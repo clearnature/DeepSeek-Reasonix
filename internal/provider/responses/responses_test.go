@@ -426,3 +426,19 @@ func TestMessagesToInputIncludesSummaryOnReasoningItems(t *testing.T) {
 		t.Fatalf("reasoning content = %#v", reasoning["content"])
 	}
 }
+
+func TestMessagesToInputOmitsSummaryWithoutReasoning(t *testing.T) {
+	client := New(Config{Name: "test", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash"}).(*client)
+	body, _, _ := client.buildRequestBody(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "run"},
+		// Assistant turn without reasoning: no reasoning item and thus no
+		// summary list should be serialized at all.
+		{Role: provider.RoleAssistant, Content: "plain answer"},
+	}})
+	items := body["input"].([]map[string]any)
+	for _, item := range items {
+		if item["type"] == "reasoning" {
+			t.Fatalf("unexpected reasoning item without ReasoningContent: %#v", item)
+		}
+	}
+}
