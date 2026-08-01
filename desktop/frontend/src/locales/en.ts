@@ -510,6 +510,10 @@ export const en = {
   "caps.skillRootShowAllSkills": "View all {count}",
   "caps.showDiagnostics": "View {count} hidden paths",
   "caps.hideDiagnostics": "Hide diagnostic paths",
+  "caps.switchBusy": "Can't change this setting right now. Finish or cancel the current turn first.",
+  "caps.switchBusyRunning": "A reply is still running, so this setting can't be changed yet. Stop the reply or wait for it to finish.",
+  "caps.switchBusyPrompt": "There's a pending confirmation, so this setting can't be changed yet. Answer it first.",
+  "caps.switchBusyJobs": "{n} background job(s) still running, so this setting can't be changed yet. Stop them first.",
 
   // subagent profiles (settings > Subagents)
   "subagents.tabHint": "Built-in + your own agent profiles",

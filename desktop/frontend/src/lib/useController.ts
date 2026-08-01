@@ -1829,6 +1829,24 @@ function settingSwitchNoticeText(
   return t(keys.failed, { err: msg });
 }
 
+// activeWorkBusyNoticeText maps the controller's rebuild-busy rejection to a
+// friendly, localized notice for setting changes that lack a dedicated switch
+// flow (MCP servers, capabilities, permissions). Returns null when the error is
+// not an active-work rejection so callers fall back to the raw message. Unlike
+// settingSwitchNoticeText it does not require a specific "before changing
+// <setting>" suffix — capability-panel mutations use varied setting names.
+export function activeWorkBusyNoticeText(err: unknown): string | null {
+  const msg = errorMessage(err).trim();
+  const lower = msg.toLowerCase();
+  if (!lower.includes("finish or cancel") || !lower.includes("before changing")) return null;
+  const detail = /running=(true|false);\s*pending_prompt=(true|false);\s*background_jobs=(\d+)/i.exec(msg);
+  if (detail?.[2] === "true") return t("caps.switchBusyPrompt");
+  if (detail?.[1] === "true") return t("caps.switchBusyRunning");
+  const jobs = Number(detail?.[3] ?? 0);
+  if (jobs > 0) return t("caps.switchBusyJobs", { n: jobs });
+  return t("caps.switchBusy");
+}
+
 export function replayPendingPromptsForActiveTab(activeTabId: string | undefined, replay: () => Promise<void> = () => app.ReplayPendingPrompts()): void {
   if (!activeTabId) return;
   void replay().catch(() => {});

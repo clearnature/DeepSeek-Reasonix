@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronDown, ChevronRight, CircleAlert, Plus, RefreshCw, Sea
 import { asArray } from "../lib/array";
 import { app, openExternal } from "../lib/bridge";
 import { useT } from "../lib/i18n";
+import { activeWorkBusyNoticeText } from "../lib/useController";
 import { mcpServerLifecycleActions, mcpServerRetryableFromAvailableList } from "../lib/mcpServerLifecycle";
 import type { CapabilitiesView, MCPInstallResult, MCPMarketplaceEntry, MCPMarketplaceView, MCPServerInput, PluginAgentView, PluginCommandView, PluginCompatibilityIssue, PluginHookView, PluginInstallOptions, PluginMCPServerView, PluginSkillView, PluginView, ServerView, SkillRootSkillView, SkillRootView, SkillsSettingsView, SkillView, TabMeta } from "../lib/types";
 import { InlineConfirmButton } from "./InlineConfirmButton";
@@ -78,7 +79,7 @@ export function CapabilitiesPanel({
       await reload();
       return true;
     } catch (e) {
-      setErr(String((e as Error)?.message ?? e));
+      setErr(activeWorkBusyNoticeText(e) ?? String((e as Error)?.message ?? e));
       await reload();
       return false;
     } finally {
@@ -1715,7 +1716,7 @@ export function PluginsSettingsPage() {
 			if (reloadAfter) await reload();
 			return true;
 		} catch (e) {
-			setErr(String((e as Error)?.message ?? e));
+			setErr(activeWorkBusyNoticeText(e) ?? String((e as Error)?.message ?? e));
 			if (reloadAfter) await reload();
 			return false;
 		} finally {
@@ -3031,7 +3032,7 @@ export function MCPServersSettingsPage() {
 			await reload();
 			return true;
 		} catch (e) {
-			setErr(String((e as Error)?.message ?? e));
+			setErr(activeWorkBusyNoticeText(e) ?? String((e as Error)?.message ?? e));
 			await reload();
 			return false;
 		} finally {
@@ -3288,7 +3289,7 @@ export function SkillsSettingsPage() {
 			await reload();
 			return true;
 		} catch (e) {
-			setErr(String((e as Error)?.message ?? e));
+			setErr(activeWorkBusyNoticeText(e) ?? String((e as Error)?.message ?? e));
 			await reload();
 			return false;
 		} finally {

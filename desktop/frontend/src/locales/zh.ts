@@ -511,6 +511,10 @@ export const zh: Record<DictKey, string> = {
   "caps.skillRootShowAllSkills": "查看全部 {count} 个",
   "caps.showDiagnostics": "查看隐藏路径 {count}",
   "caps.hideDiagnostics": "隐藏诊断路径",
+  "caps.switchBusy": "当前有任务在进行，暂时不能修改此设置。请稍后再试。",
+  "caps.switchBusyRunning": "当前回答仍在运行，暂时不能修改此设置。请先停止回答，或等待它完成。",
+  "caps.switchBusyPrompt": "有待处理的确认问题，暂时不能修改此设置。请先完成处理。",
+  "caps.switchBusyJobs": "仍有 {n} 个后台任务在运行，暂时不能修改此设置。请先停止它们。",
 
   // 子智能体档案（设置 > 子智能体）
   "subagents.tabHint": "内置 + 你自己的 agent 档案",

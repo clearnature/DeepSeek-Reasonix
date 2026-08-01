@@ -1,6 +1,6 @@
 // Run: tsx src/__tests__/use-controller-meta.test.ts
 
-import { currentTurnWaitMs, effortSwitchNoticeText, foregroundRunningFromRuntimeMeta, historyMessagesToItems, initialState, localizedBackendNoticeText, localizedNoticeText, metaFromTab, modelSwitchNoticeText, reducer, sameMeta, shouldReconcileStaleTurn, tokenModeSwitchNoticeText } from "../lib/useController";
+import { activeWorkBusyNoticeText, currentTurnWaitMs, effortSwitchNoticeText, foregroundRunningFromRuntimeMeta, historyMessagesToItems, initialState, localizedBackendNoticeText, localizedNoticeText, metaFromTab, modelSwitchNoticeText, reducer, sameMeta, shouldReconcileStaleTurn, tokenModeSwitchNoticeText } from "../lib/useController";
 import type { HistoryMessage, Meta, TabMeta, WireUsage } from "../lib/types";
 
 type LooseTabMeta = Omit<TabMeta, "toolApprovalMode"> & { toolApprovalMode?: TabMeta["toolApprovalMode"] | "" };
@@ -644,6 +644,36 @@ console.log("\nuse controller meta");
   eq(users[1]?.kind === "user" && users[1].text, "recent prompt", "older history keeps the current window");
   eq(s.historyHasOlder, false, "older history clears hasOlder when all pages are loaded");
   eq(s.historyOlderLoading, false, "older history clears loading");
+}
+
+console.log("\nactive work busy notice (capability settings)");
+
+{
+  eq(
+    activeWorkBusyNoticeText("active work is still running; running=true; pending_prompt=false; background_jobs=0; finish or cancel the current turn, answer pending prompts, and stop background jobs before changing MCP server"),
+    "A reply is still running, so this setting can't be changed yet. Stop the reply or wait for it to finish.",
+    "busy guard names the running-answer blocker for any setting",
+  );
+  eq(
+    activeWorkBusyNoticeText("active work is still running; running=false; pending_prompt=true; background_jobs=0; finish or cancel the current turn, answer pending prompts, and stop background jobs before changing MCP server"),
+    "There's a pending confirmation, so this setting can't be changed yet. Answer it first.",
+    "busy guard prioritizes the pending-prompt blocker",
+  );
+  eq(
+    activeWorkBusyNoticeText("active work is still running; running=false; pending_prompt=false; background_jobs=3; finish or cancel the current turn, answer pending prompts, and stop background jobs before changing MCP server"),
+    "3 background job(s) still running, so this setting can't be changed yet. Stop them first.",
+    "busy guard names the background-job count",
+  );
+  eq(
+    activeWorkBusyNoticeText("finish or cancel the current turn, answer pending prompts, and stop background jobs before changing MCP server"),
+    "Can't change this setting right now. Finish or cancel the current turn first.",
+    "busy guard falls back to the generic notice without detail flags",
+  );
+  eq(
+    activeWorkBusyNoticeText("some unrelated failure"),
+    null,
+    "non busy errors return null so callers keep the raw message",
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total`);
