@@ -78,3 +78,18 @@ agent-complexity-report.txt
 .direnv/
 
 site/.generated/
+
+# Local debug artifacts (never commit)
+/cache-diag*.log
+/dashscope-bench
+/baseline
+
+# Agent workspace droppings (Qwen Code / Reasonix scratch)
+.qwen/
+QWEN.md
+desktop/.qwen/
+desktop/QWEN.md
+cmd/dbg-usage/
+
+# Logs
+*.log
