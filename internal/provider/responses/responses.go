@@ -78,7 +78,7 @@ func (c Config) mode() string {
 		}
 		return "stateless"
 	}
-	if DetectVendor(c.BaseURL) == "deepseek" {
+	if DetectVendor(c.BaseURL) == "deepseek" || DetectVendor(c.BaseURL) == "mimo" {
 		return "stateless"
 	}
 	return "stateful"
@@ -92,6 +92,8 @@ func DetectVendor(baseURL string) string {
 		return "dashscope"
 	case strings.Contains(u, "api.deepseek.com"):
 		return "deepseek"
+	case strings.Contains(u, "api.xiaomimimo.com"):
+		return "mimo"
 	default:
 		return ""
 	}
@@ -135,9 +137,13 @@ func New(cfg Config) provider.Provider {
 
 func (c *client) Name() string { return c.name }
 
-// RequiresToolCallReasoning tells the agent to preserve DeepSeek reasoning on
-// assistant tool-call turns so the stateless follow-up can replay it.
-func (c *client) RequiresToolCallReasoning() bool { return c.vendor == "deepseek" }
+// RequiresToolCallReasoning tells the agent to preserve DeepSeek/MiMo
+// reasoning on assistant tool-call turns so the stateless follow-up can
+// replay it. Both vendors' Responses APIs are stateless and document that
+// multi-turn tool calls must retain historical reasoning in the input.
+func (c *client) RequiresToolCallReasoning() bool {
+	return c.vendor == "deepseek" || c.vendor == "mimo"
+}
 
 func (c *client) sendOpts() provider.SendOptions {
 	return provider.SendOptions{Provider: c.name, KeyEnv: c.keyEnv, KeySource: c.keySource, KeyPresent: c.apiKey != "", RetryAuth: c.authed.Load()}
