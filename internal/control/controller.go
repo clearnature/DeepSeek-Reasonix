@@ -118,6 +118,10 @@ type Controller struct {
 	// disableColdResumePrune skips stale-tool-result elision on cold resume.
 	// Zero value keeps the prune on (the cheaper default).
 	disableColdResumePrune bool
+	// pendingResponseFormat is a one-shot structured-output request from the
+	// HTTP frontend (/v1/chat with "format"), consumed by the next turn.
+	// Guarded by mu.
+	pendingResponseFormat string
 	// testCacheColdAfter overrides cacheColdAfter() in tests. Zero uses the
 	// vendor-aware resolution from config.
 	testCacheColdAfter                time.Duration
@@ -922,7 +926,22 @@ func (c *Controller) runGoalLoopWithRaw(ctx context.Context, input, raw string) 
 }
 
 func (c *Controller) runGoalLoopWithRawDisplay(ctx context.Context, input, raw, display string) error {
+	// A structured-output request from the HTTP frontend applies to the
+	// whole turn: inject it into the context the agent will read.
+	if f := c.takePendingResponseFormat(); f != "" {
+		ctx = agent.WithResponseFormat(ctx, f)
+	}
 	return newTurnOrchestrator(c).runGoalLoopWithRawDisplay(ctx, input, raw, display)
+}
+
+// takePendingResponseFormat consumes the one-shot structured-output request
+// left by SubmitHTTPFormat, if any. Safe for concurrent callers.
+func (c *Controller) takePendingResponseFormat() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	f := c.pendingResponseFormat
+	c.pendingResponseFormat = ""
+	return f
 }
 
 func (c *Controller) runEditedGoalLoopWithRawDisplay(ctx context.Context, input, raw, display, original string) error {
@@ -994,6 +1013,18 @@ func (c *Controller) Submit(input string) {
 // deliberately omits the trusted TUI-only "!cmd" shell shortcut and resolves file
 // references only through the controller's workspace root.
 func (c *Controller) SubmitHTTP(input string) {
+	c.submitHTTP(input, "")
+}
+
+// SubmitHTTPFormat is SubmitHTTP with an optional structured-output format
+// ("json_object") applied to the turn's completion requests. Empty format
+// behaves exactly like SubmitHTTP.
+func (c *Controller) SubmitHTTPFormat(input, format string) {
+	if strings.TrimSpace(format) != "" {
+		c.mu.Lock()
+		c.pendingResponseFormat = strings.TrimSpace(format)
+		c.mu.Unlock()
+	}
 	c.submitHTTP(input, "")
 }
 

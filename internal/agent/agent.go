@@ -2576,9 +2576,10 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		requestMessages[i].CreatedAt = 0
 	}
 	ch, err := a.prov.Stream(ctx, provider.Request{
-		Messages:    requestMessages,
-		Tools:       a.tools.Schemas(),
-		Temperature: provider.OptionalTemperature(a.temperature),
+		Messages:       requestMessages,
+		Tools:          a.tools.Schemas(),
+		Temperature:    provider.OptionalTemperature(a.temperature),
+		ResponseFormat: responseFormatFromRequest(ctx),
 	})
 	if err != nil {
 		return "", "", "", nil, nil, false, false, nil, err
