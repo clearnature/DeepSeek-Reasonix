@@ -177,7 +177,7 @@ type Request struct {
 type ResponseFormat struct {
 	// Type is the structured format: "json_object" is the only shape the
 	// Responses endpoints currently define (MiMo/DashScope/OpenAI).
-	Type string
+	Type string `json:"type"`
 }
 
 // TemperaturePtr wraps v in a pointer so callers that explicitly want a
