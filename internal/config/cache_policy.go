@@ -56,10 +56,12 @@ func detectCacheVendor(baseURL string) string {
 	case strings.Contains(u, "api.deepseek.com"):
 		return "deepseek"
 	case strings.Contains(u, "api.xiaomimimo.com"):
-		// MiMo: auto cache TTL measured short-prefix ~3.5-7.5min, but the
-		// vendor targets long TTLs (Hybrid SWA 1/7 KV + GCache L3, "hours"
-		// per its engineering blog). Kept at the 24h unknown-vendor default
-		// until a long-prefix (>8K tokens) cross-hour measurement settles it.
+		// MiMo: verified 2026-08-02 with a 8.8K-token prefix — cached_tokens
+		// reaches 99.9% hit (17024/17034) and survives 2h+ (short prefixes
+		// also hit, but take ~1.5-2h to warm). Aligns with the vendor's
+		// Hybrid SWA + GCache long-TTL design ("hours to days"), so the 24h
+		// unknown-vendor default is correct; do not move MiMo to the 5min
+		// tier.
 		return "mimo"
 	case strings.Contains(u, "api.anthropic.com"):
 		return "anthropic"
