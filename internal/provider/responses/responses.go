@@ -278,14 +278,25 @@ func messagesToInput(messages []provider.Message) []map[string]any {
 	for _, message := range messages {
 		switch message.Role {
 		case provider.RoleSystem, provider.RoleUser:
-			input = append(input, map[string]any{"role": string(message.Role), "content": message.Content})
+			// MiMo's Responses API expects message content as an
+			// InputItemList array ({"type":"input_text","text":...}),
+			// matching the documented Message object; a bare string is the
+			// TextInput shorthand the docs only show for the top-level
+			// `input` field, not for array items. The explicit
+			// type:"message" disambiguates the item kind alongside
+			// reasoning/function_call/function_call_output items.
+			input = append(input, map[string]any{
+				"role":    string(message.Role),
+				"type":    "message",
+				"content": []map[string]string{{"type": "input_text", "text": message.Content}},
+			})
 		case provider.RoleAssistant:
 			if message.ReasoningContent != "" {
 				// DashScope's Responses API requires a `summary` list on
 				// reasoning items (OpenAI's format only needs `content`).
 				// Without it the server rejects with
 				// "Invalid 'summary': summary is required and must be a list
-				// for reasoning."
+				// for reasoning." MiMo's docs omit summary but accept it.
 				input = append(input, map[string]any{
 					"type":    "reasoning",
 					"summary": []map[string]string{{"type": "summary_text", "text": message.ReasoningContent}},
@@ -293,7 +304,11 @@ func messagesToInput(messages []provider.Message) []map[string]any {
 				})
 			}
 			if message.Content != "" || len(message.ToolCalls) == 0 {
-				input = append(input, map[string]any{"role": "assistant", "content": message.Content})
+				input = append(input, map[string]any{
+					"role":    "assistant",
+					"type":    "message",
+					"content": []map[string]string{{"type": "output_text", "text": message.Content}},
+				})
 			}
 			for _, call := range message.ToolCalls {
 				input = append(input, map[string]any{

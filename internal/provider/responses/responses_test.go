@@ -126,16 +126,38 @@ func TestStatelessRequestReplaysReasoningContentAndToolPair(t *testing.T) {
 	if !ok || len(items) != 5 {
 		t.Fatalf("input = %#v, want user/reasoning/assistant/call/output", body["input"])
 	}
-	wantTypes := []string{"", "reasoning", "", "function_call", "function_call_output"}
+	wantTypes := []string{"message", "reasoning", "message", "function_call", "function_call_output"}
 	for i, want := range wantTypes {
 		item := items[i].(map[string]any)
 		if got, _ := item["type"].(string); got != want {
 			t.Errorf("item[%d].type = %q, want %q: %#v", i, got, want, item)
 		}
 	}
+	// user/system/assistant messages carry type:"message" with an
+	// InputItemList content array (MiMo documented shape), not a bare string.
+	userMsg := items[0].(map[string]any)
+	if userMsg["type"] != "message" {
+		t.Fatalf("user item type = %#v, want message", userMsg["type"])
+	}
+	userContentItems, ok := userMsg["content"].([]any)
+	if !ok || len(userContentItems) != 1 {
+		t.Fatalf("user content = %#v, want InputItemList of 1", userMsg["content"])
+	}
+	userContent := userContentItems[0].(map[string]any)
+	if userContent["type"] != "input_text" || userContent["text"] != "weather" {
+		t.Fatalf("user content = %#v, want [{input_text weather}]", userMsg["content"])
+	}
 	assistant := items[2].(map[string]any)
-	if assistant["content"] != "checking" {
-		t.Fatalf("assistant content lost: %#v", assistant)
+	if assistant["type"] != "message" {
+		t.Fatalf("assistant item type = %#v, want message", assistant["type"])
+	}
+	assistantContentItems, ok := assistant["content"].([]any)
+	if !ok || len(assistantContentItems) != 1 {
+		t.Fatalf("assistant content = %#v, want InputItemList of 1", assistant["content"])
+	}
+	assistantContent := assistantContentItems[0].(map[string]any)
+	if assistantContent["type"] != "output_text" || assistantContent["text"] != "checking" {
+		t.Fatalf("assistant content lost: %#v", assistant["content"])
 	}
 	reasoning := items[1].(map[string]any)["content"].([]any)[0].(map[string]any)
 	if reasoning["type"] != "reasoning_text" || reasoning["text"] != "need a tool" {
