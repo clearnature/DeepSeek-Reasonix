@@ -561,3 +561,57 @@ func TestMessagesToInputOmitsSummaryWithoutReasoning(t *testing.T) {
 		}
 	}
 }
+
+func TestMessagesToInputTextOnlyStaysStringShape(t *testing.T) {
+	client := New(Config{Name: "test", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash"}).(*client)
+	body, _, _ := client.buildRequestBody(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "hello"},
+		{Role: provider.RoleAssistant, Content: "hi"},
+	}})
+	items := body["input"].([]map[string]any)
+	// Text-only turns keep the documented TextInput string shape even with
+	// vision enabled: images are the only trigger for the array form.
+	for i, item := range items {
+		if _, isArr := item["content"].([]map[string]string); isArr {
+			t.Fatalf("item[%d] content is an array, want string: %#v", i, item)
+		}
+		if _, isArr := item["content"].([]map[string]any); isArr {
+			t.Fatalf("item[%d] content is an array, want string: %#v", i, item)
+		}
+	}
+}
+
+func TestMessagesToInputEmbedsImagesAsInputImageParts(t *testing.T) {
+	c := New(Config{Name: "test", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", Extra: map[string]any{"vision": true}}).(*client)
+	body, _, _ := c.buildRequestBody(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "what is this", Images: []string{"data:image/png;base64,AAAA", "data:image/jpeg;base64,BBBB"}},
+	}})
+	items := body["input"].([]map[string]any)
+	if len(items) != 1 {
+		t.Fatalf("input items = %d, want 1", len(items))
+	}
+	parts, ok := items[0]["content"].([]map[string]string)
+	if !ok {
+		t.Fatalf("user content = %#v, want InputItemList array (image turn)", items[0]["content"])
+	}
+	if len(parts) != 3 {
+		t.Fatalf("parts = %d, want 3 (text + 2 images)", len(parts))
+	}
+	if parts[0]["type"] != "input_text" || parts[0]["text"] != "what is this" {
+		t.Fatalf("parts[0] = %#v, want input_text", parts[0])
+	}
+	for i, want := range []string{"data:image/png;base64,AAAA", "data:image/jpeg;base64,BBBB"} {
+		if parts[i+1]["type"] != "input_image" || parts[i+1]["image_url"] != want {
+			t.Fatalf("parts[%d] = %#v, want input_image %q", i+1, parts[i+1], want)
+		}
+	}
+	// Vision disabled: images are ignored, content stays a string.
+	plain := New(Config{Name: "test", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash"}).(*client)
+	body2, _, _ := plain.buildRequestBody(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "what is this", Images: []string{"data:image/png;base64,AAAA"}},
+	}})
+	items2 := body2["input"].([]map[string]any)
+	if got, ok := items2[0]["content"].(string); !ok || got != "what is this" {
+		t.Fatalf("vision-off user content = %#v, want string", items2[0]["content"])
+	}
+}
