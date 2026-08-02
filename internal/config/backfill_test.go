@@ -1743,3 +1743,52 @@ func TestNormalizeOfficialDeepSeekModelsSkipsExplicitModelList(t *testing.T) {
 		t.Fatal("normalizeOfficialDeepSeekModels must not add pro when Models is explicitly set")
 	}
 }
+
+func TestNormalizeLegacyDeepSeekResponsesPresetBackfillsPresetIDAndAccess(t *testing.T) {
+	// Simulate the broken entry: deepseek-responses written outside the
+	// preset-install flow — no preset_id, missing from provider_access.
+	c := Default()
+	c.Providers = append(c.Providers, ProviderEntry{
+		Name:      "deepseek-responses",
+		Kind:      "responses",
+		BaseURL:   "https://api.deepseek.com",
+		Models:    []string{"deepseek-v4-flash"},
+		APIKeyEnv: "DEEPSEEK_API_KEY",
+	})
+	c.Desktop.ProviderAccess = []string{"deepseek"}
+
+	if !normalizeLegacyDeepSeekResponsesPreset(c) {
+		t.Fatal("migration did not report a change")
+	}
+	p, ok := c.Provider("deepseek-responses")
+	if !ok {
+		t.Fatal("deepseek-responses provider missing")
+	}
+	if p.PresetID != "deepseek-responses" {
+		t.Fatalf("PresetID = %q, want deepseek-responses", p.PresetID)
+	}
+	if !desktopProviderAccessMap(c.Desktop.ProviderAccess)["deepseek-responses"] {
+		t.Fatalf("provider_access = %+v, want deepseek-responses included", c.Desktop.ProviderAccess)
+	}
+
+	// Idempotent: a second run changes nothing.
+	if normalizeLegacyDeepSeekResponsesPreset(c) {
+		t.Fatal("migration must be idempotent")
+	}
+}
+
+func TestNormalizeLegacyDeepSeekResponsesPresetSkipsUnrelatedEntries(t *testing.T) {
+	c := Default()
+	c.Providers = append(c.Providers, ProviderEntry{
+		Name:    "custom-deepseek",
+		Kind:    "openai",
+		BaseURL: "https://api.deepseek.com",
+	})
+	c.Desktop.ProviderAccess = nil
+	if normalizeLegacyDeepSeekResponsesPreset(c) {
+		t.Fatal("unrelated entry must not trigger the migration")
+	}
+	if _, ok := c.Provider("deepseek-responses"); ok {
+		t.Fatal("must not create a deepseek-responses entry out of thin air")
+	}
+}

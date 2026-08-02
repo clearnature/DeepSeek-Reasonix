@@ -181,6 +181,7 @@ func loadForRoot(root string, migrateOnDisk bool) (*Config, error) {
 	normalizeLegacyKimiK3Catalog(cfg)
 	normalizeLegacyOpenCodeGoKimiK3Catalog(cfg)
 	normalizeLegacyMimoCustomProviders(cfg)
+	normalizeLegacyDeepSeekResponsesPreset(cfg)
 	normalizeLegacyProviderModels(cfg)
 	normalizeDesktopOfficialProviderAccess(cfg)
 	normalizeOfficialDeepSeekModels(cfg)
@@ -704,6 +705,7 @@ func normalizeConfigForEdit(cfg *Config) bool {
 	changed = normalizeLegacyKimiK3Catalog(cfg) || changed
 	changed = normalizeLegacyOpenCodeGoKimiK3Catalog(cfg) || changed
 	changed = normalizeLegacyMimoCustomProviders(cfg) || changed
+	changed = normalizeLegacyDeepSeekResponsesPreset(cfg) || changed
 	normalizeLegacyProviderModels(cfg)
 	normalizeDesktopOfficialProviderAccess(cfg)
 	applyDeepSeekOfficialDefaultPricing(cfg)
@@ -1505,6 +1507,47 @@ func legacyOfficialProviderModel(name string) string {
 
 func normalizeLegacyMimoCustomProviders(c *Config) bool {
 	return normalizeLegacyMimoCustomProvidersForRefs(c, legacyMimoConfigRefs(c)...)
+}
+
+// normalizeLegacyDeepSeekResponsesPreset repairs a deepseek-responses entry
+// that was written to config outside the preset-install flow (no preset_id and
+// missing from Desktop.ProviderAccess). Such an entry matched the curated
+// preset's kind+baseURL, so the Settings UI showed "DeepSeek Responses API" as
+// installed while the model picker could not use it. Backfill preset_id and
+// ensure the provider name is in provider_access so the entry becomes usable.
+func normalizeLegacyDeepSeekResponsesPreset(c *Config) bool {
+	if c == nil {
+		return false
+	}
+	preset, ok := CuratedProviderPreset("deepseek-responses")
+	if !ok || len(preset.Entries) != 1 {
+		return false
+	}
+	canonical := preset.Entries[0]
+	changed := false
+	for i := range c.Providers {
+		p := &c.Providers[i]
+		name := strings.TrimSpace(p.Name)
+		if name != strings.TrimSpace(canonical.Name) {
+			continue
+		}
+		if strings.TrimSpace(p.PresetID) == "" &&
+			strings.EqualFold(strings.TrimSpace(p.Kind), strings.TrimSpace(canonical.Kind)) &&
+			normalizedBaseURLForMigration(p.BaseURL) == normalizedBaseURLForMigration(canonical.BaseURL) {
+			p.PresetID = canonical.PresetID
+			changed = true
+		}
+	}
+	// Ensure the preset provider is listed in Desktop.ProviderAccess so the
+	// model picker exposes it (the preset-install flow adds it there).
+	if _, ok := c.Provider(canonical.Name); ok {
+		seen := desktopProviderAccessMap(c.Desktop.ProviderAccess)
+		if !seen[canonical.Name] {
+			c.Desktop.ProviderAccess = append(c.Desktop.ProviderAccess, canonical.Name)
+			changed = true
+		}
+	}
+	return changed
 }
 
 // NormalizeLegacyMimoCustomProvidersForRefs appends custom OpenAI-compatible

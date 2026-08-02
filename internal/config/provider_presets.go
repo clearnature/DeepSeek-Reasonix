@@ -140,6 +140,7 @@ var curatedProviderPresets = []ProviderPreset{
 		Entries: []ProviderEntry{{
 			Name:          "deepseek-anthropic",
 			Kind:          "anthropic",
+			PresetID:      "deepseek-anthropic",
 			BaseURL:       deepSeekAnthropicBaseURL,
 			Models:        deepSeekV4Models,
 			Default:       "deepseek-v4-flash",
@@ -795,6 +796,7 @@ var curatedProviderPresets = []ProviderPreset{
 		Entries: []ProviderEntry{{
 			Name:             "deepseek-responses",
 			Kind:             "responses",
+			PresetID:         "deepseek-responses",
 			BaseURL:          "https://api.deepseek.com",
 			Models:           deepSeekResponsesModels,
 			Default:          "deepseek-v4-flash",
