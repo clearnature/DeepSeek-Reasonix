@@ -55,6 +55,12 @@ func detectCacheVendor(baseURL string) string {
 		return "dashscope"
 	case strings.Contains(u, "api.deepseek.com"):
 		return "deepseek"
+	case strings.Contains(u, "api.xiaomimimo.com"):
+		// MiMo: auto cache TTL measured short-prefix ~3.5-7.5min, but the
+		// vendor targets long TTLs (Hybrid SWA 1/7 KV + GCache L3, "hours"
+		// per its engineering blog). Kept at the 24h unknown-vendor default
+		// until a long-prefix (>8K tokens) cross-hour measurement settles it.
+		return "mimo"
 	case strings.Contains(u, "api.anthropic.com"):
 		return "anthropic"
 	default:

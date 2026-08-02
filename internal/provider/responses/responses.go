@@ -78,31 +78,17 @@ func (c Config) mode() string {
 		}
 		return "stateless"
 	}
-	if DetectVendor(c.BaseURL) == "deepseek" || DetectVendor(c.BaseURL) == "mimo" {
+	if capabilitiesFor(DetectVendor(c.BaseURL)).stateless {
 		return "stateless"
 	}
 	return "stateful"
-}
-
-// DetectVendor identifies endpoint behavior that affects the Responses wire.
-func DetectVendor(baseURL string) string {
-	u := strings.ToLower(strings.TrimSpace(baseURL))
-	switch {
-	case strings.Contains(u, "dashscope.aliyuncs.com"), strings.Contains(u, ".maas.aliyuncs.com"):
-		return "dashscope"
-	case strings.Contains(u, "api.deepseek.com"):
-		return "deepseek"
-	case strings.Contains(u, "api.xiaomimimo.com"):
-		return "mimo"
-	default:
-		return ""
-	}
 }
 
 type client struct {
 	name, apiKey, keyEnv, keySource string
 	baseURL, model, effort          string
 	vendor, mode                    string
+	caps                            vendorCapabilities
 	sessionCache                    bool
 	http                            *http.Client
 	idleTimeout                     time.Duration
@@ -116,7 +102,8 @@ type client struct {
 // New creates a Responses API provider.
 func New(cfg Config) provider.Provider {
 	vendor := DetectVendor(cfg.BaseURL)
-	sessionCache := vendor == "dashscope"
+	cap := capabilitiesFor(vendor)
+	sessionCache := cap.sessionCacheHeader
 	if cfg.SessionCache != nil {
 		sessionCache = *cfg.SessionCache
 	}
@@ -130,19 +117,18 @@ func New(cfg Config) provider.Provider {
 	return &client{
 		name: cfg.Name, apiKey: cfg.APIKey, keyEnv: cfg.KeyEnv, keySource: cfg.KeySource,
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"), model: cfg.Model, effort: cfg.Effort,
-		vendor: vendor, mode: cfg.mode(), sessionCache: sessionCache,
+		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache,
 		http: httpClient, idleTimeout: defaultStreamIdleTimeout,
 	}
 }
 
 func (c *client) Name() string { return c.name }
 
-// RequiresToolCallReasoning tells the agent to preserve DeepSeek/MiMo
-// reasoning on assistant tool-call turns so the stateless follow-up can
-// replay it. Both vendors' Responses APIs are stateless and document that
-// multi-turn tool calls must retain historical reasoning in the input.
+// RequiresToolCallReasoning tells the agent to preserve stateless vendors'
+// reasoning on assistant tool-call turns so the follow-up can replay it.
+// DeepSeek and MiMo document this requirement for multi-turn tool calls.
 func (c *client) RequiresToolCallReasoning() bool {
-	return c.vendor == "deepseek" || c.vendor == "mimo"
+	return c.caps.toolCallReasoning
 }
 
 func (c *client) sendOpts() provider.SendOptions {
@@ -189,7 +175,7 @@ func (c *client) send(ctx context.Context, body map[string]any) (*http.Response,
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
-		if c.vendor == "dashscope" && c.sessionCache {
+		if c.caps.sessionCacheHeader && c.sessionCache {
 			req.Header.Set("x-dashscope-session-cache", "enable")
 		}
 		return req, nil
@@ -225,7 +211,7 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	if req.MaxTokens > 0 {
 		body["max_output_tokens"] = req.MaxTokens
 	}
-	if req.Temperature != nil {
+	if req.Temperature != nil && !c.caps.ignoresTemperature {
 		body["temperature"] = *req.Temperature
 	}
 	if len(req.Tools) > 0 {
