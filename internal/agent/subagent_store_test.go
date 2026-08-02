@@ -769,6 +769,42 @@ func TestSubagentStoreCleanupStaleRunningSkipsForeignLiveParent(t *testing.T) {
 	}
 }
 
+func TestSubagentStoreCleanupStaleRunningSkipsCorruptMeta(t *testing.T) {
+	store := NewSubagentStore(t.TempDir())
+	spec := testSubagentSpec(t, "review")
+	run, err := store.PrepareFresh(spec)
+	if err != nil {
+		t.Fatalf("PrepareFresh: %v", err)
+	}
+	if err := store.MarkRunning(run); err != nil {
+		t.Fatalf("MarkRunning: %v", err)
+	}
+	ref := run.Ref
+	run.Release()
+
+	// A crash leftover with a truncated meta file must not abort the whole
+	// cleanup pass (it cannot authorize a lifecycle rewrite anyway).
+	corruptRef := "sa_20260101_000000_000000000_deadbeefdead"
+	if err := os.WriteFile(store.metaPath(corruptRef), nil, 0o600); err != nil {
+		t.Fatalf("write corrupt meta: %v", err)
+	}
+
+	cleaned, err := store.CleanupStaleRunning()
+	if err != nil {
+		t.Fatalf("CleanupStaleRunning with corrupt meta: %v", err)
+	}
+	if cleaned != 1 {
+		t.Fatalf("cleaned = %d, want 1", cleaned)
+	}
+	meta, err := store.LoadMeta(ref)
+	if err != nil {
+		t.Fatalf("LoadMeta: %v", err)
+	}
+	if meta.Status != SubagentInterrupted {
+		t.Fatalf("status = %q, want interrupted", meta.Status)
+	}
+}
+
 func TestSubagentStoreForeignLeaseHelper(t *testing.T) {
 	if os.Getenv("REASONIX_SUBAGENT_LEASE_HELPER") != "1" {
 		return

@@ -228,6 +228,14 @@ func (s *SubagentStore) CleanupStaleRunning() (int, error) {
 		}
 		meta, err := s.LoadMeta(ref)
 		if err != nil {
+			var syntaxErr *json.SyntaxError
+			var typeErr *json.UnmarshalTypeError
+			if errors.As(err, &syntaxErr) || errors.As(err, &typeErr) {
+				// Corrupt or truncated metadata (crash leftover) cannot
+				// authorize a lifecycle rewrite; skip it so one broken
+				// file cannot block application startup.
+				continue
+			}
 			return 0, err
 		}
 		if meta.Status != SubagentRunning {
