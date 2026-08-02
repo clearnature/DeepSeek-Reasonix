@@ -2436,6 +2436,8 @@ export const zh: Record<DictKey, string> = {
   "settings.providerProtocol": "接入协议",
   "settings.providerProtocolOpenAI": "OpenAI-compatible",
   "settings.providerProtocolOpenAIHint": "适用于兼容 OpenAI API 的代理、聚合平台和自建服务。",
+  "settings.providerProtocolResponses": "Responses API",
+  "settings.providerProtocolResponsesHint": "适用于官方 Responses 协议端点（如 DeepSeek 官方 stateless Responses API），支持思考模式与工具调用。",
   "settings.providerProtocolAnthropic": "Anthropic-compatible",
   "settings.providerProtocolAnthropicHint": "适用于 Claude Messages API 风格的服务，例如部分 coding plan 端点。",
   "settings.providerBaseUrlLabel": "API 地址",

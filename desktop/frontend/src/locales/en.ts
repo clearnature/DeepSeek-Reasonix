@@ -2433,6 +2433,8 @@ export const en = {
   "settings.providerProtocol": "Connection protocol",
   "settings.providerProtocolOpenAI": "OpenAI-compatible",
   "settings.providerProtocolOpenAIHint": "For proxies, aggregators, and self-hosted services compatible with the OpenAI API.",
+  "settings.providerProtocolResponses": "Responses API",
+  "settings.providerProtocolResponsesHint": "For official Responses-protocol endpoints (e.g. DeepSeek's stateless Responses API) with thinking mode and tool calls.",
   "settings.providerProtocolAnthropic": "Anthropic-compatible",
   "settings.providerProtocolAnthropicHint": "For Claude-style Messages API services such as some coding-plan endpoints.",
   "settings.providerBaseUrlLabel": "API address",

@@ -1467,13 +1467,22 @@ function providerKindLabel(kind: string, t: ReturnType<typeof useT>): string {
       return t("settings.providerProtocolAnthropic");
     case "openai":
       return t("settings.providerProtocolOpenAI");
+    case "responses":
+      return t("settings.providerProtocolResponses");
     default:
       return kind;
   }
 }
 
 function providerKindHint(kind: string, t: ReturnType<typeof useT>): string {
-  return kind === "anthropic" ? t("settings.providerProtocolAnthropicHint") : t("settings.providerProtocolOpenAIHint");
+  switch (kind) {
+    case "anthropic":
+      return t("settings.providerProtocolAnthropicHint");
+    case "responses":
+      return t("settings.providerProtocolResponsesHint");
+    default:
+      return t("settings.providerProtocolOpenAIHint");
+  }
 }
 
 function reasoningProtocolLabel(protocol: string, t: ReturnType<typeof useT>): string {
