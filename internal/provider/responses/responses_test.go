@@ -440,6 +440,57 @@ func TestRequiresToolCallReasoningForStatelessVendors(t *testing.T) {
 	}
 }
 
+func TestMiMoDefaultMaxOutputTokensRaised(t *testing.T) {
+	// MiMo's 32768 server default (reasoning + visible output) truncates
+	// tool calls on long-reasoning turns; the vendor capability raises the
+	// unset cap to 65536 (within the documented [1,131072] range).
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var reqBody map[string]any
+		if err := json.Unmarshal(body, &reqBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := reqBody["max_output_tokens"]; got != float64(65536) {
+			t.Fatalf("MiMo default max_output_tokens = %v, want 65536", got)
+		}
+		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
+	}))
+	defer server.Close()
+
+	p := New(Config{Name: "mimo", APIKey: "key", BaseURL: server.URL, Model: "mimo-v2.5-pro"}).(*client)
+	p.vendor = "mimo"
+	p.caps = capabilitiesFor("mimo")
+	if p.caps.defaultMaxOutputTokens == 0 {
+		t.Fatal("MiMo capability must define a defaultMaxOutputTokens")
+	}
+	collect(t, p, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
+
+	// An explicit MaxTokens still wins.
+	var gotExplicit any
+	explicit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var reqBody map[string]any
+		_ = json.Unmarshal(body, &reqBody)
+		gotExplicit = reqBody["max_output_tokens"]
+		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
+	}))
+	defer explicit.Close()
+	p2 := New(Config{Name: "mimo", APIKey: "key", BaseURL: explicit.URL, Model: "mimo-v2.5-pro"}).(*client)
+	p2.vendor = "mimo"
+	p2.caps = capabilitiesFor("mimo")
+	collect(t, p2, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}, MaxTokens: 1000})
+	if gotExplicit != float64(1000) {
+		t.Fatalf("explicit MaxTokens = %v, want 1000", gotExplicit)
+	}
+
+	// Unknown endpoints leave max_output_tokens unset (server default).
+	plain := New(Config{Name: "openai", APIKey: "key", BaseURL: "https://example.com", Model: "m"}).(*client)
+	req, _, _ := plain.buildRequestBody(provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
+	if _, ok := req["max_output_tokens"]; ok {
+		t.Fatalf("unknown endpoint must not set max_output_tokens, got %v", req["max_output_tokens"])
+	}
+}
+
 func TestWarnOnMissingToolCallReasoningIsModelScoped(t *testing.T) {
 	// DeepSeek pro-tier: warns (endpoint reliably emits tool-call reasoning).
 	pro := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro"})

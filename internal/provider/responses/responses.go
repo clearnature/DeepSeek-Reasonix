@@ -234,6 +234,11 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	}
 	if req.MaxTokens > 0 {
 		body["max_output_tokens"] = req.MaxTokens
+	} else if c.caps.defaultMaxOutputTokens > 0 {
+		// No explicit cap: use the vendor default when one is defined (MiMo),
+		// whose 32768 server default can truncate long-reasoning turns before
+		// the visible answer/tool call finishes.
+		body["max_output_tokens"] = c.caps.defaultMaxOutputTokens
 	}
 	if req.Temperature != nil && !c.caps.ignoresTemperature {
 		body["temperature"] = *req.Temperature
