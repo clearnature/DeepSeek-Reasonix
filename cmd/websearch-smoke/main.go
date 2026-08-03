@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -202,7 +203,9 @@ func realFetch(key string) responses.FetchFunc {
 			Effort: "low",
 		})
 		req := provider.Request{
-			Messages:       []provider.Message{{Role: provider.RoleUser, Content: query}},
+			// instructions 提示模型：回答末尾必须列出来源（机构名+URL），
+			// 解决来源标注缺失（json_schema 是引导非强制，模型常输出 markdown）。
+			Messages:       []provider.Message{{Role: provider.RoleUser, Content: query + "\n\n回答末尾必须列出数据来源（机构名 + URL，至少 2 个）。"}},
 			Tools:          []provider.ToolSchema{provider.WebSearchTool(false)},
 			ToolChoice:     &provider.ToolChoice{Type: "web_search"},
 			ResponseFormat: provider.JSONSchemaFormat("knowledge_extract", knowledgeSchema),
@@ -266,6 +269,10 @@ func realFetch(key string) responses.FetchFunc {
 		// extraction so sources/facts still land in the cache.
 		if len(entry.Sources) == 0 {
 			entry.Sources = extractMarkdownSources(text)
+		}
+		// 仍为空 → 正文内联来源（全文 URL + 已知机构名）
+		if len(entry.Sources) == 0 {
+			entry.Sources = extractInlineSources(text)
 		}
 		if len(entry.KeyFacts) == 0 {
 			entry.KeyFacts = extractMarkdownFacts(text)
@@ -592,4 +599,42 @@ func hasFreshnessIntent(q string) bool {
 		}
 	}
 	return false
+}
+
+// extractInlineSources scans the whole reply for http(s) URLs and known
+// institution names (来源散在正文，无独立来源段落时兜底).
+func extractInlineSources(text string) []responses.Source {
+	var out []responses.Source
+	seen := map[string]bool{}
+	// 1. 全文 URL
+	urlRe := regexp.MustCompile(`https?://[\w\-./%#?&=~]+`)
+	for _, u := range urlRe.FindAllString(text, -1) {
+		if !seen[u] {
+			seen[u] = true
+			clean := strings.TrimRight(u, "。，,.;)）]}")
+			out = append(out, responses.Source{URL: clean, Title: hostOf(clean)})
+		}
+	}
+	// 2. 已知机构名（无 URL 时）
+	for _, inst := range []struct{ name, domain string }{
+		{"新加坡海事及港务管理局", "mpa.gov.sg"}, {"MPA", "mpa.gov.sg"}, {"data.gov.sg", "data.gov.sg"},
+		{"路透", "reuters.com"}, {"彭博", "bloomberg.com"}, {"联合国", "un.org"}, {"世界银行", "worldbank.org"},
+		{"FAO", "fao.org"}, {"粮农组织", "fao.org"}, {"EIA", "eia.gov"}, {"Kpler", "kpler.com"},
+	} {
+		if strings.Contains(text, inst.name) && !seen[inst.domain] {
+			seen[inst.domain] = true
+			out = append(out, responses.Source{Title: inst.name, Domain: inst.domain})
+		}
+	}
+	return out
+}
+
+func hostOf(u string) string {
+	u = strings.TrimPrefix(u, "https://")
+	u = strings.TrimPrefix(u, "http://")
+	u = strings.TrimPrefix(u, "www.")
+	if i := strings.Index(u, "/"); i > 0 {
+		u = u[:i]
+	}
+	return u
 }
