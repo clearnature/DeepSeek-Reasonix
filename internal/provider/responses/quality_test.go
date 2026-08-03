@@ -95,3 +95,27 @@ func TestMarketingSnippetPenalizesScore(t *testing.T) {
 		t.Fatalf("neutral snippet unexpectedly penalized: %.2f", e.Sources[1].Credibility)
 	}
 }
+
+func TestEmotionHits(t *testing.T) {
+	if h := EmotionHits("紧急预警！这场灾难即将失控，必须转发给所有人"); h < 3 {
+		t.Fatalf("fear/incitement text should hit, got %d", h)
+	}
+	if h := EmotionHits("今日北京多云转晴，气温回升"); h != 0 {
+		t.Fatalf("neutral text must not hit, got %d", h)
+	}
+	if h := EmotionHits(""); h != 0 {
+		t.Fatalf("empty must be 0, got %d", h)
+	}
+}
+
+func TestEmotionSnippetPenalizesScore(t *testing.T) {
+	e := &KnowledgeEntry{Sources: []Source{
+		{URL: "https://fear-a.example.com/x", Snippet: "恐慌蔓延！末日将至，十万火急"}, // emotion hits
+		{URL: "https://calm-b.example.org/y", Snippet: "今日北京多云转晴"},       // neutral
+	}}
+	ScoreAndTagSources(e)
+	if e.Sources[0].Credibility >= e.Sources[1].Credibility {
+		t.Fatalf("fear snippet must score below neutral: %.2f vs %.2f",
+			e.Sources[0].Credibility, e.Sources[1].Credibility)
+	}
+}

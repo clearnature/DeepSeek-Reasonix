@@ -63,6 +63,35 @@ var marketingHints = []string{
 	"expert recommended", "act now", "limited time",
 }
 
+// emotionHints are fear/incitement/extremism markers (defense layer 2, check
+// 1 of #12): attack content engineered to stoke panic. Marketing hints catch
+// hype; these catch manipulation that triggers fear responses. Hits lower the
+// source credibility and block cache persistence at a threshold.
+var emotionHints = []string{
+	"恐慌", "灾难", "末日", "崩溃", "致命", "失控", "威胁", "紧急预警",
+	"不寒而栗", "触目惊心", "必须转发", "十万火急", "群发", "删前速看",
+	"panic", "catastrophe", "doomsday", "collapse", "fatal", "out of control",
+	"must share", "forward to everyone",
+}
+
+// emotionHits counts fear/incitement markers in text.
+func emotionHits(text string) int {
+	if text == "" {
+		return 0
+	}
+	lower := strings.ToLower(text)
+	hits := 0
+	for _, h := range emotionHints {
+		if strings.Contains(lower, strings.ToLower(h)) {
+			hits++
+		}
+	}
+	return hits
+}
+
+// EmotionHits is the exported form of emotionHits for gate-2 pre-write checks.
+func EmotionHits(text string) int { return emotionHits(text) }
+
 // marketingHits counts content-level manipulation markers in text. A nonzero
 // count is a strong signal the source is promotional rather than factual.
 func marketingHits(text string) int {
@@ -148,6 +177,11 @@ func scoreSource(s Source, allSources []Source) float64 {
 	// the snippet are promotional, not factual.
 	if hits := marketingHits(s.Snippet); hits > 0 {
 		score -= 0.10 * float64(hits)
+	}
+	// Fear/incitement manipulation (defense layer 2 check 1): engineered
+	// panic content is a harder negative than marketing hype.
+	if hits := emotionHits(s.Snippet); hits > 0 {
+		score -= 0.15 * float64(hits)
 	}
 	// Cross-check: at least two distinct domains among all sources.
 	seen := map[string]bool{}

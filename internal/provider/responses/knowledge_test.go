@@ -153,3 +153,38 @@ func cleanKnowledgeCache(t *testing.T) {
 		_ = os.Remove(filepath.Join(dir, de.Name()))
 	}
 }
+
+func TestAuditListAndDeleteKnowledge(t *testing.T) {
+	cleanKnowledgeCache(t)
+	dir := mustKnowledgeDir(t)
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	SaveKnowledge(&KnowledgeEntry{Query: "正常问题A", AnswerSummary: "a", SourceRequestID: "req-1"})
+	SaveKnowledge(&KnowledgeEntry{Query: "正常问题B", AnswerSummary: "b", SourceRequestID: "req-1"})
+	SaveKnowledge(&KnowledgeEntry{Query: "污染问题C", AnswerSummary: "c", SourceRequestID: "req-2"})
+
+	all := ListKnowledge()
+	if len(all) != 3 {
+		t.Fatalf("ListKnowledge want 3, got %d", len(all))
+	}
+	// 审计字段可追溯
+	for _, e := range all {
+		if e.SourceRequestID == "" {
+			t.Fatalf("audit field missing for %q", e.Query)
+		}
+	}
+	// 按 request id 回滚污染来源
+	deleted := DeleteKnowledge(func(e *KnowledgeEntry) bool { return e.SourceRequestID == "req-2" })
+	if deleted != 1 {
+		t.Fatalf("DeleteKnowledge by request id want 1, got %d", deleted)
+	}
+	remaining := ListKnowledge()
+	if len(remaining) != 2 {
+		t.Fatalf("after rollback want 2, got %d", len(remaining))
+	}
+	// 全量回滚
+	DeleteKnowledge(func(e *KnowledgeEntry) bool { return true })
+	if len(ListKnowledge()) != 0 {
+		t.Fatal("full sweep should empty the cache")
+	}
+}

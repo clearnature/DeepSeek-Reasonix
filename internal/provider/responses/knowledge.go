@@ -51,6 +51,11 @@ type KnowledgeEntry struct {
 	// LastUpdatedAt 记录最近一次增量更新的时间。
 	LastUpdatedAt time.Time `json:"last_updated_at,omitempty"`
 
+	// SourceRequestID 是产生本缓存记录的上游请求标识（审计第四层）：用于
+	// 追溯是哪一次检索/哪个 web_search 结果引入了内容，污染爆发时可
+	// 按 request id 定位并回滚。
+	SourceRequestID string `json:"source_request_id,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
@@ -255,4 +260,76 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 		return best, bestSim, true
 	}
 	return nil, 0, false
+}
+
+// ListKnowledge returns all unexpired cache entries (audit layer 4: daily
+// sampling to re-check credibility, or operator inspection before rollback).
+// Expired entries are pruned during the scan.
+func ListKnowledge() []KnowledgeEntry {
+	dir, err := knowledgeDir()
+	if err != nil {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	var out []KnowledgeEntry
+	for _, de := range entries {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(dir, de.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var e KnowledgeEntry
+		if err := json.Unmarshal(data, &e); err != nil {
+			_ = os.Remove(path)
+			continue
+		}
+		if !e.ExpiresAt.IsZero() && now.After(e.ExpiresAt) {
+			_ = os.Remove(path)
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// DeleteKnowledge removes cache entries matching pred. It returns the number
+// of deleted entries and is the rollback primitive for pollution outbreaks
+// (audit layer 4): delete by request id, by tier, or sweep everything.
+func DeleteKnowledge(pred func(*KnowledgeEntry) bool) int {
+	dir, err := knowledgeDir()
+	if err != nil {
+		return 0
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	deleted := 0
+	for _, de := range entries {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(dir, de.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var e KnowledgeEntry
+		if err := json.Unmarshal(data, &e); err != nil {
+			continue
+		}
+		if pred(&e) {
+			if err := os.Remove(path); err == nil {
+				deleted++
+			}
+		}
+	}
+	return deleted
 }
