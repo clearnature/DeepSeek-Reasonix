@@ -159,6 +159,18 @@ func (c *client) sendOpts() provider.SendOptions {
 	return provider.SendOptions{Provider: c.name, KeyEnv: c.keyEnv, KeySource: c.keySource, KeyPresent: c.apiKey != "", RetryAuth: c.authed.Load()}
 }
 
+// isServerBuiltinTool reports whether t names a server-side built-in tool
+// (e.g. "web_search" / "web_search_2025_08_26") that Responses endpoints
+// execute themselves instead of a client-defined function.
+func isServerBuiltinTool(t string) bool {
+	switch t {
+	case "web_search", "web_search_2025_08_26":
+		return true
+	default:
+		return t != "" && t != "function"
+	}
+}
+
 // ResetContext drops stateful continuation metadata. Full-input stateless mode
 // is unaffected.
 func (c *client) ResetContext() {
@@ -254,6 +266,12 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	if len(req.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(req.Tools))
 		for _, tool := range req.Tools {
+			if isServerBuiltinTool(tool.Type) {
+				// Server-side built-in tool (web_search): emit flat
+				// {type}, never wrapped in a function object.
+				tools = append(tools, map[string]any{"type": tool.Type})
+				continue
+			}
 			parameters := tool.Parameters
 			if len(parameters) == 0 {
 				parameters = provider.CanonicalizeSchema(nil)
@@ -264,6 +282,16 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 			})
 		}
 		body["tools"] = tools
+	}
+	if req.ToolChoice != nil {
+		if isServerBuiltinTool(req.ToolChoice.Type) {
+			// {"type": "web_search"} forces a server-side search. The
+			// tools array must contain the matching built-in, otherwise
+			// DeepSeek rejects with 400.
+			body["tool_choice"] = map[string]any{"type": req.ToolChoice.Type}
+		} else {
+			body["tool_choice"] = req.ToolChoice.Type
+		}
 	}
 	instructions, rest := splitInstructions(messages)
 	if instructions != "" {

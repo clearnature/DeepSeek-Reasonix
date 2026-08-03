@@ -156,16 +156,48 @@ type ToolCall struct {
 
 // ToolSchema is a tool definition exposed to the model. Parameters is JSON Schema.
 type ToolSchema struct {
+	// Type selects the tool kind on the wire. Empty or "function" declares a
+	// normal function tool; "web_search" (or a versioned variant such as
+	// "web_search_2025_08_26") declares a server-side built-in search tool
+	// that is only honored by Responses endpoints (OpenAI Chat Completions
+	// and Anthropic skip these entries). Function fields are ignored for
+	// built-in types.
+	Type        string          `json:"type,omitempty"`
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters"`
+}
+
+// ToolChoice controls how the model picks tools. The zero value (nil
+// pointer) omits the field entirely, which preserves the byte-stable
+// prompt-cache prefix. Only Responses endpoints support the web_search
+// forced choice today.
+type ToolChoice struct {
+	// Type is "web_search" (or a versioned variant) to force a server-side
+	// search, or "auto"/"none"/"required"/a function name for standard modes.
+	Type string
+	// Name is the function name when Type selects a specific function.
+	Name string
+}
+
+// WebSearchTool returns a server-side built-in web search tool declaration
+// (Responses endpoints only: DeepSeek web_search). It is intentionally NOT
+// injected into the default tool list — adding it would change the
+// prompt-cache prefix for every request, so callers opt in explicitly.
+func WebSearchTool(versioned bool) ToolSchema {
+	t := "web_search"
+	if versioned {
+		t = "web_search_2025_08_26"
+	}
+	return ToolSchema{Type: t}
 }
 
 // Request is a single completion request.
 type Request struct {
 	Messages    []Message
 	Tools       []ToolSchema
-	Temperature *float64 // nil = omit; non-nil = send the value, including 0
+	ToolChoice  *ToolChoice // nil = omit (byte-stable default); Responses web_search only
+	Temperature *float64    // nil = omit; non-nil = send the value, including 0
 	MaxTokens   int
 	// ResponseFormat, when non-nil, asks the endpoint for structured JSON
 	// output (Responses: text.format.type=json_object). Nil omits the field

@@ -708,6 +708,11 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		if c.mimo {
 			parameters = provider.NormalizeLegacyTupleItemsForDraft202012(parameters)
 		}
+		if t.Type != "" && t.Type != "function" {
+			// Server-side built-in tools (web_search) are only honored by
+			// Responses endpoints; skip them on the Chat Completions wire.
+			continue
+		}
 		tools = append(tools, chatTool{
 			Type:     "function",
 			Function: chatFunction{Name: t.Name, Description: t.Description, Parameters: parameters},

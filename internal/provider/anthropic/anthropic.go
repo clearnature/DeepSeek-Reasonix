@@ -358,6 +358,11 @@ func (c *client) buildRequest(req provider.Request) anthRequest {
 
 	var tools []anthTool
 	for _, t := range req.Tools {
+		if t.Type != "" && t.Type != "function" {
+			// Server-side built-in tools (web_search) are only honored by
+			// Responses endpoints; skip them on the Anthropic wire.
+			continue
+		}
 		schema := t.Parameters
 		if len(schema) == 0 {
 			schema = json.RawMessage(`{"type":"object","properties":{}}`)
