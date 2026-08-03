@@ -328,8 +328,26 @@ func extractMarkdownSources(text string) []responses.Source {
 	inSources := false
 	for _, ln := range lines {
 		trimmed := strings.TrimSpace(ln)
+		// 标题形式：## 来源 / ## Sources / ## References / 数据来源
 		if strings.HasPrefix(trimmed, "## ") {
-			inSources = strings.Contains(trimmed, "来源") || strings.Contains(trimmed, "Sources")
+			inSources = strings.Contains(trimmed, "来源") || strings.Contains(trimmed, "Sources") ||
+				strings.Contains(trimmed, "References") || strings.Contains(trimmed, "参考")
+			continue
+		}
+		// 冒号行形式：数据来源：... / 来源：...
+		if strings.HasPrefix(trimmed, "数据来源") || strings.HasPrefix(trimmed, "来源：") ||
+			strings.HasPrefix(trimmed, "数据来源：") {
+			body := strings.TrimPrefix(trimmed, "数据来源")
+			body = strings.TrimPrefix(body, "：")
+			body = strings.TrimPrefix(body, ":")
+			body = strings.TrimPrefix(body, "来源")
+			body = strings.TrimPrefix(body, "：")
+			body = strings.TrimPrefix(body, ":")
+			body = strings.TrimSpace(body)
+			if body != "" && !strings.Contains(body, "http") {
+				// 无 URL 的来源描述（如 "新加坡海事及港务管理局 MPA 2026年1月发布"）
+				out = append(out, responses.Source{Title: body, URL: ""})
+			}
 			continue
 		}
 		if !inSources {
@@ -520,9 +538,13 @@ func runQuery(key, topic string) {
 	tier, _ := responses.ClassifyTier(topic)
 	fmt.Printf("难度分级: %s (maxRounds=%d)\n", tier, tier.MaxRounds())
 
+	// 时效意图：查询含"最新/最近/本月/今年"等时效词 → 强制刷新，
+	// 避免命中旧缓存（如 2024 数据响应 2025-2026 查询）。
+	forceFresh := hasFreshnessIntent(topic)
 	res, err := responses.Retrieve(ctx, topic, responses.RetrieveOptions{
 		Policy:        webPolicy(),
 		TimeSensitive: true,
+		ForceRefresh:  forceFresh,
 		Tier:          tier,
 	}, fetch)
 	if err != nil {
@@ -542,8 +564,16 @@ func runQuery(key, topic string) {
 
 	// 结构化分析报告
 	report := responses.SynthesizeReport(topic, []*responses.KnowledgeEntry{res.Entry})
-	fmt.Println("\n=== 分析报告 ===")
+	fmt.Println("\n=== 信息摘要（先摘要，回复「详细」获取完整数据） ===")
+	fmt.Println(report.RenderSummary())
+	fmt.Println("\n=== 完整报告 ===")
 	fmt.Println(report.Render())
+
+	// 信息素养：事实核查 + 交叉比对 + 旁观验证
+	verify := responses.CrossCheck(responses.ExtractNumericFacts(res.Entry.AnswerSummary),
+		[]*responses.KnowledgeEntry{res.Entry})
+	fmt.Println("\n=== 事实核查与交叉比对 ===")
+	fmt.Println(verify.Render())
 
 	// 因果线（时效事件）
 	if res.Entry.TimeSensitive || responses.PanicScore(topic) > 0 {
@@ -551,4 +581,15 @@ func runQuery(key, topic string) {
 		fmt.Println("=== 因果线 ===")
 		fmt.Println(chain.Render())
 	}
+}
+
+// hasFreshnessIntent reports whether a query demands current data.
+func hasFreshnessIntent(q string) bool {
+	lower := strings.ToLower(q)
+	for _, w := range []string{"最近", "最新", "本月", "今年", "最近12个月", "最近一年", "current", "latest", "recent", "this year", "2025", "2026"} {
+		if strings.Contains(lower, w) {
+			return true
+		}
+	}
+	return false
 }
