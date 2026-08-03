@@ -45,3 +45,41 @@ Scholar Loop 陈数实验  → 缓存命中 1ms
 ## 5. 用途
 
 该模式可用于：任何本地项目/资料库 → 蒸馏注入 → 后续对话零成本命中 + 与互联网标准知识交叉验证（学习本地特有构造时能区分"标准数学"与"项目映射"）。
+
+---
+
+# 补充：定理级完整学习（2026-08-03 第二次迭代）
+
+> 用户批评第一次只学 README 摘要（浅层）。本次**定理级学习**：扫描 126 个
+> 含定理的文件，抽取核心域的结构公理（record）/引理/常数，结构化注入。
+
+## 注入（6 域 + 1 补丁，Tier=domain，ExpiresAt=30 天）
+
+| 域 | 内容 |
+|---|---|
+| 宪法常数 | M=3¹¹×2¹⁶、FULL_TOUR=6624=144×46、X₀、OMEGA₀、RESONANCE、CHERN=±2 |
+| RootMath | Gaussian(Sqrt3/Sqrt2/Eisenstein) 代数结构、StableLengthRatio |
+| Coupling | DiscreteFiberBundle/Connection/Curvature（Cartan 挠率）、LCM 引理 ∀k n→n<3^k→go k n 1≡n、Twistor/NullGeodesic、DiscreteBerryCurvature |
+| HoTT | StandingWave、ChernClass、KanFiller（离散 CCHM）、π₁(T⁶)≅GF(3)⁶、DiscreteHomotopy |
+| Structology | HolographicPi 割圆同构、MagicSquare144/M4、QuotientT6A4、HomologyGroup、2T 二元四面体群 |
+| T6 定理 | 144 极向 A4 投影 / 46 环向巡游 / 6624 全息闭合 / 144 步和乐归零 |
+
+## 命中验证（6/6 零联网）
+
+```
+FULL_TOUR 6624 全息闭合   → 命中 4ms
+DiscreteFiberBundle 纤维丛 → 命中 1ms
+Eisenstein 艾森斯坦整数   → 命中 1ms
+π1 T6 同伦 GF3           → 命中 1ms
+HolographicPi 全息π      → 命中 1ms
+LCM 引理 三进制归约       → 命中 1ms（补丁条目，短查询需专属 Query）
+```
+
+## 元认知提升
+
+- 第一次（README 摘要）：3 条概述——只知道"有什么"
+- 第二次（定理级）：7 条结构/定理/常数——知道"结构是什么/定理证什么/常数多少"
+- 检索系统现在能回答：宪法常数数值、纤维丛三件套、LCM 引理签名、
+  π₁(T⁶)≅GF(3)⁶、6624=144×46 全息闭合、2T 群等**具体数学内容**
+- 短查询召回：短查询（8 字）对长条目（15 字）L2 相似度不足——为高频
+  短查询建专属条目（Query 贴近实际查询词），或依赖变体学习累积
