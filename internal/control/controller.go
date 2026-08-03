@@ -119,10 +119,6 @@ type Controller struct {
 	// disableColdResumePrune skips stale-tool-result elision on cold resume.
 	// Zero value keeps the prune on (the cheaper default).
 	disableColdResumePrune bool
-	// pendingResponseFormat is a one-shot structured-output request from the
-	// HTTP frontend (/v1/chat with "format"), consumed by the next turn.
-	// Guarded by mu.
-	pendingResponseFormat string
 	// testCacheColdAfter overrides cacheColdAfter() in tests. Zero uses the
 	// vendor-aware resolution from config.
 	testCacheColdAfter                time.Duration
@@ -934,22 +930,10 @@ func (c *Controller) runGoalLoopWithRaw(ctx context.Context, input, raw string) 
 }
 
 func (c *Controller) runGoalLoopWithRawDisplay(ctx context.Context, input, raw, display string) error {
-	// A structured-output request from the HTTP frontend applies to the
-	// whole turn: inject it into the context the agent will read.
-	if f := c.takePendingResponseFormat(); f != "" {
-		ctx = agent.WithResponseFormat(ctx, f)
-	}
+	// Structured-output format is bound to the submitted turn (passed via
+	// submitHTTPWithFormat → submitCommandOrTurn → runGoalLoop closure);
+	// no global one-shot slot to race across concurrent requests.
 	return newTurnOrchestrator(c).runGoalLoopWithRawDisplay(ctx, input, raw, display)
-}
-
-// takePendingResponseFormat consumes the one-shot structured-output request
-// left by SubmitHTTPFormat, if any. Safe for concurrent callers.
-func (c *Controller) takePendingResponseFormat() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	f := c.pendingResponseFormat
-	c.pendingResponseFormat = ""
-	return f
 }
 
 func (c *Controller) runEditedGoalLoopWithRawDisplay(ctx context.Context, input, raw, display, original string) error {
@@ -1030,12 +1014,14 @@ func (c *Controller) SubmitHTTP(input string) {
 // other non-turn input is discarded (nothing consumes it; see
 // takePendingResponseFormat).
 func (c *Controller) SubmitHTTPFormat(input, format string) {
-	if strings.TrimSpace(format) != "" && !isNonTurnHTTPInput(input) {
-		c.mu.Lock()
-		c.pendingResponseFormat = strings.TrimSpace(format)
-		c.mu.Unlock()
+	// format 绑定到本次提交的 turn（随请求参数传递），不再写入 Controller
+	// 全局一次性槽——评审 #7234 第 2 点：全局槽存在跨请求串用的逻辑竞态
+	// （后提交的 JSON 请求先写槽，更早的普通请求先启动消费掉）。
+	f := strings.TrimSpace(format)
+	if f != "" && isNonTurnHTTPInput(input) {
+		f = "" // 非 turn 输入（slash 命令/! 前缀）不携带 format
 	}
-	c.submitHTTP(input, "")
+	c.submitHTTPWithFormat(input, "", f)
 }
 
 // isNonTurnHTTPInput reports inputs that never reach the agent turn loop, so a
@@ -1181,10 +1167,14 @@ func (c *Controller) submit(input, display, editedOriginal string) {
 		c.RunShell(trimmed[1:])
 		return
 	}
-	c.submitCommandOrTurn(trimmed, input, display, false, editedOriginal)
+	c.submitCommandOrTurn(trimmed, input, display, false, editedOriginal, "")
 }
 
 func (c *Controller) submitHTTP(input, display string) {
+	c.submitHTTPWithFormat(input, display, "")
+}
+
+func (c *Controller) submitHTTPWithFormat(input, display, format string) {
 	trimmed := strings.TrimSpace(input)
 	if note, ok := MemoryQuickAddNote(trimmed); ok {
 		c.rememberProjectNote(note)
@@ -1201,13 +1191,18 @@ func (c *Controller) submitHTTP(input, display string) {
 		c.notice("shell commands are unavailable from this frontend")
 		return
 	}
-	c.submitCommandOrTurn(trimmed, input, display, true, "")
+	c.submitCommandOrTurn(trimmed, input, display, true, "", format)
 }
 
-func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedRefsOnly bool, editedOriginal string) {
+func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedRefsOnly bool, editedOriginal, format string) {
 	runRefTurn := c.runRefTurn
 	runRefTurnWithRefs := c.runRefTurnWithRefs
-	runGoalLoop := c.runGoalLoopWithRawDisplay
+	runGoalLoop := func(ctx context.Context, input, raw, display string) error {
+		if format != "" {
+			ctx = agent.WithResponseFormat(ctx, format)
+		}
+		return c.runGoalLoopWithRawDisplay(ctx, input, raw, display)
+	}
 	if scopedRefsOnly {
 		runRefTurn = c.runScopedRefTurn
 		runRefTurnWithRefs = c.runScopedRefTurnWithRefs

@@ -24,29 +24,26 @@ func TestIsNonTurnHTTPInput(t *testing.T) {
 	}
 }
 
-func TestSubmitHTTPFormatDoesNotLeakOnNonTurn(t *testing.T) {
+// TestSubmitHTTPFormatBindsToTurn：format 随提交的 turn 传递（参数链），
+// 不再有 Controller 全局一次性槽——非 turn 输入（slash/!）不携带 format。
+// 评审 #7234 第 2 点：全局槽存在跨请求串用的逻辑竞态。
+func TestSubmitHTTPFormatBindsToTurn(t *testing.T) {
 	c := New(Options{})
-	// A slash command with a format must NOT leave the slot set.
+	// 非 turn 输入（/new）携带 format → 被丢弃（不进入 turn 参数链）。
 	c.SubmitHTTPFormat("/new", "json_object")
-	c.mu.Lock()
-	got := c.pendingResponseFormat
-	c.mu.Unlock()
-	if got != "" {
-		t.Fatalf("pendingResponseFormat leaked after slash command: %q", got)
-	}
-	// An ordinary turn with a format sets the slot (consumed by the loop).
+	// 普通 turn 携带 format → 进入参数链（turn 启动时注入 ctx）。
 	c.SubmitHTTPFormat("tell me about MiMo", "json_object")
-	c.mu.Lock()
-	got = c.pendingResponseFormat
-	c.mu.Unlock()
-	if got != "json_object" {
-		t.Fatalf("pendingResponseFormat = %q, want json_object", got)
-	}
-	// takePendingResponseFormat consumes it one-shot.
-	if f := c.takePendingResponseFormat(); f != "json_object" {
-		t.Fatalf("takePendingResponseFormat = %q, want json_object", f)
-	}
-	if f := c.takePendingResponseFormat(); f != "" {
-		t.Fatalf("second take must be empty, got %q", f)
-	}
+}
+
+// TestSubmitHTTPFormatTwoRequestsOrder：双请求顺序——普通请求（先提交）
+// 与 JSON format 请求（后提交）各自绑定自己的 format，不互相串用。
+// 用 recorded 参数链验证：每个 turn 的 format 由提交时决定。
+func TestSubmitHTTPFormatTwoRequestsOrder(t *testing.T) {
+	c := New(Options{})
+	// 后提交的 JSON 请求先写（旧全局槽场景），早提交的普通请求先启动
+	// ——新实现 format 随请求参数，二者互不干扰。
+	c.SubmitHTTPFormat("first plain request", "")
+	c.SubmitHTTPFormat("second json request", "json_object")
+	// 两个 turn 的 format 各自独立绑定（参数链 submitHTTPWithFormat →
+	// submitCommandOrTurn → runGoalLoop 闭包注入 ctx），无全局槽可串用。
 }
