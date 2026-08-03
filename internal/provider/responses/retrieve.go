@@ -2,6 +2,7 @@ package responses
 
 import (
 	"context"
+	"math/rand"
 	"time"
 )
 
@@ -29,7 +30,19 @@ type RetrieveOptions struct {
 	MinCredibility float64
 	// Tier overrides heuristic classification; empty uses ClassifyTier.
 	Tier RetrievalTier
+	// BypassProbability (0..1) is the defense-layer-3 anti-echo-chamber knob:
+	// on a L2 semantic hit whose similarity is below 0.95, the cache is
+	// bypassed with this probability and a live fetch refreshes the entry
+	// (incremental update, so the answer stays current instead of being
+	// repeatedly served from the same distilled snapshot). 0 disables
+	// bypass (default, cost-first); 1 always refreshes near-synonyms.
+	BypassProbability float64
 }
+
+// bypassThreshold is the L2 similarity above which a hit is treated as
+// effectively identical (always served from cache regardless of the bypass
+// probability — re-fetching an identical query wastes money for no signal).
+const bypassThreshold = 0.95
 
 // FetchFunc performs one real retrieval for query (web_search + json_schema
 // extraction) and returns the distilled entry. tier is the classification the
@@ -41,6 +54,7 @@ type RetrieveResult struct {
 	Entry       *KnowledgeEntry // final answer (cache or fresh)
 	FromCache   bool            // served from L1/L2 without API
 	StaleServed bool            // stale cache served while refresh ran
+	Bypassed    bool            // defense-layer-3 probabilistic bypass fired
 	Refreshed   bool            // incremental refresh applied
 	Tier        RetrievalTier   // difficulty used (heuristic or override)
 	APIUsed     bool            // any fetch was invoked
@@ -83,8 +97,18 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 			res.Entry = e
 			res.FromCache = true
 			res.Tier = tierOf(e)
-			if e.NeedsRefresh(now) {
-				res.StaleServed = true
+			stale := e.NeedsRefresh(now)
+			// Defense layer 3 (anti-echo-chamber): a near-synonym hit below
+			// the identity threshold is bypassed with the configured
+			// probability so the cache is refreshed by live data instead of
+			// repeatedly serving the same distilled snapshot.
+			bypass := !stale && !opts.ForceRefresh &&
+				opts.BypassProbability > 0 &&
+				sim < bypassThreshold &&
+				rand.Float64() < opts.BypassProbability
+			if stale || bypass {
+				res.StaleServed = stale
+				res.Bypassed = bypass
 				fresh, err := fetch(ctx, query, tierOf(e))
 				if err != nil {
 					return res, err
@@ -95,7 +119,6 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 				res.Refreshed = true
 				res.APIUsed = true
 			}
-			_ = sim
 			return res, nil
 		}
 	}

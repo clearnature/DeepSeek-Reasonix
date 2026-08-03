@@ -178,3 +178,62 @@ func TestSaveKnowledgeIgnoresMaliciousQueryHash(t *testing.T) {
 		t.Fatal("malicious query_hash must not create files outside cache dir")
 	}
 }
+
+func TestRetrieveBypassProbability(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q1 := "2026年8月3日北京天气怎么样？"
+	SaveKnowledge(&KnowledgeEntry{Query: q1, AnswerSummary: "缓存快照", TimeSensitive: false})
+	defer cleanupEntry(t, q1)
+
+	// 近义查询，BypassProbability=1 → 必绕过（走 API 刷新）
+	fetches := 0
+	res, err := Retrieve(context.Background(), "北京今天天气如何", RetrieveOptions{BypassProbability: 1},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			fetches++
+			return &KnowledgeEntry{Query: q1, AnswerSummary: "实时刷新", KeyFacts: []string{"新数据"}}, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if !res.Bypassed || !res.APIUsed || fetches != 1 {
+		t.Fatalf("bypass=1 must refresh: Bypassed=%v APIUsed=%v fetches=%d", res.Bypassed, res.APIUsed, fetches)
+	}
+	if res.Entry.AnswerSummary != "实时刷新" {
+		t.Fatalf("bypass must update entry, got %q", res.Entry.AnswerSummary)
+	}
+
+	// BypassProbability=0 → 永不绕过（默认省钱）
+	fetches = 0
+	res2, err := Retrieve(context.Background(), "北京今天天气如何", RetrieveOptions{},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			fetches++
+			return nil, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if res2.Bypassed || res2.APIUsed || fetches != 0 {
+		t.Fatalf("bypass=0 must serve cache: Bypassed=%v APIUsed=%v fetches=%d", res2.Bypassed, res2.APIUsed, fetches)
+	}
+}
+
+func TestRetrieveExactHitNeverBypasses(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q := "完全相同的查询"
+	SaveKnowledge(&KnowledgeEntry{Query: q, AnswerSummary: "快照", TimeSensitive: false})
+	defer cleanupEntry(t, q)
+
+	fetches := 0
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{BypassProbability: 1},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			fetches++
+			return nil, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	// L1 精确命中（sim=1.0）即使 BypassProbability=1 也不绕过
+	if res.APIUsed || fetches != 0 {
+		t.Fatalf("exact hit must never bypass: APIUsed=%v fetches=%d", res.APIUsed, fetches)
+	}
+}
