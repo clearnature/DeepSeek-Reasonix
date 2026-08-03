@@ -25,3 +25,21 @@ func TestResolveConcept(t *testing.T) {
 		}
 	}
 }
+
+func TestHasFreshnessIntent(t *testing.T) {
+	cases := []struct {
+		q    string
+		want bool
+	}{
+		{"2026年数论最新突破", true},
+		{"ABC conjecture proof status 2026", true},
+		{"recent progress Riemann", true},
+		{"霍奇猜想是什么", false}, // 静态概念
+		{"艾森斯坦整数", false},
+	}
+	for _, c := range cases {
+		if got := HasFreshnessIntent(c.q); got != c.want {
+			t.Errorf("HasFreshnessIntent(%q) = %v, want %v", c.q, got, c.want)
+		}
+	}
+}

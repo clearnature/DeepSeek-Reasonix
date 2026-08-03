@@ -69,3 +69,18 @@ func ResolveConcept(query string) (string, bool) {
 	}
 	return "", false
 }
+
+// HasFreshnessIntent reports whether a query asks for current/latest
+// information (news, markets, "最新/2026/recent"). Freshness-seeking
+// queries must not be served static domain knowledge (Tier=domain, locally
+// injected pre-verified content) — the user wants the newest paper, not the
+// library snapshot.
+func HasFreshnessIntent(q string) bool {
+	lower := strings.ToLower(q)
+	for _, w := range []string{"最近", "最新", "本月", "今年", "current", "latest", "recent", "new", "2025", "2026"} {
+		if strings.Contains(lower, w) {
+			return true
+		}
+	}
+	return false
+}

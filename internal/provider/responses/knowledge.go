@@ -424,6 +424,11 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 			continue
 		}
 		sim := NgramSimilarity(q, e.Query)
+		// 时效查询不服务本地静态 domain 条目：用户要"最新论文/2026 进展"，
+		// 本地注入的库快照不是最新（数论检索污染教训 2026-08-03）。
+		if e.Tier == string(TierDomain) && HasFreshnessIntent(q) {
+			sim = 0
+		}
 		// 主题一致性：Dice 相似度高但领域词无交集 = 误命中（如"霍尔木兹
 		// 化肥"命中"霍尔木兹石油"）。无领域词的查询退化为纯相似度。
 		if !topicsOverlap(q, e.Query) {
