@@ -197,7 +197,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
 			prevPrefixShape = prefixShape
 		}
 
-		text, reasoning, signature, calls, usage, interrupted, partialToolStarted, partialCalls, err := a.stream(ctx, step+1)
+		text, reasoning, signature, reasoningID, reasoningStatus, calls, usage, interrupted, partialToolStarted, partialCalls, err := a.stream(ctx, step+1)
 		if err != nil {
 			if interrupted && state.streamRecoveries < maxStreamRecoveries {
 				state.streamRecoveries++
@@ -237,6 +237,8 @@ func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
 			Content:            text,
 			ReasoningContent:   reasoning,
 			ReasoningSignature: signature,
+			ReasoningID:        reasoningID,
+			ReasoningStatus:    reasoningStatus,
 			ToolCalls:          calls,
 			WorkDurationMs:     state.workDurationMs(),
 		})

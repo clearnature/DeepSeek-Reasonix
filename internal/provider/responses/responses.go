@@ -47,6 +47,10 @@ func newFromConfig(cfg provider.Config) (provider.Provider, error) {
 		Name: cfg.Name, APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Model,
 		Effort: effort, Mode: mode, Stateful: stateful, Proxy: proxy,
 		KeyEnv: keyEnv, KeySource: keySource,
+		// Extra 原样透传：vision 等能力开关由调用方（boot/CLI）写入
+		// cfg.Extra，factory 若丢弃则 New() 读不到（评审 #7234 第 3 点：
+		// vision 在真实 factory 路径丢失）。
+		Extra: cfg.Extra,
 	}), nil
 }
 
@@ -739,6 +743,15 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		c.ResetContext()
 	}
 	if !failed {
+		// 把 reasoning item 的 id/status 作为元数据 chunk 流给 Agent
+		// （空 Text，随最后一个 ChunkReasoning 语义）——Agent 持久化进
+		// session，下一轮 input reasoning item 回传 id/status
+		// （评审 #7234 第 1 点：SSE → session → 第二轮 真实链路）。
+		if reasoningID != "" || reasoningStatus != "" {
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, ReasoningID: reasoningID, ReasoningStatus: reasoningStatus}) {
+				return
+			}
+		}
 		_ = sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkDone})
 	}
 }

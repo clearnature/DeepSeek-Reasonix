@@ -2564,7 +2564,7 @@ func streamRecoveryMessage(hasPartialText, hadPartialTool bool) string {
 // stream so a sink can re-render the streamed raw text as styled markdown. The
 // accumulated text and reasoning are also returned so the caller can round-trip
 // reasoning on the next turn.
-func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, []provider.ToolCall, *provider.Usage, bool, bool, []provider.ToolCall, error) {
+func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, string, string, []provider.ToolCall, *provider.Usage, bool, bool, []provider.ToolCall, error) {
 	ctx = provider.WithRetryNotify(ctx, func(info provider.RetryInfo) {
 		a.sink.Emit(event.Event{Kind: event.Retrying, RetryAttempt: info.Attempt, RetryMax: info.Max})
 	})
@@ -2582,7 +2582,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		ResponseFormat: responseFormatFromRequest(ctx),
 	})
 	if err != nil {
-		return "", "", "", nil, nil, false, false, nil, err
+		return "", "", "", "", "", nil, nil, false, false, nil, err
 	}
 
 	// A PostLLMCall hook rewrites the whole reasoning block, so when one is wired
@@ -2592,7 +2592,8 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 	transformReasoning := a.hooks != nil && a.hooks.HasPostLLMCall()
 
 	var text, reasoning strings.Builder
-	var signature string // provider-issued proof for the reasoning (Anthropic thinking)
+	var signature string                    // provider-issued proof for the reasoning (Anthropic thinking)
+	var reasoningID, reasoningStatus string // Responses reasoning item id/status (meta chunk)
 	var calls []provider.ToolCall
 	var partialCalls []provider.ToolCall
 	var usage *provider.Usage
@@ -2618,12 +2619,12 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		select {
 		case <-ctx.Done():
 			stored, _ := finishReasoning()
-			return text.String(), stored, signature, calls, usage, false, partialToolStarted, partialCalls, ctx.Err()
+			return text.String(), stored, signature, reasoningID, reasoningStatus, calls, usage, false, partialToolStarted, partialCalls, ctx.Err()
 		case c, ok := <-ch:
 			if !ok {
 				if err := ctx.Err(); err != nil {
 					stored, _ := finishReasoning()
-					return text.String(), stored, signature, calls, usage, false, partialToolStarted, partialCalls, err
+					return text.String(), stored, signature, reasoningID, reasoningStatus, calls, usage, false, partialToolStarted, partialCalls, err
 				}
 				stored, display := finishReasoning()
 				if text.Len() > 0 || display != "" {
@@ -2633,7 +2634,7 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 						Reasoning: display,
 					})
 				}
-				return text.String(), stored, signature, calls, usage, false, false, partialCalls, nil
+				return text.String(), stored, signature, reasoningID, reasoningStatus, calls, usage, false, false, partialCalls, nil
 			}
 			chunk = c
 		}
@@ -2642,6 +2643,14 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 			reasoning.WriteString(chunk.Text)
 			if chunk.Signature != "" {
 				signature = chunk.Signature
+			}
+			// 元数据 chunk（空 Text）：reasoning item id/status 贯通
+			// SSE → session → 下一轮回传（评审 #7234 第 1 点）。
+			if chunk.ReasoningID != "" {
+				reasoningID = chunk.ReasoningID
+			}
+			if chunk.ReasoningStatus != "" {
+				reasoningStatus = chunk.ReasoningStatus
 			}
 			if chunk.Text != "" && !transformReasoning {
 				a.sink.Emit(event.Event{Kind: event.Reasoning, Text: chunk.Text})
@@ -2689,10 +2698,10 @@ func (a *Agent) stream(ctx context.Context, turn int) (string, string, string, [
 		case provider.ChunkError:
 			if provider.IsStreamInterrupted(chunk.Err) {
 				stored, _ := finishReasoning()
-				return text.String(), stored, signature, calls, usage, true, partialToolStarted, partialCalls, chunk.Err
+				return text.String(), stored, signature, reasoningID, reasoningStatus, calls, usage, true, partialToolStarted, partialCalls, chunk.Err
 			}
 			stored, _ := finishReasoning()
-			return text.String(), stored, signature, calls, usage, false, partialToolStarted, partialCalls, chunk.Err
+			return text.String(), stored, signature, reasoningID, reasoningStatus, calls, usage, false, partialToolStarted, partialCalls, chunk.Err
 		}
 	}
 }
