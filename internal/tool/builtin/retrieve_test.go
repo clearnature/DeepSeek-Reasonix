@@ -97,7 +97,12 @@ func TestRetrieveInfoToolEmptyQuery(t *testing.T) {
 
 func cleanCacheForTool(t *testing.T) {
 	t.Helper()
-	dir := filepath.Join(mustCacheDir(t), "websearch")
+	// 走 responses 的有效缓存根（honor TestMain override）——之前硬编码
+	// os.UserCacheDir() 让 tool 测试清掉了真实用户缓存。
+	dir, err := responses.KnowledgeCacheDir()
+	if err != nil {
+		return
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return

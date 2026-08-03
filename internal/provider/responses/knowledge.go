@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,6 +59,15 @@ type KnowledgeEntry struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// LastAccess is the last time this entry served a hit (L1 or L2).
+	// Capacity governance uses it as the LRU key: when the cache exceeds
+	// MaxKnowledgeEntries, the least-recently-accessed entries are evicted.
+	LastAccess time.Time `json:"last_access,omitempty"`
+	// Language is the detected language of the query ("zh"/"en"). Empty
+	// means unknown and never constrains hits. L2 semantic hits require
+	// language compatibility (both empty, equal, or one empty) so an "en"
+	// frame never gets served a Chinese snapshot.
+	Language string `json:"language,omitempty"`
 }
 
 // NeedsRefresh reports whether a cached hit should trigger an incremental
@@ -103,6 +113,17 @@ var errCacheDirUnavailable = errors.New("knowledge cache dir unavailable")
 // the 100-round hammer test previously wiped ~/.cache/reasonix/websearch).
 var knowledgeDirOverride string
 
+// SetKnowledgeDirOverride redirects the knowledge cache root. Used by tests
+// in OTHER packages (e.g. internal/tool/builtin) whose process has no
+// TestMain of their own — without it their cache-cleaning helpers wipe the
+// real user cache. Empty restores the default.
+func SetKnowledgeDirOverride(dir string) { knowledgeDirOverride = dir }
+
+// KnowledgeCacheDir exposes the effective cache root (honoring the test
+// override) so cross-package helpers can clean exactly what the cache code
+// reads. Returns errCacheDirUnavailable when the root is unset.
+func KnowledgeCacheDir() (string, error) { return knowledgeDir() }
+
 // knowledgeDir is the per-user cache root for web_search knowledge entries.
 func knowledgeDir() (string, error) {
 	root := config.CacheDir()
@@ -147,6 +168,8 @@ func LoadKnowledge(query string) (*KnowledgeEntry, bool) {
 		_ = os.Remove(path)
 		return nil, false
 	}
+	// L1 命中更新 LastAccess（LRU 治理的访问标记）。
+	touchEntry(path, &e)
 	return &e, true
 }
 
@@ -165,6 +188,14 @@ func SaveKnowledge(e *KnowledgeEntry) {
 	if e.ExpiresAt.IsZero() {
 		e.ExpiresAt = time.Now().Add(DefaultKnowledgeTTL)
 	}
+	if e.LastAccess.IsZero() {
+		e.LastAccess = time.Now()
+	}
+	// Language detection on write so L2 semantic hits can enforce language
+	// compatibility (an "en" frame must not be served a Chinese snapshot).
+	if e.Language == "" {
+		e.Language = DetectLanguage(e.Query)
+	}
 	// Re-derive unconditionally: QueryHash in persisted JSON is advisory
 	// metadata, not a path component source.
 	e.QueryHash = KnowledgeHash(e.Query)
@@ -178,6 +209,98 @@ func SaveKnowledge(e *KnowledgeEntry) {
 		return
 	}
 	_ = os.Rename(tmp, path)
+	enforceKnowledgeCapacity(dir)
+}
+
+// MaxKnowledgeEntries caps the knowledge cache. Beyond this, the
+// least-recently-accessed entries are evicted on write (LRU governance —
+// cost-first: the cache must not grow without bound on a 1M-token vendor).
+var MaxKnowledgeEntries = 500
+
+// enforceKnowledgeCapacity evicts LRU entries when the cache exceeds the
+// cap. Expired entries are always removed first (they are dead weight).
+func enforceKnowledgeCapacity(dir string) {
+	now := time.Now()
+	type stat struct {
+		path    string
+		access  time.Time
+		expired bool
+	}
+	var st []stat
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, de := range entries {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(dir, de.Name())
+		info, err := de.Info()
+		if err != nil {
+			continue
+		}
+		s := stat{path: path, access: info.ModTime()}
+		if data, err := os.ReadFile(path); err == nil {
+			var e KnowledgeEntry
+			if json.Unmarshal(data, &e) == nil {
+				if !e.LastAccess.IsZero() {
+					s.access = e.LastAccess
+				}
+				s.expired = !e.ExpiresAt.IsZero() && now.After(e.ExpiresAt)
+			}
+		}
+		st = append(st, s)
+	}
+	if len(st) <= MaxKnowledgeEntries {
+		return
+	}
+	// 过期优先删；其余按 LastAccess 最旧先删（LRU）。
+	over := len(st) - MaxKnowledgeEntries
+	var evict []stat
+	for _, s := range st {
+		if s.expired {
+			evict = append(evict, s)
+		}
+	}
+	if len(evict) < over {
+		var rest []stat
+		for _, s := range st {
+			if !s.expired {
+				rest = append(rest, s)
+			}
+		}
+		sort.Slice(rest, func(i, j int) bool { return rest[i].access.Before(rest[j].access) })
+		evict = append(evict, rest[:min(over-len(evict), len(rest))]...)
+	}
+	for _, s := range evict {
+		_ = os.Remove(s.path)
+	}
+}
+
+// DetectLanguage heuristically classifies a query as zh or en. Any CJK
+// character makes it zh (Chinese is the dominant semantic carrier even in
+// mixed queries like "Operation Midnight Hammer 轰炸"); only pure-ASCII
+// queries are en. A query with neither returns "" (unknown) so it never
+// constrains semantic hits.
+func DetectLanguage(s string) string {
+	cjk, ascii := 0, 0
+	for _, r := range s {
+		switch {
+		case r >= 0x4E00 && r <= 0x9FFF: // CJK Unified Ideographs
+			cjk++
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+			ascii++
+		}
+	}
+	switch {
+	case cjk > 0:
+		return "zh"
+	case ascii > 0:
+		return "en"
+	default:
+		return ""
+	}
 }
 
 // DefaultSemanticThreshold is the character-set similarity cutoff for L2
@@ -240,8 +363,9 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 		return nil, 0, false
 	}
 	var (
-		best    *KnowledgeEntry
-		bestSim float64
+		best     *KnowledgeEntry
+		bestSim  float64
+		bestPath string
 	)
 	now := time.Now()
 	for _, de := range entries {
@@ -267,15 +391,41 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 		if !topicsOverlap(q, e.Query) {
 			sim = 0
 		}
+		// 语言一致性：zh 查询不命中 en 缓存（反之亦然）——跨语言语义
+		// 命中会把 en 帧错误地喂给中文快照。未知语言（""）不约束。
+		ql, el := DetectLanguage(q), e.Language
+		if ql != "" && el != "" && ql != el {
+			sim = 0
+		}
 		if sim > bestSim {
 			bestSim = sim
 			best = &e
+			bestPath = path
 		}
 	}
 	if best != nil && bestSim >= threshold {
+		// L2 命中同样更新 LastAccess（LRU 治理）。
+		if bestPath != "" {
+			touchEntry(bestPath, best)
+		}
 		return best, bestSim, true
 	}
 	return nil, 0, false
+}
+
+// touchEntry updates LastAccess and persists it (LRU governance bookkeeping).
+// Failures are swallowed: the hit still counts, only the access stamp may lag.
+func touchEntry(path string, e *KnowledgeEntry) {
+	e.LastAccess = time.Now()
+	data, err := json.MarshalIndent(e, "", "  ")
+	if err != nil {
+		return
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, path)
 }
 
 // ListKnowledge returns all unexpired cache entries (audit layer 4: daily

@@ -1,6 +1,7 @@
 package responses
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -224,5 +225,83 @@ func TestExtractTopics(t *testing.T) {
 	}
 	if !foundAgri {
 		t.Fatalf("agriculture words missing: %v", topics)
+	}
+}
+
+// ---- 语言感知（2026-08-03 优化）----
+
+func TestDetectLanguage(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"北京今天天气怎么样", "zh"},
+		{"Beijing weather today", "en"},
+		{"Operation Midnight Hammer 轰炸", "zh"}, // 混合：有中文即 zh
+		{"2025年6月 B-2 轰炸", "zh"},
+		{"123456", ""}, // 无语言信号
+	}
+	for _, c := range cases {
+		if got := DetectLanguage(c.in); got != c.want {
+			t.Errorf("DetectLanguage(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestLanguageGateBlocksCrossLanguageL2：en 缓存不得被 zh 近义查询命中
+// （编排层 en 帧误拿中文快照的防护）。
+func TestLanguageGateBlocksCrossLanguageL2(t *testing.T) {
+	cleanKnowledgeCache(t)
+	// en 缓存条目
+	SaveKnowledge(&KnowledgeEntry{
+		Query:         "Beijing weather forecast today",
+		AnswerSummary: "Sunny, 30C in Beijing.",
+		ExpiresAt:     time.Now().Add(time.Hour),
+	})
+	// zh 近义查询（语义相似但语言不同 → 必须不命中）
+	if _, sim, hit := LoadKnowledgeSemantic("北京今天天气怎么样", DefaultSemanticThreshold); hit {
+		t.Fatalf("zh query must not hit en cache (sim=%.3f)", sim)
+	}
+	// en 近义查询 → 命中
+	if _, _, hit := LoadKnowledgeSemantic("weather in Beijing now", DefaultSemanticThreshold); !hit {
+		t.Fatal("en near-synonym must hit en cache")
+	}
+	// zh 缓存 + zh 近义 → 命中
+	SaveKnowledge(&KnowledgeEntry{
+		Query:         "北京今天天气",
+		AnswerSummary: "北京晴 30 度。",
+		ExpiresAt:     time.Now().Add(time.Hour),
+	})
+	if _, _, hit := LoadKnowledgeSemantic("北京今天天气怎么样", DefaultSemanticThreshold); !hit {
+		t.Fatal("zh near-synonym must hit zh cache")
+	}
+}
+
+// TestCapacityEvictsLRU：超过上限时最旧的条目被淘汰。
+func TestCapacityEvictsLRU(t *testing.T) {
+	cleanKnowledgeCache(t)
+	// 用隔离目录 + 缩小上限，避免写入 500 个文件。
+	oldCap := MaxKnowledgeEntries
+	MaxKnowledgeEntries = 5
+	defer func() { MaxKnowledgeEntries = oldCap }()
+
+	for i := 0; i < 8; i++ {
+		SaveKnowledge(&KnowledgeEntry{
+			Query:         fmt.Sprintf("话题%02d是什么", i),
+			AnswerSummary: fmt.Sprintf("话题%02d 的回答", i),
+			ExpiresAt:     time.Now().Add(time.Hour),
+		})
+	}
+	// 前 3 个最旧的应被淘汰（8 - 5 = 3）
+	for i := 0; i < 3; i++ {
+		if _, ok := LoadKnowledge(fmt.Sprintf("话题%02d是什么", i)); ok {
+			t.Fatalf("entry %d must be evicted (LRU)", i)
+		}
+	}
+	// 后 5 个保留
+	for i := 3; i < 8; i++ {
+		if _, ok := LoadKnowledge(fmt.Sprintf("话题%02d是什么", i)); !ok {
+			t.Fatalf("entry %d must survive", i)
+		}
 	}
 }
