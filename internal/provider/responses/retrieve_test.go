@@ -41,7 +41,7 @@ func TestRetrieveStaleServedThenRefresh(t *testing.T) {
 	})
 	defer cleanupEntry(t, q)
 
-	res, err := Retrieve(context.Background(), q, RetrieveOptions{},
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{Policy: webPolicy()},
 		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
 			return &KnowledgeEntry{Query: query, AnswerSummary: "最新消息", KeyFacts: []string{"已抵达"}}, nil
 		})
@@ -67,7 +67,7 @@ func TestRetrieveMissFetchAndQualityGate(t *testing.T) {
 	cleanKnowledgeCache(t)
 	q := "对比ChatGPT和DeepSeek"
 
-	res, err := Retrieve(context.Background(), q, RetrieveOptions{},
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{Policy: webPolicy()},
 		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
 			if tier != TierComplex {
 				t.Fatalf("heuristic should classify 对比 as complex, got %s", tier)
@@ -143,7 +143,7 @@ func TestRetrieveBlocksManipulatedContentFromCache(t *testing.T) {
 	cleanKnowledgeCache(t)
 	q := "这个事件是否危险"
 	// Fetch 返回含恐慌/营销操纵的内容 → 必须透传但不落盘
-	res, err := Retrieve(context.Background(), q, RetrieveOptions{},
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{Policy: webPolicy()},
 		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
 			return &KnowledgeEntry{
 				Query:         query,
@@ -188,7 +188,7 @@ func TestRetrieveBypassProbability(t *testing.T) {
 
 	// 近义查询，BypassProbability=1 → 必绕过（走 API 刷新）
 	fetches := 0
-	res, err := Retrieve(context.Background(), "北京今天天气如何", RetrieveOptions{BypassProbability: 1},
+	res, err := Retrieve(context.Background(), "北京今天天气如何", RetrieveOptions{BypassProbability: 1, Policy: webPolicy()},
 		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
 			fetches++
 			return &KnowledgeEntry{Query: q1, AnswerSummary: "实时刷新", KeyFacts: []string{"新数据"}}, nil
@@ -245,7 +245,7 @@ func TestRetrievePanicModeAppendsReassurance(t *testing.T) {
 	defer cleanupEntry(t, q)
 
 	// PanicMode 开启：答案追加安抚行（不拦截检索本身）
-	res, err := Retrieve(context.Background(), q, RetrieveOptions{PanicMode: true},
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{PanicMode: true, Policy: webPolicy()},
 		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
 			return &KnowledgeEntry{Query: query, AnswerSummary: "未监测到异常地震活动"}, nil
 		})
@@ -268,14 +268,20 @@ func TestRetrievePanicModeAppendsReassurance(t *testing.T) {
 func TestRetrievePanicModeOffByDefault(t *testing.T) {
 	cleanKnowledgeCache(t)
 	q := "明天会有海啸吗？"
+	// 先落盘一条缓存（避免未命中走 nil-policy 的 WebBlocked 路径）
+	SaveKnowledge(&KnowledgeEntry{Query: q, AnswerSummary: "请关注官方预警", TimeSensitive: false})
 	defer cleanupEntry(t, q)
 
 	res, err := Retrieve(context.Background(), q, RetrieveOptions{}, // PanicMode 默认 false
 		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
-			return &KnowledgeEntry{Query: query, AnswerSummary: "请关注官方预警"}, nil
+			t.Fatal("cache hit must not fetch")
+			return nil, nil
 		})
 	if err != nil {
 		t.Fatalf("retrieve: %v", err)
+	}
+	if !res.FromCache {
+		t.Fatalf("want cache hit, got %+v", res)
 	}
 	if contains(res.Entry.AnswerSummary, "温馨提示") {
 		t.Fatalf("panic mode off must not append reassurance, got %q", res.Entry.AnswerSummary)
@@ -284,4 +290,110 @@ func TestRetrievePanicModeOffByDefault(t *testing.T) {
 
 func contains(s, sub string) bool {
 	return strings.Contains(s, sub)
+}
+
+func webPolicy() *RetrievalPolicy {
+	p := DefaultPolicy()
+	p.WebSearch = true
+	p.Frequency = FrequencyHigh
+	return &p
+}
+
+func TestPolicyFrequencyTiers(t *testing.T) {
+	now := time.Now()
+	for tier, want := range FrequencyCooldowns {
+		if tier == FrequencyDynamic || tier == FrequencyOff {
+			continue // dynamic/off 有各自专项测试
+		}
+		p := DefaultPolicy()
+		p.WebSearch = true
+		p.Frequency = tier
+		if !p.CanWebSearch(now) {
+			t.Fatalf("%s: fresh policy must allow web", tier)
+		}
+		p.MarkWebUsed(now)
+		if p.CanWebSearch(now) {
+			t.Fatalf("%s: must be in cooldown right after fetch", tier)
+		}
+		if p.CanWebSearch(now.Add(want - time.Second)) {
+			t.Fatalf("%s: cooldown=%v not respected", tier, want)
+		}
+		if !p.CanWebSearch(now.Add(want + time.Second)) {
+			t.Fatalf("%s: must allow web after cooldown", tier)
+		}
+	}
+}
+
+func TestPolicyOffBlocksWeb(t *testing.T) {
+	p := DefaultPolicy()
+	p.WebSearch = true
+	p.Frequency = FrequencyOff
+	if p.CanWebSearch(time.Now()) {
+		t.Fatal("off tier must never allow web")
+	}
+	// 默认策略：WebSearch 未授权（nil 或 false）→ 拒绝
+	def := DefaultPolicy()
+	if def.CanWebSearch(time.Now()) {
+		t.Fatal("default policy must not allow web")
+	}
+}
+
+func TestPolicyDynamicAdaptation(t *testing.T) {
+	p := DefaultPolicy()
+	p.WebSearch = true
+	p.Frequency = FrequencyDynamic
+
+	p.ApplyDynamic(0.9, 0.95) // 强缓存信号 → 30min 冷却
+	if got := p.effectiveCooldown(); got < 20*time.Minute {
+		t.Fatalf("strong signal should lengthen cooldown, got %v", got)
+	}
+	p.ApplyDynamic(0.1, 0.1) // 弱信号 → ~1min
+	if got := p.effectiveCooldown(); got > 3*time.Minute {
+		t.Fatalf("weak signal should shorten cooldown, got %v", got)
+	}
+}
+
+func TestRetrievePolicyBlocksStaleRefresh(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q := "美军航母最新动态"
+	SaveKnowledge(&KnowledgeEntry{
+		Query: q, AnswerSummary: "旧信息", TimeSensitive: true,
+		FreshUntil: time.Now().Add(-time.Hour), // 过期
+	})
+	defer cleanupEntry(t, q)
+
+	// 未授权联网 → stale 标注 + WebBlocked，绝不静默刷新
+	fetches := 0
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			fetches++
+			return nil, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if !res.WebBlocked || !res.StaleServed {
+		t.Fatalf("want WebBlocked+StaleServed, got %+v", res)
+	}
+	if fetches != 0 {
+		t.Fatalf("no grant must never fetch, got %d", fetches)
+	}
+	if !contains(res.Entry.AnswerSummary, "信息截至") {
+		t.Fatalf("stale entry must carry 信息截至 label, got %q", res.Entry.AnswerSummary)
+	}
+
+	// 授权 + 冷却已过 → 允许刷新
+	fetches = 0
+	res2, err := Retrieve(context.Background(), q,
+		RetrieveOptions{Policy: webPolicy(), Now: func() time.Time { return time.Now().Add(time.Hour) }},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			fetches++
+			return &KnowledgeEntry{Query: query, AnswerSummary: "最新信息"}, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if res2.WebBlocked || !res2.Refreshed || fetches != 1 {
+		t.Fatalf("granted refresh failed: %+v fetches=%d", res2, fetches)
+	}
 }

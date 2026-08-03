@@ -43,6 +43,14 @@ type RetrieveOptions struct {
 	// appended to AnswerSummary before caching. This is an explicit,
 	// user-visible opt-in policy choice; it never inspects user history.
 	PanicMode bool
+	// Policy gates conversational auto-retrieval (2026-08-03 design):
+	// local-cache hits are always free; web fetch requires per-session
+	// grant (WebSearch) + frequency tier cooldown. Nil policy = safe
+	// default (local only, no web). Stale entries are labeled (信息截至…)
+	// instead of silently refreshed.
+	Policy *RetrievalPolicy
+	// Now overrides the clock for tests (nil = time.Now).
+	Now func() time.Time
 }
 
 // bypassThreshold is the L2 similarity above which a hit is treated as
@@ -62,6 +70,7 @@ type RetrieveResult struct {
 	StaleServed bool            // stale cache served while refresh ran
 	Bypassed    bool            // defense-layer-3 probabilistic bypass fired
 	Refreshed   bool            // incremental refresh applied
+	WebBlocked  bool            // web fetch denied by policy (no grant / cooldown)
 	Tier        RetrievalTier   // difficulty used (heuristic or override)
 	APIUsed     bool            // any fetch was invoked
 }
@@ -76,7 +85,25 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 		ctx = context.Background()
 	}
 	now := time.Now()
+	if opts.Now != nil {
+		now = opts.Now()
+	}
 	res := &RetrieveResult{}
+
+	// webAllowed decides whether an automatic (non-ForceRefresh) web fetch may
+	// run: explicit per-session grant + frequency cooldown. ForceRefresh is a
+	// user-initiated action and counts as its own authorization.
+	webAllowed := opts.ForceRefresh || (opts.Policy != nil && opts.Policy.CanWebSearch(now))
+
+	// staleLabel marks expired cached data instead of silently refreshing it
+	// (gate D): the user sees "信息截至 …" and must authorize a refresh.
+	staleLabel := func(e *KnowledgeEntry) string {
+		t := e.LastUpdatedAt
+		if t.IsZero() {
+			t = e.CreatedAt
+		}
+		return t.Format("2006-01-02 15:04")
+	}
 
 	// 门控 0：本地命中（L1 精确，L2 语义兜底）
 	if !opts.ForceRefresh {
@@ -85,17 +112,25 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 			res.FromCache = true
 			res.Tier = tierOf(e)
 			if e.NeedsRefresh(now) {
-				// 时效过期：serve stale + 增量刷新（不阻塞主路径，结果合入缓存）
+				// 时效过期：serve stale + 标注；联网刷新需授权+冷却。
 				res.StaleServed = true
-				fresh, err := fetch(ctx, query, tierOf(e))
-				if err != nil {
-					return res, err // stale entry still returned via res.Entry
+				e.AnswerSummary += "\n\n⚠️ 信息截至 " + staleLabel(e) + "，如需最新动态请允许联网刷新。"
+				if webAllowed {
+					fresh, err := fetch(ctx, query, tierOf(e))
+					if err != nil {
+						return res, err // stale entry still returned via res.Entry
+					}
+					advanceEvent(e, now, fresh.KeyFacts, nil)
+					mergeEntry(e, fresh)
+					SaveKnowledge(e)
+					res.Refreshed = true
+					res.APIUsed = true
+					if opts.Policy != nil {
+						opts.Policy.MarkWebUsed(now)
+					}
+				} else {
+					res.WebBlocked = true
 				}
-				advanceEvent(e, now, fresh.KeyFacts, nil)
-				mergeEntry(e, fresh)
-				SaveKnowledge(e)
-				res.Refreshed = true
-				res.APIUsed = true
 			}
 			return res, nil
 		}
@@ -115,6 +150,15 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 			if stale || bypass {
 				res.StaleServed = stale
 				res.Bypassed = bypass
+				if stale {
+					e.AnswerSummary += "\n\n⚠️ 信息截至 " + staleLabel(e) + "，如需最新动态请允许联网刷新。"
+				}
+				if !webAllowed {
+					// 自动刷新（stale 或 bypass）被 policy 门控拒绝：
+					// 返回当前缓存 + 标注，绝不静默联网。
+					res.WebBlocked = true
+					return res, nil
+				}
 				fresh, err := fetch(ctx, query, tierOf(e))
 				if err != nil {
 					return res, err
@@ -127,6 +171,12 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 			}
 			return res, nil
 		}
+	}
+
+	// 未命中：若无联网授权，不能自动发起 web fetch —— 返回 blocked。
+	if !opts.ForceRefresh && (opts.Policy == nil || !opts.Policy.WebSearch) {
+		res.WebBlocked = true
+		return res, nil
 	}
 
 	// 未命中 / 强制刷新：分级 → 全量检索 → 质量过滤 → 落盘
