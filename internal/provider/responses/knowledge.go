@@ -208,6 +208,18 @@ func loadKnowledgeEntry(dir, query string) (*KnowledgeEntry, string, bool) {
 		_ = os.Remove(vpath)
 		return nil, "", false
 	}
+	// 时效查询不服务本地静态 domain 条目（变体路径同样适用——
+	// 数论检索 2026-08-03：英文时效查询经变体命中律算合一条目）。
+	if e.Tier == string(TierDomain) && HasFreshnessIntent(query) {
+		return nil, "", false
+	}
+	// 主题一致性验证（变体路径兜底）：变体映射可能由历史宽松阈值建立
+	// （ABC→CRT 错误映射，2026-08-03）——命中后仍要求主题词交集，
+	// 不信任历史映射文件。
+	if !topicsOverlap(query, e.Query) {
+		_ = os.Remove(vpath)
+		return nil, "", false
+	}
 	return &e, mainPath, true
 }
 
@@ -452,7 +464,11 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 			touchEntry(bestPath, best)
 			// 学习闭环：把本次查询提升为 L1 变体（下次 O(1) 命中），
 			// 并关联进事件链——越使用越好，成本随使用下降。
-			learnVariant(bestPath, dir, q, best)
+			// 变体建立必须用与本次命中相同的语言阈值（英文 0.55）：
+			// 旧 0.35 英文误命中曾建立 ABC→CRT 错误映射（2026-08-03）。
+			if bestSim >= SemanticThresholdFor(q) {
+				learnVariant(bestPath, dir, q, best)
+			}
 		}
 		return best, bestSim, true
 	}
@@ -583,6 +599,11 @@ var domainVocabulary = map[string][]string{
 	"经济": {"经济", "gdp", "通胀", "油价", "市场", "衰退", "贸易", "gdp"},
 	"科技": {"ai", "芯片", "模型", "算法", "代码", "编程", "开源"},
 	"气候": {"天气", "气候", "台风", "暴雨", "干旱", "气温", "降水"},
+	// 数论/数学（2026-08-03 数论检索误命中修复：ABC 猜想命中 CRT 拍频）
+	"数论": {"数论", "素数", "质数", "猜想", "黎曼", "孪生素数", "conjecture", "prime", "number theory", "riemann", "bsd", "p-adic", "模形式", "算术"},
+	"代数": {"代数", "hodge", "霍奇", "伽罗瓦", "代数几何", "同调", "上同调"},
+	"分析": {"调和", "傅里叶", "泛函", "测度", "复分析", "harmonic", "functional"},
+	"拓扑": {"同伦", "拓扑", "纤维", "homotopy", "陈类", "chern", "环面"},
 }
 
 // ExtractTopics returns the domain-significant words present in a query.

@@ -84,3 +84,18 @@ func HasFreshnessIntent(q string) bool {
 	}
 	return false
 }
+
+// DefaultSemanticThresholdEN is the L2 semantic cutoff for English queries.
+// English shares many stopwords ("the/of/and/2026") that inflate character-
+// set overlap, so the 0.35 Chinese threshold false-positives across math
+// topics ("ABC conjecture" → "CRT beat frequency", 2026-08-03). English
+// requires a stricter match; Chinese keeps 0.35 (semantic-dense chars).
+const DefaultSemanticThresholdEN = 0.55
+
+// SemanticThresholdFor picks the L2 threshold by query language.
+func SemanticThresholdFor(query string) float64 {
+	if DetectLanguage(query) == "en" {
+		return DefaultSemanticThresholdEN
+	}
+	return DefaultSemanticThreshold
+}

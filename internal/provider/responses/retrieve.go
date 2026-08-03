@@ -193,7 +193,7 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 				}
 			}
 		}
-		if e, sim, hit := LoadKnowledgeSemantic(query, DefaultSemanticThreshold); hit {
+		if e, sim, hit := LoadKnowledgeSemantic(query, SemanticThresholdFor(query)); hit {
 			res.Entry = e
 			res.FromCache = true
 			res.Tier = tierOf(e)
