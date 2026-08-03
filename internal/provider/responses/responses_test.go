@@ -1103,3 +1103,27 @@ func mustKnowledgeDir(t *testing.T) string {
 	}
 	return d
 }
+
+// TestSingleSegmentReasoningWiredIntoWarningPolicy：singleSegmentReasoning
+// capability 驱动运行时行为——MiMo（单段）工具轮缺思考不警告、DashScope
+// （无回传契约）不警告、DeepSeek 非 flash（多段+需回传）警告。
+// Copilot review: wire into behavior or drop — wired.
+func TestSingleSegmentReasoningWiredIntoWarningPolicy(t *testing.T) {
+	cases := []struct {
+		name, baseURL, model string
+		want                 bool
+	}{
+		{"mimo 单段不警告", "https://api.xiaomimimo.com/v1", "mimo-v2.5-pro", false},
+		{"dashscope 无回传契约不警告", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen3", false},
+		{"deepseek pro 多段警告", "https://api.deepseek.com", "deepseek-v4-pro", true},
+		{"deepseek flash 豁免", "https://api.deepseek.com", "deepseek-v4-flash", false},
+	}
+	for _, c := range cases {
+		pro := New(Config{Name: "t", APIKey: "k", BaseURL: c.baseURL, Model: c.model}).(interface {
+			WarnOnMissingToolCallReasoning() bool
+		})
+		if got := pro.WarnOnMissingToolCallReasoning(); got != c.want {
+			t.Errorf("%s: WarnOnMissingToolCallReasoning = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
