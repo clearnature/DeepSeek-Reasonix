@@ -130,6 +130,10 @@ func main() {
 		runWarEventStream(key)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "-query" && len(os.Args) > 2 {
+		runQuery(key, strings.Join(os.Args[2:], " "))
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -499,4 +503,52 @@ func runWarEventStream(key string) {
 	fmt.Printf("报告: %d 事实, %d 来源, 平均可信度 %.2f\n", len(report.Sections), len(report.AllSources), report.AvgConfidence)
 	fmt.Println("--- 时间线报告预览 ---")
 	fmt.Println(truncate(report.Render(), 500))
+}
+
+// runQuery is the general-purpose retrieval entry: given a topic it uses the
+// completed retrieval system (Retrieve + 分级 + 报告合成 + 因果线) to fetch,
+// cache, and synthesize an analysis report. This is "using the system", not
+// a test script.
+func runQuery(key, topic string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	fetch := realFetch(key)
+
+	fmt.Printf("=== 信息检索: %s ===\n\n", topic)
+
+	// 难度分级 → 检索（本地缓存优先，未命中联网）
+	tier, _ := responses.ClassifyTier(topic)
+	fmt.Printf("难度分级: %s (maxRounds=%d)\n", tier, tier.MaxRounds())
+
+	res, err := responses.Retrieve(ctx, topic, responses.RetrieveOptions{
+		Policy:        webPolicy(),
+		TimeSensitive: true,
+		Tier:          tier,
+	}, fetch)
+	if err != nil {
+		fmt.Printf("❌ 检索失败: %v\n", err)
+		return
+	}
+	if res.WebBlocked {
+		fmt.Println("⚠️ 联网未授权（本地缓存未命中）")
+		return
+	}
+	src := "API"
+	if res.FromCache {
+		src = "本地缓存"
+	}
+	fmt.Printf("检索: %s | API调用=%v | tokens=%d | 来源=%d\n",
+		src, res.APIUsed, res.Entry.TotalTokens, len(res.Entry.Sources))
+
+	// 结构化分析报告
+	report := responses.SynthesizeReport(topic, []*responses.KnowledgeEntry{res.Entry})
+	fmt.Println("\n=== 分析报告 ===")
+	fmt.Println(report.Render())
+
+	// 因果线（时效事件）
+	if res.Entry.TimeSensitive || responses.PanicScore(topic) > 0 {
+		chain := responses.FromEventStream(topic+" 因果线", res.Entry)
+		fmt.Println("=== 因果线 ===")
+		fmt.Println(chain.Render())
+	}
 }

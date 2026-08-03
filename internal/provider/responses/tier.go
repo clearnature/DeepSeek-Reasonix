@@ -41,6 +41,10 @@ func (t RetrievalTier) maxRounds() int {
 	}
 }
 
+// MaxRounds is the exported form of maxRounds for external callers
+// (e.g. cmd/websearch-smoke query entry).
+func (t RetrievalTier) MaxRounds() int { return t.maxRounds() }
+
 // deepHints are phrases that mark a research-level request even when short.
 var deepHints = []string{
 	"深度研究", "深度调研", "全面调研", "撰写报告", "研究报告", "文献综述",
