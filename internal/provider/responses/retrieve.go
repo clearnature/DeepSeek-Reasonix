@@ -3,8 +3,53 @@ package responses
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"time"
 )
+
+// sanitizeFresh runs gate-3 quality + manipulation screening on a fetched
+// entry. It returns false when the content is manipulated (panic/marketing)
+// and must NOT be persisted — callers still serve it live, it just never
+// poisons the cache. Both the miss path and the stale-refresh path must call
+// this (refresh used to skip it, letting polluted content into the cache).
+func sanitizeFresh(e *KnowledgeEntry, minCredibility float64) bool {
+	if e == nil {
+		return false
+	}
+	ScoreAndTagSources(e)
+	e.Sources = FilterSources(e.Sources, minCredibility)
+	manip := emotionHits(e.AnswerSummary) + marketingHits(e.AnswerSummary)
+	for _, f := range e.KeyFacts {
+		manip += emotionHits(f) + marketingHits(f)
+	}
+	return manip == 0
+}
+
+// purgeStaleLabel removes the "信息截至…" marker before a refresh merge so a
+// refreshed entry doesn't accumulate stale labels from prior rounds.
+func purgeStaleLabel(s string) string {
+	if i := strings.Index(s, "\n\n⚠️ 信息截至 "); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// applyFresh merges a sanitized fetch into an existing entry (refresh path),
+// then persists. Shared with the miss path so both enforce the same quality
+// gate.
+func applyFresh(dst, src *KnowledgeEntry, now time.Time, minCred float64) {
+	if src == nil {
+		return
+	}
+	// 质量/操纵检查：不达标不合并进缓存。
+	if !sanitizeFresh(src, minCred) {
+		return
+	}
+	dst.AnswerSummary = purgeStaleLabel(dst.AnswerSummary)
+	advanceEvent(dst, now, src.KeyFacts, nil)
+	mergeEntry(dst, src)
+	SaveKnowledge(dst)
+}
 
 // P5: agent 闭环检索协调器。把 P1-P4 串成完整流程：
 //
@@ -120,9 +165,7 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 					if err != nil {
 						return res, err // stale entry still returned via res.Entry
 					}
-					advanceEvent(e, now, fresh.KeyFacts, nil)
-					mergeEntry(e, fresh)
-					SaveKnowledge(e)
+					applyFresh(e, fresh, now, opts.MinCredibility)
 					res.Refreshed = true
 					res.APIUsed = true
 					if opts.Policy != nil {
@@ -163,9 +206,7 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 				if err != nil {
 					return res, err
 				}
-				advanceEvent(e, now, fresh.KeyFacts, nil)
-				mergeEntry(e, fresh)
-				SaveKnowledge(e)
+				applyFresh(e, fresh, now, opts.MinCredibility)
 				res.Refreshed = true
 				res.APIUsed = true
 			}
@@ -173,8 +214,10 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 		}
 	}
 
-	// 未命中：若无联网授权，不能自动发起 web fetch —— 返回 blocked。
-	if !opts.ForceRefresh && (opts.Policy == nil || !opts.Policy.WebSearch) {
+	// 未命中：无联网授权（含频率档被关）→ 不能自动发起 web fetch。
+	// 与刷新路径一致用 CanWebSearch（含 FrequencyOff 检查），ForceRefresh
+	// 是用户主动动作例外。
+	if !opts.ForceRefresh && (opts.Policy == nil || !opts.Policy.CanWebSearch(now)) {
 		res.WebBlocked = true
 		return res, nil
 	}

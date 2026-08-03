@@ -460,3 +460,62 @@ func TestRetrieveGrantExpiryBlocksRefresh(t *testing.T) {
 		t.Fatalf("expired grant must block: WebBlocked=%v fetches=%d", res.WebBlocked, fetches)
 	}
 }
+
+// Blocking-1 regression: FrequencyOff must gate the MISS path too (previously
+// only the refresh path checked the frequency tier — a WebSearch=true policy
+// with FrequencyOff could still fetch on a cache miss).
+func TestRetrieveFrequencyOffBlocksMissPath(t *testing.T) {
+	cleanKnowledgeCache(t)
+	p := DefaultPolicy()
+	p.Approve(GrantPermanent, time.Now())
+	p.Frequency = FrequencyOff // 授权了但频率关
+
+	fetches := 0
+	res, err := Retrieve(context.Background(), "完全未缓存的问题", RetrieveOptions{Policy: &p},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			fetches++
+			return &KnowledgeEntry{Query: query, AnswerSummary: "x"}, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if !res.WebBlocked || fetches != 0 {
+		t.Fatalf("FrequencyOff must block miss path: WebBlocked=%v fetches=%d", res.WebBlocked, fetches)
+	}
+}
+
+// Blocking-2 regression: polluted content fetched during a stale REFRESH must
+// not be merged into the cache (refresh previously skipped the manipulation
+// gate).
+func TestRetrieveRefreshSkipsManipulatedContent(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q := "某事件最新进展"
+	SaveKnowledge(&KnowledgeEntry{
+		Query: q, AnswerSummary: "旧信息", TimeSensitive: true,
+		FreshUntil: time.Now().Add(-time.Hour), // 过期触发刷新
+	})
+	defer cleanupEntry(t, q)
+
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{Policy: webPolicy()},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			// 刷新返回被操纵内容（营销+恐慌）
+			return &KnowledgeEntry{
+				Query:         query,
+				AnswerSummary: "最有效的方案！紧急预警，必须转发",
+				KeyFacts:      []string{"零风险保证"},
+			}, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	// 刷新被拒绝（内容不达标）→ 缓存保留旧信息，不含操纵内容
+	if e, hit := LoadKnowledge(q); hit {
+		if contains(e.AnswerSummary, "最有效") || contains(e.AnswerSummary, "紧急预警") {
+			t.Fatalf("manipulated refresh must not enter cache, got %q", e.AnswerSummary)
+		}
+		if e.UpdateCount != 0 {
+			t.Fatalf("rejected refresh must not bump update count, got %d", e.UpdateCount)
+		}
+	}
+	_ = res
+}
