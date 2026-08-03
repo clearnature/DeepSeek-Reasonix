@@ -87,13 +87,19 @@ func (ex *ModelExecutor) fleetTaskFor(p Proposition) FleetTaskSpec {
 	if aspects == "" {
 		aspects = "信号/影响/后果"
 	}
+	// AI 驱动：场景提示词 + 语言后缀由 LLM 拆解时判定（非程序固定）
+	scopedQuery := SceneQuery(p.Query, p.Scene, p.Language)
+	lang := p.Language
+	if lang == "" {
+		lang = "zh"
+	}
 	return FleetTaskSpec{
 		Prompt: fmt.Sprintf(
 			"你是并行检索子代理。请检索子命题「%s」：%s。\n关注维度: %s。\n"+
 				"用 web_search 检索后返回 InfoFrame JSON："+
-				`{"domain":"general","language":"zh","topic":"%s","facts":["..."],"sources":[{"title":"","url":""}],"confidence":0.0}`,
-			p.Title, p.Query, aspects, p.Title),
-		Description: "检索子命题: " + p.Title,
+				`{"domain":"%s","language":"%s","topic":"%s","facts":["..."],"sources":[{"title":"","url":""}],"confidence":0.0}`,
+			p.Title, scopedQuery, aspects, p.Scene, lang, p.Title),
+		Description: "检索子命题: " + p.Title + " (" + string(p.Scene) + "/" + lang + ")",
 		ReadOnly:    true,
 		Tools:       []string{"web_search", "retrieve_info"},
 		MaxSteps:    5,

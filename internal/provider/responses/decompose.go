@@ -13,19 +13,28 @@ import (
 // Proposition is one decomposed sub-proposition of a complex query.
 type Proposition struct {
 	Title   string   `json:"title"`   // 子命题标题（因果线主题）
-	Query   string   `json:"query"`   // 独立检索查询
+	Query   string   `json:"query"`   // 独立检索查询词（LLM 生成）
 	Aspects []string `json:"aspects"` // 关注维度（信号/原因/影响/后果）
+	// Scene/Language 由 LLM 判定（AI 驱动，非程序固定）：该子命题适合的
+	// 检索场景与语言。
+	Scene    InfoDomain `json:"scene,omitempty"`
+	Language string     `json:"language,omitempty"`
 }
 
 // DecomposePrompt builds the LLM prompt that splits a complex proposition
-// into independent sub-propositions. Output must be JSON (json_schema guided).
+// into independent sub-propositions. 数量/维度/场景/语言全部由 LLM 自行
+// 判断（AI 驱动），程序只负责 JSON 传递与后续拼图。
 func DecomposePrompt(topic string) string {
 	return fmt.Sprintf(
-		"请把以下复杂研究命题拆解为 3-5 个相互独立、可分别检索的子命题。"+
-			"每个子命题应覆盖该命题的一个独立因果维度（如：直接冲击、传导机制、区域差异、时间演化、应对与缓冲）。\n\n"+
+		"请把以下复杂研究命题拆解为若干相互独立、可分别检索的子命题。"+
+			"子命题的数量与覆盖维度由你根据命题复杂度判断（可考虑直接冲击、传导机制、区域差异、时间演化、应对与缓冲等维度，"+
+			"不必拘泥于这些例子）。每个子命题还需判断其最合适的检索场景与语言。\n\n"+
 			"命题：%s\n\n"+
-			"只输出 JSON 数组（不要多余文字）：\n"+
-			`[{"title":"子命题标题","query":"该子命题的检索查询词","aspects":["信号","影响","后果"]}]`,
+			"只输出 JSON 数组（不要多余文字），每项含：\n"+
+			"title=子命题标题; query=该子命题的检索查询词; aspects=关注维度数组; "+
+			"scene=场景(economic|industrial|code|student|research|general); "+
+			"language=语言(zh|en|ja|ko|es|ar)\n"+
+			`示例：[{"title":"直接冲击","query":"...","aspects":["信号","影响"],"scene":"economic","language":"zh"}]`,
 		topic)
 }
 
@@ -49,10 +58,16 @@ func ParsePropositions(reply string) ([]Proposition, error) {
 	if err := json.Unmarshal([]byte(text), &props); err != nil {
 		return nil, fmt.Errorf("parse propositions: %w", err)
 	}
-	// 过滤空/无效子命题
+	// 过滤空/无效子命题，补 scene/language 兜底（LLM 未给时 general/zh）
 	out := make([]Proposition, 0, len(props))
 	for _, p := range props {
 		if strings.TrimSpace(p.Title) != "" && strings.TrimSpace(p.Query) != "" {
+			if p.Scene == "" {
+				p.Scene = DomainGeneral
+			}
+			if p.Language == "" {
+				p.Language = "zh"
+			}
 			out = append(out, p)
 		}
 	}

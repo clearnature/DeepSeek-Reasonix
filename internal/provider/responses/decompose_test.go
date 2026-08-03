@@ -72,3 +72,31 @@ func TestExecuteInfoEventModel(t *testing.T) {
 func fetchForTest(ctx context.Context, q string, tier RetrievalTier) (*KnowledgeEntry, error) {
 	return &KnowledgeEntry{Query: q, KeyFacts: []string{"事实:" + q}}, nil
 }
+
+func TestLLMDrivenSceneLanguage(t *testing.T) {
+	// LLM 拆解时判定 scene/language → 传递到 fleet 任务
+	reply := `[{"title":"化肥冲击","query":"化肥价格","aspects":["影响"],"scene":"economic","language":"en"},{"title":"小麦减产","query":"小麦产量","aspects":["后果"]}]`
+	props, err := ParsePropositions(reply)
+	if err != nil || len(props) != 2 {
+		t.Fatalf("parse: %v", err)
+	}
+	// LLM 给了 scene/language
+	if props[0].Scene != DomainEconomic || props[0].Language != "en" {
+		t.Fatalf("LLM scene/language lost: %+v", props[0])
+	}
+	// 未给 → 兜底 general/zh
+	if props[1].Scene != DomainGeneral || props[1].Language != "zh" {
+		t.Fatalf("default scene/language wrong: %+v", props[1])
+	}
+
+	// 编排：fleet 任务用 LLM 判定的场景/语言（scene query 提示词生效）
+	ex := &ModelExecutor{Decompose: func(t string, m int) (string, error) { return reply, nil }}
+	_ = ex
+	task := (&ModelExecutor{}).fleetTaskFor(props[0])
+	if !strings.Contains(task.Prompt, `"domain":"economic"`) || !strings.Contains(task.Prompt, `"language":"en"`) {
+		t.Fatalf("fleet task must carry LLM scene/language: %q", task.Prompt)
+	}
+	if !strings.Contains(task.Description, "economic/en") {
+		t.Fatalf("description must show scene/lang: %q", task.Description)
+	}
+}
