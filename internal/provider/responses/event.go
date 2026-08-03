@@ -41,7 +41,7 @@ func advanceEvent(e *KnowledgeEntry, now time.Time, newFacts []string, conflictH
 	if e.Confidence == 0 {
 		e.Confidence = baseConfidence
 	}
-	conflict := conflictHints != nil && len(conflictHints) > 0
+	conflict := len(conflictHints) > 0
 	if !conflict {
 		conflict = hasConflictHints(newFacts)
 	}

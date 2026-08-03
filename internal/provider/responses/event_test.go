@@ -84,9 +84,7 @@ func TestSummaryState(t *testing.T) {
 	if u != 3 || c != 0.8 || !f {
 		t.Fatalf("state=(%d,%.2f,%v)", u, c, f)
 	}
-	if e == nil {
-		t.Fatal("nil guard")
-	}
+	// nil receiver is safe and reports zero state.
 	var n *KnowledgeEntry
 	if u, c, f := n.SummaryState(); u != 0 || c != 0 || f {
 		t.Fatalf("nil state=(%d,%.2f,%v)", u, c, f)
