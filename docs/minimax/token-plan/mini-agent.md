@@ -2,17 +2,11 @@
 
 > 来源: https://platform.minimaxi.com/docs/token-plan/mini-agent.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # Mini-Agent
 
 > Mini-Agent 是一个极简但专业的项目，旨在展示使用 MiniMax M3 构建 Agent 的最佳实践。项目通过兼容 Anthropic 的 API，完全支持交错思维链（interleaved thinking），从而解锁模型在处理长而复杂的任务时强大的推理能力。
 
-<Card title="Mini-Agent" icon="github" href="https://github.com/MiniMax-AI/Mini-Agent">
-  查看 GitHub 仓库
-</Card>
+ 查看 GitHub 仓库
 
 ## 核心特性
 
@@ -49,19 +43,17 @@ Agent 使用网页搜索工具在线查找最新信息，并为用户进行总�
 
 ### 1. 安装 uv
 
-<CodeGroup>
-  ```bash macOS/Linux/WSL theme={null}
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+ ```bash macOS/Linux/WSL theme={null}
+ curl -LsSf https://astral.sh/uv/install.sh | sh
 
-  # 安装完成后，重启终端或运行：
-  source ~/.bashrc  # 或 ~/.zshrc
-  ```
+ # 安装完成后，重启终端或运行：
+ source ~/.bashrc # 或 ~/.zshrc
+ ```
 
-  ```powershell Windows theme={null}
-  # 安装后需要重启 PowerShell
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-</CodeGroup>
+ ```powershell Windows theme={null}
+ # 安装后需要重启 PowerShell
+ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+ ```
 
 ### 2. 安装 Mini Agent
 
@@ -71,15 +63,13 @@ uv tool install git+https://github.com/MiniMax-AI/Mini-Agent.git
 
 ### 3. 运行配置脚本
 
-<CodeGroup>
-  ```bash macOS/Linux theme={null}
-  curl -fsSL https://raw.githubusercontent.com/MiniMax-AI/Mini-Agent/main/scripts/setup-config.sh | bash
-  ```
+ ```bash macOS/Linux theme={null}
+ curl -fsSL https://raw.githubusercontent.com/MiniMax-AI/Mini-Agent/main/scripts/setup-config.sh | bash
+ ```
 
-  ```powershell Windows theme={null}
-  $r=Invoke-WebRequest -Uri "https://raw.githubusercontent.com/MiniMax-AI/Mini-Agent/main/scripts/setup-config.ps1" -UseBasicParsing;[IO.File]::WriteAllText("$env:TEMP\setup-config.ps1",$r.Content,(New-Object Text.UTF8Encoding $true));powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup-config.ps1"
-  ```
-</CodeGroup>
+ ```powershell Windows theme={null}
+ $r=Invoke-WebRequest -Uri "https://raw.githubusercontent.com/MiniMax-AI/Mini-Agent/main/scripts/setup-config.ps1" -UseBasicParsing;[IO.File]::WriteAllText("$env:TEMP\setup-config.ps1",$r.Content,(New-Object Text.UTF8Encoding $true));powershell -ExecutionPolicy Bypass -File "$env:TEMP\setup-config.ps1"
+ ```
 
 ### 4. 配置 API Key
 
@@ -92,23 +82,23 @@ nano ~/.mini-agent/config/config.yaml
 填入您的 API Key 和对应的 API Base：
 
 ```yaml theme={null}
-api_key: "YOUR_API_KEY_HERE"          # 填入您的 API Key
-api_base: "https://api.minimaxi.com"  # 国内版
-# api_base: "https://api.minimax.io"  # 海外版（如使用海外平台，请取消本行注释）
+api_key: "YOUR_API_KEY_HERE" # 填入您的 API Key
+api_base: "https://api.minimaxi.com" # 国内版
+# api_base: "https://api.minimax.io" # 海外版（如使用海外平台，请取消本行注释）
 model: "MiniMax-M3"
 ```
 
 ### 5. 开始使用
 
 ```bash theme={null}
-mini-agent                                    # 使用当前目录作为工作空间
-mini-agent --workspace /path/to/your/project  # 指定工作空间目录
-mini-agent --version                          # 查看版本信息
+mini-agent # 使用当前目录作为工作空间
+mini-agent --workspace /path/to/your/project # 指定工作空间目录
+mini-agent --version # 查看版本信息
 
 # 管理命令
-uv tool upgrade mini-agent                    # 升级到最新版本
-uv tool uninstall mini-agent                  # 卸载工具
-uv tool list                                  # 查看所有已安装的工具
+uv tool upgrade mini-agent # 升级到最新版本
+uv tool uninstall mini-agent # 卸载工具
+uv tool list # 查看所有已安装的工具
 ```
 
 ***
@@ -140,9 +130,9 @@ vim mini_agent/config/config.yaml
 填入您的 API Key 和对应的 API Base：
 
 ```yaml theme={null}
-api_key: "YOUR_API_KEY_HERE"          # 填入您的 API Key
-api_base: "https://api.minimaxi.com"  # 国内版
-# api_base: "https://api.minimax.io"  # 海外版
+api_key: "YOUR_API_KEY_HERE" # 填入您的 API Key
+api_base: "https://api.minimaxi.com" # 国内版
+# api_base: "https://api.minimax.io" # 海外版
 model: "MiniMax-M3"
 max_steps: 100
 workspace_dir: "./workspace"
@@ -160,9 +150,7 @@ mini-agent
 mini-agent --workspace /path/to/your/project
 ```
 
-<Note>
-  更多开发指引，请参阅 [开发指南](https://github.com/MiniMax-AI/Mini-Agent/blob/main/docs/DEVELOPMENT_GUIDE_CN.md)
-</Note>
+ 更多开发指引，请参阅 [开发指南](https://github.com/MiniMax-AI/Mini-Agent/blob/main/docs/DEVELOPMENT_GUIDE_CN.md)
 
 ***
 
@@ -177,11 +165,11 @@ Mini Agent 支持 Agent Communication Protocol（ACP），可与 Zed 等代码�
 
 ```json theme={null}
 {
-  "agent_servers": {
-    "mini-agent": {
-      "command": "/path/to/mini-agent-acp"
-    }
-  }
+ "agent_servers": {
+ "mini-agent": {
+ "command": "/path/to/mini-agent-acp"
+ }
+ }
 }
 ```
 

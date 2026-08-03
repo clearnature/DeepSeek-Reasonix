@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/faq/history-query.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 历史接口
 
 > 本文档提供历史接口查询，涵盖语言、语音、音乐等多类模型服务，支持查看 ChatCompletion、Realtime、Finetune、T2A 等历史版本，便于开发者管理接口升级与迁移，持续优化模型能力与业务体验。

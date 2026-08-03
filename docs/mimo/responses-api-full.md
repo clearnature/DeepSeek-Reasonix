@@ -9,35 +9,35 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-pro",
-    "instructions": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024.",
-    "input": "please introduce yourself",
-    "max_output_tokens": 1024,
-    "stream": false,
-    "reasoning": {
-        "effort": "none"
-    }
+ "model": "mimo-v2.5-pro",
+ "instructions": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024.",
+ "input": "please introduce yourself",
+ "max_output_tokens": 1024,
+ "stream": false,
+ "reasoning": {
+ "effort": "none"
+ }
 }'
 ```
 
 响应（effort=none 时 **无 reasoning item**，reasoning_tokens=0）：
 ```json
 {
-    "id": "resp_5fcaac1af26a4b449f30e1eeeaa8c48f",
-    "object": "response",
-    "status": "completed",
-    "model": "mimo-v2.5-pro",
-    "output": [{
-        "id": "msg_1fa8f5011ebf47adb158ecf13c99d06c",
-        "type": "message", "status": "completed", "role": "assistant",
-        "content": [{"type": "output_text", "text": "Hello! I am MiMo, ...", "annotations": []}]
-    }],
-    "output_text": "Hello! I am MiMo, ...",
-    "usage": {
-        "input_tokens": 57, "input_tokens_details": {},
-        "output_tokens": 46, "output_tokens_details": {"reasoning_tokens": 0},
-        "total_tokens": 103
-    }
+ "id": "resp_5fcaac1af26a4b449f30e1eeeaa8c48f",
+ "object": "response",
+ "status": "completed",
+ "model": "mimo-v2.5-pro",
+ "output": [{
+ "id": "msg_1fa8f5011ebf47adb158ecf13c99d06c",
+ "type": "message", "status": "completed", "role": "assistant",
+ "content": [{"type": "output_text", "text": "Hello! I am MiMo, ...", "annotations": []}]
+ }],
+ "output_text": "Hello! I am MiMo, ...",
+ "usage": {
+ "input_tokens": 57, "input_tokens_details": {},
+ "output_tokens": 46, "output_tokens_details": {"reasoning_tokens": 0},
+ "total_tokens": 103
+ }
 }
 ```
 
@@ -48,11 +48,11 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 --header "api-key: $MIMO_API_KEY" \
 --header "Content-Type: application/json" \
 --data-raw '{
-    "model": "mimo-v2.5-pro",
-    "instructions": "...",
-    "input": [{"role": "user", "content": [{"type": "input_text", "text": "please introduce yourself"}]}],
-    "max_output_tokens": 1024,
-    "stream": true
+ "model": "mimo-v2.5-pro",
+ "instructions": "...",
+ "input": [{"role": "user", "content": [{"type": "input_text", "text": "please introduce yourself"}]}],
+ "max_output_tokens": 1024,
+ "stream": true
 }'
 ```
 
@@ -66,31 +66,31 @@ data:{"type":"response.in_progress","sequence_number":1,...}
 
 event:response.output_item.added
 data:{"type":"response.output_item.added","sequence_number":2,"output_index":0,
-     "item":{"id":"rs_54dee72a...","type":"reasoning","summary":[],"content":[],"status":"in_progress"}}
+ "item":{"id":"rs_54dee72a...","type":"reasoning","summary":[],"content":[],"status":"in_progress"}}
 
 event:response.content_part.added
 data:{"type":"response.content_part.added","sequence_number":3,"item_id":"rs_...",
-     "output_index":0,"content_index":0,"part":{"type":"reasoning_text","text":""}}
+ "output_index":0,"content_index":0,"part":{"type":"reasoning_text","text":""}}
 
 ...（reasoning_text.delta × N）
 
 event:response.output_text.done
 data:{"type":"response.output_text.done","sequence_number":84,"item_id":"msg_...",
-     "output_index":1,"content_index":0,"text":"Hello! I'm MiMo, ..."}
+ "output_index":1,"content_index":0,"text":"Hello! I'm MiMo, ..."}
 
 event:response.output_item.done
 data:{"type":"response.output_item.done","sequence_number":86,"output_index":1,
-     "item":{"id":"msg_...","type":"message","status":"completed","role":"assistant","content":[...]}}
+ "item":{"id":"msg_...","type":"message","status":"completed","role":"assistant","content":[...]}}
 
 event:response.completed
 data:{"type":"response.completed","sequence_number":87,"response":{
-     "id":"resp_646d7c96...","status":"completed",
-     "output":[
-        {"id":"rs_54dee72a...","type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"Okay, the user just asked me to introduce myself..."}],"status":"completed"},
-        {"id":"msg_513be1...","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello! I'm MiMo, ..."}]}
-     ],
-     "usage":{"input_tokens":55,"input_tokens_details":{},"output_tokens":177,
-              "output_tokens_details":{"reasoning_tokens":110},"total_tokens":232}}}
+ "id":"resp_646d7c96...","status":"completed",
+ "output":[
+ {"id":"rs_54dee72a...","type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"Okay, the user just asked me to introduce myself..."}],"status":"completed"},
+ {"id":"msg_513be1...","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello! I'm MiMo, ..."}]}
+ ],
+ "usage":{"input_tokens":55,"input_tokens_details":{},"output_tokens":177,
+ "output_tokens_details":{"reasoning_tokens":110},"total_tokens":232}}}
 ```
 
 **关键**：
@@ -105,37 +105,37 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 --header "api-key: $MIMO_API_KEY" \
 --header "Content-Type: application/json" \
 --data-raw '{
-    "model": "mimo-v2.5-pro",
-    "instructions": "...",
-    "input": [{"role": "user", "content": "What is the weather like in Boston today?"}],
-    "max_output_tokens": 1024,
-    "tools": [{
-        "type": "function",
-        "name": "get_current_weather",
-        "description": "Get the current weather in a given location",
-        "parameters": {"type": "object", "properties": {...}, "required": ["location"]},
-        "strict": true
-    }],
-    "tool_choice": "auto"
+ "model": "mimo-v2.5-pro",
+ "instructions": "...",
+ "input": [{"role": "user", "content": "What is the weather like in Boston today?"}],
+ "max_output_tokens": 1024,
+ "tools": [{
+ "type": "function",
+ "name": "get_current_weather",
+ "description": "Get the current weather in a given location",
+ "parameters": {"type": "object", "properties": {...}, "required": ["location"]},
+ "strict": true
+ }],
+ "tool_choice": "auto"
 }'
 ```
 
 响应（**工具轮带 reasoning**，reasoning_tokens=186）：
 ```json
 {
-    "id": "resp_cd7be5c8...",
-    "status": "completed",
-    "output": [
-        {"id": "rs_80ce68b8...", "type": "reasoning", "summary": [],
-         "content": [{"type": "reasoning_text", "text": "The user wants to know the weather in Boston today. I have access to the get_current_weather tool..."}],
-         "status": "completed"},
-        {"id": "fc_a6b2cb43...", "type": "function_call",
-         "call_id": "call_cab078c9...", "name": "get_current_weather",
-         "arguments": "{\"location\": \"Boston, MA\", \"unit\": \"fahrenheit\"}",
-         "status": "completed"}
-    ],
-    "output_text": "",
-    "usage": {"input_tokens": 349, "output_tokens": 221, "output_tokens_details": {"reasoning_tokens": 186}, "total_tokens": 570}
+ "id": "resp_cd7be5c8...",
+ "status": "completed",
+ "output": [
+ {"id": "rs_80ce68b8...", "type": "reasoning", "summary": [],
+ "content": [{"type": "reasoning_text", "text": "The user wants to know the weather in Boston today. I have access to the get_current_weather tool..."}],
+ "status": "completed"},
+ {"id": "fc_a6b2cb43...", "type": "function_call",
+ "call_id": "call_cab078c9...", "name": "get_current_weather",
+ "arguments": "{\"location\": \"Boston, MA\", \"unit\": \"fahrenheit\"}",
+ "status": "completed"}
+ ],
+ "output_text": "",
+ "usage": {"input_tokens": 349, "output_tokens": 221, "output_tokens_details": {"reasoning_tokens": 186}, "total_tokens": 570}
 }
 ```
 
@@ -148,24 +148,24 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 --header "api-key: $MIMO_API_KEY" \
 --header "Content-Type: application/json" \
 --data-raw '{
-    "model": "mimo-v2.5",
-    "instructions": "...",
-    "input": [{
-        "role": "user",
-        "content": [
-            {"type": "input_image", "image_url": "https://example-files.cnbj1.mi-fds.com/example-files/image/image_example.png"},
-            {"type": "input_text", "text": "please describe the content of the image"}
-        ]
-    }],
-    "max_output_tokens": 1024
+ "model": "mimo-v2.5",
+ "instructions": "...",
+ "input": [{
+ "role": "user",
+ "content": [
+ {"type": "input_image", "image_url": "https://example-files.cnbj1.mi-fds.com/example-files/image/image_example.png"},
+ {"type": "input_text", "text": "please describe the content of the image"}
+ ]
+ }],
+ "max_output_tokens": 1024
 }'
 ```
 
 响应（含 reasoning 310 tokens + 多模态文本）：
 ```json
 "usage": {"input_tokens": 1085, "input_tokens_details": {"cached_tokens": 1024},
-          "output_tokens": 559, "output_tokens_details": {"reasoning_tokens": 310},
-          "total_tokens": 1644}
+ "output_tokens": 559, "output_tokens_details": {"reasoning_tokens": 310},
+ "total_tokens": 1644}
 ```
 
 **关键**：多模态请求 **input_tokens_details.cached_tokens=1024**（非流式返回缓存命中！与流式 completed 事件 input_tokens_details={} 不同）
@@ -191,7 +191,7 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 
 响应（effort 默认，reasoning_tokens=0——json 模式可能无思考）：
 ```json
-{"type": "output_text", "text": "{\n  \"name\": \"Zhang San\",\n  \"age\": 28,\n  \"email\": \"zhangsan@test.com\",\n  \"birthday\": \"1996-05-12\"\n}"}
+{"type": "output_text", "text": "{\n \"name\": \"Zhang San\",\n \"age\": 28,\n \"email\": \"zhangsan@test.com\",\n \"birthday\": \"1996-05-12\"\n}"}
 ```
 
 ---
@@ -225,10 +225,10 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 
 ### EasyInputMessage / Message
 - `content`: string | array（**必选**）
-  - TextInput: string（纯文本简写）
-  - ResponseInputMessageContentList: array
-    - ResponseInputText: `{"type": "input_text", "text": "..."}`
-    - ResponseInputImage: `{"type": "input_image", "image_url": "..."}`
+ - TextInput: string（纯文本简写）
+ - ResponseInputMessageContentList: array
+ - ResponseInputText: `{"type": "input_text", "text": "..."}`
+ - ResponseInputImage: `{"type": "input_image", "image_url": "..."}`
 - `role`: **必选**，user/assistant/system/developer
 - `type`: message（可选）
 
@@ -248,7 +248,7 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 ### Reasoning（输入）
 - `id`: string **必选**
 - `content`: array
-  - `{"type": "reasoning_text", "text": "..."}`
+ - `{"type": "reasoning_text", "text": "..."}`
 - `type`: reasoning **必选**
 - `status`: in_progress/completed
 
@@ -268,9 +268,9 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/responses' \
 - `error`: {code, message}
 - `incomplete_details`: {reason: max_output_tokens/content_filter}
 - `output`: array（message/function_call/function_call_output/reasoning）
-  - ResponseOutputMessage: content[output_text], role=assistant, status, type=message
-  - FunctionCall: arguments/call_id/name/type=function_call/status
-  - Reasoning: content[reasoning_text], status, type=reasoning, **summary: []**
+ - ResponseOutputMessage: content[output_text], role=assistant, status, type=message
+ - FunctionCall: arguments/call_id/name/type=function_call/status
+ - Reasoning: content[reasoning_text], status, type=reasoning, **summary: []**
 - `output_text`: SDK 便捷聚合属性
 - `usage`: {input_tokens, input_tokens_details{cached_tokens}, output_tokens, output_tokens_details{reasoning_tokens}, total_tokens}
 

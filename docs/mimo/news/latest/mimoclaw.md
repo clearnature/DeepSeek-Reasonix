@@ -1,10 +1,8 @@
-﻿# Xiaomi MiMo Claw Official Release | Flagship Model + Kingsoft Office Ecosystem, New Subscription Service Launched 
+# Xiaomi MiMo Claw Official Release | Flagship Model + Kingsoft Office Ecosystem, New Subscription Service Launched 
 
 Xiaomi MiMo Claw is a lightweight cloud-based Claw product, enabling users to quickly experience the MiMo model and access AI Agents with low barriers to entry. Now officially launched, it is powered by **MiMo-V2.5-Pro**, a flagship model deeply optimized for the official OpenClaw framework.
 
 We have partnered with Kingsoft Office to deliver a full-suite document productivity solution, added multiple core practical features of OpenClaw, and upgraded benefits for free users: the daily single-session usage limit has been extended from 1 hour to 4 hours. Meanwhile, tiered TokenPlan subscriptions are released for heavy and professional users to cater to diverse usage demands.
-
-<img src="https://mimo.mi.com/static/HP03bfQJHokUwcxeptVcNz2on2c.c7f5b14882bf8a22.png" alt="图片" style="margin: 16px auto;" />
 
 ### I. Feature Upgrades
 
@@ -34,8 +32,6 @@ MiMo Claw runs entirely on the cloud, eliminating local environment configuratio
 
 It also incorporates practical functions including multi-channel message interaction, file management, multi-task parallel processing and automatic exception fixing, greatly lowering the learning curve for AI Agent operations.
 
-<img src="https://mimo.mi.com/static/LdMdbOilFopR42xppm7cvwZanlb.89698e5798917876.png" alt="图片" style="margin: 16px auto;" />
-
 ### II. User Benefits
 
 #### 1. Upgraded Benefits for Free Users
@@ -51,8 +47,6 @@ It also incorporates practical functions including multi-channel message interac
 - **Service Cancellation**: Users who have added MiMo Claw to their plans may cancel the service. Remaining value will be refunded based on unused time.
 
 - **Universal Historical Quotas**: All promotional token quotas from past campaigns are fully usable.
-
-<img src="https://mimo.mi.com/static/Ev8wbiXPXokCycxWQiKcvE4YnHf.bfbfaee5be3be254.png" alt="图片" style="margin: 16px auto;" />
 
 ### III. Subscription Services
 
@@ -79,8 +73,6 @@ Exclusive limited-time offers are available for monthly and annual MiMo Claw sub
 - Standard Discount: ¥19.9 per month / ¥233.8 per year
 
 *Note: Overseas subscriptions are not yet available. Please stay tuned.*
-
-<img src="https://mimo.mi.com/static/PP5Cb6VB0ohcQZxXAf1cg8RlnYg.04be1c821c70b7fe.png" alt="图片" style="margin: 16px auto;" />
 
 **Xiaomi MiMo Platform** 
 

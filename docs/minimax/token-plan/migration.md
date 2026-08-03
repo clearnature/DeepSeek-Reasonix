@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/token-plan/migration.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # Token Plan 升级与权益调整说明
 
 > M3 上线后的 Token Plan 计费切换、订阅权益保护与档位迁移方案
@@ -56,9 +52,7 @@ M3 是一个更大尺寸、更加智能、多模态、拥有 1M 上下文的全�
 * M2.7 的使用次数**约增加 10%**
 * 新增 M3 使用权限和多模态额度，与 M2.7 共享同一份额度池
 
-<Tip>
-  这两档为老用户专属保留档，建议保持订阅状态以延续当前权益；若中途断订，后续将无法再次订阅同档套餐。
-</Tip>
+ 这两档为老用户专属保留档，建议保持订阅状态以延续当前权益；若中途断订，后续将无法再次订阅同档套餐。
 
 当前自动切换，无需任何操作。
 

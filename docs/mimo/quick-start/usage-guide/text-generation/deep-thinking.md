@@ -1,4 +1,4 @@
-﻿# Deep Thinking
+# Deep Thinking
 
 {/* feishu-style:text-align:left */}
 Deep Thinking enables the model to perform deep reasoning before generating the final answer, analyzing problems step-by-step through an internal Chain of Thought (CoT), significantly improving accuracy on complex tasks. It is suitable for scenarios requiring deep analysis, such as complex reasoning, code generation, mathematical computation, and multi-step analysis.
@@ -37,39 +37,12 @@ In deep thinking, `mimo-v2.5-pro`, `mimo-v2.5` models do not support custom `tem
 ### Multi-turn Conversation Pass-through Requirements
 
 {/* feishu-style:text-align:left */}
-When deep thinking is enabled in Agent product multi-turn conversations, and historical conversations contain tool calls, the assistant responses passed back in all subsequent user interaction rounds that contain tool calls <strong>must completely pass back the `reasoning_content` field, otherwise the API will return a 400 error</strong>. For the correct pass-back method, please refer to the "Multi-turn Tool Calls in Thinking Mode" section in the Call Examples.
-
-<div className='mdx-highlight mdx-highlight-warning' data-highlight-icon='warning'>
+When deep thinking is enabled in Agent product multi-turn conversations, and historical conversations contain tool calls, the assistant responses passed back in all subsequent user interaction rounds that contain tool calls must completely pass back the `reasoning_content` field, otherwise the API will return a 400 error. For the correct pass-back method, please refer to the "Multi-turn Tool Calls in Thinking Mode" section in the Call Examples.
 
 If historical `reasoning_content` is missing, the model's context will be incomplete, which may result in decreased instruction following and increased hallucinations.
 
-</div>
-
 {/* feishu-style:text-align:left */}
 **Affected Agent Products:** 
-
-<table>
-<colgroup>
-<col style="width: 350px" />
-<col style="width: 350px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: left;">Protocol</span></th>
-<th><span style="display: inline-block; text-align: left;">Affected Agent Products</span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: left;">OpenAI Compatible Protocol</span></td>
-<td><span style="display: inline-block; text-align: left;">TRAE, Cursor, Roo Code, Codex, GitHub Copilot CLI, Zed, AutoGen, Goose</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Anthropic Compatible Protocol</span></td>
-<td><span style="display: inline-block; text-align: left;">TRAE, GitHub Copilot CLI, AutoGen, Goose, OpenClaw, OpenCode, Kilo Code</span></td>
-</tr>
-</tbody>
-</table>
 
 ### Other Notes
 
@@ -79,277 +52,242 @@ If historical `reasoning_content` is missing, the model's context will be incomp
 
 ## Call Examples
 
-<div className='mdx-highlight mdx-highlight-warning' data-highlight-icon='warning'>
-
 The `thinking` field is not a standard OpenAI parameter. When passing thinking-related parameters via the OpenAI Python SDK, they must be included in `extra_body`.
 
-</div>
-
 ### Thinking Enabled
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-pro",
-    messages=[
-        {
-            "role": "system",
-            "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
-        },
-        {
-            "role": "user",
-            "content": "Introduce machine learning in three sentences."
-        }
-    ],
-    max_completion_tokens=1024,
-    extra_body={
-        "thinking": {"type": "enabled"}
-    }
+ model="mimo-v2.5-pro",
+ messages=[
+ {
+ "role": "system",
+ "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
+ },
+ {
+ "role": "user",
+ "content": "Introduce machine learning in three sentences."
+ }
+ ],
+ max_completion_tokens=1024,
+ extra_body={
+ "thinking": {"type": "enabled"}
+ }
 )
 
 print(completion.model_dump_json())
 ```
-
-  </TabItem>
-  <TabItem label={`Curl`}>
 
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header "Content-Type: application/json" \
 --data-raw '{
-    "model": "mimo-v2.5-pro",
-    "messages": [
-        {
-            "role": "system",
-            "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
-        },
-        {
-            "role": "user",
-            "content": "Introduce machine learning in three sentences."
-        }
-    ],
-    "max_completion_tokens": 1024,
-    "thinking": {
-        "type": "enabled"
-    }
+ "model": "mimo-v2.5-pro",
+ "messages": [
+ {
+ "role": "system",
+ "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
+ },
+ {
+ "role": "user",
+ "content": "Introduce machine learning in three sentences."
+ }
+ ],
+ "max_completion_tokens": 1024,
+ "thinking": {
+ "type": "enabled"
+ }
 }'
 ```
-
-  </TabItem>
-</Tab>
 
 {/* feishu-style:text-align:left */}
 **Response Example**
 
 ```json
 {
-    "id": "2b92b0964c9b4335bffad7c2f75cfe9e",
-    "choices": [
-        {
-            "finish_reason": "stop",
-            "index": 0,
-            "message": {
-                "content": "Machine learning is a branch of artificial intelligence that enables systems to automatically learn and improve from experience without being explicitly programmed. It works by identifying patterns in data to make predictions or decisions. This technology powers a wide range of applications, from recommendation systems and speech recognition to autonomous vehicles and medical diagnosis.",
-                "role": "assistant",
-                "tool_calls": null,
-                "reasoning_content": "Hmm, the user wants a concise three-sentence introduction to machine learning. This seems like a straightforward request for a clear, high-level explanation. \n\nI should focus on the core idea without technical jargon, mention its practical use, and end with its significance. The first sentence can define it simply, the second can give an example, and the third can highlight its impact. \n\nKeeping it neutral and informative fits the user's likely need for a quick overview. No need for extra details or fluff since they specifically asked for brevity."
-            }
-        }
-    ],
-    "created": 1781233054,
-    "model": "mimo-v2.5-pro",
-    "object": "chat.completion",
-    "usage": {
-        "completion_tokens": 171,
-        "prompt_tokens": 60,
-        "total_tokens": 231,
-        "completion_tokens_details": {
-            "reasoning_tokens": 110
-        },
-        "prompt_tokens_details": {}
-    }
+ "id": "2b92b0964c9b4335bffad7c2f75cfe9e",
+ "choices": [
+ {
+ "finish_reason": "stop",
+ "index": 0,
+ "message": {
+ "content": "Machine learning is a branch of artificial intelligence that enables systems to automatically learn and improve from experience without being explicitly programmed. It works by identifying patterns in data to make predictions or decisions. This technology powers a wide range of applications, from recommendation systems and speech recognition to autonomous vehicles and medical diagnosis.",
+ "role": "assistant",
+ "tool_calls": null,
+ "reasoning_content": "Hmm, the user wants a concise three-sentence introduction to machine learning. This seems like a straightforward request for a clear, high-level explanation. \n\nI should focus on the core idea without technical jargon, mention its practical use, and end with its significance. The first sentence can define it simply, the second can give an example, and the third can highlight its impact. \n\nKeeping it neutral and informative fits the user's likely need for a quick overview. No need for extra details or fluff since they specifically asked for brevity."
+ }
+ }
+ ],
+ "created": 1781233054,
+ "model": "mimo-v2.5-pro",
+ "object": "chat.completion",
+ "usage": {
+ "completion_tokens": 171,
+ "prompt_tokens": 60,
+ "total_tokens": 231,
+ "completion_tokens_details": {
+ "reasoning_tokens": 110
+ },
+ "prompt_tokens_details": {}
+ }
 }
 ```
 
 ### Thinking Disabled
 
-<Tab>
-  <TabItem label={`Python SDK`}>
-
 ```python
 import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-pro",
-    messages=[
-        {
-            "role": "system",
-            "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
-        },
-        {
-            "role": "user",
-            "content": "Write a short paragraph about the beauty of nature."
-        }
-    ],
-    max_completion_tokens=1024,
-    extra_body={
-        "thinking": {"type": "disabled"}
-    }
+ model="mimo-v2.5-pro",
+ messages=[
+ {
+ "role": "system",
+ "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
+ },
+ {
+ "role": "user",
+ "content": "Write a short paragraph about the beauty of nature."
+ }
+ ],
+ max_completion_tokens=1024,
+ extra_body={
+ "thinking": {"type": "disabled"}
+ }
 )
 
 print(completion.model_dump_json())
 ```
-
-  </TabItem>
-  <TabItem label={`Curl`}>
 
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header "Content-Type: application/json" \
 --data-raw '{
-    "model": "mimo-v2.5-pro",
-    "messages": [
-        {
-            "role": "system",
-            "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
-        },
-        {
-            "role": "user",
-            "content": "Write a short paragraph about the beauty of nature."
-        }
-    ],
-    "max_completion_tokens": 1024,
-    "thinking": {
-        "type": "disabled"
-    }
+ "model": "mimo-v2.5-pro",
+ "messages": [
+ {
+ "role": "system",
+ "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
+ },
+ {
+ "role": "user",
+ "content": "Write a short paragraph about the beauty of nature."
+ }
+ ],
+ "max_completion_tokens": 1024,
+ "thinking": {
+ "type": "disabled"
+ }
 }'
 ```
-
-  </TabItem>
-</Tab>
 
 {/* feishu-style:text-align:left */}
 **Response Example**
 
 ```json
 {
-    "id": "f914c393444e4a35a4f7b1e337e032cb",
-    "choices": [
-        {
-            "finish_reason": "stop",
-            "index": 0,
-            "message": {
-                "content": "From the gentle rustle of leaves in an ancient forest to the fiery spectacle of a sunset painting the sky, nature's beauty is a symphony for the senses. It is found in the delicate symmetry of a snowflake, the vibrant hues of a wildflower meadow, and the silent majesty of a mountain range draped in morning mist. This ever-changing tapestry offers a profound sense of peace and wonder, reminding us of a world that exists beyond our own making. Whether in a vast, untouched wilderness or a single dewdrop clinging to a spider's web, nature's artistry is a constant, humbling source of inspiration and renewal.",
-                "role": "assistant",
-                "tool_calls": null
-            }
-        }
-    ],
-    "created": 1781233927,
-    "model": "mimo-v2.5-pro",
-    "object": "chat.completion",
-    "usage": {
-        "completion_tokens": 131,
-        "prompt_tokens": 64,
-        "total_tokens": 195,
-        "completion_tokens_details": {
-            "reasoning_tokens": 0
-        },
-        "prompt_tokens_details": {}
-    }
+ "id": "f914c393444e4a35a4f7b1e337e032cb",
+ "choices": [
+ {
+ "finish_reason": "stop",
+ "index": 0,
+ "message": {
+ "content": "From the gentle rustle of leaves in an ancient forest to the fiery spectacle of a sunset painting the sky, nature's beauty is a symphony for the senses. It is found in the delicate symmetry of a snowflake, the vibrant hues of a wildflower meadow, and the silent majesty of a mountain range draped in morning mist. This ever-changing tapestry offers a profound sense of peace and wonder, reminding us of a world that exists beyond our own making. Whether in a vast, untouched wilderness or a single dewdrop clinging to a spider's web, nature's artistry is a constant, humbling source of inspiration and renewal.",
+ "role": "assistant",
+ "tool_calls": null
+ }
+ }
+ ],
+ "created": 1781233927,
+ "model": "mimo-v2.5-pro",
+ "object": "chat.completion",
+ "usage": {
+ "completion_tokens": 131,
+ "prompt_tokens": 64,
+ "total_tokens": 195,
+ "completion_tokens_details": {
+ "reasoning_tokens": 0
+ },
+ "prompt_tokens_details": {}
+ }
 }
 ```
 
 ### Streaming Response (Thinking Enabled)
 
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
-
 During streaming responses, thinking content and answer content are output sequentially: first, the thinking process is returned step-by-step via `reasoning_content`, and after thinking is complete, the final answer is output step-by-step via `content`.
-
-</div>
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-pro",
-    messages=[
-        {
-            "role": "system",
-            "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
-        },
-        {
-            "role": "user",
-            "content": "Give me some tips for improving work efficiency."
-        }
-    ],
-    max_completion_tokens=1024,
-    stream=True,
-    extra_body={
-        "thinking": {"type": "enabled"}
-    }
+ model="mimo-v2.5-pro",
+ messages=[
+ {
+ "role": "system",
+ "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
+ },
+ {
+ "role": "user",
+ "content": "Give me some tips for improving work efficiency."
+ }
+ ],
+ max_completion_tokens=1024,
+ stream=True,
+ extra_body={
+ "thinking": {"type": "enabled"}
+ }
 )
 
 for chunk in completion:
-    print(chunk.model_dump_json())
+ print(chunk.model_dump_json())
 ```
-
-  </TabItem>
-  <TabItem label={`Curl`}>
 
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header "Content-Type: application/json" \
 --data-raw '{
-    "model": "mimo-v2.5-pro",
-    "messages": [
-        {
-            "role": "system",
-            "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
-        },
-        {
-            "role": "user",
-            "content": "Give me some tips for improving work efficiency."
-        }
-    ],
-    "max_completion_tokens": 1024,
-    "stream": true,
-    "thinking": {
-        "type": "enabled"
-    }
+ "model": "mimo-v2.5-pro",
+ "messages": [
+ {
+ "role": "system",
+ "content": "You are MiMo, an AI assistant developed by Xiaomi. Today is date: Tuesday, December 16, 2025. Your knowledge cutoff date is December 2024."
+ },
+ {
+ "role": "user",
+ "content": "Give me some tips for improving work efficiency."
+ }
+ ],
+ "max_completion_tokens": 1024,
+ "stream": true,
+ "thinking": {
+ "type": "enabled"
+ }
 }'
 ```
-
-  </TabItem>
-</Tab>
 
 {/* feishu-style:text-align:left */}
 **Response Example**
@@ -398,95 +336,95 @@ from openai import OpenAI
 
 # Initialize client
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 # Define tools
 tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_current_weather",
-            "description": "Get the current weather for a given city",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string", "description": "City name, e.g. Beijing"},
-                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
-                },
-                "required": ["location"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_time",
-            "description": "Get the current time in a given timezone",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "timezone": {"type": "string", "description": "Timezone, e.g. Asia/Shanghai"}
-                },
-                "required": ["timezone"]
-            }
-        }
-    }
+ {
+ "type": "function",
+ "function": {
+ "name": "get_current_weather",
+ "description": "Get the current weather for a given city",
+ "parameters": {
+ "type": "object",
+ "properties": {
+ "location": {"type": "string", "description": "City name, e.g. Beijing"},
+ "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+ },
+ "required": ["location"]
+ }
+ }
+ },
+ {
+ "type": "function",
+ "function": {
+ "name": "get_time",
+ "description": "Get the current time in a given timezone",
+ "parameters": {
+ "type": "object",
+ "properties": {
+ "timezone": {"type": "string", "description": "Timezone, e.g. Asia/Shanghai"}
+ },
+ "required": ["timezone"]
+ }
+ }
+ }
 ]
 
 # Tool execution functions (replace with real API calls in production)
 def get_current_weather(location: str, unit: str = "celsius") -> str:
-    weather_data = {"Beijing": "Sunny 25°C", "Shanghai": "Cloudy 22°C", "Shenzhen": "Rainy 28°C"}
-    return weather_data.get(location, f"Weather unknown for {location}")
+ weather_data = {"Beijing": "Sunny 25°C", "Shanghai": "Cloudy 22°C", "Shenzhen": "Rainy 28°C"}
+ return weather_data.get(location, f"Weather unknown for {location}")
 
 def get_time(timezone: str) -> str:
-    from datetime import datetime
-    return datetime.now().strftime(f"%Y-%m-%d %H:%M:%S ({timezone})")
+ from datetime import datetime
+ return datetime.now().strftime(f"%Y-%m-%d %H:%M:%S ({timezone})")
 
 TOOL_MAP = {
-    "get_current_weather": lambda **kw: get_current_weather(**kw),
-    "get_time": lambda **kw: get_time(**kw)
+ "get_current_weather": lambda **kw: get_current_weather(**kw),
+ "get_time": lambda **kw: get_time(**kw)
 }
 
 def run_turn(messages, turn_num):
-    """Execute a single user turn: call model, run tools in a loop until final answer."""
-    request_num = 0
-    while True:
-        request_num += 1
-        print(f"\nRequest {turn_num}-{request_num}:")
+ """Execute a single user turn: call model, run tools in a loop until final answer."""
+ request_num = 0
+ while True:
+ request_num += 1
+ print(f"\nRequest {turn_num}-{request_num}:")
 
-        response = client.chat.completions.create(
-            model="mimo-v2.5-pro",
-            messages=messages,
-            tools=tools,
-            extra_body={"thinking": {"type": "enabled"}}
-        )
+ response = client.chat.completions.create(
+ model="mimo-v2.5-pro",
+ messages=messages,
+ tools=tools,
+ extra_body={"thinking": {"type": "enabled"}}
+ )
 
-        assistant_message = response.choices[0].message
-        messages.append(assistant_message)
+ assistant_message = response.choices[0].message
+ messages.append(assistant_message)
 
-        # Print full model response
-        print(f"reasoning_content: {assistant_message.reasoning_content}")
-        print(f"content: \"{assistant_message.content}\"")
-        print(f"tool_calls: {assistant_message.tool_calls}")
+ # Print full model response
+ print(f"reasoning_content: {assistant_message.reasoning_content}")
+ print(f"content: \"{assistant_message.content}\"")
+ print(f"tool_calls: {assistant_message.tool_calls}")
 
-        # If no tool calls, we have the final answer
-        if not assistant_message.tool_calls:
-            break
+ # If no tool calls, we have the final answer
+ if not assistant_message.tool_calls:
+ break
 
-        # Execute each tool call and append results
-        for tool_call in assistant_message.tool_calls:
-            func_name = tool_call.function.name
-            func_args = json.loads(tool_call.function.arguments)
-            result = TOOL_MAP[func_name](**func_args)
+ # Execute each tool call and append results
+ for tool_call in assistant_message.tool_calls:
+ func_name = tool_call.function.name
+ func_args = json.loads(tool_call.function.arguments)
+ result = TOOL_MAP[func_name](**func_args)
 
-            print(f"-> Tool result [{func_name}]: {result}")
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": result
-            })
+ print(f"-> Tool result [{func_name}]: {result}")
+ messages.append({
+ "role": "tool",
+ "tool_call_id": tool_call.id,
+ "content": result
+ })
 
 # --- Multi-turn conversation ---
 messages = []

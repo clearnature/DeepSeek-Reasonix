@@ -1,4 +1,4 @@
-﻿# MiMo Public Beta Free Access Extended
+# MiMo Public Beta Free Access Extended
 
 Dear Developers,
 
@@ -16,4 +16,4 @@ Attached is the model API pricing: **Domestic: Input: ¥0.7 / 1M tokens, Cached 
 
 We sincerely invite new and existing users to take advantage of the extended free public beta period to continue enjoying the intelligent experience brought by MiMo, and to actively share your usage experiences and suggestions. If you have any questions, please feel free to [contact us](https://platform.xiaomimimo.com/#/contact) or join the developer discussion group (scan the QR code in the lower left corner to join). Let's explore the boundaries of intelligence together.
 
-<p className="mb-[16px] w-full text-[14px] leading-[24px] lg:text-[16px] lg:leading-[28px] font-normal text-[#5C5C62]" style={{ textAlign: 'right' }}>**—— Xiaomi MiMo API Open Platform Team**</p>
+**—— Xiaomi MiMo API Open Platform Team**

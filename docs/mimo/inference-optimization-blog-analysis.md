@@ -130,20 +130,20 @@ score(worker) = matchWeight × prefix_match_percentage − normalized_load
 
 **短前缀（646 tokens）**：
 ```
-T+0s    cached=0    MISS（冷）
-T+2s    cached=576  HIT
-T+210s  cached=640  HIT
-T+450s  cached=0    MISS（7.5min 失效）
+T+0s cached=0 MISS（冷）
+T+2s cached=576 HIT
+T+210s cached=640 HIT
+T+450s cached=0 MISS（7.5min 失效）
 ```
 
 **长前缀（8.8K tokens / 17K input）**：
 ```
-T+0s      cached=0    MISS（冷）
-T+2s      cached=0    MISS
-T+30min   cached=0    MISS
-T+60min   cached=0    MISS
-T+90min   cached=0    MISS
-T+120min  cached=17024/17034  HIT（99.9%）
+T+0s cached=0 MISS（冷）
+T+2s cached=0 MISS
+T+30min cached=0 MISS
+T+60min cached=0 MISS
+T+90min cached=0 MISS
+T+120min cached=17024/17034 HIT（99.9%）
 ```
 
 **关键结论**：
@@ -171,7 +171,7 @@ T+120min  cached=17024/17034  HIT（99.9%）
 
 ```
 MiMo 自动缓存命中 = f(内容哈希, SWA 窗口安全长度, L1/L2/L3 一致性, 实例路由)
-Reasonix prefix-cache = f(字节稳定性)  ← 客户端完全可控
+Reasonix prefix-cache = f(字节稳定性) ← 客户端完全可控
 ```
 
 - 93% 命中率是**服务端全局统计**，不等于单用户命中率

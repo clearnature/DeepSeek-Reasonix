@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/faq/about-account.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 账户相关
 
 > 本文档解答MiniMax开放平台账户相关的常见问题，包括充值方式、发票申请、余额预警及资源包管理等关键内容。
@@ -35,6 +31,4 @@
 
 **答：** MiniMax 开放平台，目前提供视频及语音资源包的购买，具体套餐内容，您可前往[账户管理->API 资源包](https://platform.minimaxi.com/user-center/payment/subscription)了解详细内容，并选择合适您的套餐。
 
-<Note>
-  提示：您所购买的资源包，余量不继承，过期将自动清零。请关注所购买的资源包的有效期，及时使用。
-</Note>
+ 提示：您所购买的资源包，余量不继承，过期将自动清零。请关注所购买的资源包的有效期，及时使用。

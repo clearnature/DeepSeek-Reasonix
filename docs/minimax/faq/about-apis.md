@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/faq/about-apis.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 接口相关
 
 > 本文档解答 MiniMax 开放平台接口使用的核心问题，包括 API Key 获取与管理、资源保障提升方案及声音复刻服务使用条件。帮助开发者高效集成与调用平台API服务。
@@ -28,9 +24,7 @@ $$
 
 即从模型输出第一个 token 开始计时，到最后一个 token 输出完成为止，期间生成的 token 总数除以这段时间（秒）。
 
-<Note>
-  TPS 在实际使用中可能存在波动，各模型页面标注的 TPS 为参考值。
-</Note>
+ TPS 在实际使用中可能存在波动，各模型页面标注的 TPS 为参考值。
 
 ### 问：如何才能使用声音复刻服务
 

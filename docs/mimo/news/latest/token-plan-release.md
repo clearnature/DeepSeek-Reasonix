@@ -1,8 +1,8 @@
-﻿# Xiaomi MiMo Token Plan Brand New Release
+# Xiaomi MiMo Token Plan Brand New Release
 
 Since 2025, the capabilities of large models have been continuously redefined. However, for most developers and users, "affordability" remains a more fundamental issue than "usability". Under the pay-as-you-go model, every invocation is accompanied by uncertainty about costs.
 
-We don't want it to be this way. We believe that  **good technology should not be a privilege reserved for only a few; it should, like water and electricity, become a readily accessible productivity tool for everyone at a predictable price.** 
+We don't want it to be this way. We believe that **good technology should not be a privilege reserved for only a few; it should, like water and electricity, become a readily accessible productivity tool for everyone at a predictable price.** 
 
 Therefore, we officially launch the Xiaomi MiMo Token Plan.
 
@@ -24,23 +24,21 @@ Our original intention in designing the Token Plan was to ensure that the billin
 
 **3. Users who purchase the package can enjoy the priority internal testing experience right for the new model**—advanced and user-friendly, one step ahead.
 
-<img src="https://mimo.mi.com/static/C4NKbWi3NoXjfzxBCuscOiyinFe.4a9ca76821803852.png" alt="图片" style="margin: 16px auto;" />
-
 ### Four-tier pricing, designed for you
 
 Token Plan offers four tiers of packages, so no matter your frequency and depth of AI usage, you can find a suitable plan:
 
-- **Lite (China: ¥39/month. Overseas: $6/month)**  —— 60M Credits, can execute approximately **120 medium to complex tasks**. Suitable for explorers new to AI development, starting at the price of a cup of coffee.
+- **Lite (China: ¥39/month. Overseas: $6/month)** —— 60M Credits, can execute approximately **120 medium to complex tasks**. Suitable for explorers new to AI development, starting at the price of a cup of coffee.
 
-- **Standard (China: ¥99/month. Overseas: $16/month)**  —— 200M Credits, capable of performing approximately **400 medium to complex tasks**. A primary solution designed for work and developer users who rely on AI for daily efficiency improvement.
+- **Standard (China: ¥99/month. Overseas: $16/month)** —— 200M Credits, capable of performing approximately **400 medium to complex tasks**. A primary solution designed for work and developer users who rely on AI for daily efficiency improvement.
 
-- **Pro (China: ¥329/month. Overseas: $50/month)**  —— 700 million (700M) Credits, capable of performing approximately **1,400 medium to complex tasks**. Designed for professional users who deeply integrate AI into their workflows.
+- **Pro (China: ¥329/month. Overseas: $50/month)** —— 700 million (700M) Credits, capable of performing approximately **1,400 medium to complex tasks**. Designed for professional users who deeply integrate AI into their workflows.
 
-- **Max (China: ¥659/month. Overseas: $100/month)**  —— 1.6 billion (1600M) Credits, capable of executing approximately **3200 medium to complex tasks**. Designed for developers with all-day, high-intensity usage, offering an almost unrestricted usage experience.
+- **Max (China: ¥659/month. Overseas: $100/month)** —— 1.6 billion (1600M) Credits, capable of executing approximately **3200 medium to complex tasks**. Designed for developers with all-day, high-intensity usage, offering an almost unrestricted usage experience.
 
 > All packages enjoy a **12% discount** on the first purchase, and this discount is limited to 1 time only.
 >
-> <img src="https://mimo.mi.com/static/LgVzbjs0Wovbkqxj7ImcjZnVnpg.1e45697ee7ac5c40.png" alt="图片" style="margin: 16px auto;" />
+> 
 
 ### Specifically adapted for mainstream AI tools 
 

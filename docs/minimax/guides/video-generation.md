@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/guides/video-generation.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 视频生成
 
 > 本文档介绍 MiniMax 视频生成服务（MiniMax H3）的使用方法，助力高效创作视频内容。
@@ -14,40 +10,40 @@ MiniMax H3 是开放通用的多模态视频模型，可以统一理解文本、
 
 ## 支持的生成方式
 
-| 生成方式      | 输入内容                 | 适用场景                    |
+| 生成方式 | 输入内容 | 适用场景 |
 | --------- | -------------------- | ----------------------- |
-| 文生视频      | Prompt               | 根据文字描述从零生成视频            |
+| 文生视频 | Prompt | 根据文字描述从零生成视频 |
 | 首帧/尾帧图生视频 | Prompt + 首帧图片和/或尾帧图片 | 控制视频的开始或结束画面，让指定画面自然动起来 |
-| 全能参考生成    | Prompt + 参考图片、视频或音频  | 参考角色、动作、镜头、风格、声音或剪辑节奏   |
+| 全能参考生成 | Prompt + 参考图片、视频或音频 | 参考角色、动作、镜头、风格、声音或剪辑节奏 |
 
 ## 模型规格与输入条件
 
 ### 输出规格
 
-| 项目    | MiniMax H3                                                          |
+| 项目 | MiniMax H3 |
 | ----- | ------------------------------------------------------------------- |
-| 模型名称  | `MiniMax-H3`                                                        |
-| 输出分辨率 | 768P / 2K                                                           |
-| 输出时长  | 4～15 秒，仅支持整数值                                                       |
-| 宽高比   | 支持多种常见比例或自适应，[详见 API 文档](/docs/api-reference/video-generation-v2-create) |
+| 模型名称 | `MiniMax-H3` |
+| 输出分辨率 | 768P / 2K |
+| 输出时长 | 4～15 秒，仅支持整数值 |
+| 宽高比 | 支持多种常见比例或自适应，[详见 API 文档](/docs/api-reference/video-generation-v2-create) |
 
 ### 输入条件
 
-| 项目          | 要求                                                                    |
+| 项目 | 要求 |
 | ----------- | --------------------------------------------------------------------- |
-| **首/尾帧入口**  | 图片：0、1、2 张；宽高范围 \[256, 5760]；宽高比 5:2～2:5 范围内                          |
-|             | 无图片输入时为文生视频模式                                                         |
-| **全能参考入口**  | 图片：≤ 9 张；宽高范围 \[256, 5760]                                            |
-|             | 视频：≤ 3 段；单段时长 \[2, 15] 秒；总时长 ≤ 15 秒；宽高范围 \[256, 5760]；宽高比 5:2～2:5 范围内 |
-|             | 音频：≤ 3 段，且必须配图片或视频输入，不能单独输入；单段时长 \[2, 15] 秒；总时长 ≤ 15 秒                |
-|             | 混合输入的总上限是 12 个文件                                                      |
-|             | 无图片、视频、音频输入时为文生视频模式                                                   |
-| **输入格式支持**  | 视频：H.264/AVC、H.265/HEVC；视频内音频：AAC、MP3                                 |
-|             | 图片：JPG、JPEG、PNG、WEBP、HEIC、HEIF                                        |
-|             | 音频：WAV、MP3                                                            |
-| **传入大小限制**  | 视频单个 50 MB；图片单个 30 MB；音频单个 15 MB（加起来的不限制，限制都在单个素材上）                   |
-|             | API 请求体 64 MB（推荐使用 URL 传入素材）                                          |
-| **提示词字数上限** | 不超过 7000 字符                                                           |
+| **首/尾帧入口** | 图片：0、1、2 张；宽高范围 \[256, 5760]；宽高比 5:2～2:5 范围内 |
+| | 无图片输入时为文生视频模式 |
+| **全能参考入口** | 图片：≤ 9 张；宽高范围 \[256, 5760] |
+| | 视频：≤ 3 段；单段时长 \[2, 15] 秒；总时长 ≤ 15 秒；宽高范围 \[256, 5760]；宽高比 5:2～2:5 范围内 |
+| | 音频：≤ 3 段，且必须配图片或视频输入，不能单独输入；单段时长 \[2, 15] 秒；总时长 ≤ 15 秒 |
+| | 混合输入的总上限是 12 个文件 |
+| | 无图片、视频、音频输入时为文生视频模式 |
+| **输入格式支持** | 视频：H.264/AVC、H.265/HEVC；视频内音频：AAC、MP3 |
+| | 图片：JPG、JPEG、PNG、WEBP、HEIC、HEIF |
+| | 音频：WAV、MP3 |
+| **传入大小限制** | 视频单个 50 MB；图片单个 30 MB；音频单个 15 MB（加起来的不限制，限制都在单个素材上） |
+| | API 请求体 64 MB（推荐使用 URL 传入素材） |
+| **提示词字数上限** | 不超过 7000 字符 |
 
 ## 工作流程
 
@@ -71,132 +67,125 @@ headers = {"Authorization": f"Bearer {api_key}"}
 BASE_URL = "https://api.minimaxi.com"
 MODEL = "MiniMax-H3"
 
-
 # --- 步骤 1: 发起视频生成任务 ---
 # MiniMax-H3 使用多模态 content[] 结构：每个元素通过 type（text / image_url / video_url / audio_url）区分，
 # 并可用 role 标注用途。以下四个函数分别对应文生视频、图生视频、首尾帧、多模态参考四种模式，
 # 都会发起一个异步任务并返回唯一的 task_id。
 
 def invoke_text_to_video() -> str:
-    """（模式一）纯文本生成视频（t2va）。t2va 场景 ratio 必填且不能为 adaptive。"""
-    url = f"{BASE_URL}/v2/video_generation"
-    payload = {
-        "model": MODEL,
-        "content": [
-            # type=text 为必填项，用于描述视频的动态内容。
-            {"type": "text", "text": "镜头拍摄一个女性坐在咖啡馆里，女人抬头看着窗外，镜头缓缓移动拍摄到窗外的街道，画面呈现暖色调，色彩浓郁，氛围轻松惬意。"},
-        ],
-        "duration": 5,
-        "resolution": "2K",
-        "ratio": "16:9",
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json()["task_id"]
-
+ """（模式一）纯文本生成视频（t2va）。t2va 场景 ratio 必填且不能为 adaptive。"""
+ url = f"{BASE_URL}/v2/video_generation"
+ payload = {
+ "model": MODEL,
+ "content": [
+ # type=text 为必填项，用于描述视频的动态内容。
+ {"type": "text", "text": "镜头拍摄一个女性坐在咖啡馆里，女人抬头看着窗外，镜头缓缓移动拍摄到窗外的街道，画面呈现暖色调，色彩浓郁，氛围轻松惬意。"},
+ ],
+ "duration": 5,
+ "resolution": "2K",
+ "ratio": "16:9",
+ }
+ response = requests.post(url, headers=headers, json=payload)
+ response.raise_for_status()
+ return response.json()["task_id"]
 
 def invoke_image_to_video() -> str:
-    """（模式二）首帧图 + 文本生成视频（i2va）。"""
-    url = f"{BASE_URL}/v2/video_generation"
-    payload = {
-        "model": MODEL,
-        "content": [
-            {"type": "text", "text": "Contemporary dance, the people in the picture are performing contemporary dance."},
-            # role=first_frame 指定视频起始帧；图生视频场景下宽高比由输入图片决定，ratio 恒为 adaptive。
-            {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/85c96368-6ead-4eae-af9c-116be878eac3.png"}, "role": "first_frame"},
-        ],
-        "duration": 5,
-        "resolution": "2K",
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json()["task_id"]
-
+ """（模式二）首帧图 + 文本生成视频（i2va）。"""
+ url = f"{BASE_URL}/v2/video_generation"
+ payload = {
+ "model": MODEL,
+ "content": [
+ {"type": "text", "text": "Contemporary dance, the people in the picture are performing contemporary dance."},
+ # role=first_frame 指定视频起始帧；图生视频场景下宽高比由输入图片决定，ratio 恒为 adaptive。
+ {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/85c96368-6ead-4eae-af9c-116be878eac3.png"}, "role": "first_frame"},
+ ],
+ "duration": 5,
+ "resolution": "2K",
+ }
+ response = requests.post(url, headers=headers, json=payload)
+ response.raise_for_status()
+ return response.json()["task_id"]
 
 def invoke_start_end_to_video() -> str:
-    """（模式三）首帧图 + 尾帧图 + 文本生成视频。"""
-    url = f"{BASE_URL}/v2/video_generation"
-    payload = {
-        "model": MODEL,
-        "content": [
-            {"type": "text", "text": "A little girl grows up."},
-            # role=first_frame 指定起始画面
-            {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/fe9d04da-f60e-444d-a2e0-18ae743add33.jpeg"}, "role": "first_frame"},
-            # role=last_frame 指定结束画面
-            {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/97b7cd08-764e-4b8b-a7bf-87a0bd898575.jpeg"}, "role": "last_frame"},
-        ],
-        "duration": 5,
-        "resolution": "2K",
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json()["task_id"]
-
+ """（模式三）首帧图 + 尾帧图 + 文本生成视频。"""
+ url = f"{BASE_URL}/v2/video_generation"
+ payload = {
+ "model": MODEL,
+ "content": [
+ {"type": "text", "text": "A little girl grows up."},
+ # role=first_frame 指定起始画面
+ {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/fe9d04da-f60e-444d-a2e0-18ae743add33.jpeg"}, "role": "first_frame"},
+ # role=last_frame 指定结束画面
+ {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/97b7cd08-764e-4b8b-a7bf-87a0bd898575.jpeg"}, "role": "last_frame"},
+ ],
+ "duration": 5,
+ "resolution": "2K",
+ }
+ response = requests.post(url, headers=headers, json=payload)
+ response.raise_for_status()
+ return response.json()["task_id"]
 
 def invoke_reference_to_video() -> str:
-    """（模式四）多模态参考生视频（r2va）：可组合参考图 / 参考视频 / 参考音频。"""
-    url = f"{BASE_URL}/v2/video_generation"
-    payload = {
-        "model": MODEL,
-        "content": [
-            {"type": "text", "text": "On an overcast day, in an ancient cobbled alleyway, the model walks and adjusts a vintage beret with a smile; natural lighting and cinematic colors."},
-            # role=reference_image 提供人物/主体参考；也可加入 role=reference_video / reference_audio 作为参考。
-            {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/54be8fbe-5694-4422-9c95-99cf785eb90e.PNG"}, "role": "reference_image"},
-        ],
-        "duration": 5,
-        "resolution": "2K",
-    }
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json()["task_id"]
-
+ """（模式四）多模态参考生视频（r2va）：可组合参考图 / 参考视频 / 参考音频。"""
+ url = f"{BASE_URL}/v2/video_generation"
+ payload = {
+ "model": MODEL,
+ "content": [
+ {"type": "text", "text": "On an overcast day, in an ancient cobbled alleyway, the model walks and adjusts a vintage beret with a smile; natural lighting and cinematic colors."},
+ # role=reference_image 提供人物/主体参考；也可加入 role=reference_video / reference_audio 作为参考。
+ {"type": "image_url", "image_url": {"url": "https://filecdn.minimax.chat/public/54be8fbe-5694-4422-9c95-99cf785eb90e.PNG"}, "role": "reference_image"},
+ ],
+ "duration": 5,
+ "resolution": "2K",
+ }
+ response = requests.post(url, headers=headers, json=payload)
+ response.raise_for_status()
+ return response.json()["task_id"]
 
 # --- 步骤 2: 轮询查询任务状态 ---
 # 视频生成是一个耗时过程，因此 API 设计为异步模式。
 # 提交任务后，需使用 task_id 通过此函数进行轮询。任务成功后直接返回成片下载地址（content.url），无需再换 file_id。
 def query_task_status(task_id: str) -> str:
-    """根据 task_id 轮询任务状态，成功后返回成片下载地址。"""
-    url = f"{BASE_URL}/v2/query/video_generation/{task_id}"
-    while True:
-        # 推荐的轮询间隔为 10 秒，以避免对服务器造成不必要的压力。
-        time.sleep(10)
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        task = response.json()["task"]
-        status = task["status"]
-        print(f"当前任务状态: {status}")
-        # 成功时 task.content.url 即为成片下载地址。
-        if status == "succeeded":
-            return task["content"]["url"]
-        # 终态失败：failed / cancelled。
-        if status in ("failed", "cancelled"):
-            raise Exception(f"视频生成未成功: status={status}, error={task.get('error')}")
-
+ """根据 task_id 轮询任务状态，成功后返回成片下载地址。"""
+ url = f"{BASE_URL}/v2/query/video_generation/{task_id}"
+ while True:
+ # 推荐的轮询间隔为 10 秒，以避免对服务器造成不必要的压力。
+ time.sleep(10)
+ response = requests.get(url, headers=headers)
+ response.raise_for_status()
+ task = response.json()["task"]
+ status = task["status"]
+ print(f"当前任务状态: {status}")
+ # 成功时 task.content.url 即为成片下载地址。
+ if status == "succeeded":
+ return task["content"]["url"]
+ # 终态失败：failed / cancelled。
+ if status in ("failed", "cancelled"):
+ raise Exception(f"视频生成未成功: status={status}, error={task.get('error')}")
 
 # --- 步骤 3: 下载并保存视频文件 ---
 # 任务成功后直接得到成片下载地址，下载内容并保存到本地即可。
 def fetch_video(download_url: str):
-    """下载成片并保存到本地。"""
-    with open("output.mp4", "wb") as f:
-        video_response = requests.get(download_url)
-        video_response.raise_for_status()
-        f.write(video_response.content)
-    print("视频已成功保存至 output.mp4")
-
+ """下载成片并保存到本地。"""
+ with open("output.mp4", "wb") as f:
+ video_response = requests.get(download_url)
+ video_response.raise_for_status()
+ f.write(video_response.content)
+ print("视频已成功保存至 output.mp4")
 
 # --- 主流程: 完整调用示例 ---
 # 该部分演示了从发起任务到最终保存视频的完整调用链路。
 if __name__ == "__main__":
-    # 选择一种方式创建任务
-    task_id = invoke_text_to_video()  # 方式一：文生视频
-    # task_id = invoke_image_to_video() # 方式二：图生视频
-    # task_id = invoke_start_end_to_video() # 方式三: 根据首尾帧生成视频
-    # task_id = invoke_reference_to_video() # 方式四: 多模态参考生视频
+ # 选择一种方式创建任务
+ task_id = invoke_text_to_video() # 方式一：文生视频
+ # task_id = invoke_image_to_video() # 方式二：图生视频
+ # task_id = invoke_start_end_to_video() # 方式三: 根据首尾帧生成视频
+ # task_id = invoke_reference_to_video() # 方式四: 多模态参考生视频
 
-    print(f"视频生成任务已提交，任务 ID: {task_id}")
-    download_url = query_task_status(task_id)
-    print(f"任务处理成功，成片地址: {download_url}")
-    fetch_video(download_url)
+ print(f"视频生成任务已提交，任务 ID: {task_id}")
+ download_url = query_task_status(task_id)
+ print(f"任务处理成功，成片地址: {download_url}")
+ fetch_video(download_url)
 ```
 
 ## 生成视频结果
@@ -207,23 +196,17 @@ if __name__ == "__main__":
 
 示例生成结果
 
-<video controls src="https://filecdn.minimax.chat/docs/video-generation-v2/text-to-video.mp4" />
-
 ### 首帧/尾帧生成视频
 
 提供首帧图片、尾帧图片，或同时提供两张，再结合文字描述生成视频。视频的起始或结束画面完全可控，适合让静态图片"动起来"或补完自然的过渡画面。
 
 示例生成结果
 
-<video controls src="https://filecdn.minimax.chat/docs/video-generation-v2/first-last-frame.mp4" />
-
 ### 全能参考生成
 
 提供参考图片、参考视频或参考音频（可组合使用），并结合文字描述生成视频，在生成过程中保持参考主体或素材的特征一致性。
 
 示例生成结果
-
-<video controls src="https://filecdn.minimax.chat/docs/video-generation-v2/reference.mp4" />
 
 ## 创建 H3-Context-IR 任务
 
@@ -239,32 +222,16 @@ H3-Context-IR 采用异步任务形式。创建成功后，使用[查询任务](
 
 ## 推荐阅读
 
-<Columns cols={2}>
-  <Card title="创建视频生成任务" icon="book-open" href="/docs/api-reference/video-generation-v2-create" arrow="true" cta="点击查看">
-    使用本接口通过多模态 content 输入，创建 MiniMax-H3 视频生成任务。
-  </Card>
+ 使用本接口通过多模态 content 输入，创建 MiniMax-H3 视频生成任务。
 
-  <Card title="创建 H3-Context-IR 任务" icon="book-open" href="/docs/api-reference/video-generation-v2-h3-context-ir" arrow="true" cta="点击查看">
-    深度理解视频生成的多模态上下文，并生成结构化增强提示词。
-  </Card>
+ 深度理解视频生成的多模态上下文，并生成结构化增强提示词。
 
-  <Card title="创建视频再生成任务" icon="book-open" href="/docs/api-reference/video-generation-v2-regeneration" arrow="true" cta="点击查看">
-    对符合 MiniMax-H3 768P 输出规格的源视频进行再生成，输出 2K 视频。
-  </Card>
+ 对符合 MiniMax-H3 768P 输出规格的源视频进行再生成，输出 2K 视频。
 
-  <Card title="查询任务" icon="book-open" href="/docs/api-reference/video-generation-v2-query" arrow="true" cta="点击查看">
-    使用本接口按 task\_id 查询任务状态并获取成片下载地址。
-  </Card>
+ 使用本接口按 task\_id 查询任务状态并获取成片下载地址。
 
-  <Card title="查询任务列表" icon="book-open" href="/docs/api-reference/video-generation-v2-list" arrow="true" cta="点击查看">
-    分页查询最近 7 天内的任务，并按 task\_type 区分任务类型。
-  </Card>
+ 分页查询最近 7 天内的任务，并按 task\_type 区分任务类型。
 
-  <Card title="取消或删除任务" icon="book-open" href="/docs/api-reference/video-generation-v2-delete" arrow="true" cta="点击查看">
-    取消排队中的任务，或删除成功和失败的任务记录。
-  </Card>
+ 取消排队中的任务，或删除成功和失败的任务记录。
 
-  <Card title="产品定价" icon="book-open" href="/docs/guides/pricing-paygo#视频" arrow="true" cta="点击查看">
-    各模型的定价说明、计费方式及使用限制。
-  </Card>
-</Columns>
+ 各模型的定价说明、计费方式及使用限制。

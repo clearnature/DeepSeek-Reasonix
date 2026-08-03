@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/api-reference/text-prompt-caching.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # Prompt 缓存
 
 > 通过 Prompt 缓存，可以有效降低延迟和成本。
@@ -26,179 +22,173 @@
 
 # 代码示例
 
-<Tabs>
-  <Tab title="Anthropic SDK 示例">
-    **安装 SDK**
+ **安装 SDK**
 
-    ```bash theme={null} theme={null}
-    pip install anthropic
-    ```
+ ```bash theme={null} theme={null}
+ pip install anthropic
+ ```
 
-    **环境变量设置**
+ **环境变量设置**
 
-    国内用户使用 `https://api.minimaxi.com/v1`，国际用户使用 `https://api.minimax.io/v1`
+ 国内用户使用 `https://api.minimaxi.com/v1`，国际用户使用 `https://api.minimax.io/v1`
 
-    ```bash theme={null} theme={null}
-    export ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
-    export ANTHROPIC_API_KEY=${YOUR_API_KEY}
-    ```
+ ```bash theme={null} theme={null}
+ export ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+ export ANTHROPIC_API_KEY=${YOUR_API_KEY}
+ ```
 
-    **第一次请求 - 建立缓存**
+ **第一次请求 - 建立缓存**
 
-    ```python theme={null} theme={null}
-    import anthropic
+ ```python theme={null} theme={null}
+ import anthropic
 
-    client = anthropic.Anthropic()
+ client = anthropic.Anthropic()
 
-    response1 = client.messages.create(
-        model="MiniMax-M3",
-        system="You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n",
-        messages=[
-            {
-                "role": "user", 
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "<the entire contents of 'Pride and Prejudice'>"
-                    }
-                ]
-            },
-        ],
-        max_tokens=10240,
-    )
+ response1 = client.messages.create(
+ model="MiniMax-M3",
+ system="You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n",
+ messages=[
+ {
+ "role": "user", 
+ "content": [
+ {
+ "type": "text",
+ "text": ""
+ }
+ ]
+ },
+ ],
+ max_tokens=10240,
+ )
 
-    print("第一次请求结果:")
-    for block in response1.content:
-        if block.type == "thinking":
-            print(f"思考:\n{block.thinking}\n")
-        elif block.type == "text":
-            print(f"输出:\n{block.text}\n")
-    print(f"输入 Token: {response1.usage.input_tokens}")
-    print(f"输出 Token: {response1.usage.output_tokens}")
-    print(f"命中缓存 Token: {response1.usage.cache_read_input_tokens}")
+ print("第一次请求结果:")
+ for block in response1.content:
+ if block.type == "thinking":
+ print(f"思考:\n{block.thinking}\n")
+ elif block.type == "text":
+ print(f"输出:\n{block.text}\n")
+ print(f"输入 Token: {response1.usage.input_tokens}")
+ print(f"输出 Token: {response1.usage.output_tokens}")
+ print(f"命中缓存 Token: {response1.usage.cache_read_input_tokens}")
 
-    ```
+ ```
 
-    **第二次请求 - 复用缓存**
+ **第二次请求 - 复用缓存**
 
-    ```python theme={null} theme={null}
-    response2 = client.messages.create(
-        model="MiniMax-M3",
-        system="You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n",
-        messages=[
-            {
-                "role": "user", 
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "<the entire contents of 'Pride and Prejudice'>"
-                    }
-                ]
-            },
-        ],
-        max_tokens=10240,
-    )
+ ```python theme={null} theme={null}
+ response2 = client.messages.create(
+ model="MiniMax-M3",
+ system="You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n",
+ messages=[
+ {
+ "role": "user", 
+ "content": [
+ {
+ "type": "text",
+ "text": ""
+ }
+ ]
+ },
+ ],
+ max_tokens=10240,
+ )
 
-    print("\n第二次请求结果:")
-    for block in response2.content:
-        if block.type == "thinking":
-            print(f"思考:\n{block.thinking}\n")
-        elif block.type == "text":
-            print(f"输出:\n{block.text}\n")
-    print(f"输入 Token: {response2.usage.input_tokens}")
-    print(f"输出 Token: {response2.usage.output_tokens}")
-    print(f"命中缓存 Token: {response2.usage.cache_read_input_tokens}")
-    ```
+ print("\n第二次请求结果:")
+ for block in response2.content:
+ if block.type == "thinking":
+ print(f"思考:\n{block.thinking}\n")
+ elif block.type == "text":
+ print(f"输出:\n{block.text}\n")
+ print(f"输入 Token: {response2.usage.input_tokens}")
+ print(f"输出 Token: {response2.usage.output_tokens}")
+ print(f"命中缓存 Token: {response2.usage.cache_read_input_tokens}")
+ ```
 
-    **响应包含上下文缓存的 Token 使用信息：**
+ **响应包含上下文缓存的 Token 使用信息：**
 
-    ```json theme={null} theme={null}
-    {
-        "usage": {
-            "input_tokens": 108,
-            "output_tokens": 91,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 14813
-        }
-    }
-    ```
-  </Tab>
+ ```json theme={null} theme={null}
+ {
+ "usage": {
+ "input_tokens": 108,
+ "output_tokens": 91,
+ "cache_creation_input_tokens": 0,
+ "cache_read_input_tokens": 14813
+ }
+ }
+ ```
 
-  <Tab title="OpenAI SDK 示例">
-    **安装 SDK**
+ **安装 SDK**
 
-    ```bash theme={null} theme={null}
-    pip install openai
-    ```
+ ```bash theme={null} theme={null}
+ pip install openai
+ ```
 
-    **环境变量设置**
+ **环境变量设置**
 
-    国内用户使用 `https://api.minimaxi.com/v1`，国际用户使用 `https://api.minimax.io/v1`
+ 国内用户使用 `https://api.minimaxi.com/v1`，国际用户使用 `https://api.minimax.io/v1`
 
-    ```bash theme={null} theme={null}
-    export OPENAI_BASE_URL=https://api.minimaxi.com/v1
-    export OPENAI_API_KEY=${YOUR_API_KEY}
-    ```
+ ```bash theme={null} theme={null}
+ export OPENAI_BASE_URL=https://api.minimaxi.com/v1
+ export OPENAI_API_KEY=${YOUR_API_KEY}
+ ```
 
-    **第一次请求 - 建立缓存**
+ **第一次请求 - 建立缓存**
 
-    ```python theme={null} theme={null}
-    from openai import OpenAI
+ ```python theme={null} theme={null}
+ from openai import OpenAI
 
-    client = OpenAI()
+ client = OpenAI()
 
-    response1 = client.chat.completions.create(
-        model="MiniMax-M3",
-        messages=[
-            {"role": "system", "content": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"},
-            {"role": "user", "content": "<the entire contents of 'Pride and Prejudice'>"},
-        ],
-        # 设置 reasoning_split=True 将思考内容分离到 reasoning_details 字段
-        extra_body={"reasoning_split": True},
-    )
+ response1 = client.chat.completions.create(
+ model="MiniMax-M3",
+ messages=[
+ {"role": "system", "content": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"},
+ {"role": "user", "content": ""},
+ ],
+ # 设置 reasoning_split=True 将思考内容分离到 reasoning_details 字段
+ extra_body={"reasoning_split": True},
+ )
 
-    print("第一次请求结果:")
-    print(f"回复: {response1.choices[0].message.content}")
-    print(f"总 Token: {response1.usage.total_tokens}")
-    print(f"缓存 Token: {response1.usage.prompt_tokens_details.cached_tokens if hasattr(response1.usage, 'prompt_tokens_details') else 0}")
+ print("第一次请求结果:")
+ print(f"回复: {response1.choices[0].message.content}")
+ print(f"总 Token: {response1.usage.total_tokens}")
+ print(f"缓存 Token: {response1.usage.prompt_tokens_details.cached_tokens if hasattr(response1.usage, 'prompt_tokens_details') else 0}")
 
-    ```
+ ```
 
-    **第二次请求 - 复用缓存**
+ **第二次请求 - 复用缓存**
 
-    ```python theme={null} theme={null}
-    response2 = client.chat.completions.create(
-        model="MiniMax-M3",
-        messages=[
-            {"role": "system", "content": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"},
-            {"role": "user", "content": "<the entire contents of 'Pride and Prejudice'>"},
-        ],
-        # 设置 reasoning_split=True 将思考内容分离到 reasoning_details 字段
-        extra_body={"reasoning_split": True},
-    )
+ ```python theme={null} theme={null}
+ response2 = client.chat.completions.create(
+ model="MiniMax-M3",
+ messages=[
+ {"role": "system", "content": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"},
+ {"role": "user", "content": ""},
+ ],
+ # 设置 reasoning_split=True 将思考内容分离到 reasoning_details 字段
+ extra_body={"reasoning_split": True},
+ )
 
-    print("\n第二次请求结果:")
-    print(f"回复: {response2.choices[0].message.content}")
-    print(f"总 Token: {response2.usage.total_tokens}")
-    print(f"缓存 Token: {response2.usage.prompt_tokens_details.cached_tokens if hasattr(response2.usage, 'prompt_tokens_details') else 0}")
-    ```
+ print("\n第二次请求结果:")
+ print(f"回复: {response2.choices[0].message.content}")
+ print(f"总 Token: {response2.usage.total_tokens}")
+ print(f"缓存 Token: {response2.usage.prompt_tokens_details.cached_tokens if hasattr(response2.usage, 'prompt_tokens_details') else 0}")
+ ```
 
-    **响应包含上下文缓存的 Token 使用信息：**
+ **响应包含上下文缓存的 Token 使用信息：**
 
-    ```json theme={null} theme={null}
-    {
-        "usage": {
-            "prompt_tokens": 1200,
-            "completion_tokens": 300,
-            "total_tokens": 1500,
-            "prompt_tokens_details": {
-                "cached_tokens": 800
-            }
-        }
-    }
-    ```
-  </Tab>
-</Tabs>
+ ```json theme={null} theme={null}
+ {
+ "usage": {
+ "prompt_tokens": 1200,
+ "completion_tokens": 300,
+ "total_tokens": 1500,
+ "prompt_tokens_details": {
+ "cached_tokens": 800
+ }
+ }
+ }
+ ```
 
 # 注意事项
 
@@ -244,15 +234,19 @@ prompt 缓存采用差异化的计费策略：
 
 # Cache 对比
 
-|      | Prompt 缓存（被动缓存）                                                           | Anthropic 主动缓存                                                               |
+| | Prompt 缓存（被动缓存） | Anthropic 主动缓存 |
 | :--- | :------------------------------------------------------------------------ | :--------------------------------------------------------------------------- |
-| 使用方式 | 自动识别重复内容并缓存                                                               | 在API中显式设置 cache\_control                                                     |
-| 计费方式 | 命中缓存的token以优惠价格进行计费<br />写入缓存的部分无额外计费                                     | 命中缓存的token以优惠价格进行计费<br />首次写入缓存的token需要额外计费                                  |
-| 缓存过期 | 根据系统负载自动调整过期时间                                                            | 5min过期时间，持续使用会自动续期                                                           |
-| 支持模型 | MiniMax-M3<br />MiniMax-M2.7 系列<br />MiniMax-M2.5 系列<br />MiniMax-M2.1 系列 | MiniMax-M2.7 系列<br />MiniMax-M2.5 系列<br />MiniMax-M2.1 系列<br />MiniMax-M2 系列 |
+| 使用方式 | 自动识别重复内容并缓存 | 在API中显式设置 cache\_control |
+| 计费方式 | 命中缓存的token以优惠价格进行计费
+写入缓存的部分无额外计费 | 命中缓存的token以优惠价格进行计费
+首次写入缓存的token需要额外计费 |
+| 缓存过期 | 根据系统负载自动调整过期时间 | 5min过期时间，持续使用会自动续期 |
+| 支持模型 | MiniMax-M3
+MiniMax-M2.7 系列
+MiniMax-M2.5 系列
+MiniMax-M2.1 系列 | MiniMax-M2.7 系列
+MiniMax-M2.5 系列
+MiniMax-M2.1 系列
+MiniMax-M2 系列 |
 
 # 更多阅读
-
-<Columns cols={1}>
-  <Card title="Anthropic 主动缓存" icon="book-open" href="/docs/api-reference/anthropic-api-compatible-cache" arrow="true" cta="点击查看" />
-</Columns>

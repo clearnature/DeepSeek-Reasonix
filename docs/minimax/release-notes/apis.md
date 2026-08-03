@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/release-notes/apis.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 功能更新
 
 > 本文档汇总MiniMax开放平台接口更新动态，助力开发者了解平台最新能力，提升应用体验。

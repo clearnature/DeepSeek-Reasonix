@@ -1,4 +1,4 @@
-﻿# Model Release
+# Model Release
 
 ## 2026-06-02 mimo-v2.5-asr Released
 
@@ -24,9 +24,9 @@ Model Introduction:
 
 Model Introduction:
 
-- **Native full-modal perception + 1M context:**  Supports native understanding of images, videos, audio, and text, enabling cross-modal precise perception and long-range reasoning, with comprehensive perception capabilities ranking among the industry's forefront 
+- **Native full-modal perception + 1M context:** Supports native understanding of images, videos, audio, and text, enabling cross-modal precise perception and long-range reasoning, with comprehensive perception capabilities ranking among the industry's forefront 
 
-- **Powerful full-modal Agent capabilities:**  It has native Agent execution capabilities, enabling it to efficiently complete complex tasks such as browsing, understanding, reasoning, and operation, with its performance in daily tasks comparable to that of **mimo-v2.5-pro**
+- **Powerful full-modal Agent capabilities:** It has native Agent execution capabilities, enabling it to efficiently complete complex tasks such as browsing, understanding, reasoning, and operation, with its performance in daily tasks comparable to that of **mimo-v2.5-pro**
 
 - **Combining Performance and Efficiency:** While maintaining leading capabilities, achieving superior token efficiency, and positioned at the Pareto frontier of performance and efficiency
 
@@ -34,11 +34,11 @@ Model Introduction:
 
 Model Introduction:
 
-- **Premium Voice TTS:**  Built-in with multiple high-quality premium voices, it has strong capabilities in understanding and adhering to style instructions, supports fine-grained control over speech rate, emotion, tone, etc., and meets the expression needs of multiple scenarios 
+- **Premium Voice TTS:** Built-in with multiple high-quality premium voices, it has strong capabilities in understanding and adhering to style instructions, supports fine-grained control over speech rate, emotion, tone, etc., and meets the expression needs of multiple scenarios 
 
--  **Timbre Design:** Supports quickly defining and generating new timbres through a single sentence, making timbre creation more intuitive and efficient
+- **Timbre Design:** Supports quickly defining and generating new timbres through a single sentence, making timbre creation more intuitive and efficient
 
--  **Timbre Cloning:** Based on a small number of audio samples, it can reproduce the target timbre with high fidelity, while maintaining the consistency of timbre characteristics and possessing good generalization and stability
+- **Timbre Cloning:** Based on a small number of audio samples, it can reproduce the target timbre with high fidelity, while maintaining the consistency of timbre characteristics and possessing good generalization and stability
 
 ## 2026-03-18 mimo-v2-pro Release
 
@@ -94,140 +94,6 @@ Performance on Arena-Hard (Hard Prompts) in Thinking Mode has been strengthened,
 1. **More Efficient Chain-of-Thought (CoT):**
 By optimizing CoT generation strategies, the consumption of redundant tokens has been significantly reduced. In benchmarks such as AIME25 and HMMT, the average generation length has decreased by **13% to 30%**. This effectively lowers latency and token costs while maintaining model performance.
 
-<table>
-<colgroup>
-<col style="width: 299px" />
-<col style="width: 207px" />
-<col style="width: 207px" />
-<col style="width: 156px" />
-</colgroup>
-<thead>
-<tr>
-<th></th>
-<th>**mimo-v2-flash-0204**</th>
-<th>**mimo-v2-flash-0112**</th>
-<th>**mimo-v2-flash**</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>**SWE-Bench Verified** <br />**Non-Thinking**</td>
-<td>**73.7**</td>
-<td>73.3</td>
-<td>73.4</td>
-</tr>
-<tr>
-<td>**SWE-Bench Verified** <br />**Thinking**</td>
-<td>**78.6**</td>
-<td>74.2</td>
-<td>-</td>
-</tr>
-<tr>
-<td>**Arena-Hard(Hard Prompt)** <br />**Non-Thinking**</td>
-<td>**49.3**</td>
-<td>52.7</td>
-<td>46.0</td>
-</tr>
-<tr>
-<td>**Arena-Hard(Creative Writing)** <br />**Non-Thinking**</td>
-<td>**85.0**</td>
-<td>86.0</td>
-<td>78.3</td>
-</tr>
-<tr>
-<td>**Aren-Hard(Hard Prompt)**<br />**Thinking**</td>
-<td>**60.6**</td>
-<td>58.3</td>
-<td>54.1</td>
-</tr>
-<tr>
-<td>**Arena-Hard(Creative Writing)**<br />**Thinking**</td>
-<td>**85.8**</td>
-<td>90.4</td>
-<td>86.2</td>
-</tr>
-<tr>
-<td>**AA-IFBench**</td>
-<td>**72**</td>
-<td>-</td>
-<td>64</td>
-</tr>
-<tr>
-<td>**AA-Omniscience Accuracy**</td>
-<td>**19**</td>
-<td>-</td>
-<td>27</td>
-</tr>
-<tr>
-<td>**AA-Omniscience Non-Hallucination Rate**</td>
-<td>**52%**</td>
-<td>-</td>
-<td>9%</td>
-</tr>
-<tr>
-<td>**Tool call success rate**<br />**Thinking**</td>
-<td>**97.0%**</td>
-<td>64%</td>
-<td>44%</td>
-</tr>
-</tbody>
-</table>
-
-<table>
-<colgroup>
-<col style="width: 166px" />
-<col style="width: 100px" />
-<col style="width: 100px" />
-<col style="width: 100px" />
-<col style="width: 100px" />
-<col style="width: 100px" />
-</colgroup>
-<thead>
-<tr>
-<th>**Benchmark**</th>
-<th>**mimo-v2-flash (Acc)**</th>
-<th>**mimo-v2-flash (Avg Tokens)**</th>
-<th>**mimo-v2-flash-0204 (Acc)**</th>
-<th>**mimo-v2-flash-0204 (Avg Tokens)**</th>
-<th>**Length Reduction Ratio (%)**</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>**AIME25**</td>
-<td>94.8</td>
-<td>26984</td>
-<td>91.1</td>
-<td>18879</td>
-<td>**30.04%**</td>
-</tr>
-<tr>
-<td>**HMMT_Feb_25**</td>
-<td>94.2</td>
-<td>29294</td>
-<td>92.9</td>
-<td>21470</td>
-<td>**26.71%**</td>
-</tr>
-<tr>
-<td>**LiveCodeBench-AA**</td>
-<td>83.2</td>
-<td>21488</td>
-<td>84.9</td>
-<td>18335</td>
-<td>**14.67%**</td>
-</tr>
-<tr>
-<td>**GPQA-Diamond**</td>
-<td>83.7</td>
-<td>15862</td>
-<td>83.8</td>
-<td>13659</td>
-<td>**13.89%**</td>
-</tr>
-</tbody>
-</table>
-
 > Note: The model API call method and model name remain unchanged
 
 ## 2026-01-12 mimo-v2-flash Update
@@ -238,58 +104,11 @@ By optimizing CoT generation strategies, the consumption of redundant tokens has
 
 1. **Deep integration with Claude Code:** Fully supports using Thinking mode in Claude Code.
 
-   - **Best practice:** Set Thinking as the default mode to achieve more stable, higher-quality code generation.
+ - **Best practice:** Set Thinking as the default mode to achieve more stable, higher-quality code generation.
 
-1. **Optimized Experience for Other Code Agents:**  Synchronized improvements to the interaction experience and generation quality across code assistant tools (Code Scaffolds) such as Kilo, Cline, and Roo.
+1. **Optimized Experience for Other Code Agents:** Synchronized improvements to the interaction experience and generation quality across code assistant tools (Code Scaffolds) such as Kilo, Cline, and Roo.
 
 1. **Improved Stability & Instruction Following:** Enhanced output stability and significantly improved adherence to specific output formats.
-
-<table>
-<colgroup>
-<col style="width: 187px" />
-<col style="width: 163px" />
-<col style="width: 170px" />
-</colgroup>
-<thead>
-<tr>
-<th></th>
-<th>**mimo-v2-flash-0112**</th>
-<th>**mimo-v2-flash**</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>**SWE-Bench Verified** <br />**Non-Thinking**</td>
-<td>**73.3**</td>
-<td>73.4</td>
-</tr>
-<tr>
-<td>**SWE-Bench Verified Thinking**</td>
-<td>**74.2**</td>
-<td>-</td>
-</tr>
-<tr>
-<td>**Arena-Hard(Hard Prompt)** <br />**Non-Thinking**</td>
-<td>**52.7**</td>
-<td>46.0</td>
-</tr>
-<tr>
-<td>**Arena-Hard(Creative Writing)** <br />**Non-Thinking**</td>
-<td>**86.0**</td>
-<td>78.3</td>
-</tr>
-<tr>
-<td>**Arena-Hard(Hard Prompt)**<br />**Thinking**</td>
-<td>**58.3**</td>
-<td>54.1</td>
-</tr>
-<tr>
-<td>**Arena-Hard(Creative Writing)**<br />**Thinking**</td>
-<td>**90.4**</td>
-<td>86.2</td>
-</tr>
-</tbody>
-</table>
 
 > Note: The model API call method and model name remain unchanged
 

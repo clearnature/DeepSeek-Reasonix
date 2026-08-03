@@ -1,4 +1,4 @@
-﻿# Xiaomi MiMo-V2-TTS: Versatile Voice Agent that Speaks and Sings
+# Xiaomi MiMo-V2-TTS: Versatile Voice Agent that Speaks and Sings
 
 **Xiaomi** **mimo-v2-tts** is a large-scale speech synthesis model independently developed by Xiaomi. Built on a proprietary audio tokenizer and a multi-codebook joint speech–text modeling architecture, it has been trained on hundreds of millions of hours of speech data with large-scale pretraining and multi-dimensional reinforcement learning, enabling highly controllable, fine-grained speech style generation. mimo-v2-tts supports precise control ranging from global style setting to nuanced local emotional expression. It can perform tone shifts and gradual emotional transitions within a single utterance, faithfully reproducing the natural prosody of human speech. When singing, it can also accurately render pitch and rhythm, delivering natural and expressive performance.
 

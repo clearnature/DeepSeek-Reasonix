@@ -1109,7 +1109,7 @@ Xiaomi MiMo APIXiaomi MiMo StudioXiaomi MiMo ClawXiaomi MiMo Code
 ###### 动态
 新闻更新日志MiMo Blog
 ###### 关于我们
-服务协议隐私政策Copyright©2026 Xiaomi. All Rights Reserved
+服务协议隐私政策
 
 Xiaomi MiMo : 备案号 Beijing-XiaomiMiMo-202601050182|小米大语言模型算法 : 备案号 网信算备110108916280901240011号|京ICP备17028681号-55
 
@@ -1178,8 +1178,6 @@ Xiaomi MiMo : 备案号 Beijing-XiaomiMiMo-202601050182|小米大语言模型算
  }
  }
 
- 
-
  /* Drawer 样式 - 与设计稿一致 */
  .base-modal-large.base-modal {
  max-height: 90vh;
@@ -1204,5 +1202,5 @@ Xiaomi MiMo : 备案号 Beijing-XiaomiMiMo-202601050182|小米大语言模型算
  .base-modal-large .ant-drawer-close{
  margin: 0 !important ;
  }
- 
- !function(){var e,f,a,c,n,t,d,r,o,b,i,u,s,l,p={58828:function(e,f,a){Promise.all([a.e(2374),a.e(2898),a.e(1889)]).then(a.bind(a,90855))}},m={};function h(e){var f=m[e];if(void 0!==f)return f.exports;var a=m[e]={exports:{}};return p[e].call(a.exports,a,a.exports,h),a.exports}if(h.m=p,h.c=m,f=(e="function"==typeof Symbol)?Symbol("rspack queues"):"__rspack_queues",a=h.aE=e?Symbol("rspack exports"):"__webpack_exports__",c=e?Symbol("rspack error"):"__rspack_error",n=e?Symbol("rspack done"):"__rspack_done",t=h.zS=e?Symbol("rspack defer"):"__rspack_defer",h.zT=function(e){if(e.some(e=>{var f=m[e];return!f||!1===f[n]}))return{then:(f,a)=>Promise.all(e.map(h)).then(f,a)}},d=function(e){e&&e.dtypeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},h.p="/","u">typeof document){var v=function(e,f,a,c,n,t){var d=document.createElement("link");return d.rel="stylesheet",d.type="text/css",h.nc&&(d.nonce=h.nc),d.href=f,0!==d.href.indexOf(window.location.origin+"/")&&(d.crossOrigin="anonymous"),d.onerror=d.onload=function(a){if(d.onerror=d.onload=null,"load"===a.type)c();else{var t=a&&("load"===a.type?"missing":a.type),r=a&&a.target&&a.target.href||f,o=Error("Loading CSS chunk "+e+" failed.\\n("+r+")");o.code="CSS_CHUNK_LOAD_FAILED",o.type=t,o.request=r,d.parentNode&&d.parentNode.removeChild(d),n(o)}},a?a.parentNode.insertBefore(d,a.nextSibling):document.head.appendChild(d),d},y=function(e,f){for(var a=document.getElementsByTagName("link"),c=0;c
+
+ !function(){var e,f,a,c,n,t,d,r,o,b,i,u,s,l,p={58828:function(e,f,a){Promise.all([a.e(2374),a.e(2898),a.e(1889)]).then(a.bind(a,90855))}},m={};function h(e){var f=m[e];if(void 0!==f)return f.exports;var a=m[e]={exports:{}};return p[e].call(a.exports,a,a.exports,h),a.exports}if(h.m=p,h.c=m,f=(e="function"==typeof Symbol)?Symbol("rspack queues"):"__rspack_queues",a=h.aE=e?Symbol("rspack exports"):"__webpack_exports__",c=e?Symbol("rspack error"):"__rspack_error",n=e?Symbol("rspack done"):"__rspack_done",t=h.zS=e?Symbol("rspack defer"):"__rspack_defer",h.zT=function(e){if(e.some(e=>{var f=m[e];return!f||!1===f[n]}))return{then:(f,a)=>Promise.all(e.map(h)).then(f,a)}},d=function(e){e&&e.dtypeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},h.p="/","u">typeof document){var v=function(e,f,a,c,n,t){var d=("link");return d.rel="stylesheet",d.type="text/css",h.nc&&(d.nonce=h.nc),d.href=f,0!==d.href.indexOf(window.location.origin+"/")&&(d.crossOrigin="anonymous"),d.onerror=d.onload=function(a){if(d.onerror=d.onload=null,"load"===a.type)c();else{var t=a&&("load"===a.type?"missing":a.type),r=a&&a.target&&a.target.href||f,o=Error("Loading CSS chunk "+e+" failed.\\n("+r+")");o.code="CSS_CHUNK_LOAD_FAILED",o.type=t,o.request=r,d.parentNode&&d.parentNode.removeChild(d),n(o)}},a?a.parentNode.insertBefore(d,a.nextSibling):(d),d},y=function(e,f){for(var a=("link"),c=0;c

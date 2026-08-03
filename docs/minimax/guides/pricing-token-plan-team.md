@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/guides/pricing-token-plan-team.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # Token Plan 团队版
 
 > 了解团队中 Token Plan 席位、共享积分和按量计费资源的使用方式。

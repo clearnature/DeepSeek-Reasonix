@@ -1,4 +1,4 @@
-﻿# MiMo-V2.5 Series Inference Full-Link Optimization: Pushing Hybrid SWA Efficiency to the Extreme
+# MiMo-V2.5 Series Inference Full-Link Optimization: Pushing Hybrid SWA Efficiency to the Extreme
 
 The MiMo V2.5 series models (including MiMo-V2.5, MiMo-V2.5-Pro, etc.) integrate multiple architectural features: Hybrid Sliding Window Attention (Hybrid SWA) reduces KVCache storage to approximately 1/7 of Full Attention through hybrid window attention; MoE reduces the computational cost per token while maintaining model capacity through sparse activation; MultiModal Machine Learning Encoder supports cross-modal understanding of vision, audio, video, etc. The combination of the three endows the MiMo-V2.5 series of models with significant potential for effectiveness and efficiency in long-context and multi-modal scenarios.
 
@@ -20,17 +20,9 @@ Taking MiMo-V2.5-Pro as an example, this model has a total of 70 layers, among w
 
 Since the SWA layer only needs to retain KV within the sliding window and does not need to store the full sequence, the KVCache occupancy also drops to nearly 1/7. The Decode phase is approximately memory-bandwidth-bound, and its latency is proportional to the read volume of model parameters plus KVCache. In the case of long sequences, the volume of KVCache may far exceed the model parameters, so the reduction in KVCache storage is almost directly equivalent to the reduction of decode cost in long sequence scenarios. 
 
-<img src="https://mimo.mi.com/static/Q8rLbWiIwoiUpYxK7opcwghbnac.13ab87c6f8f43ee9.png" alt="图片" style="margin: 16px auto;" />
-
-<img src="https://mimo.mi.com/static/ZGpBby5AlopLvnxgycwc5ZYlnsr.93ca9960d5da6535.png" alt="图片" style="margin: 16px auto;" />
-
 There are significant differences in the KVCache storage of different model architectures, and there are also differences in memory access patterns. The following is an estimate of the KVCache size for each domestic model. It can be seen that MiMo-V2.5-Pro and MiMo-V2.5 rank second among domestic models in terms of KVCache, second only to DeepSeek-V4-Pro and Flash. 
 
-<img src="https://mimo.mi.com/static/YZfzb97DrohQ9Yx0dTZcK7T9njf.3604bd49c0e24bd8.png" alt="图片" style="margin: 16px auto;" />
-
-<img src="https://mimo.mi.com/static/HC6hb5QdMocBz1xYJGJcwp7vnXc.f874fdb266714a8e.png" alt="图片" style="margin: 16px auto;" />
-
-It should be noted that the actual cost difference is not strictly equivalent to the KVCache scale ratio, because there are also fixed computational and memory access overheads that are independent of the sequence length. However, in the long context scenario, the overall trend remains consistent:  **the cost-effectiveness of short texts is similar, and the longer the sequence, the greater the inference cost advantage** . 
+It should be noted that the actual cost difference is not strictly equivalent to the KVCache scale ratio, because there are also fixed computational and memory access overheads that are independent of the sequence length. However, in the long context scenario, the overall trend remains consistent: **the cost-effectiveness of short texts is similar, and the longer the sequence, the greater the inference cost advantage** . 
 
 ## 2. KVCache System Refactoring
 
@@ -58,13 +50,11 @@ Through the above design, SWA KVCache achieves strict O(W) storage constraints a
 
 After the implementation of SWA KVCache storage optimization, the SWA layer only needs to prefetch a very small amount of KVCache, which enables the process of prefetching KVCache from the Host to the Device to achieve perfect overlap through layerwise granularity scheduling. As a result, the cost of Cache reads during the inference process is close to zero. 
 
-<img src="https://mimo.mi.com/static/VRLjb2butogonJx8uKwcnlIrnpf.3fad65eda42d2270.png" alt="图片" style="margin: 16px auto;" />
-
 #### SWA-aware prefix cache tree 
 
-The hit rule of traditional RadixAttention is based on a simple assumption:  **equal token sequences → equal KV** . This assumption holds true in Full Attention mode - as long as two requests share the same token id, their corresponding KV must still be in the pool and can be directly reused. 
+The hit rule of traditional RadixAttention is based on a simple assumption: **equal token sequences → equal KV** . This assumption holds true in Full Attention mode - as long as two requests share the same token id, their corresponding KV must still be in the pool and can be directly reused. 
 
-However, this assumption is broken in SWA mode. The reason is that the logical lifecycle of the prefix tree does not align with the physical lifecycle of SWA KV. The length of prefix tree nodes is not constrained by the SWA window. The sequence length of a node can be either shorter or much longer than the window; moreover, nodes change continuously with request merging, splitting, and removal. Thus, although a prefix tree node still logically represents a complete token sequence, its corresponding SWA KV  **may only have its last part remaining, or may even have completely disappeared.** If the prefix tree still gives the reuse length according to the rule of "matching when tokens are equal", what the scheduler receives may be a pseudo-match where "the tail KV has evaporated" - subsequent attention calculations will read invalid or overwritten slots, directly affecting the model's performance. 
+However, this assumption is broken in SWA mode. The reason is that the logical lifecycle of the prefix tree does not align with the physical lifecycle of SWA KV. The length of prefix tree nodes is not constrained by the SWA window. The sequence length of a node can be either shorter or much longer than the window; moreover, nodes change continuously with request merging, splitting, and removal. Thus, although a prefix tree node still logically represents a complete token sequence, its corresponding SWA KV **may only have its last part remaining, or may even have completely disappeared.** If the prefix tree still gives the reuse length according to the rule of "matching when tokens are equal", what the scheduler receives may be a pseudo-match where "the tail KV has evaporated" - subsequent attention calculations will read invalid or overwritten slots, directly affecting the model's performance. 
 
 To ensure that prefix reuse remains correct and efficient in SWA mode, it is necessary to modify the semantics of the prefix tree in three aspects: 
 
@@ -74,9 +64,7 @@ To ensure that prefix reuse remains correct and efficient in SWA mode, it is nec
 
 1. **The node simultaneously carries two sets of indexes** : Each prefix tree node records two pieces of information - the Full Attention segment index (determines the logical order and participates in the Full Attention layer computation) and the SWA segment mapping (determines window security). During eviction, they also need to be managed separately: the SWA segments outside the window can be evicted individually while retaining the Full Attention segments (so that the prefix can still be reused by the Full Attention layer), or the entire segment can be evicted. 
 
-SWA compressing the KV volume to 1/7 is  **the gain at the capacity level** , while the hit rate is  **the gain at the reuse level** . Only when the two are multiplied can we obtain the curve of the actual computational cost during the prefill phase. After introducing the "window safety length" matching rule, the hit rate of KVCache with the same token capacity theoretically decreases slightly, but the number of tokens under the same storage capacity reaches several times, resulting in a substantial increase in the actual hit rate. 
-
-<img src="https://mimo.mi.com/static/Aqkfbfnpro65cxxaq1lcG16Qn4d.6e3dfd73f38b2350.png" alt="图片" style="margin: 16px auto;" />
+SWA compressing the KV volume to 1/7 is **the gain at the capacity level** , while the hit rate is **the gain at the reuse level** . Only when the two are multiplied can we obtain the curve of the actual computational cost during the prefill phase. After introducing the "window safety length" matching rule, the hit rate of KVCache with the same token capacity theoretically decreases slightly, but the number of tokens under the same storage capacity reaches several times, resulting in a substantial increase in the actual hit rate. 
 
 #### Optimization of KVCache Hit Rate Improvement
 
@@ -100,29 +88,27 @@ GCache supports both file and KV semantics, multi-level caching of memory/disk/r
 
 #### Architecture Design 
 
-<img src="https://mimo.mi.com/static/OXC0bNUtKo9kSRxeLBdcQ6Gsnfh.a66e2400fc645baa.png" alt="图片" style="margin: 16px auto;" />
-
 GCache has several characteristics: 
 
 1. **The decentralized metadata management approach allows the cluster scale to expand without limitations:** 
 
-   - Calculate the consistent hash for the key to determine the storage location. 
+ - Calculate the consistent hash for the key to determine the storage location. 
 
-   - Master uses Raft high-availability deployment. However, Master is only responsible for managing heartbeats and Service Discovery, and the IO path does not pass through Master.
+ - Master uses Raft high-availability deployment. However, Master is only responsible for managing heartbeats and Service Discovery, and the IO path does not pass through Master.
 
 1. **The server supports both memory and disk caching simultaneously:** 
 
-   - Cold data in memory will be evicted to disk, while hot data on disk will be promoted to memory. This mode is very friendly to inference scenarios, automatically ensuring the performance of active sessions and reducing the cost of sessions that have not been started for a long time. 
+ - Cold data in memory will be evicted to disk, while hot data on disk will be promoted to memory. This mode is very friendly to inference scenarios, automatically ensuring the performance of active sessions and reducing the cost of sessions that have not been started for a long time. 
 
-   - Memory supports persistence to shm, ensuring that cached data is not lost when the service is restarted.
+ - Memory supports persistence to shm, ensuring that cached data is not lost when the service is restarted.
 
-   - Supports smooth scaling up or down of machines without losing cache during the process. 
+ - Supports smooth scaling up or down of machines without losing cache during the process. 
 
 1. **Provide multi-language SDK, start a dedicated thread, slice and dispatch user requests:** 
 
-   - Does not occupy the resources of user threads; slicing improves concurrency and controls the IO size within a range friendly to RDMA.
+ - Does not occupy the resources of user threads; slicing improves concurrency and controls the IO size within a range friendly to RDMA.
 
-   - The thread callback operates in Asynchronous Mode, allowing flexible control of callback granularity, such as single kv level, batch level, or CUDA stream level. 
+ - The thread callback operates in Asynchronous Mode, allowing flexible control of callback granularity, such as single kv level, batch level, or CUDA stream level. 
 
 #### Network Optimization
 
@@ -144,7 +130,7 @@ Based on the above work, GCache has been able to maintain single-copy storage in
 
 Thanks to the aforementioned optimizations for SWA on KVCache - lower storage footprint, supplemented by a more stable large-capacity GCache as L3 storage - we have been able to significantly extend the TTL (Time-To-Live) of the cache, thereby substantially increasing the hit rate of the KV Cache. The eviction of KVCache essentially stems from storage capacity constraints. When the capacity approaches saturation, the system must prioritize retaining the KV Cache generated by new requests and evict historically accessed entries according to strategies such as LRU, which directly results in the fact that a certain context often fails to be hit when reused after several hours. The extremely small storage footprint of SWA enables the cache capacity for concurrent requests that can be supported to increase exponentially under the same cost, while the large-capacity L3 further expands the available capacity at low cost—the more abundant the storage space, the less pressure there is for KVCache to be evicted, and naturally the longer its retention duration.The longer the TTL, the wider the hit window for historical context, and the cache hit rate rises accordingly. Additionally, although the smaller bandwidth transmission pressure of SWA does not directly affect TTL, it significantly reduces the data transfer overhead between multi-level storage, providing a guarantee for the stable and efficient operation of the entire cache system. 
 
-Since the model went live, we have continuously observed on the server side that under the mainstream high-quality harness framework, the server-side KV Cache hit rate can reach an average of  **93%** ; for individual users with high-intensity and long-term usage, this indicator can even climb to  **95%**  or higher. In the future, we will continue to iterate on the KV Cache management logic of SWA and collaborate with more harness frameworks to promote the co-design of harness-inference to further optimize the upper limit of the cache hit rate. 
+Since the model went live, we have continuously observed on the server side that under the mainstream high-quality harness framework, the server-side KV Cache hit rate can reach an average of **93%** ; for individual users with high-intensity and long-term usage, this indicator can even climb to **95%** or higher. In the future, we will continue to iterate on the KV Cache management logic of SWA and collaborate with more harness frameworks to promote the co-design of harness-inference to further optimize the upper limit of the cache hit rate. 
 
 ## III. Scheduling Optimization
 
@@ -165,9 +151,7 @@ Router implements KVCache affinity scheduling by maintaining distributed request
 
 When queuing occurs in model services, the traditional First Come First Serve strategy does not consider the priority relationship between requests with high and low hit rates, causing requests with more cache hits but fewer real computational tokens to potentially wait for requests with lower cache hit rates to finish inference before they can start. The TTFT P99 of the overall service becomes extremely long, slowing down the average performance of the overall throughput. 
 
-To address this issue, when the waiting queue selects to prioritize the execution of the prefill service, the Router side preferentially schedules requests with fewer real computational tokens, avoiding the problem of P99 degradation caused by blocking requests that originally had short computation times. Meanwhile, this strategy may lead to the starvation phenomenon where some requests are not scheduled for a long time, so we have also added a waiting time penalty mechanism to balance this phenomenon. The results show that this strategy does not degrade the service quality for shorter requests, while for longer requests, it can reduce the P90 metric of TTFT by up to  **30%** . 
-
-<img src="https://mimo.mi.com/static/QzALbfqBbobRUIxKJMucTWDAned.addd81811098b4d4.png" alt="图片" style="margin: 16px auto;" />
+To address this issue, when the waiting queue selects to prioritize the execution of the prefill service, the Router side preferentially schedules requests with fewer real computational tokens, avoiding the problem of P99 degradation caused by blocking requests that originally had short computation times. Meanwhile, this strategy may lead to the starvation phenomenon where some requests are not scheduled for a long time, so we have also added a waiting time penalty mechanism to balance this phenomenon. The results show that this strategy does not degrade the service quality for shorter requests, while for longer requests, it can reduce the P90 metric of TTFT by up to **30%** . 
 
 ## 4. Prefill Optimization
 
@@ -178,8 +162,6 @@ Theoretically, the smaller the EP (Expert Parallelism) during the prefill phase,
 ### 4.2 Length Bucketing Strategy
 
 Compared to the pure GQA architecture, the Hybrid architecture of the MiMo-V2.5 series significantly improves computational efficiency, but throughput still decreases significantly as the sequence length increases. The following figure shows the throughput in Chunked Prefill when computing 16K tokens with different prefix lengths:
-
-<img src="https://mimo.mi.com/static/B6DubYIBroLfFwx3dwAcHH4Rndh.086f05d1566e8886.png" alt="图片" style="margin: 16px auto;" />
 
 In the Agentic scenario, most ultra-long requests originate from multi-round agent interactions and generally carry a large amount of prefix cache. When requests with significantly different lengths are scheduled to the same model instance, short requests will be dragged down by long requests, reducing overall throughput, which is mainly reflected in two scenarios: 
 
@@ -193,11 +175,9 @@ To alleviate the above load imbalance issue, we adopted**the three-level length 
 
 All models in the MiMo-V2.5 series adopt the MoE architecture, and the issue of expert load balance during the prefill phase needs to be considered. Since a load balance training objective was introduced during the pre-training phase and the training was relatively stable, the model has learned a relatively uniform expert allocation strategy during training. During the inference phase, without enabling any expert load balance strategy, **the average expert load per layer (the ratio of the average number of tokens across all ranks in a layer to the maximum number of tokens in a rank of that layer) is approximately 0.85, which is already at a relatively optimal distribution level**. Therefore, we currently have not introduced any expert load balance strategy. Subsequently, we will continuously monitor this indicator and introduce relevant optimizations as needed based on the dynamic evolution of the online load pattern.
 
-<img src="https://mimo.mi.com/static/ZlGnbF1JWoujQ6xYx51c0UCMn1c.073d7b05b4218566.png" alt="图片" style="margin: 16px auto;" />
-
 ### 4.4 Resolve NUMA Conflicts
 
-In some Ubuntu systems, the kernel numa_balancing parameter conflicts with the numa-node configuration of SGLang, resulting in occasional large execution gaps between computing kernels during model inference. In a multi-node multi-GPU deployment, the occurrence positions of these gaps on each rank are random, and each time synchronization occurs between ranks, the overall computing process is slowed down by the slowest rank, thereby significantly affecting the overall inference efficiency. After disabling the numa_balancing parameter of the system kernel, the issue was resolved,  **and end-to-end performance increased by approximately 10%** . 
+In some Ubuntu systems, the kernel numa_balancing parameter conflicts with the numa-node configuration of SGLang, resulting in occasional large execution gaps between computing kernels during model inference. In a multi-node multi-GPU deployment, the occurrence positions of these gaps on each rank are random, and each time synchronization occurs between ranks, the overall computing process is slowed down by the slowest rank, thereby significantly affecting the overall inference efficiency. After disabling the numa_balancing parameter of the system kernel, the issue was resolved, **and end-to-end performance increased by approximately 10%** . 
 
 ## 5. Decode Optimization
 
@@ -213,42 +193,11 @@ In the Agentic scenario, multi-round conversations cause the context to continuo
 
 ### 5.2 MTP Optimization
 
-The MiMo-V2.5 series models natively support 3-layer MTP accelerated decode output, but MTP was not enabled during the prefill phase previously, resulting in the MTP using invalid KVCache for the initial 128 output tokens of decode and a very low prediction acceptance rate. Since most output sequences are short in Agentic scenarios, this defect significantly reduces the effectiveness of MTP acceleration. By introducing MTP support during the prefill phase and performing specialized adaptation and optimization on HiCache L2/L3, the acceleration effect of MTP in the early stage of decoding has been significantly improved:  **The acceleration ratio reaches 2.3× for the 0–128th tokens and 1.5× for the 128–256th tokens** , effectively reducing the real decoding cost in agentic scenarios. 
+The MiMo-V2.5 series models natively support 3-layer MTP accelerated decode output, but MTP was not enabled during the prefill phase previously, resulting in the MTP using invalid KVCache for the initial 128 output tokens of decode and a very low prediction acceptance rate. Since most output sequences are short in Agentic scenarios, this defect significantly reduces the effectiveness of MTP acceleration. By introducing MTP support during the prefill phase and performing specialized adaptation and optimization on HiCache L2/L3, the acceleration effect of MTP in the early stage of decoding has been significantly improved: **The acceleration ratio reaches 2.3× for the 0–128th tokens and 1.5× for the 128–256th tokens** , effectively reducing the real decoding cost in agentic scenarios. 
 
 ## 6. MultiModal Machine Learning Inference Optimization
 
 Based on the SGLang Community v0.5.7 EPD solution, we have carried out**a large number of engineering optimizations and stability fixes in EPD separation**around MiMo-V2.5, increasing the Encoder throughput to **2 times**while keeping the latency unchanged. Currently, we are feeding back the work results to the SGLang Community (issues#24945). The differences in Encoder performance before and after optimization are shown in the following table:
-
-<table>
-<colgroup>
-<col style="width: 100px" />
-<col style="width: 100px" />
-<col style="width: 100px" />
-<col style="width: 100px" />
-</colgroup>
-<thead>
-<tr>
-<th></th>
-<th>QPS</th>
-<th>Avg Latency</th>
-<th>P90 Latency</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Before Optimization</td>
-<td>15</td>
-<td>78.39ms</td>
-<td>100.76ms</td>
-</tr>
-<tr>
-<td>Optimized</td>
-<td>30</td>
-<td>80.28ms</td>
-<td>82.94ms</td>
-</tr>
-</tbody>
-</table>
 
 **6.1 Architecture Optimization**
 
@@ -276,6 +225,6 @@ Based on the SGLang Community v0.5.7 EPD solution, we have carried out**a large 
 
 ## VII. Postscript
 
-Looking back at the entire project, the inference efficiency of the MiMo-V2.5 series models does not stem from a single-point breakthrough in one particular stage, but rather from the result of multi-dimensional collaborative optimization. Hybrid SWA benefits both prefill and decode, but the under-optimized implementation of KVCache actually increases costs at each stage.Around this goal, we systematically reconstructed KVCache management, hierarchical caching, and prefix cache trees, tackled the core issues of SWA KVCache, optimized the scheduling strategy and Prefill/Decode links, and after verification in real online scenarios, finally translated its theoretical efficiency advantages into actual production environments. Only then did Hybrid SWA demonstrate its architectural advantages of combining strength and efficiency in  **long text inference** . By further combining MoE configuration and various optimizations of MultiModal Machine Learning inference, the performance of online inference services has been significantly improved. 
+Looking back at the entire project, the inference efficiency of the MiMo-V2.5 series models does not stem from a single-point breakthrough in one particular stage, but rather from the result of multi-dimensional collaborative optimization. Hybrid SWA benefits both prefill and decode, but the under-optimized implementation of KVCache actually increases costs at each stage.Around this goal, we systematically reconstructed KVCache management, hierarchical caching, and prefix cache trees, tackled the core issues of SWA KVCache, optimized the scheduling strategy and Prefill/Decode links, and after verification in real online scenarios, finally translated its theoretical efficiency advantages into actual production environments. Only then did Hybrid SWA demonstrate its architectural advantages of combining strength and efficiency in **long text inference** . By further combining MoE configuration and various optimizations of MultiModal Machine Learning inference, the performance of online inference services has been significantly improved. 
 
 We hereby present the first large-scale engineering implementation plan that comprehensively covers the Hybrid SWA + MoE + MultiModal Machine Learning combined architecture, and will pass on the cost savings achieved thereby to users through API price cuts. Meanwhile, we have already contributed some optimizations to the SGLang open-source community in the form of PRs, and will continue to advance more open-source initiatives, hoping to ensure that engineering optimization no longer serves as a barrier as soon as possible, enabling this type of composite architecture that combines strength and efficiency to be more widely explored and applied.

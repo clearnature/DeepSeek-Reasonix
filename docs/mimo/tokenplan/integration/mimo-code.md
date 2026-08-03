@@ -1,15 +1,11 @@
-﻿# MiMo Code Configuration
+# MiMo Code Configuration
 
 {/* feishu-style:text-align:left */}
 [MiMo Code](https://mimo.xiaomi.com/zh/mimocode) is an AI-powered coding assistant developed by Xiaomi, available as a CLI tool in the terminal. Both **pay-as-you-go MiMo API** and **Token Plan** are supported by MiMo Code. Refer to this guide for configuration and usage.
 
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
-
 **Limited-Time Offer**
 
 After completing authorization for MiMo Code, each user is entitled to **1000 free** web search queries per day. Once the quota is exceeded, please activate the relevant service on the open platform and ensure your account has sufficient balance.
-
-</div>
 
 ## Prerequisites
 
@@ -17,33 +13,6 @@ After completing authorization for MiMo Code, each user is entitled to **1000 fr
 MiMo Code supports direct redirection to the [Xiaomi MiMo API Platform](https://platform.xiaomimimo.com/docs/en-US/welcome) for authorization login, or you can log in using the authorization code returned by the platform. No manual API Key configuration is required. The system provides two key types for you to choose from based on your usage scenario.
 
 > Note: Before authorizing and logging into MiMo Code, please ensure your account on the open platform has sufficient balance or a valid Token Plan. Otherwise, the authorization will fail.
-
-<table>
-<colgroup>
-<col style="width: 152px" />
-<col style="width: 242px" />
-<col style="width: 659px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: center;">Usage</span></th>
-<th><span style="display: inline-block; text-align: center;">Description</span></th>
-<th><span style="display: inline-block; text-align: center;">How to Obtain and Manage</span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: center;">Pay-as-you-go API</span></td>
-<td><span style="display: inline-block; text-align: left;">Billed by actual usage, suitable for light usage</span></td>
-<td><span style="display: inline-block; text-align: left;">After authorization, the platform will automatically create a new API Key prefixed with `mimo-code-cli-key`. You can view and manage it on the [API Keys](https://platform.xiaomimimo.com/#/console/api-keys) page.</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: center;">Token Plan</span></td>
-<td><span style="display: inline-block; text-align: left;">Fixed subscription fee with limited calls per plan</span></td>
-<td><span style="display: inline-block; text-align: left;">You can view the current Token Plan quota, usage, and expiration on the [Token Plan](https://platform.xiaomimimo.com/#/console/plan-manage) page.</span></td>
-</tr>
-</tbody>
-</table>
 
 ## Install MiMo Code
 
@@ -60,7 +29,7 @@ curl -fsSL https://mimo.xiaomi.com/install | bash
 ```
 
 {/* feishu-style:text-align:left */}
-**Method 2: npm Installation (for Windows)**  
+**Method 2: npm Installation (for Windows)** 
 
 {/* feishu-style:text-align:left */}
 Requires Node.js 18 or later.
@@ -100,8 +69,6 @@ mimo auth login
 {/* feishu-style:text-align:left */}
 After confirmation, the MiMo authorization login popup will automatically appear. Follow the prompts to complete the login, and then select your preferred authorization key type based on your usage scenario:
 
-<img src="./images/OaltbhLKMo8siQx06ZZc1pKnnYe.png" alt="图片" style="margin: 16px auto;" />
-
 ## Use MiMo Code
 
 ### Quick Start
@@ -120,8 +87,6 @@ mimo
 /init
 ```
 
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
-
 It is strongly recommended to run the `/init` command on first use:
 
 - It automatically analyzes your project structure and coding conventions
@@ -130,12 +95,8 @@ It is strongly recommended to run the `/init` command on first use:
 
 - MiMo Code will use this file to better understand your project context, improving interaction quality
 
-</div>
-
 {/* feishu-style:text-align:left */}
 For more commands and detailed usage, please refer to the [MiMo Code Official Documentation](https://mimo.xiaomi.com/mimocode/interaction).
-
-<img src="./images/Xe4WbBAjmoAjowxcPyNcdtnznfd.png" alt="图片" style="margin: 16px auto;" />
 
 ### Model Selection
 

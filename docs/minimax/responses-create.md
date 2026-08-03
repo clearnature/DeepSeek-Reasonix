@@ -2,7 +2,7 @@
 
 > 来源: https://platform.minimaxi.com/docs/api-reference/responses-create
 
-{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://platform.minimaxi.com/#organization","name":"MiniMax 开放平台文档中心","url":"https://platform.minimaxi.com","logo":{"@type":"ImageObject","url":"https://mintcdn.com/minimax-zh/1UjvBcdoC6r0UeyA/logo/light.svg?fit=max&auto=format&n=1UjvBcdoC6r0UeyA&q=85&s=672d724b639b2d88d0702fae329ea4f8"}},{"@type":"WebSite","@id":"https://platform.minimaxi.com/docs#website","name":"MiniMax 开放平台文档中心","url":"https://platform.minimaxi.com/docs","publisher":{"@id":"https://platform.minimaxi.com/#organization"}},{"@type":"WebPage","@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#webpage","url":"https://platform.minimaxi.com/docs/api-reference/responses-create","name":"对话生成","description":"OpenAI Responses API 兼容的主接口调用MiniMax 模型，生成模型回复，支持流式与非流式。","dateModified":"2026-06-08T10:47:14.216Z","isPartOf":{"@id":"https://platform.minimaxi.com/docs#website"},"breadcrumb":{"@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"文本","item":"https://platform.minimaxi.com/docs/api-reference/text-anthropic-api"},{"@type":"ListItem","position":2,"name":"对话生成","item":"https://platform.minimaxi.com/docs/api-reference/responses-create"}]},{"@type":["TechArticle","APIReference"],"@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#apireference","headline":"对话生成","name":"对话生成","description":"OpenAI Responses API 兼容的主接口调用MiniMax 模型，生成模型回复，支持流式与非流式。","url":"https://platform.minimaxi.com/docs/api-reference/responses-create","mainEntityOfPage":{"@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#webpage"},"image":"https://filecdn.minimax.chat/public/58eca777-e31f-448a-9823-e2220e49b426.png","dateModified":"2026-06-08T10:47:14.216Z","publisher":{"@id":"https://platform.minimaxi.com/#organization"},"isPartOf":{"@id":"https://platform.minimaxi.com/docs#website"}}]}document.documentElement.setAttribute('data-page-mode', "none");.audio-container {
+{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://platform.minimaxi.com/#organization","name":"MiniMax 开放平台文档中心","url":"https://platform.minimaxi.com","logo":{"@type":"ImageObject","url":"https://mintcdn.com/minimax-zh/1UjvBcdoC6r0UeyA/logo/light.svg?fit=max&auto=format&n=1UjvBcdoC6r0UeyA&q=85&s=672d724b639b2d88d0702fae329ea4f8"}},{"@type":"WebSite","@id":"https://platform.minimaxi.com/docs#website","name":"MiniMax 开放平台文档中心","url":"https://platform.minimaxi.com/docs","publisher":{"@id":"https://platform.minimaxi.com/#organization"}},{"@type":"WebPage","@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#webpage","url":"https://platform.minimaxi.com/docs/api-reference/responses-create","name":"对话生成","description":"OpenAI Responses API 兼容的主接口调用MiniMax 模型，生成模型回复，支持流式与非流式。","dateModified":"2026-06-08T10:47:14.216Z","isPartOf":{"@id":"https://platform.minimaxi.com/docs#website"},"breadcrumb":{"@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"文本","item":"https://platform.minimaxi.com/docs/api-reference/text-anthropic-api"},{"@type":"ListItem","position":2,"name":"对话生成","item":"https://platform.minimaxi.com/docs/api-reference/responses-create"}]},{"@type":["TechArticle","APIReference"],"@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#apireference","headline":"对话生成","name":"对话生成","description":"OpenAI Responses API 兼容的主接口调用MiniMax 模型，生成模型回复，支持流式与非流式。","url":"https://platform.minimaxi.com/docs/api-reference/responses-create","mainEntityOfPage":{"@id":"https://platform.minimaxi.com/docs/api-reference/responses-create#webpage"},"image":"https://filecdn.minimax.chat/public/58eca777-e31f-448a-9823-e2220e49b426.png","dateModified":"2026-06-08T10:47:14.216Z","publisher":{"@id":"https://platform.minimaxi.com/#organization"},"isPartOf":{"@id":"https://platform.minimaxi.com/docs#website"}}]}('data-page-mode', "none");.audio-container {
  height: 50px;
 }
 
@@ -424,7 +424,7 @@ curl --request POST \
 - HTTP Authorization Scheme: Bearer API_key，用于验证账户信息，可在 账户管理>接口密钥 中查看
 
 #### 请求头
-​Content-Typeenum<string>默认值:application/json必填请求体的媒介类型，请设置为 `application/json`，确保请求数据的格式为 JSON
+​Content-Typeenum默认值:application/json必填请求体的媒介类型，请设置为 `application/json`，确保请求数据的格式为 JSON
 
 可用选项: `application/json` 
 #### 请求体
@@ -435,15 +435,15 @@ application/json​modelstring必填调用的模型名称，如 `MiniMax-M3`
 ​input#opt-dd-_R_c95qjkp5d7av5tccsnisnpfiulb_:has(option[value="0"]:checked) ~ [data-idx="0"] { display: flex; }
 #opt-dd-_R_c95qjkp5d7av5tccsnisnpfiulb_:has(option[value="1"]:checked) ~ [data-idx="1"] { display: flex; }stringobject[]stringobject[]必填对话内容，支持简单文本或完整对话历史数组
 
-​service_tierenum<string>默认值:standard请求准入服务层级。支持的取值为 `standard` 和 `priority`。省略时默认使用 `standard`。`priority` 的价格为 `standard` 的 1.5 倍，并会确保请求获得优先准入，使其排在其他请求之前处理，从而带来更快响应并减少失败。
+​service_tierenum默认值:standard请求准入服务层级。支持的取值为 `standard` 和 `priority`。省略时默认使用 `standard`。`priority` 的价格为 `standard` 的 1.5 倍，并会确保请求获得优先准入，使其排在其他请求之前处理，从而带来更快响应并减少失败。
 
 可用选项: `standard`, `priority` ​instructionsstring系统指令
 
 ​max_output_tokensinteger最大输出 token 数
 
-​temperaturenumber<float>默认值:1采样温度，取值范围 (0, 1]
+​temperaturenumber默认值:1采样温度，取值范围 (0, 1]
 
-必填范围: `0 ​top_pnumber<float>默认值:0.95核采样，取值范围 (0, 1]
+必填范围: `0 ​top_pnumber默认值:0.95核采样，取值范围 (0, 1]
 
 必填范围: `0 ​streamboolean默认值:false设置为 `true` 启用 SSE 流式响应
 
@@ -451,7 +451,7 @@ application/json​modelstring必填调用的模型名称，如 `MiniMax-M3`
 
 Show child attributes
 
-​tool_choiceenum<string>工具选择策略：`none` 表示不调用任何工具；`auto` 表示由模型自动判断是否调用工具
+​tool_choiceenum工具选择策略：`none` 表示不调用任何工具；`auto` 表示由模型自动判断是否调用工具
 
 可用选项: `none`, `auto` ​metadataobject请求元数据，key-value 均为字符串
 
@@ -474,13 +474,13 @@ Show child attributes
 
 示例:`"abc123"`
 
-​objectenum<string>必填对象类型，固定为 `response`
+​objectenum必填对象类型，固定为 `response`
 
 可用选项: `response` ​created_atinteger必填响应创建时间（Unix 秒）
 
 ​modelstring必填实际处理请求的模型名称
 
-​statusenum<string>必填响应状态
+​statusenum必填响应状态
 
 可用选项: `completed`, `incomplete`, `failed` ​output(Message · object | Reasoning · object | Function Call · object)[]必填模型输出列表
 
@@ -507,7 +507,7 @@ Show child attributes
 
 ​storeboolean响应是否持久化
 
-​truncationenum<string>上下文截断策略
+​truncationenum上下文截断策略
 
 可用选项: `disabled` 此页面对您有帮助吗？
 

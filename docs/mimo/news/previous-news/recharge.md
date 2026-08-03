@@ -1,4 +1,4 @@
-﻿# Xiaomi MiMo API Open Platform Recharge Function Officially Launched
+# Xiaomi MiMo API Open Platform Recharge Function Officially Launched
 
 ## Dear Developers,
 
@@ -42,6 +42,6 @@ For assistance or business inquiries, feel free to reach out to us through the f
 
 We are committed to continuously optimizing our products and services to provide you with superior AI capabilities. Thank you again for your understanding and trust!
 
-<p className="mb-[16px] w-full text-[14px] leading-[24px] lg:text-[16px] lg:leading-[28px] font-normal text-[#5C5C62]" style={{ textAlign: 'right' }}>**—— Xiaomi MiMo API Open Platform Team**</p>
+**—— Xiaomi MiMo API Open Platform Team**
 
-<p className="mb-[16px] w-full text-[14px] leading-[24px] lg:text-[16px] lg:leading-[28px] font-normal text-[#5C5C62]" style={{ textAlign: 'right' }}>**January 20, 2026**</p>
+**January 20, 2026**

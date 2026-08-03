@@ -1,4 +1,4 @@
-﻿# Speech Synthesis (MiMo-V2.5-TTS Series)
+# Speech Synthesis (MiMo-V2.5-TTS Series)
 
 {/* feishu-style:text-align:left */}
 Speech Synthesis (Text-to-Speech) supports automatically converting input text into natural and fluent speech output. You can generate natural and vivid speech content by configuring parameters such as speech style and voice.
@@ -6,59 +6,18 @@ Speech Synthesis (Text-to-Speech) supports automatically converting input text i
 {/* feishu-style:text-align:left */}
 **Core Capabilities**
 
-- **Out-of-the-box built-in voices:**  A variety of high-quality built-in voices are available for quick use without additional configuration.
+- **Out-of-the-box built-in voices:** A variety of high-quality built-in voices are available for quick use without additional configuration.
 
-- **Voice design and cloning:**  Supports voice design via text description, or replication of arbitrary voices based on audio samples.
+- **Voice design and cloning:** Supports voice design via text description, or replication of arbitrary voices based on audio samples.
 
-- **Diverse speech styles:**  Supports control over speed, emotion, role-play, dialects and other styles, for more vivid and natural speech expression.
-
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
+- **Diverse speech styles:** Supports control over speed, emotion, role-play, dialects and other styles, for more vivid and natural speech expression.
 
 Low-latency streaming output for `mimo-v2.5-tts` is now available. The streaming interface has been restored and returns responses in real time.
-
-</div>
 
 ## List of Supported Models
 
 {/* feishu-style:text-align:left */}
 Currently, three models of the MiMo-V2.5-TTS series are supported, and the model list is as follows:
-
-<table>
-<colgroup>
-<col style="width: 243px" />
-<col style="width: 228px" />
-<col style="width: 240px" />
-<col style="width: 307px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: left;">Model ID</span></th>
-<th><span style="display: inline-block; text-align: left;">Function</span></th>
-<th><span style="display: inline-block; text-align: left;">Voice</span></th>
-<th><span style="display: inline-block; text-align: left;">Precautions </span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: left;">`mimo-v2.5-tts`</span></td>
-<td><span style="display: inline-block; text-align: left;">Use built-in high-quality voices for speech synthesis </span></td>
-<td><span style="display: inline-block; text-align: left;">Use the high-quality voices from the built-in voices list </span></td>
-<td><span style="display: inline-block; text-align: left;">Supports singing mode, does not support voice design and voice cloning</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">`mimo-v2.5-tts-voicedesign`</span></td>
-<td><span style="display: inline-block; text-align: left;">Customize voice through text description</span></td>
-<td><span style="display: inline-block; text-align: left;">Automatically generate voices from text descriptions, without requiring presets or audio samples</span></td>
-<td><span style="display: inline-block; text-align: left;">Does not support singing mode, built-in voices, or voice cloning</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">`mimo-v2.5-tts-voiceclone`</span></td>
-<td><span style="display: inline-block; text-align: left;">Replicate any voice from audio samples</span></td>
-<td><span style="display: inline-block; text-align: left;">Precisely replicate voices from audio samples to enable speech synthesis of any voice</span></td>
-<td><span style="display: inline-block; text-align: left;">Does not support singing mode, built-in voices, or voice design</span></td>
-</tr>
-</tbody>
-</table>
 
 ## Preparation
 
@@ -67,8 +26,6 @@ For preparations such as obtaining API Key, please refer to [ First API Call ](h
 
 ## General Precautions
 
-<div className='mdx-highlight mdx-highlight-warning' data-highlight-icon='warning'>
-
 **Call Rules**
 
 - The target text for speech synthesis must be filled in the `role` of `assistant` message and cannot be placed in the `user` role message. 
@@ -76,8 +33,6 @@ For preparations such as obtaining API Key, please refer to [ First API Call ](h
 - `user` role messages are optional parameters, and instructions can be passed in to adjust the tone and style of speech synthesis, or they can be conversation history (message content will not appear in synthesized speech). When using the `mimo-v2.5-tts-voicedesign` model, they are required parameters. 
 
 - When using streaming calls, please specify the format of the output audio as `pcm16`, so that it can be spliced into a complete audio. For splicing examples, please refer to the Python calling methods in each chapter.
-
-</div>
 
 ## Style Control 
 
@@ -95,12 +50,12 @@ We currently offer two control methods: **natural language control** and **tag c
 
 - **Natural Language Control** → Placed in `role: user`'s `content`
 
-- **Audio Tag Control**  → Placed in ` role: assistant ` 's ` content `
+- **Audio Tag Control** → Placed in ` role: assistant ` 's ` content `
 
 ### Natural Language Control
 
 {/* feishu-style:text-align:left */}
-Through natural language description, enable the model to understand and generate speech in the corresponding style. **The content is placed in the** `messages` **field of** `role: user` **in the** `content` **field.**   You can directly describe the desired speech style in a single sentence. 
+Through natural language description, enable the model to understand and generate speech in the corresponding style. **The content is placed in the** `messages` **field of** `role: user` **in the** `content` **field.** You can directly describe the desired speech style in a single sentence. 
 
 {/* feishu-style:text-align:left */}
 **Example:** 
@@ -114,11 +69,11 @@ Through natural language description, enable the model to understand and generat
 {/* feishu-style:text-align:left */}
 On this basis, we also support a more complex and refined **director mode** — just like writing a script for actors, comprehensively depicting characters and voices from the three dimensions of **character, scene, and guidance**, based on which the model can generate more layered and performative voices.
 
-- **[Character]**  Clearly describe the character's identity, personality traits, physical appearance and speaking habits.
+- **[Character]** Clearly describe the character's identity, personality traits, physical appearance and speaking habits.
 
-- **[Scene]**  Describe what is happening at this moment, who you are talking to, and what emotional state you are in. The more specific the better — time, location, event, and the other person's reaction can all be included.
+- **[Scene]** Describe what is happening at this moment, who you are talking to, and what emotional state you are in. The more specific the better — time, location, event, and the other person's reaction can all be included.
 
-- **[Guidance]**  Similar to a director giving acting instructions to an actor: speaking speed, breath control, pauses, accents, resonance position, timbre texture, and emotional fluctuations. It can be written in detail, and the model will act according to these "stage directions". 
+- **[Guidance]** Similar to a director giving acting instructions to an actor: speaking speed, breath control, pauses, accents, resonance position, timbre texture, and emotional fluctuations. It can be written in detail, and the model will act according to these "stage directions". 
 
 {/* feishu-style:text-align:left */}
 **Example:** 
@@ -142,115 +97,33 @@ Director Mode is suitable for scenarios with high requirements for voice perform
 ### Audio Tag Control
 
 {/* feishu-style:text-align:left */}
-By embedding style tags and audio tags in the text, fine-grained control over speech can be directly achieved. The overall style tag comes at the beginning, and fine-grained control tags can be inserted in the middle. **All tag control content is placed in the** ` messages ` **of the** ` role: assistant ` ` content `  **field.**  
+By embedding style tags and audio tags in the text, fine-grained control over speech can be directly achieved. The overall style tag comes at the beginning, and fine-grained control tags can be inserted in the middle. **All tag control content is placed in the** ` messages ` **of the** ` role: assistant ` ` content ` **field.** 
 
 {/* feishu-style:text-align:left */}
 Add a **start** `(style)` tag to the target text to specify the pronunciation style of the voice. Multiple styles can be set simultaneously by placing multiple style names within the same pair of parentheses, with no restrictions on the delimiter.
 
 {/* feishu-style:text-align:left */}
-**Supported bracket formats:**  Half-width `()`, full-width `（）`, or `[]` can be used.
+**Supported bracket formats:** Half-width `()`, full-width `（）`, or `[]` can be used.
 
 {/* feishu-style:text-align:left */}
-**Format Example:**  `(Style 1 Style 2)Content to be Synthesized`
+**Format Example:** `(Style 1 Style 2)Content to be Synthesized`
 
 {/* feishu-style:text-align:left */}
 The following are some recommended styles, and custom styles not listed are also supported. 
 
-<div className='mdx-highlight mdx-highlight-warning' data-highlight-icon='warning'>
-
 To experience a better singing style, you must add the `(唱歌)` tag at the very beginning of the target text, with the format: `(唱歌)lyrics`. `Lyrics` are recommended to be in Chinese for better synthesis results. The tag supports equivalent values: `唱歌`, `sing`, `singing`. Entering any of them will yield the same result.
-
-</div>
-
-<table>
-<colgroup>
-<col style="width: 159px" />
-<col style="width: 697px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: left;">**Style Type**</span></th>
-<th><span style="display: inline-block; text-align: left;">**Style Example** </span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Basic Emotions</span></td>
-<td><span style="display: inline-block; text-align: left;">*Happy / Sad / Angry / Fearful / Amazed / Excited / Wronged / Calm / Indifferent*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Complex Emotions</span></td>
-<td><span style="display: inline-block; text-align: left;">*Melancholy / Relieved / Helpless / Guilty / Relieved / Jealous / Tired / Apprehensive / Emotional*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Overall tone</span></td>
-<td><span style="display: inline-block; text-align: left;">*Gentle / Cold / Lively / Serious / Lazy / Playful / Deep / Capable / Sharp*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Timbre Positioning</span></td>
-<td><span style="display: inline-block; text-align: left;">*Magnetic / Mellow / Clear / Ethereal / Innocent / Old / Sweet / Hoarse / Elegant*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Character Tone</span></td>
-<td><span style="display: inline-block; text-align: left;">*Clamp voice / Big Sister voice / Shota voice / Uncle voice / Taiwanese accent*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Dialect</span></td>
-<td><span style="display: inline-block; text-align: left;">*Northeast dialect / Sichuan dialect / Henan dialect / Cantonese*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Role-playing</span></td>
-<td><span style="display: inline-block; text-align: left;">*Sun Wukong / Lin Daiyu*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Singing </span></td>
-<td><span style="display: inline-block; text-align: left;">*singing*</span></td>
-</tr>
-</tbody>
-</table>
 
 {/* feishu-style:text-align:left */}
 **Example:** 
 - `(Sighing)After all these years, when I walked down that street again, a part of my heart suddenly felt empty.`
 - `(Lazy)Let me sleep for five more minutes... just five minutes, really, for the last time.`
-- `(Magnetic)The night is already deep, but the city is still breathing. I'm the one accompanying you tonight. Welcome to listen to <Midnight Radio>.`
+- `(Magnetic)The night is already deep, but the city is still breathing. I'm the one accompanying you tonight. Welcome to listen to .`
 - `(Northeastern dialect)Oh my goodness, it's so cold today! You know that wind, it's whistling like a knife, cutting into your face!`
 - `(Cantonese)This is really amazing! Once you've tasted it, you won't forget!`
 - `(singing)Forgive me for my unruly and unrestrained love for freedom throughout my life, and I'm also afraid that one day I'll fall, Oh no. Abandoning ideals, anyone can do it, so how could I be afraid that one day it'll only be you and me.`
 
 {/* feishu-style:text-align:left */}
 On this basis, we also support inserting `[audio tag]` at any position in the text. Through the [audio tag], you can perform fine-grained control over the sound, precisely adjusting tone, mood, and expression style—whether it's a whisper, a hearty laugh, or a little complaint with a touch of emotion. You can also flexibly insert breathing sounds, pauses, coughs, etc., all of which can be easily achieved. The speaking speed can also be flexibly adjusted, allowing each sentence to have its proper rhythm.
-
-<table>
-<colgroup>
-<col style="width: 218px" />
-<col style="width: 697px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: left;">**Style Type**</span></th>
-<th><span style="display: inline-block; text-align: left;">**Style Example** </span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Speech Rate and Rhythm</span></td>
-<td><span style="display: inline-block; text-align: left;">*Inhale / Take a deep breath / Sigh / Let out a long sigh / Pant / Hold one's breath*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Emotional State</span></td>
-<td><span style="display: inline-block; text-align: left;">*nervous / scared / excited / tired / wronged / coquettish / guilty / shocked / impatient*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Speech Features</span></td>
-<td><span style="display: inline-block; text-align: left;">*Trembling / Voice trembling / Pitch change / Cracked voice / Nasal voice / Breathiness / Hoarseness*</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Laughing and crying tone</span></td>
-<td><span style="display: inline-block; text-align: left;">*Smile / Chuckle / Laugh out loud / Sneer / Sob / Whimper / Choke / Wail*</span></td>
-</tr>
-</tbody>
-</table>
 
 {/* feishu-style:text-align:left */}
 **Example:** 
@@ -273,84 +146,9 @@ On this basis, we also support inserting `[audio tag]` at any position in the te
 {/* feishu-style:text-align:left */}
 When in use, you can set the preset timbre in `{"audio": {"voice": "mimo_default"}}`.
 
-<table>
-<colgroup>
-<col style="width: 109px" />
-<col style="width: 127px" />
-<col style="width: 113px" />
-<col style="width: 598px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: left;">**Voice Name**</span></th>
-<th><span style="display: inline-block; text-align: left;">**Voice ID** </span></th>
-<th><span style="display: inline-block; text-align: left;">Language</span></th>
-<th><span style="display: inline-block; text-align: left;">Gender</span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: left;">MiMo-默认</span></td>
-<td><span style="display: inline-block; text-align: left;">mimo_default</span></td>
-<td colspan="2"><span style="display: inline-block; text-align: left;">It varies depending on the deployed cluster. The default for the China cluster is `冰糖`, and the default for other clusters is `Mia`</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">冰糖</span></td>
-<td><span style="display: inline-block; text-align: left;">冰糖</span></td>
-<td><span style="display: inline-block; text-align: left;">Chinese</span></td>
-<td><span style="display: inline-block; text-align: left;">Female </span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">茉莉</span></td>
-<td><span style="display: inline-block; text-align: left;">茉莉</span></td>
-<td><span style="display: inline-block; text-align: left;">Chinese</span></td>
-<td><span style="display: inline-block; text-align: left;">Female </span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">苏打</span></td>
-<td><span style="display: inline-block; text-align: left;">苏打</span></td>
-<td><span style="display: inline-block; text-align: left;">Chinese</span></td>
-<td><span style="display: inline-block; text-align: left;">Male </span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">白桦</span></td>
-<td><span style="display: inline-block; text-align: left;">白桦</span></td>
-<td><span style="display: inline-block; text-align: left;">Chinese</span></td>
-<td><span style="display: inline-block; text-align: left;">Male </span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Mia</span></td>
-<td><span style="display: inline-block; text-align: left;">Mia</span></td>
-<td><span style="display: inline-block; text-align: left;">English</span></td>
-<td><span style="display: inline-block; text-align: left;">Female </span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Chloe</span></td>
-<td><span style="display: inline-block; text-align: left;">Chloe</span></td>
-<td><span style="display: inline-block; text-align: left;">English</span></td>
-<td><span style="display: inline-block; text-align: left;">Female </span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Milo</span></td>
-<td><span style="display: inline-block; text-align: left;">Milo</span></td>
-<td><span style="display: inline-block; text-align: left;">English</span></td>
-<td><span style="display: inline-block; text-align: left;">Male </span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Dean</span></td>
-<td><span style="display: inline-block; text-align: left;">Dean</span></td>
-<td><span style="display: inline-block; text-align: left;">English</span></td>
-<td><span style="display: inline-block; text-align: left;">Male </span></td>
-</tr>
-</tbody>
-</table>
-
 ### Code Sample
 
 #### Non-streaming Call
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import os
@@ -358,73 +156,60 @@ from openai import OpenAI
 import base64
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-tts",
-    messages=[
-        {
-            "role": "user",
-            "content": "Bright, bouncy, slightly sing-song tone — like you're bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
-        },
-        {
-            "role": "assistant",
-            "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
-        }
-    ],
-    audio={
-        "format": "wav",
-        "voice": "Chloe"
-    }
+ model="mimo-v2.5-tts",
+ messages=[
+ {
+ "role": "user",
+ "content": "Bright, bouncy, slightly sing-song tone — like you're bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
+ },
+ {
+ "role": "assistant",
+ "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
+ }
+ ],
+ audio={
+ "format": "wav",
+ "voice": "Chloe"
+ }
 )
 
 message = completion.choices[0].message
 audio_bytes = base64.b64decode(message.audio.data)
 with open("audio_file.wav", "wb") as f:
-    f.write(audio_bytes)
+ f.write(audio_bytes)
 ```
-
-  </TabItem>
-  <TabItem label={`Curl`}>
 
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-tts",
-    "messages": [
-        {
-            "role": "user",
-            "content": "Bright, bouncy, slightly sing-song tone — like you are bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
-        },
-        {
-            "role": "assistant",
-            "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
-        }
-    ],
-    "audio": {
-        "format": "wav",
-        "voice": "Chloe"
-    }
+ "model": "mimo-v2.5-tts",
+ "messages": [
+ {
+ "role": "user",
+ "content": "Bright, bouncy, slightly sing-song tone — like you are bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
+ },
+ {
+ "role": "assistant",
+ "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
+ }
+ ],
+ "audio": {
+ "format": "wav",
+ "voice": "Chloe"
+ }
 }'
 ```
 
-  </TabItem>
-</Tab>
-
 #### Streaming Call
 
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
-
 Low-latency streaming output for `mimo-v2.5-tts` is now available. The streaming interface has been restored and returns responses in real time.
-
-</div>
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import base64
@@ -434,44 +219,44 @@ import soundfile as sf
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-tts",
-    messages=[
-        {
-            "role": "user",
-            "content": "Bright, bouncy, slightly sing-song tone — like you're bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
-        },
-        {
-            "role": "assistant",
-            "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
-        }
-    ],
-    audio={
-        "format": "pcm16",
-        "voice": "Chloe"
-    },
-    stream=True
+ model="mimo-v2.5-tts",
+ messages=[
+ {
+ "role": "user",
+ "content": "Bright, bouncy, slightly sing-song tone — like you're bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
+ },
+ {
+ "role": "assistant",
+ "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
+ }
+ ],
+ audio={
+ "format": "pcm16",
+ "voice": "Chloe"
+ },
+ stream=True
 )
 
 # 24kHz PCM16LE mono audio
 collected_chunks: np.ndarray = np.array([], dtype=np.float32)
 
 for chunk in completion:
-    if not chunk.choices:
-        continue
-    delta = chunk.choices[0].delta
-    audio = getattr(delta, "audio", None)
+ if not chunk.choices:
+ continue
+ delta = chunk.choices[0].delta
+ audio = getattr(delta, "audio", None)
 
-    if audio is not None:
-        assert isinstance(audio, dict), f"Expected audio to be a dict, got {type(audio)}"
-        pcm_bytes = base64.b64decode(audio["data"])
-        np_pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        collected_chunks = np.concatenate((collected_chunks, np_pcm))
-        print(f"Received audio chunk of size {len(pcm_bytes)} bytes")
+ if audio is not None:
+ assert isinstance(audio, dict), f"Expected audio to be a dict, got {type(audio)}"
+ pcm_bytes = base64.b64decode(audio["data"])
+ np_pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+ collected_chunks = np.concatenate((collected_chunks, np_pcm))
+ print(f"Received audio chunk of size {len(pcm_bytes)} bytes")
 
 # Save the collected audio to a file
 os.makedirs("tmp", exist_ok=True)
@@ -479,35 +264,29 @@ sf.write("tmp/output.wav", collected_chunks, samplerate=24000)
 print("Audio saved to tmp/output.wav")
 ```
 
-  </TabItem>
-  <TabItem label={`Curl`}>
-
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-tts",
-    "messages": [
-        {
-            "role": "user",
-            "content": "Bright, bouncy, slightly sing-song tone — like you are bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
-        },
-        {
-            "role": "assistant",
-            "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
-        }
-    ],
-    "audio": {
-        "format": "pcm16",
-        "voice": "Chloe"
-    },
-    "stream": true
+ "model": "mimo-v2.5-tts",
+ "messages": [
+ {
+ "role": "user",
+ "content": "Bright, bouncy, slightly sing-song tone — like you are bursting with good news you can barely hold in. Fast pace, rising pitch at the end."
+ },
+ {
+ "role": "assistant",
+ "content": "Hey boss — guess what, guess what? I just got the results back and I actually passed! Not just passed, I got a distinction! I know, I know — you told me I was cutting it close, but hey, here we are. Drinks are on me tonight, okay?"
+ }
+ ],
+ "audio": {
+ "format": "pcm16",
+ "voice": "Chloe"
+ },
+ "stream": true
 }'
 ```
-
-  </TabItem>
-</Tab>
 
 ## Speech Synthesis Using Voice Design
 
@@ -523,37 +302,6 @@ When using the `mimo-v2.5-tts-voicedesign` model, the text in the `user` message
 
 {/* feishu-style:text-align:left */}
 A good voice description usually covers the following multiple dimensions (not necessarily comprehensive):
-
-<table>
-<colgroup>
-<col style="width: 200px" />
-<col style="width: 594px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: left;">Dimension</span></th>
-<th><span style="display: inline-block; text-align: left;">Example</span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Gender and Age</span></td>
-<td><span style="display: inline-block; text-align: left;">"young woman in her mid-20s", "middle-aged man in his 50s"</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Voice / Texture</span></td>
-<td><span style="display: inline-block; text-align: left;">"deep and gravelly", "silky, mellow, and magnetic"</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Mood / Tone</span></td>
-<td><span style="display: inline-block; text-align: left;">"warm and confident", "gentle but with a hint of weariness"</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">Speech speed / Rhythm</span></td>
-<td><span style="display: inline-block; text-align: left;">"slow and deliberate", "speaking at an extremely fast pace, like a machine gun."</span></td>
-</tr>
-</tbody>
-</table>
 
 {/* feishu-style:text-align:left */}
 The following dimensions can be optionally added to increase richness:
@@ -602,16 +350,9 @@ An elderly gentleman, speaking Mandarin with a northern accent, his speech slow 
 
 ### Code Sample
 
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
-
 `mimo-v2.5-tts-voicedesign` supports the optional parameter `optimize_text_preview` to control whether the target broadcast text is intelligently polished. When set to `true`, the `assistant` role message can be omitted.
 
-</div>
-
 #### Non-streaming Call
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import os
@@ -619,77 +360,64 @@ from openai import OpenAI
 import base64
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-tts-voicedesign",
-    messages=[
-        {
-            "role": "user",
-            "content": "Give me a young male tone."
-        },
-        {
-            "role": "assistant",
-            "content": "Yes, I had a sandwich."
-        }
-    ],
-    audio={
-        "format": "wav",
-        "optimize_text_preview": True
-    }
+ model="mimo-v2.5-tts-voicedesign",
+ messages=[
+ {
+ "role": "user",
+ "content": "Give me a young male tone."
+ },
+ {
+ "role": "assistant",
+ "content": "Yes, I had a sandwich."
+ }
+ ],
+ audio={
+ "format": "wav",
+ "optimize_text_preview": True
+ }
 )
 
 message = completion.choices[0].message
 audio_bytes = base64.b64decode(message.audio.data)
 with open("audio_file.wav", "wb") as f:
-    f.write(audio_bytes)
+ f.write(audio_bytes)
 ```
-
-  </TabItem>
-  <TabItem label={`Curl`}>
 
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-tts-voicedesign",
-    "messages": [
-        {
-            "role": "user",
-            "content": "Give me a young male tone."
-        },
-        {
-            "role": "assistant",
-            "content": "Yes, I had a sandwich."
-        }
-    ],
-    "audio": {
-        "format": "wav",
-        "optimize_text_preview": true
-    }
+ "model": "mimo-v2.5-tts-voicedesign",
+ "messages": [
+ {
+ "role": "user",
+ "content": "Give me a young male tone."
+ },
+ {
+ "role": "assistant",
+ "content": "Yes, I had a sandwich."
+ }
+ ],
+ "audio": {
+ "format": "wav",
+ "optimize_text_preview": true
+ }
 }'
 ```
 
-  </TabItem>
-</Tab>
-
 #### Streaming Call
-
-<div className='mdx-highlight mdx-highlight-warning' data-highlight-icon='warning'>
 
 **Note**
 
 - The low-latency streaming output feature of `mimo-v2.5-tts-voicedesign` is not yet available. If you have relevant requirements, please follow the upcoming feature updates.
 
 - The streaming call interface is currently downgraded to compatibility mode, and only **returns the results once in streaming format after all inferences are completed.**
-
-</div>
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import base64
@@ -699,44 +427,44 @@ import soundfile as sf
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-tts-voicedesign",
-    messages=[
-        {
-            "role": "user",
-            "content": "Give me a young male tone."
-        },
-        {
-            "role": "assistant",
-            "content": "You are UN-BE-LIEVABLE! I am sooooo done with your constant lies. GET. OUT!"
-        }
-    ],
-    audio={
-        "format": "pcm16",
-        "optimize_text_preview": True
-    },
-    stream=True
+ model="mimo-v2.5-tts-voicedesign",
+ messages=[
+ {
+ "role": "user",
+ "content": "Give me a young male tone."
+ },
+ {
+ "role": "assistant",
+ "content": "You are UN-BE-LIEVABLE! I am sooooo done with your constant lies. GET. OUT!"
+ }
+ ],
+ audio={
+ "format": "pcm16",
+ "optimize_text_preview": True
+ },
+ stream=True
 )
 
 # 24kHz PCM16LE mono audio
 collected_chunks: np.ndarray = np.array([], dtype=np.float32)
 
 for chunk in completion:
-    if not chunk.choices:
-        continue
-    delta = chunk.choices[0].delta
-    audio = getattr(delta, "audio", None)
+ if not chunk.choices:
+ continue
+ delta = chunk.choices[0].delta
+ audio = getattr(delta, "audio", None)
 
-    if audio is not None:
-        assert isinstance(audio, dict), f"Expected audio to be a dict, got {type(audio)}"
-        pcm_bytes = base64.b64decode(audio["data"])
-        np_pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        collected_chunks = np.concatenate((collected_chunks, np_pcm))
-        print(f"Received audio chunk of size {len(pcm_bytes)} bytes")
+ if audio is not None:
+ assert isinstance(audio, dict), f"Expected audio to be a dict, got {type(audio)}"
+ pcm_bytes = base64.b64decode(audio["data"])
+ np_pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+ collected_chunks = np.concatenate((collected_chunks, np_pcm))
+ print(f"Received audio chunk of size {len(pcm_bytes)} bytes")
 
 # Save the collected audio to a file
 os.makedirs("tmp", exist_ok=True)
@@ -744,35 +472,29 @@ sf.write("tmp/output.wav", collected_chunks, samplerate=24000)
 print("Audio saved to tmp/output.wav")
 ```
 
-  </TabItem>
-  <TabItem label={`Curl`}>
-
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-tts-voicedesign",
-    "messages": [
-        {
-            "role": "user",
-            "content": "Give me a young male tone."
-        },
-        {
-            "role": "assistant",
-            "content": "You are UN-BE-LIEVABLE! I am sooooo done with your constant lies. GET. OUT!"
-        }
-    ],
-    "audio": {
-        "format": "pcm16",
-        "optimize_text_preview": true
-    },
-    "stream": true
+ "model": "mimo-v2.5-tts-voicedesign",
+ "messages": [
+ {
+ "role": "user",
+ "content": "Give me a young male tone."
+ },
+ {
+ "role": "assistant",
+ "content": "You are UN-BE-LIEVABLE! I am sooooo done with your constant lies. GET. OUT!"
+ }
+ ],
+ "audio": {
+ "format": "pcm16",
+ "optimize_text_preview": true
+ },
+ "stream": true
 }'
 ```
-
-  </TabItem>
-</Tab>
 
 ## Speech Synthesis Using Voice Cloning
 
@@ -787,22 +509,15 @@ curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' 
 {/* feishu-style:text-align:left */}
 Convert the audio file sample to a Base64-encoded string and then pass it in. The size of the converted Base64-encoded string cannot exceed 10 MB, and currently only `mp3` and `wav` format audio sample files are supported.
 
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
-
 Please include the prefix before Base64 encoding: `data:{MIME_TYPE};base64,$BASE64_AUDIO`
 
 - `{MIME_TYPE}`: The MIME type (media type) of the audio, used to identify the audio format, needs to be replaced with the MIME value corresponding to the actual audio. The values here can be: ` audio/mpeg ` (or ` audio/mp3 `), ` audio/wav `. 
 
 - `$BASE64_AUDIO`: A pure Base64-encoded string of the audio file (without any prefix).
 
-</div>
-
 > In the following example, both `{MIME_TYPE}` and `$BASE64_AUDIO` are placeholders, please replace them with actual valid data before running.
 
 #### Non-streaming Call
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import base64
@@ -811,81 +526,68 @@ import os
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1",
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1",
 )
 
 with open("voice.mp3", "rb") as f:
-    voice_bytes = f.read()
+ voice_bytes = f.read()
 voice_base64 = base64.b64encode(voice_bytes).decode("utf-8")
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-tts-voiceclone",
-    messages=[
-        {
-            "role": "user",
-            "content": ""
-        },
-        {
-            "role": "assistant", 
-            "content": "Yes, I had a sandwich."
-        }
-    ],
-    audio={
-        "format": "wav",
-        "voice": f"data:audio/mpeg;base64,{voice_base64}"
-    }
+ model="mimo-v2.5-tts-voiceclone",
+ messages=[
+ {
+ "role": "user",
+ "content": ""
+ },
+ {
+ "role": "assistant", 
+ "content": "Yes, I had a sandwich."
+ }
+ ],
+ audio={
+ "format": "wav",
+ "voice": f"data:audio/mpeg;base64,{voice_base64}"
+ }
 )
 
 message = completion.choices[0].message
 audio_bytes = base64.b64decode(message.audio.data)
 with open("audio_file.wav", "wb") as f:
-    f.write(audio_bytes)
+ f.write(audio_bytes)
 ```
-
-  </TabItem>
-  <TabItem label={`Curl`}>
 
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-tts-voiceclone",
-    "messages": [
-        {
-            "role": "user",
-            "content": ""
-        },
-        {
-            "role": "assistant",
-            "content": "Yes, I had a sandwich."
-        }
-    ],
-    "audio": {
-        "format": "wav",
-        "voice": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
-    }
+ "model": "mimo-v2.5-tts-voiceclone",
+ "messages": [
+ {
+ "role": "user",
+ "content": ""
+ },
+ {
+ "role": "assistant",
+ "content": "Yes, I had a sandwich."
+ }
+ ],
+ "audio": {
+ "format": "wav",
+ "voice": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
+ }
 }'
 ```
 
-  </TabItem>
-</Tab>
-
 #### Streaming Call
-
-<div className='mdx-highlight mdx-highlight-warning' data-highlight-icon='warning'>
 
 **Note**
 
 - The low-latency streaming output feature of `mimo-v2.5-tts-voiceclone` is not yet available. If you have relevant requirements, please follow the upcoming feature updates.
 
 - The streaming call interface is currently downgraded to compatibility mode, and only **returns the results oncein streaming formatafter all inferences are completed.**
-
-</div>
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import base64
@@ -896,50 +598,50 @@ import soundfile as sf
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1",
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1",
 )
 
 with open("voice.mp3", "rb") as f:
-    voice_bytes = f.read()
+ voice_bytes = f.read()
 voice_base64 = base64.b64encode(voice_bytes).decode("utf-8")
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-tts-voiceclone",
-    messages=[
-        {
-            "role": "user",
-            "content": ""
-        },
-        {
-            "role": "assistant", 
-            "content": "Yes, I had a sandwich."
-        }
-    ],
-    audio={
-        "format": "wav",
-        "voice": f"data:audio/mpeg;base64,{voice_base64}",
-    },
-    stream=True
+ model="mimo-v2.5-tts-voiceclone",
+ messages=[
+ {
+ "role": "user",
+ "content": ""
+ },
+ {
+ "role": "assistant", 
+ "content": "Yes, I had a sandwich."
+ }
+ ],
+ audio={
+ "format": "wav",
+ "voice": f"data:audio/mpeg;base64,{voice_base64}",
+ },
+ stream=True
 )
 
 # 24kHz PCM16LE mono audio
 collected_chunks: np.ndarray = np.array([], dtype=np.float32)
 
 for chunk in completion:
-    if not chunk.choices:
-        continue
-    delta = chunk.choices[0].delta
-    audio = getattr(delta, "audio", None)
+ if not chunk.choices:
+ continue
+ delta = chunk.choices[0].delta
+ audio = getattr(delta, "audio", None)
 
-    if audio is not None:
-        assert isinstance(audio, dict), (
-            f"Expected audio to be a dict, got {type(audio)}"
-        )
-        pcm_bytes = base64.b64decode(audio["data"])
-        np_pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        collected_chunks = np.concatenate((collected_chunks, np_pcm))
-        print(f"Received audio chunk of size {len(pcm_bytes)} bytes")
+ if audio is not None:
+ assert isinstance(audio, dict), (
+ f"Expected audio to be a dict, got {type(audio)}"
+ )
+ pcm_bytes = base64.b64decode(audio["data"])
+ np_pcm = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+ collected_chunks = np.concatenate((collected_chunks, np_pcm))
+ print(f"Received audio chunk of size {len(pcm_bytes)} bytes")
 
 # Save the collected audio to a file
 os.makedirs("tmp", exist_ok=True)
@@ -947,35 +649,29 @@ sf.write("tmp/output.wav", collected_chunks, samplerate=24000)
 print("Audio saved to tmp/output.wav")
 ```
 
-  </TabItem>
-  <TabItem label={`Curl`}>
-
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-tts-voiceclone",
-    "messages": [
-        {
-            "role": "user",
-            "content": ""
-        },
-        {
-            "role": "assistant",
-            "content": "You are UN-BE-LIEVABLE! I am sooooo done with your constant lies. GET. OUT!"
-        }
-    ],
-    "audio": {
-        "format": "pcm16",
-        "voice": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
-    },
-    "stream": true
+ "model": "mimo-v2.5-tts-voiceclone",
+ "messages": [
+ {
+ "role": "user",
+ "content": ""
+ },
+ {
+ "role": "assistant",
+ "content": "You are UN-BE-LIEVABLE! I am sooooo done with your constant lies. GET. OUT!"
+ }
+ ],
+ "audio": {
+ "format": "pcm16",
+ "voice": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
+ },
+ "stream": true
 }'
 ```
-
-  </TabItem>
-</Tab>
 
 ## Price
 

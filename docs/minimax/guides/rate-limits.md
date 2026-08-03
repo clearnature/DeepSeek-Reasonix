@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/guides/rate-limits.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 速率限制
 
 > 为保证资源的高效使用，引入速率限制（Rate Limits），以确保服务的可用性、稳定性。
@@ -21,52 +17,63 @@
 
 ### 语言
 
-| 模型   | MiniMax-M3 | MiniMax-M3 |
+| 模型 | MiniMax-M3 | MiniMax-M3 |
 | :--- | :--------- | :--------- |
-| 限制类型 | RPM        | TPM        |
-| 免费用户 | 20         | 1,000,000  |
-| 充值用户 | 200        | 10,000,000 |
+| 限制类型 | RPM | TPM |
+| 免费用户 | 20 | 1,000,000 |
+| 充值用户 | 200 | 10,000,000 |
 
-| 模型   | MiniMax-M2.7 / M2.7-highspeed<br />MiniMax-M2.5 / M2.5-highspeed<br />MiniMax-M2.1 / M2.1-highspeed<br />MiniMax-M2 | MiniMax-M2.7 / M2.7-highspeed<br />MiniMax-M2.5 / M2.5-highspeed<br />MiniMax-M2.1 / M2.1-highspeed<br />MiniMax-M2 |
+| 模型 | MiniMax-M2.7 / M2.7-highspeed
+MiniMax-M2.5 / M2.5-highspeed
+MiniMax-M2.1 / M2.1-highspeed
+MiniMax-M2 | MiniMax-M2.7 / M2.7-highspeed
+MiniMax-M2.5 / M2.5-highspeed
+MiniMax-M2.1 / M2.1-highspeed
+MiniMax-M2 |
 | :--- | :------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------ |
-| 限制类型 | RPM                                                                                                                 | TPM                                                                                                                 |
-| 免费用户 | 20                                                                                                                  | 1,000,000                                                                                                           |
-| 充值用户 | 500                                                                                                                 | 20,000,000                                                                                                          |
+| 限制类型 | RPM | TPM |
+| 免费用户 | 20 | 1,000,000 |
+| 充值用户 | 500 | 20,000,000 |
 
 ### 视频
 
 | 接口名           | Video Generation | Video Generation V2     |
 | :------------ | :--------------- | :---------------------- |
-| 模型            | Hailuo 系列        | MiniMax-H3              |
-| 限制类型          | RPM              | CONN（最大并行运行任务数）         |
-| 免费用户          | 5                | 2                       |
-| 充值用户          | 20               | 15                      |
+| 模型 | Hailuo 系列 | MiniMax-H3 |
+| 限制类型 | RPM | CONN（最大并行运行任务数） |
+| 免费用户 | 5 | 2 |
+| 充值用户 | 20 | 15 |
 
 ### 语音
 
-| 接口名  | T2A v2                                                                                                                | Voice Cloning     | Voice Design |
+| 接口名 | T2A v2 | Voice Cloning     | Voice Design |
 | :--- | :-------------------------------------------------------------------------------------------------------------------- | :---------------- | :----------- |
-| 模型   | speech-02-hd<br />speech-02-turbo<br /> speech-2.6-hd<br />speech-2.6-turbo<br /> speech-2.8-hd<br />speech-2.8-turbo | ——                | ——           |
-| 限制类型 | RPM                                                                                                                   | RPM               | RPM          |
-| 免费用户 | 10                                                                                                                    | 60                | 20           |
-| 充值用户 | 20                                                                                                                    | 60                | 20           |
+| 模型 | speech-02-hd
+speech-02-turbo
+ speech-2.6-hd
+speech-2.6-turbo
+ speech-2.8-hd
+speech-2.8-turbo | —— | —— |
+| 限制类型 | RPM | RPM | RPM |
+| 免费用户 | 10 | 60 | 20 |
+| 充值用户 | 20 | 60 | 20 |
 
 ### 图片
 
 | 接口名                | Image Generation                     | Image Generation     |
 | :----------------- | :----------------------------------- | :------------------- |
-| 限制类型               | RPM                                  | TPM                  |
-| 免费用户               | 10                                   | 60                   |
-| 充值用户               | 10                                   | 60                   |
+| 限制类型 | RPM | TPM |
+| 免费用户 | 10 | 60 |
+| 充值用户 | 10 | 60 |
 
 ### 音乐
 
-| 接口名                | Music Generation                     | Music Generation                    |
+| 接口名                | Music Generation                     | Music Generation     |
 | :----------------- | :----------------------------------- | :---------------------------------- |
-| 模型                 | music-2.6 / music-cover / music-2.0  | music-2.6 / music-cover / music-2.0 |
-| 限制类型               | RPM                                  | CONN（最大并行运行任务数）                     |
-| 免费用户               | 3                                    | 3                                   |
-| 充值用户               | 120                                  | 20                                  |
+| 模型 | music-2.6 / music-cover / music-2.0 | music-2.6 / music-cover / music-2.0 |
+| 限制类型 | RPM | CONN（最大并行运行任务数） |
+| 免费用户 | 3 | 3 |
+| 充值用户 | 120 | 20 |
 
 ## 相关说明
 

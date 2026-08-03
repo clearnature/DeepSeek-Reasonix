@@ -1,4 +1,4 @@
-﻿# Refer & earn
+# Refer & earn
 
 ## 1. Overview
 
@@ -122,7 +122,7 @@ To keep things fair, the following will result in rewards being withheld or revo
 
 ## 7. Adjustments and sunset
 
-**This is a long-term feature with no fixed end date.**  Xiaomi MiMo may adjust, pause, or sunset this feature based on operational needs:
+**This is a long-term feature with no fixed end date.** Xiaomi MiMo may adjust, pause, or sunset this feature based on operational needs:
 
 ## 8. Contact us
 

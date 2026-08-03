@@ -1,4 +1,4 @@
-﻿# Speech Recognition (MiMo-V2.5-ASR)
+# Speech Recognition (MiMo-V2.5-ASR)
 
 {/* feishu-style:text-align:left */}
 Speech recognition converts input audio into text output, suitable for meeting transcription, lyrics recognition, dialect transcription, noisy environment recordings, and more. You can improve recognition accuracy by specifying language parameters.
@@ -27,69 +27,30 @@ For API Key setup and other prerequisites, please refer to [First API Call](http
 {/* feishu-style:text-align:left */}
 Currently, only `wav` and `mp3` audio sample files are supported. Before passing audio to the API, convert the file to a Base64 encoded string. The encoded string size must not exceed 10 MB. Currently, two audio input methods are supported:
 
-<Tab>
-  <TabItem label={`Data URL`}>
-
 ```json
 "input_audio": {
-    "data": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
+ "data": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
 }
 ```
-
-  </TabItem>
-  <TabItem label={`Pure Base64 Encoding`}>
 
 {/* feishu-style:text-align:left */}
 When passing audio in pure Base64 encoding, the `format` field must be passed simultaneously to specify the audio format.
 
 ```json
 "input_audio": {
-    "data": "$BASE64_AUDIO",
-    "format": "{format}"
+ "data": "$BASE64_AUDIO",
+ "format": "{format}"
 }
 ```
-
-  </TabItem>
-</Tab>
 
 {/* feishu-style:text-align:left */}
 **Supported formats and their MIME types:** 
 
-<table>
-<colgroup>
-<col style="width: 350px" />
-<col style="width: 350px" />
-</colgroup>
-<thead>
-<tr>
-<th><span style="display: inline-block; text-align: left;">Format</span></th>
-<th><span style="display: inline-block; text-align: left;">MIME Type</span></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><span style="display: inline-block; text-align: left;">wav</span></td>
-<td><span style="display: inline-block; text-align: left;">`audio/wav`</span></td>
-</tr>
-<tr>
-<td><span style="display: inline-block; text-align: left;">mp3</span></td>
-<td><span style="display: inline-block; text-align: left;">`audio/mpeg` or `audio/mp3`</span></td>
-</tr>
-</tbody>
-</table>
-
 ## Code Sample
-
-<div className='mdx-highlight mdx-highlight-info' data-highlight-icon='info'>
 
 Set `asr_options.language` to specify the language. Auto detection will be used if this parameter is not configured. Manual specification is recommended when the language is confirmed to improve recognition performance. Supported values: `auto`, `zh`, `en`.
 
-</div>
-
 ### Non-streaming Call
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import os
@@ -97,75 +58,66 @@ import base64
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 # Replace with the actual local file path
 with open("audio_file.wav", "rb") as f:
-    audio_bytes = f.read()
+ audio_bytes = f.read()
 audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-asr",
-    messages=[
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": f"data:audio/wav;base64,{audio_base64}"
-                    }
-                }
-            ]
-        }
-    ],
-    extra_body={
-        "asr_options": {
-            "language": "en"
-        }
-    }
+ model="mimo-v2.5-asr",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "input_audio",
+ "input_audio": {
+ "data": f"data:audio/wav;base64,{audio_base64}"
+ }
+ }
+ ]
+ }
+ ],
+ extra_body={
+ "asr_options": {
+ "language": "en"
+ }
+ }
 )
 
 print(completion.model_dump_json())
 ```
 
-  </TabItem>
-  <TabItem label={`Curl`}>
-
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-asr",
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
-                    }
-                }
-            ]
-        }
-    ],
-    "asr_options": {
-        "language": "en"
-    }
+ "model": "mimo-v2.5-asr",
+ "messages": [
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "input_audio",
+ "input_audio": {
+ "data": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
+ }
+ }
+ ]
+ }
+ ],
+ "asr_options": {
+ "language": "en"
+ }
 }'
 ```
 
-  </TabItem>
-</Tab>
-
 ### Streaming Call
-
-<Tab>
-  <TabItem label={`Python SDK`}>
 
 ```python
 import os
@@ -173,73 +125,67 @@ import base64
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("MIMO_API_KEY"),
-    base_url="https://api.xiaomimimo.com/v1"
+ api_key=os.environ.get("MIMO_API_KEY"),
+ base_url="https://api.xiaomimimo.com/v1"
 )
 
 # Replace with the actual local file path
 with open("audio_file.wav", "rb") as f:
-    audio_bytes = f.read()
+ audio_bytes = f.read()
 audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
 completion = client.chat.completions.create(
-    model="mimo-v2.5-asr",
-    messages=[
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": f"data:audio/wav;base64,{audio_base64}"
-                    }
-                }
-            ]
-        }
-    ],
-    extra_body={
-        "asr_options": {
-            "language": "auto"
-        }
-    },
-    stream=True
+ model="mimo-v2.5-asr",
+ messages=[
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "input_audio",
+ "input_audio": {
+ "data": f"data:audio/wav;base64,{audio_base64}"
+ }
+ }
+ ]
+ }
+ ],
+ extra_body={
+ "asr_options": {
+ "language": "auto"
+ }
+ },
+ stream=True
 )
 
 for chunk in completion:
-    print(chunk.model_dump_json())
+ print(chunk.model_dump_json())
 ```
-
-  </TabItem>
-  <TabItem label={`Curl`}>
 
 ```bash
 curl --location --request POST 'https://api.xiaomimimo.com/v1/chat/completions' \
 --header "api-key: $MIMO_API_KEY" \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "model": "mimo-v2.5-asr",
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
-                    }
-                }
-            ]
-        }
-    ],
-    "asr_options": {
-        "language": "auto"
-    },
-    "stream": true
+ "model": "mimo-v2.5-asr",
+ "messages": [
+ {
+ "role": "user",
+ "content": [
+ {
+ "type": "input_audio",
+ "input_audio": {
+ "data": "data:{MIME_TYPE};base64,$BASE64_AUDIO"
+ }
+ }
+ ]
+ }
+ ],
+ "asr_options": {
+ "language": "auto"
+ },
+ "stream": true
 }'
 ```
-
-  </TabItem>
-</Tab>
 
 ## Price
 

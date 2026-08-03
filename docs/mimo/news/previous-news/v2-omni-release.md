@@ -1,4 +1,4 @@
-﻿# Xiaomi MiMo-V2-Omni: Omni-Modal Agentic Foundation Model that Sees, Understands and Acts
+# Xiaomi MiMo-V2-Omni: Omni-Modal Agentic Foundation Model that Sees, Understands and Acts
 
 Today, we are thrilled to announce Xiaomi’s omni‑modal foundation model for agent era: Xiaomi mimo-v2-omni.
 
@@ -28,11 +28,7 @@ A true AI agent model must be capable of observing complex environments across m
 
 mimo-v2-omni excels in benchmarks involving interaction with real-world digital environments, performing on par with Gemini 3 Pro. This success is underpinned by its industry-leading perceptual capabilities：The more accurate the perception, the more effective execution.
 
-<img src="https://mimo.mi.com/static/E1mxb9Phxohb4BxWxBXcnA3gnIf.ec275fe6f07cd694.png" alt="图片" style="margin: 16px auto;" />
-
 At the same time, mimo-v2-omni remains highly competitive in text-only agent tasks.
-
-<img src="https://mimo.mi.com/static/DZu3bIDUWoBFyHxmBT5cZkGWnio.b6313980cfa02389.png" alt="图片" style="margin: 16px auto;" />
 
 ## Capabilities Demonstration
 
@@ -42,11 +38,11 @@ Browser Use is the ultimate litmus test for a model’s agentic capabilities. It
 
 - **Shopping, Bargaining, and Ordering on Your Behalf**
 
-   We tested an end-to-end shopping task. Controlling the browser, the model first browsed over a dozen posts on Xiaohongshu to complete information gathering and obtain purchasing recommendations. It then performed cross-platform price comparisons across multiple stores on JD, followed by connecting with human customer service to bargain using natural language. After real-time interaction with the representative, it ultimately completed the process of adding items to the cart and placing the order. The model autonomously handled non-standard DOM structures, multi-tab context management, and workflow recovery after encountering platform anti-automation detections.
+ We tested an end-to-end shopping task. Controlling the browser, the model first browsed over a dozen posts on Xiaohongshu to complete information gathering and obtain purchasing recommendations. It then performed cross-platform price comparisons across multiple stores on JD, followed by connecting with human customer service to bargain using natural language. After real-time interaction with the representative, it ultimately completed the process of adding items to the cart and placing the order. The model autonomously handled non-standard DOM structures, multi-tab context management, and workflow recovery after encountering platform anti-automation detections.
 
 - **TikTok Video Creation and Publishing**
 
-   We tested an end-to-end video publishing task. The model autonomously designed four sets of visuals and synthesized all sound effects on-site with zero reliance on external assets. During rendering, it encountered a Chinese font error, which it self-corrected before continuing. It then controlled the browser to open the TikTok upload page, analyzed non-standard input controls to complete the copywriting, and proceeded to like and comment after clicking "Publish." Finally, it re-checked to confirm the video passed review and was publicly live.
+ We tested an end-to-end video publishing task. The model autonomously designed four sets of visuals and synthesized all sound effects on-site with zero reliance on external assets. During rendering, it encountered a Chinese font error, which it self-corrected before continuing. It then controlled the browser to open the TikTok upload page, analyzed non-standard input controls to complete the copywriting, and proceeded to like and comment after clicking "Publish." Finally, it re-checked to confirm the video passed review and was publicly live.
 
 ### 🗒️ Smart Office Scenarios
 
@@ -54,7 +50,7 @@ Through natural dialogue, mimo-v2-omni can directly generate high-quality Word d
 
 - **2026 Intelligent College Entrance Examination Application**
 
-   We tested the college entrance examination application planning task. The model can autonomously initiate web searches to obtain raw information, use skills to process files, and generate an Excel spreadsheet containing detailed application recommendations and tiered classifications.
+ We tested the college entrance examination application planning task. The model can autonomously initiate web searches to obtain raw information, use skills to process files, and generate an Excel spreadsheet containing detailed application recommendations and tiered classifications.
 
 ## Open API
 

@@ -11,22 +11,15 @@ https://api.xiaomimimo.com/v1/responses
 {/* feishu-style:text-align:left */}
 The API supports the following two authentication methods. Please choose one and add it to the request headers:
 
- 
-
 ```json
 api-key: $MIMO_API_KEY
 Content-Type: application/json
 ```
 
- 
- 
-
 ```json
 Authorization: Bearer $MIMO_API_KEY
 Content-Type: application/json
 ```
-
- 
 
 ## Request Body
 

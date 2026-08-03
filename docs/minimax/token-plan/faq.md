@@ -2,15 +2,9 @@
 
 > 来源: https://platform.minimaxi.com/docs/token-plan/faq.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 常见问题
 
 > 参考文档，了解关于 Token Plan 订阅套餐的相关问题
-
-<div id="contact-us" />
 
 ## 问题反馈与使用交流有哪些渠道？
 
@@ -18,18 +12,14 @@
 
 ***
 
-<div id="token-plan-key" />
-
-<div id="available-plans" />
-
 ## 现在有哪些 Token Plan 套餐可以选择？
 
 当前公开订阅档位为 **Plus**、**Max** 和 **Ultra**。
 
-| 套餐    | 价格       | 典型 Agent 用量 |
+| 套餐 | 价格 | 典型 Agent 用量 |
 | :---- | :------- | :---------- |
-| Plus  | ¥49 / 月  | 3-4 个 Agent |
-| Max   | ¥119 / 月 | 4-5 个 Agent |
+| Plus | ¥49 / 月 | 3-4 个 Agent |
+| Max | ¥119 / 月 | 4-5 个 Agent |
 | Ultra | ¥469 / 月 | 6-7 个 Agent |
 
 Ultra 面向更重度的 Agent 工作流用户。
@@ -38,23 +28,17 @@ Ultra 面向更重度的 Agent 工作流用户。
 
 ***
 
-<div id="switch-models" />
-
 ## Token Plan 支持哪些资源，以及如何切换资源？
 
 Token Plan 支持开放平台上的所有模型。用户无需按模型分别计算额度；控制台会通过统一的用量进度条展示套餐内额度和消耗情况。
 
 对于已有按量计费价格的 API 端点，用量会按对应按量计费价格扣减套餐内 Token Plan 额度。不同模型、不同模态的实际消耗会不同。
 
-<Tip>
-  在 AI Agent 中调用支持的资源，请参考 [MiniMax CLI 指南](https://platform.minimaxi.com/docs/token-plan/minimax-cli)。
-</Tip>
+ 在 AI Agent 中调用支持的资源，请参考 [MiniMax CLI 指南](https://platform.minimaxi.com/docs/token-plan/minimax-cli)。
 
 如需切换模型，请使用对应 API 或工具接入页面中说明的模型 ID。
 
 ***
-
-<div id="shared-credits-pool" />
 
 ## 文本、图片、语音等额度是分开的吗？
 
@@ -63,8 +47,6 @@ Token Plan 支持开放平台上的所有模型。用户无需按模型分别计
 不同资源的用量消耗不同，实际可用资源和用量消耗以控制台展示为准。
 
 ***
-
-<div id="token-plan-key" />
 
 ## 订阅 Key 是什么？
 
@@ -76,10 +58,6 @@ Token Plan 支持开放平台上的所有模型。用户无需按模型分别计
 
 ***
 
-<div id="credits" />
-
-<div id="credits-value" />
-
 ## 已购积分怎么折算？
 
 已购积分是可单独购买的补充余额，用于覆盖 Token Plan 资源范围内的合规超额用量。
@@ -90,8 +68,6 @@ Token Plan 支持开放平台上的所有模型。用户无需按模型分别计
 * 如果同一用量同时可由套餐内额度和已购积分覆盖，系统会优先扣除套餐内额度，超出部分再扣除已购积分。
 
 ***
-
-<div id="credits" />
 
 ## 没有 Token Plan 订阅也可以使用积分吗？
 
@@ -107,10 +83,6 @@ Token Plan 支持开放平台上的所有模型。用户无需按模型分别计
 
 ***
 
-<div id="default-team" />
-
-<div id="check-usage" />
-
 ## 如何查看 Token Plan 用量？
 
 您可以通过以下两种方式查看 Token Plan 用量：
@@ -123,7 +95,7 @@ Token Plan 支持开放平台上的所有模型。用户无需按模型分别计
 
 ```bash theme={null}
 curl --location 'https://www.minimaxi.com/v1/token_plan/remains' \
---header 'Authorization: Bearer <API Key>' \
+--header 'Authorization: Bearer ' \
 --header 'Content-Type: application/json'
 ```
 
@@ -134,8 +106,6 @@ curl --location 'https://www.minimaxi.com/v1/token_plan/remains' \
 * **较高消耗**：长上下文推理、多模态任务、复杂 Agent 工作流。
 
 ***
-
-<div id="reset-calculation" />
 
 ## 用量是如何重置的？
 
@@ -149,10 +119,6 @@ Token Plan 用量通过控制台用量进度条展示，并受额度窗口控制
 
 ***
 
-<div id="switch-models" />
-
-<div id="quota-limit" />
-
 ## 达到限额上限怎么办？
 
 达到 5 小时固定窗口或周窗口上限时，您可以选择：
@@ -164,8 +130,6 @@ Token Plan 用量通过控制台用量进度条展示，并受额度窗口控制
 
 ***
 
-<div id="api-key-interchangeable" />
-
 ## Token Plan 的 API Key 和开放平台普通的 API Key 可以混用吗？
 
 不可以。
@@ -175,8 +139,6 @@ Token Plan 用量通过控制台用量进度条展示，并受额度窗口控制
 
 ***
 
-<div id="api-vlm" />
-
 ## API-vlm 在 Token Plan 中如何计费？
 
 API-vlm 支持图像理解，输出为文本。
@@ -185,15 +147,11 @@ API-vlm 支持图像理解，输出为文本。
 
 ***
 
-<div id="multiple-tools" />
-
 ## 是否可以同时在多个工具中使用我的订阅套餐？
 
 可以，您可以在所有支持的工具中使用同一订阅套餐，但额度是共享的，所有工具的使用会消耗同一套餐额度。
 
 ***
-
-<div id="cancel-renewal" />
 
 ## 如何取消自动续订？
 
@@ -204,8 +162,6 @@ API-vlm 支持图像理解，输出为文本。
 * 老用户专属保留档取消后的影响，请参考 [Token Plan 迁移方案](/docs/token-plan/migration)。
 
 ***
-
-<div id="invoice" />
 
 ## 合并支付的订单如何开票？
 
@@ -220,8 +176,6 @@ API-vlm 支持图像理解，输出为文本。
 
 ***
 
-<div id="tps-calculation" />
-
 ## 语言模型的 TPS（Tokens Per Second）是如何计算的？
 
 TPS 表示模型每秒生成的 token 数量，用于衡量模型的推理输出速度。计算公式为：
@@ -232,13 +186,9 @@ $$
 
 即从模型输出第一个 token 开始计时，到最后一个 token 输出完成为止，期间生成的 token 总数除以这段时间（秒）。
 
-<Note>
-  TPS 在实际使用中可能存在波动，各页面上标注的 TPS 为参考值。
-</Note>
+ TPS 在实际使用中可能存在波动，各页面上标注的 TPS 为参考值。
 
 ***
-
-<div id="token-plan-limits" />
 
 ## Token Plan 有哪些使用限制？是否适合生产环境？
 
@@ -251,10 +201,6 @@ Token Plan 面向个人开发者的交互式使用场景，更高的套餐等级
 
 ***
 
-<div id="highspeed-plan" />
-
-<div id="token-plan-limit-rules" />
-
 ## 平台流量规则是什么？
 
 为保障对所有用户的服务稳定性和可用性，MiniMax 平台可能在高峰时段实施动态限流策略。
@@ -264,46 +210,22 @@ Token Plan 面向个人开发者的交互式使用场景，更高的套餐等级
 平台限流规则与行业实践保持一致，MiniMax 将在高峰时段进行动态限流：
 
 * **流量高峰时段**：根据集群负载动态调整，通常出现在工作日 15:00-17:30。
-  * Plus：约支持 3-4 个 Agent。
-  * Max：约支持 4-5 个 Agent。
-  * Ultra：约支持 6-7 个 Agent。
+ * Plus：约支持 3-4 个 Agent。
+ * Max：约支持 4-5 个 Agent。
+ * Ultra：约支持 6-7 个 Agent。
 * **套餐额度**：套餐内 Token Plan 额度受 5 小时固定窗口和周窗口控制，未使用完的套餐内额度不会结转到下一个计费周期。
 
 同时，我们正在持续推进算力扩容与系统优化，努力提供更稳定、可靠的服务。
 
 ***
 
-<div id="upgrade-plan" />
-
-<div id="check-usage" />
-
-<div id="reset-calculation" />
-
-<div id="quota-limit" />
-
 * 使用已购积分 \
-  如果已购积分可用，Token Plan 资源覆盖范围内的用量可由已购积分自动补充支付。
+ 如果已购积分可用，Token Plan 资源覆盖范围内的用量可由已购积分自动补充支付。
 * 升级订阅套餐 \
-  您可以前往 [Token Plan](https://platform.minimaxi.com/subscribe/token-plan) 页面升级到更高级别的套餐，获取更多的请求用量。Token Plan 支持随时升级，升级后立即生效。
+ 您可以前往 [Token Plan](https://platform.minimaxi.com/subscribe/token-plan) 页面升级到更高级别的套餐，获取更多的请求用量。Token Plan 支持随时升级，升级后立即生效。
 * 切换到按量付费（Pay as you go） \
-  如果您希望不受速率限制，您可以将编程工具中的 API Key 更换为您的从账户管理系统，MiniMax 开放平台普通的 API Key。这样，工具将切换到按实际 token 使用量计费的模式，消耗您的开放平台账户余额。
+ 如果您希望不受速率限制，您可以将编程工具中的 API Key 更换为您的从账户管理系统，MiniMax 开放平台普通的 API Key。这样，工具将切换到按实际 token 使用量计费的模式，消耗您的开放平台账户余额。
 * 等待重置 \
-  文本模型的限额是基于一个动态的 5 小时窗口。您可以暂停使用，等待窗口滚动，额度将会自动恢复。
-
-<div id="api-key-interchangeable" />
-
-<div id="api-vlm" />
-
-<div id="multiple-tools" />
-
-<div id="refund" />
-
-<div id="invoice" />
-
-<div id="tps-calculation" />
-
-<div id="token-plan-limits" />
-
-<div id="token-plan-limit-rules" />
+ 文本模型的限额是基于一个动态的 5 小时窗口。您可以暂停使用，等待窗口滚动，额度将会自动恢复。
 
 如您在订阅服务中遇到任何问题，可扫描底部官方客服二维码，获得支持。

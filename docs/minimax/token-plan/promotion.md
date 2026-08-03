@@ -2,10 +2,6 @@
 
 > 来源: https://platform.minimaxi.com/docs/token-plan/promotion.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # 订阅活动
 
 > Token Plan，让您尽享 MiniMax 全模态模型的强大能力！
@@ -15,10 +11,10 @@
 ## 1. 活动概要
 
 * 活动时间
-  * 邀请共建活动：2025 年 12 月 26 日 至 2026 年 8 月 31 日
+ * 邀请共建活动：2025 年 12 月 26 日 至 2026 年 8 月 31 日
 * 参与资格
-  * 邀请人： 所有 MiniMax 开放平台 Token Plan 的有效订阅用户（包含历史订阅用户）
-  * 受邀人： 通过本次活动邀请链接访问并购买 Token Plan 的用户
+ * 邀请人： 所有 MiniMax 开放平台 Token Plan 的有效订阅用户（包含历史订阅用户）
+ * 受邀人： 通过本次活动邀请链接访问并购买 Token Plan 的用户
 
 ## 2. 奖励机制
 
@@ -27,21 +23,21 @@
 ### 受邀人福利（Builder 专属权益）
 
 * **Token Plan 订阅优惠**
-  通过邀请链接购买 Token Plan，可在结算时享受 9 折优惠
-  * 适用于 Token Plan 全场套餐订阅及订阅升级
-  * 活动期间支持多次购买，均可享受相应优惠
+ 通过邀请链接购买 Token Plan，可在结算时享受 9 折优惠
+ * 适用于 Token Plan 全场套餐订阅及订阅升级
+ * 活动期间支持多次购买，均可享受相应优惠
 * **Builder 共建者身份**
-  * 受邀用户可加入 MiniMax 开发者社区，作为社区 Builder 参与交流，将有机会优先参与 MiniMax 新模型体验，并高效获取真实开发案例与前沿技术讨论
+ * 受邀用户可加入 MiniMax 开发者社区，作为社区 Builder 参与交流，将有机会优先参与 MiniMax 新模型体验，并高效获取真实开发案例与前沿技术讨论
 
 ### 邀请人奖励（共建者回馈）
 
 * **开放平台使用激励（代金券）**
-  每成功邀请一位好友完成有效支付，邀请人将获得该好友订单实付金额 10% 的开放平台通用代金券
-  * 代金券有效期为发放之日起 90 天
-  * 仅可用于抵扣 MiniMax 开放平台内的 API 调用费用
-  * 不可提现、不可转让，过期自动失效
+ 每成功邀请一位好友完成有效支付，邀请人将获得该好友订单实付金额 10% 的开放平台通用代金券
+ * 代金券有效期为发放之日起 90 天
+ * 仅可用于抵扣 MiniMax 开放平台内的 API 调用费用
+ * 不可提现、不可转让，过期自动失效
 * **开发者社区共建参与机会**
-  * 符合条件的邀请人将有机会优先参与 MiniMax 新模型体验、开发者技术交流活动，并获得更直接的产品与技术反馈渠道
+ * 符合条件的邀请人将有机会优先参与 MiniMax 新模型体验、开发者技术交流活动，并获得更直接的产品与技术反馈渠道
 
 ## 3. 注意事项
 

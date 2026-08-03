@@ -2,15 +2,11 @@
 
 > 来源: https://platform.minimaxi.com/docs/token-plan/codex.md
 
-> ## Documentation Index
-> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
-> Use this file to discover all available pages before exploring further.
-
 # Codex
 
 > 在 Codex 桌面客户端中使用最新的 MiniMax M 系列模型进行 AI 编程。
 
-<div style={{background:"#fffbeb",borderLeft:"4px solid #d97706",padding:"12px 16px",borderRadius:"6px",margin:"16px 0"}}>[**Codex**](https://developers.openai.com/codex/) 是 OpenAI 官方的桌面端 AI 编程 Agent。</div>
+[**Codex**](https://developers.openai.com/codex/) 是 OpenAI 官方的桌面端 AI 编程 Agent。
 
 ## 安装 Codex
 
@@ -18,27 +14,21 @@
 
 ## 配置 MiniMax API
 
-<Steps>
-  <Step title="编辑配置文件">
-    打开 `~/.codex/config.toml`，加入以下内容，并将 `<MINIMAX_API_KEY>` 替换为你从 [MiniMax 开放平台](https://platform.minimaxi.com/user-center/payment/token-plan) 获取的 Key：
+ 打开 `~/.codex/config.toml`，加入以下内容，并将 `` 替换为你从 [MiniMax 开放平台](https://platform.minimaxi.com/user-center/payment/token-plan) 获取的 Key：
 
-    ```toml theme={null}
-    model = "MiniMax-M3"
-    model_provider = "minimax"
-    model_context_window = 1000000
+ ```toml theme={null}
+ model = "MiniMax-M3"
+ model_provider = "minimax"
+ model_context_window = 1000000
 
-    [model_providers.minimax]
-    name = "MiniMax"
-    base_url = "https://api.minimaxi.com/v1"
-    experimental_bearer_token = "<MINIMAX_API_KEY>"
-    wire_api = "responses"
-    ```
-  </Step>
+ [model_providers.minimax]
+ name = "MiniMax"
+ base_url = "https://api.minimaxi.com/v1"
+ experimental_bearer_token = ""
+ wire_api = "responses"
+ ```
 
-  <Step title="重启 Codex 并开始使用 MiniMax-M3">
-    重启 Codex —— 即可开始使用 MiniMax-M3。
-  </Step>
-</Steps>
+ 重启 Codex —— 即可开始使用 MiniMax-M3。
 
 ## 配置模型能力目录（可选）
 
@@ -54,30 +44,30 @@ model_catalog_json = "~/.codex/model-catalogs/custom-catalog.json"
 
 ```json theme={null}
 {
-  "models": [
-    {
-      "slug": "MiniMax-M3",
-      "display_name": "MiniMax-M3",
-      "description": "MiniMax",
-      "default_reasoning_level": "high",
-      "supported_reasoning_levels": [
-        { "effort": "none", "description": "Think-Off" },
-        { "effort": "high", "description": "Deep" }
-      ],
-      "shell_type": "shell_command",
-      "visibility": "list",
-      "supported_in_api": true,
-      "priority": 0,
-      "base_instructions": "You are Codex, a coding agent based on MiniMax-M3. You and the user share the same workspace and collaborate to achieve the user's goals.",
-      "supports_reasoning_summaries": true,
-      "default_reasoning_summary": "none",
-      "support_verbosity": false,
-      "truncation_policy": { "mode": "bytes", "limit": 10000 },
-      "supports_parallel_tool_calls": true,
-      "experimental_supported_tools": [],
-      "input_modalities": ["text", "image"]
-    }
-  ]
+ "models": [
+ {
+ "slug": "MiniMax-M3",
+ "display_name": "MiniMax-M3",
+ "description": "MiniMax",
+ "default_reasoning_level": "high",
+ "supported_reasoning_levels": [
+ { "effort": "none", "description": "Think-Off" },
+ { "effort": "high", "description": "Deep" }
+ ],
+ "shell_type": "shell_command",
+ "visibility": "list",
+ "supported_in_api": true,
+ "priority": 0,
+ "base_instructions": "You are Codex, a coding agent based on MiniMax-M3. You and the user share the same workspace and collaborate to achieve the user's goals.",
+ "supports_reasoning_summaries": true,
+ "default_reasoning_summary": "none",
+ "support_verbosity": false,
+ "truncation_policy": { "mode": "bytes", "limit": 10000 },
+ "supports_parallel_tool_calls": true,
+ "experimental_supported_tools": [],
+ "input_modalities": ["text", "image"]
+ }
+ ]
 }
 ```
 

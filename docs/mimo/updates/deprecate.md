@@ -1,4 +1,4 @@
-﻿# Model Deprecation
+# Model Deprecation
 
 With the continuous iteration of the MiMo model, the new version has comprehensively outperformed the old version in terms of effectiveness and performance. We will gradually deprecate the legacy models, and the specific plan will be announced in advance via SMS, email, website announcements, etc. Please pay attention to the relevant messages and complete the switch in a timely manner.
 
@@ -14,58 +14,7 @@ With the continuous iteration of the MiMo model, the new version has comprehensi
 
 - Refer to the system replacement model in the table below to complete your code self-check and replacement. It is recommended to fully test and verify before the official switch. 
 
-<br></br>
-
 ### Deprecated model on 2026.6.30 
-
-<table>
-<colgroup>
-<col style="width: 147px" />
-<col style="width: 215px" />
-<col style="width: 215px" />
-<col style="width: 134px" />
-<col style="width: 277px" />
-</colgroup>
-<thead>
-<tr>
-<th>Deprecated Model</th>
-<th>Offline Time</th>
-<th>System replacement time</th>
-<th>System Replacement Model</th>
-<th>Replacement Impact</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>mimo-v2-pro</td>
-<td>Beijing Time 2026.6.30 00:00</td>
-<td>Beijing Time 2026.6.1 00:00</td>
-<td>mimo-v2.5-pro</td>
-<td>API parameters are fully adapted</td>
-</tr>
-<tr>
-<td>mimo-v2-omni</td>
-<td>Beijing Time 2026.6.30 00:00</td>
-<td>Beijing Time 2026.6.1 00:00</td>
-<td>mimo-v2.5</td>
-<td>API parameters are fully adapted</td>
-</tr>
-<tr>
-<td>mimo-v2-flash</td>
-<td>Beijing Time 2026.6.30 00:00</td>
-<td>Beijing Time 2026.6.18 00:00</td>
-<td>mimo-v2.5</td>
-<td>The default value of the parameter has changed, see details below</td>
-</tr>
-<tr>
-<td>mimo-v2-tts</td>
-<td>Beijing Time 2026.6.30 00:00</td>
-<td>Beijing Time 2026.6.27 00:00</td>
-<td>mimo-v2.5-tts</td>
-<td>Timbre remapping,`mimo_default` is mapped to `冰糖` in Chinese clusters and `mia` in other clusters.</td>
-</tr>
-</tbody>
-</table>
 
 **Note:** 
 
@@ -75,4 +24,4 @@ Starting from 00:00 on June 18, 2026, Beijing time, requests for mimo-v2-flash w
 
 - If parameters are customized when using mimo-v2-flash, the parameters passed to mimo-v2-flash will be inherited when automatically routing to mimo-v2.5 
 
-- If ` thinking `, ` temperature `, or ` max_completion_tokens ` are not specified in the request, the system will automatically  use  ` mimo-v2.5 ` default values , as shown in the following table:
+- If ` thinking `, ` temperature `, or ` max_completion_tokens ` are not specified in the request, the system will automatically use ` mimo-v2.5 ` default values , as shown in the following table:

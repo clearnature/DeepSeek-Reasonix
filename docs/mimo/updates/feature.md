@@ -1,4 +1,4 @@
-﻿# Feature Updates
+# Feature Updates
 
 ## 2026-6-23 Support for OpenAI Responses API
 
@@ -22,13 +22,13 @@ Invite builders to try Xiaomi's flagship MiMo V2.5 — sign up to instantly get 
 
 - Multiple limited-time promotions are now available:
 
-   - **Returning user bonus** : exclusive "usage reset" reward for existing users.
+ - **Returning user bonus** : exclusive "usage reset" reward for existing users.
 
-   - **First-time auto-renewal discount** : new users who have never subscribed get 23% off; returning users enabling auto-renewal for the first time get 30% off. This discount cannot be combined with the first-purchase discount. Limited to one per account.
+ - **First-time auto-renewal discount** : new users who have never subscribed get 23% off; returning users enabling auto-renewal for the first time get 30% off. This discount cannot be combined with the first-purchase discount. Limited to one per account.
 
-   - **Annual plan savings** : 12% off compared to monthly auto-renewal. First-purchase and first-time auto-renewal discounts do not apply to annual plans.
+ - **Annual plan savings** : 12% off compared to monthly auto-renewal. First-purchase and first-time auto-renewal discounts do not apply to annual plans.
 
-   - **Off-peak discount rate** : 0.8x token consumption during off-peak hours (12:00 AM – 8:00 AM Beijing Time / 4:00 PM – 12:00 AM UTC).
+ - **Off-peak discount rate** : 0.8x token consumption during off-peak hours (12:00 AM – 8:00 AM Beijing Time / 4:00 PM – 12:00 AM UTC).
 
 ## 2026-4-3 Token Plan New Release
 
@@ -46,7 +46,7 @@ Invite builders to try Xiaomi's flagship MiMo V2.5 — sign up to instantly get 
 
 ## 2026-02-10 Real-name authentication of enterprises and corporate payment functions are launched 
 
-**Real-name authentication of enterprise accounts and  domestic non-mainland users**
+**Real-name authentication of enterprise accounts and domestic non-mainland users**
 
 - Added real-name authentication for enterprises
 
