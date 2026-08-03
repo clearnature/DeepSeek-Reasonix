@@ -200,6 +200,14 @@ func responsesEntry() *config.ProviderEntry {
 	for i := range cfg.Providers {
 		e := &cfg.Providers[i]
 		if e.Kind == "responses" && strings.Contains(e.BaseURL, "api.deepseek.com") {
+			// 手动添加的 entry 常只有 models 列表、无顶层 model（如
+			// deepseek-responses preset #7103）：取第一个模型兜底。
+			if e.Model == "" && len(e.Models) > 0 {
+				e.Model = e.Models[0]
+			}
+			if e.Model == "" {
+				e.Model = "deepseek-v4-flash"
+			}
 			return e
 		}
 	}
