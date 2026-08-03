@@ -32,9 +32,20 @@ func TestRetrieveInfoToolMissBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	// 未命中 + 零 policy → 提示需联网授权，绝不静默联网
-	if !strings.Contains(out, "未命中") || !strings.Contains(out, "联网") {
-		t.Fatalf("miss output wrong: %q", out)
+	// 未命中 + 零 policy → needs_grant 结构化标志（前端弹授权对话框），绝不静默联网
+	var flag struct {
+		NeedsGrant bool     `json:"needs_grant"`
+		Options    []string `json:"options"`
+	}
+	if err := json.Unmarshal([]byte(out), &flag); err != nil {
+		t.Fatalf("miss output must be structured JSON, got %q", out)
+	}
+	if !flag.NeedsGrant {
+		t.Fatalf("must carry needs_grant=true, got %q", out)
+	}
+	// 时长选项齐全
+	if len(flag.Options) != 5 {
+		t.Fatalf("must offer 5 duration options, got %v", flag.Options)
 	}
 }
 

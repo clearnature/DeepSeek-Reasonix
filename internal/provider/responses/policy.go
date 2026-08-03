@@ -53,8 +53,94 @@ type RetrievalPolicy struct {
 	// Cooldown overrides the tier's default when non-zero (dynamic gate
 	// writes its adapted value here).
 	Cooldown time.Duration
+	// Grant is how long the web-search grant lasts after the user approves.
+	Grant GrantDuration
+	// GrantUntil is the wall-clock expiry of the current grant (zero =
+	// never granted / not set; permanent grants use Grant=GrantPermanent and
+	// ignore this field).
+	GrantUntil time.Time
 	// lastWebAt tracks the most recent web fetch (per-session state).
 	lastWebAt time.Time
+}
+
+// GrantDuration is the user-selectable web-search authorization window
+// (2026-08-03 UI 对话框：每次/本次会话/一周/一月/永久).
+type GrantDuration string
+
+const (
+	// GrantEach re-prompts for every web fetch.
+	GrantEach GrantDuration = "each"
+	// GrantSession authorizes for the current session (process lifetime).
+	GrantSession GrantDuration = "session"
+	// GrantWeek authorizes for one week.
+	GrantWeek GrantDuration = "week"
+	// GrantMonth authorizes for one month.
+	GrantMonth GrantDuration = "month"
+	// GrantPermanent authorizes indefinitely.
+	GrantPermanent GrantDuration = "permanent"
+)
+
+// GrantTTL maps each bounded grant to its duration; session/permanent are
+// handled specially (zero = process lifetime, permanent = never expires).
+func (g GrantDuration) ttl() time.Duration {
+	switch g {
+	case GrantWeek:
+		return 7 * 24 * time.Hour
+	case GrantMonth:
+		return 30 * 24 * time.Hour
+	default: // each / session
+		return 0
+	}
+}
+
+// IsGranted reports whether the current grant (if any) still covers now.
+// GrantPermanent never expires; session grants never expire within the
+// process; bounded grants expire at GrantUntil; GrantEach is only "granted"
+// for the single call that approved it, so this returns false (the caller
+// must consume a fresh approval).
+func (p *RetrievalPolicy) IsGranted(now time.Time) bool {
+	if p == nil || !p.WebSearch {
+		return false
+	}
+	switch p.Grant {
+	case GrantPermanent:
+		return true
+	case GrantEach:
+		return false // each approval is consumed by one fetch
+	case GrantSession:
+		return true
+	case GrantWeek, GrantMonth:
+		return !p.GrantUntil.IsZero() && now.Before(p.GrantUntil)
+	default:
+		return false
+	}
+}
+
+// Approve grants web access for the chosen window. For bounded grants it
+// sets GrantUntil = now + ttl; permanent ignores the clock; session is
+// process-lifetime; each must be re-approved per fetch.
+func (p *RetrievalPolicy) Approve(g GrantDuration, now time.Time) {
+	if p == nil {
+		return
+	}
+	p.Grant = g
+	p.WebSearch = true
+	switch g {
+	case GrantWeek, GrantMonth:
+		p.GrantUntil = now.Add(g.ttl())
+	case GrantPermanent, GrantSession:
+		p.GrantUntil = time.Time{}
+	}
+}
+
+// Revoke clears the web grant (user chose "deny" or each expired).
+func (p *RetrievalPolicy) Revoke() {
+	if p == nil {
+		return
+	}
+	p.WebSearch = false
+	p.Grant = ""
+	p.GrantUntil = time.Time{}
 }
 
 // DefaultPolicy returns the safe default: local cache on, web off.
@@ -74,9 +160,10 @@ func (p *RetrievalPolicy) effectiveCooldown() time.Duration {
 }
 
 // CanWebSearch reports whether a web fetch is currently permitted: explicit
-// per-session grant + tier not off + cooldown elapsed.
+// per-session grant (still within its window) + tier not off + cooldown
+// elapsed.
 func (p *RetrievalPolicy) CanWebSearch(now time.Time) bool {
-	if p == nil || !p.WebSearch || p.Frequency == FrequencyOff {
+	if p == nil || !p.IsGranted(now) || p.Frequency == FrequencyOff {
 		return false
 	}
 	return now.Sub(p.lastWebAt) >= p.effectiveCooldown()

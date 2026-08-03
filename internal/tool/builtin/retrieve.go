@@ -66,7 +66,8 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 
 	if res.Entry == nil {
 		if res.WebBlocked {
-			return "本地知识缓存未命中。如需联网检索最新信息，请先开启联网权限（用户授权）。", nil
+			// 未授权/授权过期：返回结构化标志，前端据此弹授权对话框。
+			return `{"needs_grant":true,"reason":"local cache miss; web fetch requires user grant","options":["each","session","week","month","permanent"],"message":"本地知识缓存未命中。如需联网检索，请选择授权时长。"}`, nil
 		}
 		return "本地知识缓存未命中。", nil
 	}

@@ -294,7 +294,7 @@ func contains(s, sub string) bool {
 
 func webPolicy() *RetrievalPolicy {
 	p := DefaultPolicy()
-	p.WebSearch = true
+	p.Approve(GrantPermanent, time.Now())
 	p.Frequency = FrequencyHigh
 	return &p
 }
@@ -306,7 +306,7 @@ func TestPolicyFrequencyTiers(t *testing.T) {
 			continue // dynamic/off 有各自专项测试
 		}
 		p := DefaultPolicy()
-		p.WebSearch = true
+		p.Approve(GrantPermanent, now)
 		p.Frequency = tier
 		if !p.CanWebSearch(now) {
 			t.Fatalf("%s: fresh policy must allow web", tier)
@@ -326,7 +326,7 @@ func TestPolicyFrequencyTiers(t *testing.T) {
 
 func TestPolicyOffBlocksWeb(t *testing.T) {
 	p := DefaultPolicy()
-	p.WebSearch = true
+	p.Approve(GrantPermanent, time.Now())
 	p.Frequency = FrequencyOff
 	if p.CanWebSearch(time.Now()) {
 		t.Fatal("off tier must never allow web")
@@ -395,5 +395,78 @@ func TestRetrievePolicyBlocksStaleRefresh(t *testing.T) {
 	}
 	if res2.WebBlocked || !res2.Refreshed || fetches != 1 {
 		t.Fatalf("granted refresh failed: %+v fetches=%d", res2, fetches)
+	}
+}
+
+func TestPolicyGrantDurations(t *testing.T) {
+	now := time.Now()
+
+	// 永久授权：永不过期
+	p := DefaultPolicy()
+	p.Approve(GrantPermanent, now)
+	p.Frequency = FrequencyHigh
+	if !p.IsGranted(now.Add(100 * 365 * 24 * time.Hour)) {
+		t.Fatal("permanent grant must never expire")
+	}
+
+	// 一周授权：7 天内有效，之后过期
+	p = DefaultPolicy()
+	p.Approve(GrantWeek, now)
+	if !p.IsGranted(now.Add(6 * 24 * time.Hour)) {
+		t.Fatal("week grant must be valid within window")
+	}
+	if p.IsGranted(now.Add(8 * 24 * time.Hour)) {
+		t.Fatal("week grant must expire after window")
+	}
+
+	// 每月授权
+	p = DefaultPolicy()
+	p.Approve(GrantMonth, now)
+	if p.IsGranted(now.Add(31 * 24 * time.Hour)) {
+		t.Fatal("month grant must expire after 30 days")
+	}
+
+	// 每次授权：单次消费，永不"已授权"
+	p = DefaultPolicy()
+	p.Approve(GrantEach, now)
+	if p.IsGranted(now) {
+		t.Fatal("each grant is consumed per fetch, never standing")
+	}
+
+	// 拒绝后未授权
+	p = DefaultPolicy()
+	p.Approve(GrantWeek, now)
+	p.Revoke()
+	if p.IsGranted(now) {
+		t.Fatal("revoked grant must not be granted")
+	}
+}
+
+func TestRetrieveGrantExpiryBlocksRefresh(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q := "某事件最新进展"
+	SaveKnowledge(&KnowledgeEntry{
+		Query: q, AnswerSummary: "旧信息", TimeSensitive: true,
+		FreshUntil: time.Now().Add(-time.Hour),
+	})
+	defer cleanupEntry(t, q)
+
+	// 周授权在 8 天后过期 → WebBlocked
+	p := DefaultPolicy()
+	p.Approve(GrantWeek, time.Now().Add(-8*24*time.Hour))
+	p.Frequency = FrequencyHigh
+
+	fetches := 0
+	res, err := Retrieve(context.Background(), q,
+		RetrieveOptions{Policy: &p, Now: func() time.Time { return time.Now() }},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			fetches++
+			return nil, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if !res.WebBlocked || fetches != 0 {
+		t.Fatalf("expired grant must block: WebBlocked=%v fetches=%d", res.WebBlocked, fetches)
 	}
 }
