@@ -2,7 +2,7 @@
 
 export const REMOTE_SCHEMA_FORMAT = "reasonix.remote.schema.v1" as const;
 export const REMOTE_PROTOCOL_VERSION = "1" as const;
-export const REMOTE_SCHEMA_HASH = "sha256:f6f8f7defd2fed14951ca472c792bce8af1f67eb65e92c349e83ed9a9eebeb37" as const;
+export const REMOTE_SCHEMA_HASH = "sha256:57353c9d456f868227adeb04bd1fa430ae393dfeccdca3d6069464012368b59d" as const;
 
 export const REMOTE_FIXED_RESOURCES = {
   "protocol": {
@@ -208,6 +208,7 @@ export type RemoteEventRaw = {
       "cost"?: number;
       "costUsd"?: number;
       "currency"?: string;
+      "estimated"?: boolean;
       "promptTokens": number;
       "reasoningTokens"?: number;
       "sessionCacheHitTokens": number;
@@ -277,6 +278,7 @@ export type RemoteEventRaw = {
     "cost"?: number;
     "costUsd"?: number;
     "currency"?: string;
+    "estimated"?: boolean;
     "promptTokens": number;
     "reasoningTokens"?: number;
     "sessionCacheHitTokens": number;
@@ -357,6 +359,7 @@ export type RemoteEventHydrated = {
       "cost"?: number;
       "costUsd"?: number;
       "currency"?: string;
+      "estimated"?: boolean;
       "promptTokens": number;
       "reasoningTokens"?: number;
       "sessionCacheHitTokens": number;
@@ -426,6 +429,7 @@ export type RemoteEventHydrated = {
     "cost"?: number;
     "costUsd"?: number;
     "currency"?: string;
+    "estimated"?: boolean;
     "promptTokens": number;
     "reasoningTokens"?: number;
     "sessionCacheHitTokens": number;
@@ -925,6 +929,7 @@ export type BrokerStreamChunkParamsRaw = {
       "cacheHitTokens": number;
       "cacheMissTokens": number;
       "completionTokens": number;
+      "estimated"?: boolean;
       "finishReason"?: string;
       "promptTokens": number;
       "reasoningTokens": number;
@@ -960,6 +965,7 @@ export type BrokerStreamChunkParamsHydrated = {
       "cacheHitTokens": number;
       "cacheMissTokens": number;
       "completionTokens": number;
+      "estimated"?: boolean;
       "finishReason"?: string;
       "promptTokens": number;
       "reasoningTokens": number;
@@ -1040,6 +1046,8 @@ export type BrokerStreamOpenParamsRaw = {
       "workDurationMs"?: number;
     }>;
     "responseFormat"?: {
+      "name"?: string;
+      "schema"?: RemoteJSONValue;
       "type": string;
     };
     "temperature"?: number;
@@ -1047,6 +1055,7 @@ export type BrokerStreamOpenParamsRaw = {
       "description": string;
       "name": string;
       "parameters": RemoteJSONValue;
+      "type"?: string;
     }>;
   };
   "streamId": string;
@@ -1108,6 +1117,8 @@ export type BrokerStreamOpenParamsHydrated = {
       "workDurationMs"?: number;
     }>;
     "responseFormat"?: {
+      "name"?: string;
+      "schema"?: RemoteJSONValue;
       "type": string;
     };
     "temperature"?: number;
@@ -1115,6 +1126,7 @@ export type BrokerStreamOpenParamsHydrated = {
       "description": string;
       "name": string;
       "parameters": RemoteJSONValue;
+      "type"?: string;
     }>;
   };
   "streamId": string;
@@ -2897,6 +2909,7 @@ export type SessionContextResultRaw = {
     "cacheMissTokens": number;
     "completionTokens": number;
     "elapsedMs": number;
+    "estimated"?: boolean;
     "promptTokens": number;
     "readFiles": Array<{
       "limit"?: number;
@@ -2917,6 +2930,7 @@ export type SessionContextResultRaw = {
       "cacheHitTokens": number;
       "cacheMissTokens": number;
       "completionTokens": number;
+      "estimated"?: boolean;
       "promptTokens": number;
       "reasoningTokens": number;
       "requestCount": number;
@@ -2936,6 +2950,7 @@ export type SessionContextResultHydrated = {
     "cacheMissTokens": number;
     "completionTokens": number;
     "elapsedMs": number;
+    "estimated"?: boolean;
     "promptTokens": number;
     "readFiles": Array<{
       "limit"?: number;
@@ -2956,6 +2971,7 @@ export type SessionContextResultHydrated = {
       "cacheHitTokens": number;
       "cacheMissTokens": number;
       "completionTokens": number;
+      "estimated"?: boolean;
       "promptTokens": number;
       "reasoningTokens": number;
       "requestCount": number;
@@ -3133,6 +3149,7 @@ export type SessionEventRaw = {
         "cost"?: number;
         "costUsd"?: number;
         "currency"?: string;
+        "estimated"?: boolean;
         "promptTokens": number;
         "reasoningTokens"?: number;
         "sessionCacheHitTokens": number;
@@ -3202,6 +3219,7 @@ export type SessionEventRaw = {
       "cost"?: number;
       "costUsd"?: number;
       "currency"?: string;
+      "estimated"?: boolean;
       "promptTokens": number;
       "reasoningTokens"?: number;
       "sessionCacheHitTokens": number;
@@ -3303,6 +3321,7 @@ export type SessionEventHydrated = {
         "cost"?: number;
         "costUsd"?: number;
         "currency"?: string;
+        "estimated"?: boolean;
         "promptTokens": number;
         "reasoningTokens"?: number;
         "sessionCacheHitTokens": number;
@@ -3372,6 +3391,7 @@ export type SessionEventHydrated = {
       "cost"?: number;
       "costUsd"?: number;
       "currency"?: string;
+      "estimated"?: boolean;
       "promptTokens": number;
       "reasoningTokens"?: number;
       "sessionCacheHitTokens": number;
@@ -3715,7 +3735,7 @@ export type SessionProfileSetParamsHydrated = {
 
 export type SessionProfileSetResultRaw = {
   "autoResolvedPromptIds": Array<string>;
-  "disposition": "rebuilt" | "updated";
+  "disposition": "rebuilt" | "unchanged" | "updated";
   "resolvedProfile": {
     "collaborationMode": "goal" | "normal" | "plan";
     "effort": string;
@@ -3727,7 +3747,7 @@ export type SessionProfileSetResultRaw = {
 };
 export type SessionProfileSetResultHydrated = {
   "autoResolvedPromptIds": Array<string>;
-  "disposition": "rebuilt" | "updated";
+  "disposition": "rebuilt" | "unchanged" | "updated";
   "resolvedProfile": {
     "collaborationMode": "goal" | "normal" | "plan";
     "effort": string;
@@ -4073,6 +4093,7 @@ export type SessionSubscribeResultRaw = {
       "cacheMissTokens": number;
       "completionTokens": number;
       "elapsedMs": number;
+      "estimated"?: boolean;
       "promptTokens": number;
       "readFiles": Array<{
         "limit"?: number;
@@ -4093,6 +4114,7 @@ export type SessionSubscribeResultRaw = {
         "cacheHitTokens": number;
         "cacheMissTokens": number;
         "completionTokens": number;
+        "estimated"?: boolean;
         "promptTokens": number;
         "reasoningTokens": number;
         "requestCount": number;
@@ -4379,6 +4401,7 @@ export type SessionSubscribeResultRaw = {
             "cost"?: number;
             "costUsd"?: number;
             "currency"?: string;
+            "estimated"?: boolean;
             "promptTokens": number;
             "reasoningTokens"?: number;
             "sessionCacheHitTokens": number;
@@ -4448,6 +4471,7 @@ export type SessionSubscribeResultRaw = {
           "cost"?: number;
           "costUsd"?: number;
           "currency"?: string;
+          "estimated"?: boolean;
           "promptTokens": number;
           "reasoningTokens"?: number;
           "sessionCacheHitTokens": number;
@@ -4492,6 +4516,7 @@ export type SessionSubscribeResultHydrated = {
       "cacheMissTokens": number;
       "completionTokens": number;
       "elapsedMs": number;
+      "estimated"?: boolean;
       "promptTokens": number;
       "readFiles": Array<{
         "limit"?: number;
@@ -4512,6 +4537,7 @@ export type SessionSubscribeResultHydrated = {
         "cacheHitTokens": number;
         "cacheMissTokens": number;
         "completionTokens": number;
+        "estimated"?: boolean;
         "promptTokens": number;
         "reasoningTokens": number;
         "requestCount": number;
@@ -4798,6 +4824,7 @@ export type SessionSubscribeResultHydrated = {
             "cost"?: number;
             "costUsd"?: number;
             "currency"?: string;
+            "estimated"?: boolean;
             "promptTokens": number;
             "reasoningTokens"?: number;
             "sessionCacheHitTokens": number;
@@ -4867,6 +4894,7 @@ export type SessionSubscribeResultHydrated = {
           "cost"?: number;
           "costUsd"?: number;
           "currency"?: string;
+          "estimated"?: boolean;
           "promptTokens": number;
           "reasoningTokens"?: number;
           "sessionCacheHitTokens": number;

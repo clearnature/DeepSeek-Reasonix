@@ -164,6 +164,7 @@ type BrokerProviderUsage struct {
 	CacheMissTokens  int    `json:"cacheMissTokens" validate:"min=0"`
 	ReasoningTokens  int    `json:"reasoningTokens" validate:"min=0"`
 	FinishReason     string `json:"finishReason,omitempty"`
+	Estimated        bool   `json:"estimated,omitempty"`
 }
 
 type BrokerProviderErrorCode string
@@ -218,6 +219,7 @@ func BrokerProviderChunkFromProvider(chunk provider.Chunk) BrokerProviderChunk {
 			TotalTokens: chunk.Usage.TotalTokens, CacheHitTokens: chunk.Usage.CacheHitTokens,
 			CacheMissTokens: chunk.Usage.CacheMissTokens, ReasoningTokens: chunk.Usage.ReasoningTokens,
 			FinishReason: chunk.Usage.FinishReason,
+			Estimated:    chunk.Usage.Estimated,
 		}
 	}
 	if chunk.Err != nil {
@@ -246,6 +248,7 @@ func (chunk BrokerProviderChunk) ProviderChunk() provider.Chunk {
 			TotalTokens: chunk.Usage.TotalTokens, CacheHitTokens: chunk.Usage.CacheHitTokens,
 			CacheMissTokens: chunk.Usage.CacheMissTokens, ReasoningTokens: chunk.Usage.ReasoningTokens,
 			FinishReason: chunk.Usage.FinishReason,
+			Estimated:    chunk.Usage.Estimated,
 		}
 	}
 	if chunk.Error != nil {

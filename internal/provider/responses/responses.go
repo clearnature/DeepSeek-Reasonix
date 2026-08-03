@@ -43,14 +43,13 @@ func newFromConfig(cfg provider.Config) (provider.Provider, error) {
 	proxy, _ := cfg.Extra["proxy_spec"].(netclient.ProxySpec)
 	keyEnv, _ := cfg.Extra["api_key_env"].(string)
 	keySource, _ := cfg.Extra["api_key_source"].(string)
+	maxOutputTokens, _ := cfg.Extra["max_output_tokens"].(int)
 	return New(Config{
 		Name: cfg.Name, APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Model,
 		Effort: effort, Mode: mode, Stateful: stateful, Proxy: proxy,
 		KeyEnv: keyEnv, KeySource: keySource,
-		// Extra 原样透传：vision 等能力开关由调用方（boot/CLI）写入
-		// cfg.Extra，factory 若丢弃则 New() 读不到（评审 #7234 第 3 点：
-		// vision 在真实 factory 路径丢失）。
-		Extra: cfg.Extra,
+		// Extra 原样透传（评审 #7234 第 3 点：vision 在 factory 路径丢失）。
+		Extra: cfg.Extra, MaxOutputTokens: maxOutputTokens,
 	}), nil
 }
 
@@ -66,6 +65,10 @@ type Config struct {
 	Proxy     netclient.ProxySpec
 	KeyEnv    string
 	KeySource string
+	// MaxOutputTokens is the total provider output budget. Zero enables Reasonix's
+	// 32K reasoning safety default on official DeepSeek and otherwise omits the
+	// field; thinking-disabled DeepSeek requests and negative values omit it.
+	MaxOutputTokens int
 	// SessionCache controls DashScope's opt-in header. The header is never sent
 	// to non-DashScope endpoints even when this value is true.
 	SessionCache *bool
@@ -98,9 +101,11 @@ type client struct {
 	caps                            vendorCapabilities
 	sessionCache                    bool
 	vision                          bool // model accepts image input; embed Images as input_image parts
-	http                            *http.Client
-	idleTimeout                     time.Duration
-	authed                          atomic.Bool
+	maxOutputTokens                 int
+
+	http        *http.Client
+	idleTimeout time.Duration
+	authed      atomic.Bool
 
 	mu                   sync.Mutex
 	lastResponseID       string
@@ -112,6 +117,11 @@ func New(cfg Config) provider.Provider {
 	vendor := DetectVendor(cfg.BaseURL)
 	cap := capabilitiesFor(vendor)
 	sessionCache := cap.sessionCacheHeader
+	maxOutputTokens := cfg.MaxOutputTokens
+	if maxOutputTokens == 0 && vendor == "deepseek" && !responsesReasoningDisabled(cfg.Effort) {
+		maxOutputTokens = provider.DefaultReasoningOutputTokens
+	}
+
 	if cfg.SessionCache != nil {
 		sessionCache = *cfg.SessionCache
 	}
@@ -127,8 +137,17 @@ func New(cfg Config) provider.Provider {
 		name: cfg.Name, apiKey: cfg.APIKey, keyEnv: cfg.KeyEnv, keySource: cfg.KeySource,
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"), model: cfg.Model, effort: cfg.Effort,
 		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache,
-		vision: vision,
-		http:   httpClient, idleTimeout: defaultStreamIdleTimeout,
+		vision: vision, maxOutputTokens: maxOutputTokens,
+		http: httpClient, idleTimeout: defaultStreamIdleTimeout,
+	}
+}
+
+func responsesReasoningDisabled(effort string) bool {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "none", "disabled", "off":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -157,6 +176,16 @@ func (c *client) WarnOnMissingToolCallReasoning() bool {
 	// Flash-tier DeepSeek models do not emit tool-call reasoning (same carve
 	// as openai.go expectsDeepSeekToolCallReasoning).
 	return !strings.Contains(model, "flash")
+}
+
+func (c *client) MissingToolCallReasoningWarningIdentity() string {
+	if c == nil {
+		return ""
+	}
+	return strings.Join([]string{
+		"responses", strings.TrimSpace(c.name), strings.TrimSpace(c.baseURL),
+		strings.TrimSpace(c.model), strings.TrimSpace(c.vendor), strings.TrimSpace(c.mode), strings.TrimSpace(c.effort),
+	}, "\x00")
 }
 
 func (c *client) sendOpts() provider.SendOptions {
@@ -249,21 +278,22 @@ func (c *client) ResetContext() {
 }
 
 func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+	requestCtx := provider.WithRequestAttemptCounter(ctx)
 	body, usedPrevious, wireMessages := c.buildRequestBody(req)
-	resp, err := c.send(ctx, body)
+	resp, err := c.send(requestCtx, body)
 	if err != nil && usedPrevious && isStalePreviousResponseError(err) {
 		// A stateful response ID may expire server-side. Retrying once with full
 		// history is safe because no response body has started streaming.
 		c.ResetContext()
 		body, _, wireMessages = c.buildRequestBody(req)
-		resp, err = c.send(ctx, body)
+		resp, err = c.send(requestCtx, body)
 	}
 	if err != nil {
 		return nil, err
 	}
 	c.authed.Store(true)
 	out := make(chan provider.Chunk, 64)
-	go c.readStream(ctx, resp, out, wireMessages)
+	go c.readStream(requestCtx, resp, out, wireMessages)
 	return out, nil
 }
 
@@ -312,31 +342,38 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	if effort != "" {
 		body["reasoning"] = map[string]any{"effort": effort}
 	}
-	if req.MaxTokens > 0 {
-		body["max_output_tokens"] = req.MaxTokens
+	maxOutputTokens := req.MaxTokens
+	if maxOutputTokens == 0 {
+		maxOutputTokens = c.maxOutputTokens
+	}
+	if maxOutputTokens > 0 {
+		body["max_output_tokens"] = maxOutputTokens
 	} else if c.caps.defaultMaxOutputTokens > 0 {
 		// No explicit cap: use the vendor default when one is defined (MiMo),
 		// whose 32768 server default can truncate long-reasoning turns before
 		// the visible answer/tool call finishes.
 		body["max_output_tokens"] = c.caps.defaultMaxOutputTokens
 	}
+
+	if req.Temperature != nil && !c.caps.ignoresTemperature {
+		body["temperature"] = *req.Temperature
+	}
 	if req.ResponseFormat != nil && req.ResponseFormat.Type != "" {
 		// Structured output: Responses text.format. MiMo/DashScope/OpenAI
-		// accept {"text":{"format":{"type":"json_object"}}}; DeepSeek
-		// additionally accepts json_schema with name+schema (the model is
-		// guided, not strictly forced, to comply). The model only emits JSON
-		// when the instructions also demand it.
+		// accept text.format; json_schema carries name + schema.
 		format := map[string]any{"type": req.ResponseFormat.Type}
 		if req.ResponseFormat.Type == "json_schema" && req.ResponseFormat.Name != "" {
 			format["name"] = req.ResponseFormat.Name
-			if req.ResponseFormat.Schema != nil {
-				format["schema"] = req.ResponseFormat.Schema
+			if len(req.ResponseFormat.Schema) > 0 {
+				format["schema"] = json.RawMessage(req.ResponseFormat.Schema)
 			}
 		}
-		body["text"] = map[string]any{"format": format}
-	}
-	if req.Temperature != nil && !c.caps.ignoresTemperature {
-		body["temperature"] = *req.Temperature
+		text := map[string]any{}
+		if existing, ok := body["text"].(map[string]any); ok {
+			text = existing
+		}
+		text["format"] = format
+		body["text"] = text
 	}
 	if len(req.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(req.Tools))
@@ -663,6 +700,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 					completedResponseID = event.Response.ID
 				}
 				usage := usageFromResponse(event.Response)
+				provider.ApplyRequestAttemptCount(ctx, usage)
 				if event.Type == "response.incomplete" {
 					switch event.Response.IncompleteDetails.Reason {
 					case "max_output_tokens":

@@ -1,6 +1,9 @@
 package responses
 
-import "strings"
+import (
+	"net/url"
+	"strings"
+)
 
 // vendorCapabilities describes how a Responses-compatible endpoint deviates
 // from the base OpenAI Responses wire behavior. Vendors are detected from the
@@ -100,13 +103,17 @@ func capabilitiesFor(vendor string) vendorCapabilities {
 // DetectVendor identifies endpoint behavior that affects the Responses wire.
 // Empty means an unknown OpenAI-compatible endpoint with default behavior.
 func DetectVendor(baseURL string) string {
-	u := strings.ToLower(strings.TrimSpace(baseURL))
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
 	switch {
-	case strings.Contains(u, "dashscope.aliyuncs.com"), strings.Contains(u, ".maas.aliyuncs.com"):
+	case host == "dashscope.aliyuncs.com", strings.HasSuffix(host, ".dashscope.aliyuncs.com"), strings.HasSuffix(host, ".maas.aliyuncs.com"):
 		return "dashscope"
-	case strings.Contains(u, "api.deepseek.com"):
+	case host == "api.deepseek.com", host == "eu.deepseek.com", strings.HasSuffix(host, ".deepseek.com"):
 		return "deepseek"
-	case strings.Contains(u, "api.xiaomimimo.com"):
+	case host == "api.xiaomimimo.com", strings.HasSuffix(host, ".xiaomimimo.com"):
 		return "mimo"
 	default:
 		return ""

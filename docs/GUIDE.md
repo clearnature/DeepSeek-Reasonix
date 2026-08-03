@@ -99,6 +99,7 @@ api_key_env = "DEEPSEEK_API_KEY"
 [tools]
 enabled = []   # omit/empty = all built-ins
 bash_timeout_seconds = 120   # foreground safety cap; set 0 for no tool-local cap
+mcp_startup_timeout_seconds = 30   # background initialize + tools/list safety cap
 mcp_call_timeout_seconds = 300   # default MCP call safety cap; per-plugin/tool overrides may raise it
 
 [environment]
@@ -130,6 +131,7 @@ auth_mode = "none"             # none|token|password; use auth before binding be
 [[plugins]]
 name    = "example"
 command = "reasonix-plugin-example"
+startup_timeout_seconds = 60   # optional initialize + tools/list cap
 call_timeout_seconds = 600   # optional per-server MCP call timeout
 tool_timeout_seconds = { "generate_video" = 1800 }   # optional raw MCP tool names
 ```
@@ -175,7 +177,7 @@ and deletes pending counters. After the choice is saved, enabled reporting is
 silent and the prompt is not shown again. If the preference cannot be saved,
 nothing is uploaded.
 
-Reporting is always disabled in CI, Safe Mode, development builds, and when
+Reporting is always disabled in CI, development builds, and when
 `DO_NOT_TRACK` is set or `REASONIX_TELEMETRY=0`. Under `auto`, redirected/piped
 or otherwise non-interactive sessions do not report. When no choice has been
 saved yet, these ineligible sessions neither prompt nor report. Network failures
@@ -214,8 +216,7 @@ reasonix report delete [ID]     # delete without sending
 ```
 
 Piped or redirected `reasonix report` calls only preview and never prompt or
-send. Safe Mode also blocks sending while leaving the local report available for
-review or deletion. The CLI telemetry setting does not auto-send or auto-delete
+send. The CLI telemetry setting does not auto-send or auto-delete
 these separately reviewed reports. Runtime fatal throws, operating-system kills,
 and panics in unwrapped background goroutines cannot be recovered by Go and do
 not produce this local report.
@@ -822,6 +823,7 @@ resource) you can copy.
 [[plugins]]                       # local stdio server
 name    = "example"
 command = "reasonix-plugin-example"
+# startup_timeout_seconds = 60    # optional initialize + tools/list cap
 # call_timeout_seconds = 600       # optional per-server MCP call timeout
 # tool_timeout_seconds = { "generate_video" = 1800 }   # optional raw MCP tool names
 
@@ -839,6 +841,13 @@ disable a server for the current session. For a read-only config/runtime health
 report across skills, hooks, packages, and MCP (without changing settings), see
 [Capability diagnostics](./CAPABILITY_DIAGNOSTICS.md)
 (`reasonix doctor capabilities` or **Settings → Diagnostics**).
+
+An interactive caller waits only briefly for a cold server. If that wait ends,
+the shared startup continues in the background rather than being killed and
+restarted; retry the tool after it comes online. `mcp_startup_timeout_seconds`
+(default `30`) bounds the full launch, authorization, initialize, and
+`tools/list` sequence. `mcp_call_timeout_seconds` applies only after the server
+is connected. Either value can be overridden per server.
 
 **Already have an `.mcp.json`?** Drop it in the project root and Reasonix
 reads it as-is — the `mcpServers` spec (`command`/`args`/`env`, `type`/`url`/
