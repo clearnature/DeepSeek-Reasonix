@@ -180,6 +180,16 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 			}
 			return res, nil
 		}
+		// 概念别名索引：短查询（"霍奇"）直接解析到模块条目（L1 命中，
+		// 零扫描零联网）——修复短查询对长 Query 条目的 L2 召回不足。
+		if mod, ok := ResolveConcept(query); ok {
+			if e, hit := LoadKnowledge(mod); hit {
+				res.Entry = e
+				res.FromCache = true
+				res.Tier = tierOf(e)
+				return res, nil
+			}
+		}
 		if e, sim, hit := LoadKnowledgeSemantic(query, DefaultSemanticThreshold); hit {
 			res.Entry = e
 			res.FromCache = true
