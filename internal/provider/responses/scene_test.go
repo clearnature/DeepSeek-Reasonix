@@ -107,3 +107,16 @@ func TestMergeFramesEmpty(t *testing.T) {
 		t.Fatal("empty render must produce header")
 	}
 }
+
+func TestPlanAndSceneComposeMultilingual(t *testing.T) {
+	// planner 四维模板 × scene 多语言 = 完整多语言检索计划
+	plan := PlanResearch("AI 监管", DepthL2)
+	for _, lang := range []string{"zh", "en", "ja"} {
+		for _, q := range plan.Queries {
+			scoped := SceneQuery(q.Query, DomainResearch, lang)
+			if scoped == "" {
+				t.Fatalf("composed query empty for %s", lang)
+			}
+		}
+	}
+}

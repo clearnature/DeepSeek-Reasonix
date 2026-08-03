@@ -137,3 +137,47 @@ func (r KnowledgeReport) Render() string {
 	}
 	return b.String()
 }
+
+// RenderSummary produces the concise first-pass report (摘要优先交互)：
+// 结论摘要 + 关键指标 + 来源标注 + 详细问询提示。用户确认后再 Render()
+// 出完整报告。
+func (r KnowledgeReport) RenderSummary() string {
+	var b strings.Builder
+	b.WriteString("# " + r.Topic + " — 信息摘要\n\n")
+	if r.Summary != "" {
+		// 摘要截断到 ~300 字符（用户可要求详细）
+		runes := []rune(r.Summary)
+		if len(runes) > 300 {
+			b.WriteString(string(runes[:300]) + "…\n\n")
+		} else {
+			b.WriteString(r.Summary + "\n\n")
+		}
+	}
+	fmt.Fprintf(&b, "> 平均可信度: %.2f | 关键事实: %d 条 | 来源: %d 个\n",
+		r.AvgConfidence, len(r.MergedFactCount()), len(r.AllSources))
+	if len(r.AllSources) > 0 {
+		b.WriteString("\n**信息来源**：\n")
+		for i, s := range r.AllSources {
+			if i >= 5 {
+				fmt.Fprintf(&b, "- 等 %d 个来源…\n", len(r.AllSources)-5)
+				break
+			}
+			fmt.Fprintf(&b, "- %s（%s）", s.Title, s.Domain)
+			if s.URL != "" {
+				b.WriteString(" " + s.URL)
+			}
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n> 回复「详细」获取完整报告数据。\n")
+	return b.String()
+}
+
+// MergedFactCount returns the total number of facts across sections.
+func (r KnowledgeReport) MergedFactCount() []string {
+	var out []string
+	for _, s := range r.Sections {
+		out = append(out, s.Facts...)
+	}
+	return out
+}
