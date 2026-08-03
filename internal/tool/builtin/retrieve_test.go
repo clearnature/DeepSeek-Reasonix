@@ -43,9 +43,9 @@ func TestRetrieveInfoToolMissBlocked(t *testing.T) {
 	if !flag.NeedsGrant {
 		t.Fatalf("must carry needs_grant=true, got %q", out)
 	}
-	// 时长选项齐全
-	if len(flag.Options) != 5 {
-		t.Fatalf("must offer 5 duration options, got %v", flag.Options)
+	// 时长选项（简化后两档）
+	if len(flag.Options) != 2 || flag.Options[0] != "session" || flag.Options[1] != "permanent" {
+		t.Fatalf("must offer session/permanent options, got %v", flag.Options)
 	}
 }
 

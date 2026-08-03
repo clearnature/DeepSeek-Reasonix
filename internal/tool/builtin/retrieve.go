@@ -67,7 +67,8 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 	if res.Entry == nil {
 		if res.WebBlocked {
 			// 未授权/授权过期：返回结构化标志，前端据此弹授权对话框。
-			return `{"needs_grant":true,"reason":"local cache miss; web fetch requires user grant","options":["each","session","week","month","permanent"],"message":"本地知识缓存未命中。如需联网检索，请选择授权时长。"}`, nil
+			// 简化（2026-08-03）：只提供两档时长——本次会话 / 永久。
+			return `{"needs_grant":true,"reason":"local cache miss; web fetch requires user grant","options":["session","permanent"],"message":"本地知识缓存未命中。允许联网检索吗？（本次会话 / 永久）"}`, nil
 		}
 		return "本地知识缓存未命中。", nil
 	}

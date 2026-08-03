@@ -409,33 +409,22 @@ func TestPolicyGrantDurations(t *testing.T) {
 		t.Fatal("permanent grant must never expire")
 	}
 
-	// 一周授权：7 天内有效，之后过期
+	// 本次会话授权：进程内永续
 	p = DefaultPolicy()
-	p.Approve(GrantWeek, now)
-	if !p.IsGranted(now.Add(6 * 24 * time.Hour)) {
-		t.Fatal("week grant must be valid within window")
-	}
-	if p.IsGranted(now.Add(8 * 24 * time.Hour)) {
-		t.Fatal("week grant must expire after window")
+	p.Approve(GrantSession, now)
+	if !p.IsGranted(now) {
+		t.Fatal("session grant must be active")
 	}
 
-	// 每月授权
+	// 拒绝（不 Approve）：未授权
 	p = DefaultPolicy()
-	p.Approve(GrantMonth, now)
-	if p.IsGranted(now.Add(31 * 24 * time.Hour)) {
-		t.Fatal("month grant must expire after 30 days")
-	}
-
-	// 每次授权：单次消费，永不"已授权"
-	p = DefaultPolicy()
-	p.Approve(GrantEach, now)
 	if p.IsGranted(now) {
-		t.Fatal("each grant is consumed per fetch, never standing")
+		t.Fatal("default policy must not be granted")
 	}
 
-	// 拒绝后未授权
+	// Revoke 后撤销
 	p = DefaultPolicy()
-	p.Approve(GrantWeek, now)
+	p.Approve(GrantPermanent, now)
 	p.Revoke()
 	if p.IsGranted(now) {
 		t.Fatal("revoked grant must not be granted")
@@ -451,9 +440,10 @@ func TestRetrieveGrantExpiryBlocksRefresh(t *testing.T) {
 	})
 	defer cleanupEntry(t, q)
 
-	// 周授权在 8 天后过期 → WebBlocked
+	// 授权被撤销（模拟会话结束/用户拒绝）→ WebBlocked
 	p := DefaultPolicy()
-	p.Approve(GrantWeek, time.Now().Add(-8*24*time.Hour))
+	p.Approve(GrantPermanent, time.Now())
+	p.Revoke()
 	p.Frequency = FrequencyHigh
 
 	fetches := 0
