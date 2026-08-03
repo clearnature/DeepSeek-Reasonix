@@ -262,6 +262,13 @@ func realFetch(key string) responses.FetchFunc {
 	}
 }
 
+func webPolicy() *responses.RetrievalPolicy {
+	p := responses.DefaultPolicy()
+	p.Approve(responses.GrantPermanent, time.Now())
+	p.Frequency = responses.FrequencyHigh
+	return &p
+}
+
 func runRetrieve(key string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
@@ -271,7 +278,7 @@ func runRetrieve(key string) {
 	fmt.Println("\n=== 真实 Retrieve 闭环（P0-P5 全链路） ===")
 
 	// 首查：未命中 → 全量 web_search + json_schema → 质量过滤 → 落盘
-	r1, err := responses.Retrieve(ctx, q, responses.RetrieveOptions{TimeSensitive: true}, fetch)
+	r1, err := responses.Retrieve(ctx, q, responses.RetrieveOptions{TimeSensitive: true, Policy: webPolicy()}, fetch)
 	if err != nil {
 		fmt.Printf("❌ 首查失败: %v\n", err)
 		return
@@ -281,11 +288,11 @@ func runRetrieve(key string) {
 		truncate(r1.Entry.AnswerSummary, 40))
 
 	// L1 精确命中（零 API）
-	r2, _ := responses.Retrieve(ctx, q, responses.RetrieveOptions{TimeSensitive: true}, fetch)
+	r2, _ := responses.Retrieve(ctx, q, responses.RetrieveOptions{TimeSensitive: true, Policy: webPolicy()}, fetch)
 	fmt.Printf("② L1命中 : FromCache=%v API=%v 摘要=%s\n", r2.FromCache, r2.APIUsed, truncate(r2.Entry.AnswerSummary, 40))
 
 	// L2 语义命中（近义改写，零 API）
-	r3, _ := responses.Retrieve(ctx, "北京今天天气如何", responses.RetrieveOptions{TimeSensitive: true}, fetch)
+	r3, _ := responses.Retrieve(ctx, "北京今天天气如何", responses.RetrieveOptions{TimeSensitive: true, Policy: webPolicy()}, fetch)
 	fmt.Printf("③ L2命中 : FromCache=%v API=%v tier=%s 摘要=%s\n", r3.FromCache, r3.APIUsed, r3.Tier, truncate(r3.Entry.AnswerSummary, 40))
 
 	// 强制刷新（走 API）
