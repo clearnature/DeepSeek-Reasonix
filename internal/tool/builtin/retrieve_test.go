@@ -111,12 +111,3 @@ func cleanCacheForTool(t *testing.T) {
 		_ = os.Remove(filepath.Join(dir, de.Name()))
 	}
 }
-
-func mustCacheDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		t.Fatalf("cache dir: %v", err)
-	}
-	return filepath.Join(dir, "reasonix")
-}
