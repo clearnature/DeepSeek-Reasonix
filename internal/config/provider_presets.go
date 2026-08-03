@@ -327,7 +327,7 @@ var curatedProviderPresets = []ProviderPreset{
 	{
 		ID:          "mimo-api",
 		Label:       "MiMo API",
-		Description: "Xiaomi MiMo direct API with text and vision-capable models.",
+		Description: "Xiaomi MiMo direct API with text and vision-capable models. 默认走 OpenAI 兼容 Chat Completions（kind=openai）；Responses 协议能力（stateless 多轮/知识缓存/JSON 输出/web_search）需在厂商接入中单独添加 kind=responses 的自定义配置（如 deepseek-responses 同款添加方式）。",
 		KeyEnv:      "MIMO_API_KEY",
 		Entries: []ProviderEntry{{
 			Name:          "mimo-api",
