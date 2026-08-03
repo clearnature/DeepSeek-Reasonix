@@ -40,6 +40,8 @@ var trustedDomains = map[string]bool{
 	// 官方/组织
 	"who.int": true, "un.org": true, "imf.org": true, "worldbank.org": true,
 	"nasa.gov": true, "noaa.gov": true, "fda.gov": true,
+	// 港口/海事官方（新加坡）
+	"mpa.gov.sg": true, "data.gov.sg": true, "psa.gov.sg": true, "mti.gov.sg": true,
 }
 
 // spamDomains are ad/farm/low-quality sources that pollute results.
@@ -257,7 +259,12 @@ func ScoreAndTagSources(entry *KnowledgeEntry) {
 	}
 	for i := range entry.Sources {
 		s := &entry.Sources[i]
-		s.Domain = domainOf(s.URL)
+		// URL 非空时从 URL 重算 Domain；URL 空时保留提取器预设的机构
+		// Domain（如 extractInlineSources 的 mpa.gov.sg），否则白名单
+		// 豁免会因 Domain 清空而失效。
+		if d := domainOf(s.URL); d != "" {
+			s.Domain = d
+		}
 		s.Credibility = scoreSource(*s, entry.Sources)
 	}
 }

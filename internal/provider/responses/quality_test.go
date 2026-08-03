@@ -138,3 +138,28 @@ func TestPanicScore(t *testing.T) {
 		}
 	}
 }
+
+func TestWhitelistDomainSurvivesSanitize(t *testing.T) {
+	// 修复：extractInlineSources 提取的 MPA（Domain 预设，无 URL）经过
+	// sanitizeFresh（ScoreAndTagSources + FilterSources）后必须保留
+	//（白名单豁免），否则来源被 0.5 阈值过滤。
+	entry := &KnowledgeEntry{
+		AnswerSummary: "新加坡港口数据",
+		Sources:       []Source{{Title: "MPA", Domain: "mpa.gov.sg"}}, // 无 URL
+	}
+	if !sanitizeFresh(entry, 0.5) {
+		t.Fatal("whitelisted source must pass sanitize")
+	}
+	if len(entry.Sources) != 1 {
+		t.Fatalf("whitelisted source must survive FilterSources, got %d", len(entry.Sources))
+	}
+	if entry.Sources[0].Domain != "mpa.gov.sg" {
+		t.Fatalf("domain must survive scoring: %q", entry.Sources[0].Domain)
+	}
+	// 非白名单无 URL 源 → 被过滤（无法验证来源不保留）
+	entry2 := &KnowledgeEntry{Sources: []Source{{Title: "未知", Domain: "unknown.example"}}}
+	sanitizeFresh(entry2, 0.5)
+	if len(entry2.Sources) != 0 {
+		t.Fatalf("non-whitelisted source should be filtered: %v", entry2.Sources)
+	}
+}
