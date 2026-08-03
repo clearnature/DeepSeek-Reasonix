@@ -110,27 +110,27 @@ func (m *InfoEventModel) Report() string {
 	var b strings.Builder
 	b.WriteString("# " + m.Topic + " — 信息事件模型\n\n")
 
-	b.WriteString(fmt.Sprintf("## ① 命题拆解（%d 子命题）\n\n", len(m.Propositions)))
+	fmt.Fprintf(&b, "## ① 命题拆解（%d 子命题）\n\n", len(m.Propositions))
 	for i, p := range m.Propositions {
-		b.WriteString(fmt.Sprintf("%d. **%s** — %s\n", i+1, p.Title, p.Query))
+		fmt.Fprintf(&b, "%d. **%s** — %s\n", i+1, p.Title, p.Query)
 	}
 	b.WriteString("\n")
 
-	b.WriteString(fmt.Sprintf("## ② 多因果线（%d 条）\n\n", len(m.Chains)))
+	fmt.Fprintf(&b, "## ② 多因果线（%d 条）\n\n", len(m.Chains))
 	for _, c := range m.Chains {
 		b.WriteString("- " + c.Topic + "\n")
 	}
 	b.WriteString("\n")
 
-	b.WriteString(fmt.Sprintf("## ③ 并行检索任务（%d 个）\n\n", len(m.FleetTasks)))
+	fmt.Fprintf(&b, "## ③ 并行检索任务（%d 个）\n\n", len(m.FleetTasks))
 	for i, t := range m.FleetTasks {
-		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, t.Description))
+		fmt.Fprintf(&b, "%d. %s\n", i+1, t.Description)
 	}
 	b.WriteString("\n")
 
 	if m.EventMain != nil {
-		b.WriteString(fmt.Sprintf("## ④ 信息流（更新 %d 次，置信度 %.2f）\n\n",
-			m.EventMain.UpdateCount, m.EventMain.Confidence))
+		fmt.Fprintf(&b, "## ④ 信息流（更新 %d 次，置信度 %.2f）\n\n",
+			m.EventMain.UpdateCount, m.EventMain.Confidence)
 	}
 	b.WriteString("\n## ⑤ 信息帧拼图\n\n")
 	b.WriteString(m.View.Render())

@@ -29,22 +29,6 @@ func DecomposePrompt(topic string) string {
 		topic)
 }
 
-// decomposeSchema guides the LLM to emit structured propositions.
-func decomposeSchema() map[string]any {
-	return map[string]any{
-		"type": "array",
-		"items": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"title":  map[string]any{"type": "string"},
-				"query":  map[string]any{"type": "string"},
-				"aspects": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			},
-			"required": []string{"title", "query"},
-		},
-	}
-}
-
 // DecomposeRequest is the provider request for LLM decomposition.
 type DecomposeRequest struct {
 	Topic string
