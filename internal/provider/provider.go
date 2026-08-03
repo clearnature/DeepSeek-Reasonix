@@ -207,9 +207,23 @@ type Request struct {
 
 // ResponseFormat asks a provider to constrain its output shape.
 type ResponseFormat struct {
-	// Type is the structured format: "json_object" is the only shape the
-	// Responses endpoints currently define (MiMo/DashScope/OpenAI).
+	// Type is the structured format: "json_object" constrains the reply to
+	// JSON; "json_schema" additionally carries Name/Schema so the model
+	// emits a schema-conforming object (DeepSeek Responses web_search
+	// knowledge-extraction uses this). Empty Type means unset.
 	Type string `json:"type"`
+	// Name is required for json_schema ("knowledge_extract" etc.).
+	Name string `json:"name,omitempty"`
+	// Schema is the JSON Schema object for json_schema output. The model is
+	// guided (not strictly guaranteed) to comply, so callers must tolerate
+	// markdown-wrapped JSON.
+	Schema map[string]any `json:"schema,omitempty"`
+}
+
+// JSONSchemaFormat returns a json_schema ResponseFormat that asks the model
+// to emit an object matching schema under the given name.
+func JSONSchemaFormat(name string, schema map[string]any) *ResponseFormat {
+	return &ResponseFormat{Type: "json_schema", Name: name, Schema: schema}
 }
 
 // TemperaturePtr wraps v in a pointer so callers that explicitly want a

@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -906,4 +908,125 @@ func TestWebSearchSkippedOnChatAndAnthropicWires(t *testing.T) {
 	if len(tools) != 2 {
 		t.Fatalf("sanity: want 2 tool schemas, got %d", len(tools))
 	}
+}
+
+func TestJSONSchemaFormatOnWire(t *testing.T) {
+	// json_schema must carry name+schema; json_object must stay bare so the
+	// existing MiMo path is unchanged.
+	var gotText any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var reqBody map[string]any
+		_ = json.Unmarshal(body, &reqBody)
+		gotText = reqBody["text"]
+		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
+	}))
+	defer server.Close()
+
+	p := New(Config{Name: "deepseek-responses", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-flash"}).(*client)
+	p.vendor = "deepseek"
+	p.caps = capabilitiesFor("deepseek")
+
+	// json_schema with name+schema
+	body, _, _ := p.buildRequestBody(provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+		ResponseFormat: provider.JSONSchemaFormat("knowledge_extract", map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"answer_summary": map[string]any{"type": "string"},
+			},
+		}),
+	})
+	_ = json.Unmarshal(mustMarshal(t, body["text"]), &gotText)
+	format := gotText.(map[string]any)["format"].(map[string]any)
+	if format["type"] != "json_schema" || format["name"] != "knowledge_extract" {
+		t.Fatalf("json_schema must carry type+name, got %#v", format)
+	}
+	if _, hasSchema := format["schema"]; !hasSchema {
+		t.Fatalf("json_schema must carry schema, got %#v", format)
+	}
+
+	// json_object stays bare (no name/schema leakage)
+	body2, _, _ := p.buildRequestBody(provider.Request{
+		Messages:       []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+		ResponseFormat: &provider.ResponseFormat{Type: "json_object"},
+	})
+	_ = json.Unmarshal(mustMarshal(t, body2["text"]), &gotText)
+	format2 := gotText.(map[string]any)["format"].(map[string]any)
+	if _, hasName := format2["name"]; hasName {
+		t.Fatalf("json_object must not carry name, got %#v", format2)
+	}
+	if format2["type"] != "json_object" {
+		t.Fatalf("json_object type mismatch, got %#v", format2)
+	}
+}
+
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return b
+}
+
+func TestExtractJSONFromOutputHandlesMarkdownWrap(t *testing.T) {
+	// DeepSeek json_schema output is guided, not forced: the reply may be
+	// wrapped in prose or fenced blocks. The extractor must find the object.
+	cases := map[string]string{
+		"bare":   `{"answer_summary":"ok","key_facts":["a","b"]}`,
+		"fence":  "```json\n{\"answer_summary\":\"ok\"}\n```",
+		"prose":  "以下是从搜索中提取的结果：\n{\"answer_summary\":\"ok\",\"sources\":[{\"title\":\"T\",\"url\":\"https://x\"}]}\n希望对你有帮助。",
+		"nested": `{"a":{"b":[1,2,{"c":"d"}]},"e":"f"}`,
+	}
+	for name, input := range cases {
+		v, ok := extractJSONFromOutput(input)
+		if !ok {
+			t.Errorf("%s: expected extraction, got none", name)
+			continue
+		}
+		obj, isObj := v.(map[string]any)
+		if !isObj {
+			t.Errorf("%s: want object, got %T", name, v)
+			continue
+		}
+		if obj["answer_summary"] != "ok" && name != "nested" {
+			t.Errorf("%s: answer_summary missing, got %#v", name, obj)
+		}
+	}
+	// Negative: plain text without JSON
+	if _, ok := extractJSONFromOutput("no json here at all"); ok {
+		t.Fatal("plain text must not extract")
+	}
+}
+
+func TestKnowledgeCacheRoundTrip(t *testing.T) {
+	// Save then load must round-trip with a stable hash key; missing entry
+	// is a miss, not an error.
+	q := "谁是 2026 年图灵奖得主？"
+	SaveKnowledge(&KnowledgeEntry{Query: q, AnswerSummary: "测试摘要", TotalTokens: 123})
+	defer os.Remove(filepath.Join(mustKnowledgeDir(t), KnowledgeHash(q)+".json"))
+
+	got, hit := LoadKnowledge(q)
+	if !hit {
+		t.Fatal("expected cache hit after save")
+	}
+	if got.AnswerSummary != "测试摘要" || got.TotalTokens != 123 {
+		t.Fatalf("round-trip mismatch: %#v", got)
+	}
+	if got.QueryHash != KnowledgeHash(q) {
+		t.Fatalf("hash mismatch: %s vs %s", got.QueryHash, KnowledgeHash(q))
+	}
+	if _, miss := LoadKnowledge("never-asked-query-" + q); miss {
+		t.Fatal("unknown query must miss")
+	}
+}
+
+func mustKnowledgeDir(t *testing.T) string {
+	t.Helper()
+	d, err := knowledgeDir()
+	if err != nil {
+		t.Fatalf("knowledgeDir: %v", err)
+	}
+	return d
 }

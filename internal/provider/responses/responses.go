@@ -171,6 +171,63 @@ func isServerBuiltinTool(t string) bool {
 	}
 }
 
+// extractJSONFromOutput pulls the first top-level JSON object or array out of
+// a model reply. json_schema output is guided, not enforced, so DeepSeek
+// sometimes wraps the object in markdown prose or fenced blocks; callers that
+// need the structured payload use this before falling back to raw text.
+func extractJSONFromOutput(text string) (any, bool) {
+	text = strings.TrimSpace(text)
+	// Strip a ```json ... ``` fence if present.
+	if strings.HasPrefix(text, "```") {
+		if idx := strings.Index(text, "\n"); idx > 0 {
+			text = text[idx+1:]
+		}
+		if idx := strings.LastIndex(text, "```"); idx > 0 {
+			text = text[:idx]
+		}
+		text = strings.TrimSpace(text)
+	}
+	for i := 0; i < len(text); i++ {
+		if text[i] != '{' && text[i] != '[' {
+			continue
+		}
+		depth := 0
+		inStr := false
+		esc := false
+		for j := i; j < len(text); j++ {
+			c := text[j]
+			if esc {
+				esc = false
+				continue
+			}
+			switch c {
+			case '\\':
+				if inStr {
+					esc = true
+				}
+			case '"':
+				inStr = !inStr
+			case '{', '[':
+				if !inStr {
+					depth++
+				}
+			case '}', ']':
+				if !inStr {
+					depth--
+					if depth == 0 {
+						var v any
+						if err := json.Unmarshal([]byte(text[i:j+1]), &v); err == nil {
+							return v, true
+						}
+						return nil, false
+					}
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
 // ResetContext drops stateful continuation metadata. Full-input stateless mode
 // is unaffected.
 func (c *client) ResetContext() {
@@ -254,11 +311,18 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	}
 	if req.ResponseFormat != nil && req.ResponseFormat.Type != "" {
 		// Structured output: Responses text.format. MiMo/DashScope/OpenAI
-		// all accept {"text":{"format":{"type":"json_object"}}}. The model
-		// only emits JSON when the instructions also demand it.
-		body["text"] = map[string]any{
-			"format": map[string]any{"type": req.ResponseFormat.Type},
+		// accept {"text":{"format":{"type":"json_object"}}}; DeepSeek
+		// additionally accepts json_schema with name+schema (the model is
+		// guided, not strictly forced, to comply). The model only emits JSON
+		// when the instructions also demand it.
+		format := map[string]any{"type": req.ResponseFormat.Type}
+		if req.ResponseFormat.Type == "json_schema" && req.ResponseFormat.Name != "" {
+			format["name"] = req.ResponseFormat.Name
+			if req.ResponseFormat.Schema != nil {
+				format["schema"] = req.ResponseFormat.Schema
+			}
 		}
+		body["text"] = map[string]any{"format": format}
 	}
 	if req.Temperature != nil && !c.caps.ignoresTemperature {
 		body["temperature"] = *req.Temperature
