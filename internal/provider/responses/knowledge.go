@@ -262,6 +262,11 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 			continue
 		}
 		sim := NgramSimilarity(q, e.Query)
+		// 主题一致性：Dice 相似度高但领域词无交集 = 误命中（如"霍尔木兹
+		// 化肥"命中"霍尔木兹石油"）。无领域词的查询退化为纯相似度。
+		if !topicsOverlap(q, e.Query) {
+			sim = 0
+		}
 		if sim > bestSim {
 			bestSim = sim
 			best = &e
@@ -343,4 +348,53 @@ func DeleteKnowledge(pred func(*KnowledgeEntry) bool) int {
 		}
 	}
 	return deleted
+}
+
+// domainVocabulary maps domain-significant words; two queries sharing any
+// such word are the same topic, sharing none means the semantic hit is a
+// false positive (fix: 语义缓存误命中不同主题). Order matters: more
+// specific words first.
+var domainVocabulary = map[string][]string{
+	"农业": {"化肥", "农业", "小麦", "粮食", "收成", "农产品", "氮磷钾", "尿素", "大豆", "玉米"},
+	"能源": {"石油", "港口", "吞吐量", "霍尔木兹", "马六甲", "原油", "天然气", "lng", "海峡"},
+	"军事": {"战争", "冲突", "军事", "航母", "轰炸", "导弹", "制裁"},
+	"经济": {"经济", "gdp", "通胀", "油价", "市场", "衰退", "贸易", "gdp"},
+	"科技": {"ai", "芯片", "模型", "算法", "代码", "编程", "开源"},
+	"气候": {"天气", "气候", "台风", "暴雨", "干旱", "气温", "降水"},
+}
+
+// ExtractTopics returns the domain-significant words present in a query.
+func ExtractTopics(query string) []string {
+	var out []string
+	lower := strings.ToLower(query)
+	for _, words := range domainVocabulary {
+		for _, w := range words {
+			if strings.Contains(lower, w) {
+				out = append(out, w)
+			}
+		}
+	}
+	return out
+}
+
+// topicsOverlap reports whether a and b share at least one domain word.
+// 语义：仅当查询本身带明确领域词时才要求交集（跨主题防误命中）；查询
+// 无领域词（如英文缩写/代号）退化为纯相似度（保守命中，不拦截）。
+func topicsOverlap(a, b string) bool {
+	wordsA := ExtractTopics(a)
+	if len(wordsA) == 0 {
+		return true // 查询无领域信号：不拦截
+	}
+	wordsB := ExtractTopics(b)
+	if len(wordsB) == 0 {
+		return true // 缓存无领域标签：无法判断主题，保守命中
+	}
+	for _, wa := range wordsA {
+		for _, wb := range wordsB {
+			if wa == wb {
+				return true
+			}
+		}
+	}
+	return false
 }

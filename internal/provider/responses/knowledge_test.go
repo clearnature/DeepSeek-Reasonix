@@ -188,3 +188,41 @@ func TestAuditListAndDeleteKnowledge(t *testing.T) {
 		t.Fatal("full sweep should empty the cache")
 	}
 }
+
+func TestSemanticHitTopicConsistency(t *testing.T) {
+	cleanKnowledgeCache(t)
+	dir := mustKnowledgeDir(t)
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	// 石油主题缓存
+	SaveKnowledge(&KnowledgeEntry{Query: "全球主要港口石油吞吐量 霍尔木兹经济影响", AnswerSummary: "石油报告", TimeSensitive: false})
+
+	// 同主题近义 → 命中
+	if _, _, hit := LoadKnowledgeSemantic("霍尔木兹海峡封锁油价影响", DefaultSemanticThreshold); !hit {
+		t.Fatal("same-topic near-synonym must hit")
+	}
+	// 不同主题（化肥/农业）→ 不命中（修复前误命中）
+	if _, _, hit := LoadKnowledgeSemantic("霍尔木兹封锁 化肥供给 小麦收成", DefaultSemanticThreshold); hit {
+		t.Fatal("cross-topic must NOT hit semantic cache")
+	}
+	// 无领域词的查询 → 退化相似度
+	if _, _, hit := LoadKnowledgeSemantic("今天天气如何", DefaultSemanticThreshold); hit {
+		t.Fatal("no-domain query should not hit oil cache")
+	}
+}
+
+func TestExtractTopics(t *testing.T) {
+	topics := ExtractTopics("霍尔木兹海峡化肥供给小麦收成")
+	if len(topics) == 0 {
+		t.Fatal("must extract domain words")
+	}
+	foundAgri := false
+	for _, w := range topics {
+		if w == "化肥" || w == "小麦" || w == "农业" {
+			foundAgri = true
+		}
+	}
+	if !foundAgri {
+		t.Fatalf("agriculture words missing: %v", topics)
+	}
+}
