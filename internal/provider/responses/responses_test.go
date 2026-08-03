@@ -1003,6 +1003,7 @@ func TestExtractJSONFromOutputHandlesMarkdownWrap(t *testing.T) {
 func TestKnowledgeCacheRoundTrip(t *testing.T) {
 	// Save then load must round-trip with a stable hash key; missing entry
 	// is a miss, not an error.
+	cleanKnowledgeCache(t)
 	q := "谁是 2026 年图灵奖得主？"
 	SaveKnowledge(&KnowledgeEntry{Query: q, AnswerSummary: "测试摘要", TotalTokens: 123})
 	defer os.Remove(filepath.Join(mustKnowledgeDir(t), KnowledgeHash(q)+".json"))

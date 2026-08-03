@@ -35,6 +35,8 @@ func TestNgramSimilarity(t *testing.T) {
 }
 
 func TestLoadKnowledgeSemanticHitAndMiss(t *testing.T) {
+	cleanKnowledgeCache(t)
+
 	dir := mustKnowledgeDir(t)
 	// 清理测试可能残留
 	q1 := "2026年8月3日北京天气怎么样？"
@@ -51,12 +53,14 @@ func TestLoadKnowledgeSemanticHitAndMiss(t *testing.T) {
 	}
 
 	// 无关问题 → 不应命中
-	if _, _, hit := LoadKnowledgeSemantic("图灵奖得主是谁", DefaultSemanticThreshold); hit {
+	if _, _, hit := LoadKnowledgeSemantic("如何制作番茄炒蛋", DefaultSemanticThreshold); hit {
 		t.Fatal("unrelated query must miss")
 	}
 }
 
 func TestLoadKnowledgeSemanticSkipsExpired(t *testing.T) {
+	cleanKnowledgeCache(t)
+
 	dir := mustKnowledgeDir(t)
 	q := "过期测试问题"
 	e := &KnowledgeEntry{Query: q, AnswerSummary: "x", ExpiresAt: time.Now().Add(-time.Hour)}
@@ -111,6 +115,8 @@ func TestNeedsRefreshDecisionTable(t *testing.T) {
 }
 
 func TestKnowledgeTierPersisted(t *testing.T) {
+	cleanKnowledgeCache(t)
+
 	dir := mustKnowledgeDir(t)
 	q := "复杂问题"
 	e := &KnowledgeEntry{Query: q, AnswerSummary: "x", Tier: "complex", TimeSensitive: true,
@@ -130,5 +136,20 @@ func TestKnowledgeTierPersisted(t *testing.T) {
 	}
 	if !got.NeedsRefresh(time.Now().Add(2 * time.Hour)) {
 		t.Fatal("expired time-sensitive entry must need refresh")
+	}
+}
+
+// cleanKnowledgeCache wipes the websearch cache dir so tests are isolated
+// from each other (semantic scan covers the whole dir, so leftovers from
+// earlier tests would otherwise be "hits").
+func cleanKnowledgeCache(t *testing.T) {
+	t.Helper()
+	dir := mustKnowledgeDir(t)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, de := range entries {
+		_ = os.Remove(filepath.Join(dir, de.Name()))
 	}
 }
