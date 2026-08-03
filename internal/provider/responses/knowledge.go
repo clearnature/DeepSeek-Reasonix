@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"reasonix/internal/config"
@@ -110,4 +111,96 @@ func SaveKnowledge(e *KnowledgeEntry) {
 		return
 	}
 	_ = os.Rename(tmp, path)
+}
+
+// DefaultSemanticThreshold is the character-set similarity cutoff for L2
+// semantic hits. Near-synonym Chinese queries (今天北京天气 vs 北京今天天气)
+// score ~0.5 under unigram Jaccard; unrelated queries score near 0. Tune per
+// corpus: higher = fewer false positives but lower recall.
+const DefaultSemanticThreshold = 0.35
+
+// NgramSimilarity returns the Dice coefficient of character sets between a
+// and b (0..1): 2·|A∩B| / (|A|+|B|). It is a cheap, local, dependency-free
+// proxy for "semantic" matching on short Chinese/English queries. Unlike
+// Jaccard it normalizes by the average length rather than the union, so a
+// verbose query ("2026年8月3日北京天气怎么样") still scores well against a
+// terse near-synonym ("北京今天天气如何") instead of being diluted by the
+// extra characters. Word-order changes keep the same set, so near-synonym
+// phrasings score high; punctuation and whitespace are ignored.
+func NgramSimilarity(a, b string) float64 {
+	ga := charSet(a)
+	gb := charSet(b)
+	if len(ga) == 0 || len(gb) == 0 {
+		return 0
+	}
+	inter := 0
+	for g := range ga {
+		if gb[g] {
+			inter++
+		}
+	}
+	denom := len(ga) + len(gb)
+	if denom == 0 {
+		return 0
+	}
+	return 2 * float64(inter) / float64(denom)
+}
+
+func charSet(s string) map[rune]bool {
+	out := make(map[rune]bool)
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r >= 0x4E00 && r <= 0x9FFF: // CJK unified ideographs
+			out[r] = true
+		}
+	}
+	return out
+}
+
+// LoadKnowledgeSemantic scans the cache for the unexpired entry whose query is
+// most similar to q (L2 fallback after LoadKnowledge's exact hash miss). It
+// returns the best match, its similarity, and true when that similarity meets
+// or exceeds threshold. Zero-dependency local matching — no vector DB, no
+// embedding API.
+func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float64, bool) {
+	dir, err := knowledgeDir()
+	if err != nil {
+		return nil, 0, false
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, 0, false
+	}
+	var (
+		best    *KnowledgeEntry
+		bestSim float64
+	)
+	now := time.Now()
+	for _, de := range entries {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, de.Name()))
+		if err != nil {
+			continue
+		}
+		var e KnowledgeEntry
+		if err := json.Unmarshal(data, &e); err != nil {
+			continue
+		}
+		if !e.ExpiresAt.IsZero() && now.After(e.ExpiresAt) {
+			_ = os.Remove(filepath.Join(dir, de.Name()))
+			continue
+		}
+		sim := NgramSimilarity(q, e.Query)
+		if sim > bestSim {
+			bestSim = sim
+			best = &e
+		}
+	}
+	if best != nil && bestSim >= threshold {
+		return best, bestSim, true
+	}
+	return nil, 0, false
 }
