@@ -201,6 +201,13 @@ func loadKnowledgeEntry(dir, query string) (*KnowledgeEntry, string, bool) {
 		_ = os.Remove(vpath)
 		return nil, "", false
 	}
+	// 变体路径同样执行语言门：变体映射是 L2 命中的提升，但后续查询
+	// 可能来自另一语言（英文查询经变体 L1 命中中文条目——2026-08-03
+	// verify_math 发现）。语言不兼容 → 映射作废（不再服务该查询）。
+	if ql, el := DetectLanguage(query), e.Language; ql != "" && el != "" && ql != el {
+		_ = os.Remove(vpath)
+		return nil, "", false
+	}
 	return &e, mainPath, true
 }
 

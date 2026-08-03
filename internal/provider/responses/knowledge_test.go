@@ -374,3 +374,28 @@ func TestSensitiveQueryNotLearnedAsVariant(t *testing.T) {
 		t.Fatal("sensitive query must NOT be promoted to L1 variant")
 	}
 }
+
+// TestVariantPathEnforcesLanguageGate：变体映射 L1 命中同样执行语言门
+// （verify_math 发现：英文查询经变体命中中文条目）。
+func TestVariantPathEnforcesLanguageGate(t *testing.T) {
+	cleanKnowledgeCache(t)
+	// 中文主条目
+	SaveKnowledge(&KnowledgeEntry{
+		Query:         "霍奇猜想 代数几何",
+		AnswerSummary: "霍奇猜想：代数簇的 Hodge 类由代数闭链表示。",
+		ExpiresAt:     time.Now().Add(time.Hour),
+	})
+	// 建立变体映射（中文近义查询 L2 命中 → 学习变体）
+	variant := "霍奇猜想是什么"
+	if _, _, hit := LoadKnowledgeSemantic(variant, DefaultSemanticThreshold); !hit {
+		t.Skip("variant did not L2-hit — gate not exercised")
+	}
+	// 英文查询（语言不兼容）→ 变体路径必须拦截
+	if _, ok := LoadKnowledge("Hodge conjecture algebraic geometry"); ok {
+		t.Fatal("EN query must NOT resolve via variant map to ZH entry")
+	}
+	// 中文同变体仍命中
+	if _, ok := LoadKnowledge(variant); !ok {
+		t.Fatal("ZH variant must still resolve")
+	}
+}
