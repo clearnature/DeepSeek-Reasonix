@@ -5655,14 +5655,17 @@ const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker({
     const timer = setTimeout(() => setDebouncedQuery(query), 150);
     return () => clearTimeout(timer);
   }, [query]);
-  if (candidates.length === 0) return null;
-  const selected = new Set(selectedModels);
-  const vision = new Set(visionModels);
   const q = debouncedQuery.trim().toLowerCase();
   const visibleCandidates = q
     ? candidates.filter((model) => model.toLowerCase().includes(q))
     : candidates;
+  // NOTE: hooks must run unconditionally before any early return, otherwise
+  // React #310 (rendered more hooks than during the previous render) fires
+  // when candidates transitions from empty to non-empty after model fetch.
   const deferredCandidates = useDeferredValue(visibleCandidates);
+  if (candidates.length === 0) return null;
+  const selected = new Set(selectedModels);
+  const vision = new Set(visionModels);
   return (
     <div className="provider-model-draft provider-model-draft--inline">
       <div className="provider-model-draft__head">
