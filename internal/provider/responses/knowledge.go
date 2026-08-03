@@ -38,6 +38,19 @@ type KnowledgeEntry struct {
 	// simple / general / complex / deep (retrieval tier P2 routing).
 	Tier string `json:"tier,omitempty"`
 
+	// ---- P4: 信息流模型（动态事件追踪，情报模式）----
+	// EventChain links this entry to related event queries (初始事件→后续
+	// 更新→关联事件)。元素是相关查询的原始文本。
+	EventChain []string `json:"event_chain,omitempty"`
+	// Confidence 是 0..1 的事件置信度，随增量更新上升、随冲突信号下降。
+	Confidence float64 `json:"confidence,omitempty"`
+	// UpdateCount 是该事件被增量刷新/更新的次数。
+	UpdateCount int `json:"update_count,omitempty"`
+	// ConflictDetected 标记多源矛盾（冲突信号），提示答案可能不稳定。
+	ConflictDetected bool `json:"conflict_detected,omitempty"`
+	// LastUpdatedAt 记录最近一次增量更新的时间。
+	LastUpdatedAt time.Time `json:"last_updated_at,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
