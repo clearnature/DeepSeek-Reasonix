@@ -3447,9 +3447,12 @@ func (c *Controller) cacheColdAfter() time.Duration {
 		}
 		return c.testCacheColdAfter
 	}
-	cfg, err := config.LoadForRoot(c.workspaceRoot)
+	// 查询路径只读：LoadForRootReadOnly 不触发配置迁移写盘（评审 #7168
+	// 第 4 点）；失败时保守回退 24h（DeepSeek/未知 vendor 默认），避免
+	// 提前触发 PruneStaleToolResults 改写仍可命中的缓存历史。
+	cfg, err := config.LoadForRootReadOnly(c.workspaceRoot)
 	if err != nil {
-		return 10 * time.Minute
+		return 24 * time.Hour
 	}
 	ref := c.modelRef
 	if ref == "" {
@@ -3457,7 +3460,7 @@ func (c *Controller) cacheColdAfter() time.Duration {
 	}
 	entry, ok := cfg.ResolveModel(ref)
 	if !ok {
-		return 10 * time.Minute
+		return 24 * time.Hour
 	}
 	return entry.EffectiveCacheTTL()
 }
