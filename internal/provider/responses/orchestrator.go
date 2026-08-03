@@ -94,8 +94,8 @@ func (ex *ModelExecutor) fleetTaskFor(p Proposition) FleetTaskSpec {
 		lang = "zh"
 	}
 	return FleetTaskSpec{
-		Prompt: fmt.Sprintf(
-			"你是并行检索子代理。请检索子命题「%s」：%s。\n关注维度: %s。\n"+
+		Prompt: retrievalPromptBase() + fmt.Sprintf(
+			"本次任务：检索子命题「%s」：%s。\n关注维度: %s。\n"+
 				"用 web_search 检索后返回 InfoFrame JSON："+
 				`{"domain":"%s","language":"%s","topic":"%s","facts":["..."],"sources":[{"title":"","url":""}],"confidence":0.0}`,
 			p.Title, scopedQuery, aspects, p.Scene, lang, p.Title),

@@ -80,3 +80,22 @@ func TestAssembleFrameView(t *testing.T) {
 	}
 	_ = json.RawMessage{} // keep encoding/json import
 }
+
+func TestRetrievalPromptBaseQualityGates(t *testing.T) {
+	base := retrievalPromptBase()
+	for _, want := range []string{"retrieve_info", "零成本", "权威", "营销话术", "恐慌", "facts 3-8", "sources 最多 5", "confidence 0-1"} {
+		if !strings.Contains(base, want) {
+			t.Fatalf("prompt base missing %q", want)
+		}
+	}
+	// 两处生成器都带 base
+	tasks := BuildFleetRetrievalTasks("测试", DepthL1, []string{"zh"}, nil)
+	if !strings.Contains(tasks[0].Prompt, "检索策略") {
+		t.Fatal("fleet task must include strategy base")
+	}
+	ex := &ModelExecutor{}
+	task := ex.fleetTaskFor(Proposition{Title: "子", Query: "q", Scene: DomainEconomic, Language: "en"})
+	if !strings.Contains(task.Prompt, "检索策略") || !strings.Contains(task.Prompt, "confidence 0-1") {
+		t.Fatal("orchestrator task must include quality base")
+	}
+}

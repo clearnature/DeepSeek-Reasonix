@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+// retrievalPromptBase 是并行检索子代理的公共指令（fable5 优化）：
+// 检索策略（缓存优先）、质量要求（权威来源/排除营销煽动）、输出约束
+// （facts/sources 数量、confidence 语义）。两处任务生成器共用。
+func retrievalPromptBase() string {
+	return "你是并行检索子代理，负责高质量信息检索。\n" +
+		"检索策略：1) 先调用 retrieve_info 查询本地知识缓存（零成本，命中直接采用）；" +
+		"2) 未命中再用 web_search 检索；3) 优先权威来源（政府/官方机构/主流媒体/学术），" +
+		"排除营销话术（最有效/零风险/限时抢购/专家推荐）与煽动性内容（恐慌/末日/必须转发）。\n" +
+		"输出约束：facts 3-8 条核心事实（涉及时效的信息标注时间）；sources 最多 5 个；" +
+		"confidence 0-1（来源越权威、交叉验证越多，可信度越高）。\n"
+}
+
 // fleet_plan.go：把 info-frame 接入 fleet 并行子代理（2026-08-03 方案 B）。
 // 模型调用 fleet 工具前，先用 BuildFleetRetrievalTasks 展开检索计划为
 // 并行子代理任务（每任务 = 场景×语言×四维 一帧），子代理各自用
@@ -46,9 +58,9 @@ func BuildFleetRetrievalTasks(topic string, depth ResearchDepth, langs []string,
 			for _, q := range plan.Queries {
 				queries = append(queries, SceneQuery(q.Query, d, lang))
 			}
-			prompt := fmt.Sprintf(
-				"你是并行检索子代理。主题「%s」的【%s】场景%s【%s】语言帧。\n"+
-					"请用 web_search 工具检索以下查询（可合并为 1-3 次搜索）：\n%s\n\n"+
+			prompt := retrievalPromptBase() + fmt.Sprintf(
+				"本次任务：主题「%s」的【%s】场景%s【%s】语言帧。\n"+
+					"请检索以下查询（可合并为 1-3 次搜索）：\n%s\n\n"+
 					"只输出一个 JSON 对象（InfoFrame 格式），不要多余文字：\n"+
 					`{"domain":"%s","language":"%s","topic":"%s","facts":["核心事实1","核心事实2"],"sources":[{"title":"来源名","url":"https://..."}],"confidence":0.0}`,
 				topic, domainName(d), audDesc, lang,
