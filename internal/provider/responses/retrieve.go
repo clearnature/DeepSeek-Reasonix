@@ -36,19 +36,21 @@ func purgeStaleLabel(s string) string {
 
 // applyFresh merges a sanitized fetch into an existing entry (refresh path),
 // then persists. Shared with the miss path so both enforce the same quality
-// gate.
-func applyFresh(dst, src *KnowledgeEntry, now time.Time, minCred float64) {
+// gate. Returns true only when the refresh actually merged (manipulated or
+// nil content returns false so callers don't over-report Refreshed).
+func applyFresh(dst, src *KnowledgeEntry, now time.Time, minCred float64) bool {
 	if src == nil {
-		return
+		return false
 	}
 	// 质量/操纵检查：不达标不合并进缓存。
 	if !sanitizeFresh(src, minCred) {
-		return
+		return false
 	}
 	dst.AnswerSummary = purgeStaleLabel(dst.AnswerSummary)
 	advanceEvent(dst, now, src.KeyFacts, nil)
 	mergeEntry(dst, src)
 	SaveKnowledge(dst)
+	return true
 }
 
 // P5: agent 闭环检索协调器。把 P1-P4 串成完整流程：
@@ -165,11 +167,12 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 					if err != nil {
 						return res, err // stale entry still returned via res.Entry
 					}
-					applyFresh(e, fresh, now, opts.MinCredibility)
-					res.Refreshed = true
-					res.APIUsed = true
-					if opts.Policy != nil {
-						opts.Policy.MarkWebUsed(now)
+					if applyFresh(e, fresh, now, opts.MinCredibility) {
+						res.Refreshed = true
+						res.APIUsed = true
+						if opts.Policy != nil {
+							opts.Policy.MarkWebUsed(now)
+						}
 					}
 				} else {
 					res.WebBlocked = true
@@ -206,9 +209,10 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 				if err != nil {
 					return res, err
 				}
-				applyFresh(e, fresh, now, opts.MinCredibility)
-				res.Refreshed = true
-				res.APIUsed = true
+				if applyFresh(e, fresh, now, opts.MinCredibility) {
+					res.Refreshed = true
+					res.APIUsed = true
+				}
 			}
 			return res, nil
 		}

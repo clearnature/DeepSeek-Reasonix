@@ -22,9 +22,11 @@ const (
 
 // negationHints are phrases in a fresh update that contradict a prior claim.
 // A lightweight heuristic for conflict detection — the intelligence-community
-// analogue is "conflicting source reporting".
+// analogue is "conflicting source reporting". Deliberately excludes generic
+// negations ("不是/并未/并非" appear in innocuous sentences like "今天不是
+// 周末") to avoid false positives; only explicit contradiction markers remain.
 var negationHints = []string{
-	"否认", "辟谣", "并未", "并非", "不是", "没有发生", "撤回",
+	"否认", "辟谣", "没有发生", "撤回",
 	"denies", "denied", "contradicts", "refutes", "retracts", "no evidence",
 }
 

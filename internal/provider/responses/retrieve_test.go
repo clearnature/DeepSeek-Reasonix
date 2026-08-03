@@ -519,3 +519,39 @@ func TestRetrieveRefreshSkipsManipulatedContent(t *testing.T) {
 	}
 	_ = res
 }
+
+// should-fix regression: applyFresh must return false when the refresh was
+// rejected (manipulated content) so callers don't over-report Refreshed.
+func TestApplyFreshReturnsFalseOnRejectedContent(t *testing.T) {
+	cleanKnowledgeCache(t)
+	dst := &KnowledgeEntry{Query: "q", AnswerSummary: "旧"}
+
+	// 操纵内容 → false，不合并
+	ok := applyFresh(dst, &KnowledgeEntry{AnswerSummary: "最有效！紧急", KeyFacts: []string{"零风险"}}, time.Now(), 0.5)
+	if ok {
+		t.Fatal("manipulated refresh must return false")
+	}
+	if dst.AnswerSummary != "旧" || dst.UpdateCount != 0 {
+		t.Fatalf("rejected refresh must not mutate dst: %+v", dst)
+	}
+
+	// 干净内容 → true，合并
+	ok = applyFresh(dst, &KnowledgeEntry{AnswerSummary: "新信息", KeyFacts: []string{"事实"}}, time.Now(), 0.5)
+	if !ok {
+		t.Fatal("clean refresh must return true")
+	}
+	if dst.AnswerSummary != "新信息" || dst.UpdateCount != 1 {
+		t.Fatalf("clean refresh must merge: %+v", dst)
+	}
+}
+
+// should-fix regression: .org must not grant authority score (anyone can
+// register an .org domain).
+func TestOrgNotAuthority(t *testing.T) {
+	if isAuthorityDomain("random-org.example.org") {
+		t.Fatal(".org must not be treated as authority TLD")
+	}
+	if !isAuthorityDomain("nasa.gov") {
+		t.Fatal("gov must remain authority")
+	}
+}

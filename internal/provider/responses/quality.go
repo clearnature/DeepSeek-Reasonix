@@ -18,8 +18,10 @@ import (
 // passes; unknown junk does not).
 
 // authorityTLDs are registrable top-level segments that imply an official
-// operator. 中国政府/机构 and edu/research institutions.
-var authorityTLDs = []string{"gov.cn", "gov", "edu.cn", "edu", "mil", "ac.cn", "org"}
+// operator. 中国政府/机构 and edu/research institutions. ".org" is NOT
+// included: anyone can register an .org, so it conveys no authority (fix:
+// .org 权威分滥用).
+var authorityTLDs = []string{"gov.cn", "gov", "edu.cn", "edu", "mil", "ac.cn"}
 
 // trustedDomains is a compact built-in whitelist of verified professional
 // sources (subset of deep-research sources.md). Extend as sources.md grows.
