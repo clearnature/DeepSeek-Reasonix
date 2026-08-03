@@ -67,3 +67,68 @@ func TestLoadKnowledgeSemanticSkipsExpired(t *testing.T) {
 		t.Fatal("expired entry must miss")
 	}
 }
+
+func TestNeedsRefreshDecisionTable(t *testing.T) {
+	now := time.Now()
+	base := func() *KnowledgeEntry { return &KnowledgeEntry{} }
+
+	cases := []struct {
+		name string
+		e    *KnowledgeEntry
+		want bool
+	}{
+		{"事实类永不刷新", base(), false},
+		{"时效类未过期", func() *KnowledgeEntry {
+			e := base()
+			e.TimeSensitive = true
+			e.FreshUntil = now.Add(time.Hour)
+			return e
+		}(), false},
+		{"时效类已过期需增量", func() *KnowledgeEntry {
+			e := base()
+			e.TimeSensitive = true
+			e.FreshUntil = now.Add(-time.Hour)
+			return e
+		}(), true},
+		{"时效类无FreshUntil回退ExpiresAt", func() *KnowledgeEntry {
+			e := base()
+			e.TimeSensitive = true
+			e.ExpiresAt = now.Add(-time.Minute)
+			return e
+		}(), true},
+		{"nil条目不刷新", nil, false},
+		{"时效类无任何期限", func() *KnowledgeEntry {
+			e := base()
+			e.TimeSensitive = true
+			return e
+		}(), false},
+	}
+	for _, c := range cases {
+		if got := c.e.NeedsRefresh(now); got != c.want {
+			t.Errorf("%s: NeedsRefresh=%v want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestKnowledgeTierPersisted(t *testing.T) {
+	dir := mustKnowledgeDir(t)
+	q := "复杂问题"
+	e := &KnowledgeEntry{Query: q, AnswerSummary: "x", Tier: "complex", TimeSensitive: true,
+		FreshUntil: time.Now().Add(time.Hour)}
+	SaveKnowledge(e)
+	defer os.Remove(filepath.Join(dir, KnowledgeHash(q)+".json"))
+
+	got, hit := LoadKnowledge(q)
+	if !hit {
+		t.Fatal("expected hit")
+	}
+	if got.Tier != "complex" || !got.TimeSensitive {
+		t.Fatalf("tier/time_sensitive not persisted: %#v", got)
+	}
+	if got.NeedsRefresh(time.Now()) {
+		t.Fatal("fresh time-sensitive entry must not need refresh")
+	}
+	if !got.NeedsRefresh(time.Now().Add(2 * time.Hour)) {
+		t.Fatal("expired time-sensitive entry must need refresh")
+	}
+}

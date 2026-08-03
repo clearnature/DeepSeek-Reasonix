@@ -24,8 +24,41 @@ type KnowledgeEntry struct {
 	KeyFacts      []string  `json:"key_facts,omitempty"`
 	Sources       []Source  `json:"sources,omitempty"`
 	TotalTokens   int       `json:"total_tokens,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	ExpiresAt     time.Time `json:"expires_at"`
+
+	// TimeSensitive marks time-critical content (news, markets, live
+	// events). FreshUntil bounds how long a hit may be served without a
+	// refresh; after it, the entry is served as a stale fallback while an
+	// incremental web_search refresh is triggered (retrieval tier P1).
+	TimeSensitive bool `json:"time_sensitive,omitempty"`
+	// FreshUntil is the freshness deadline for TimeSensitive entries. Zero
+	// falls back to ExpiresAt. Non-sensitive entries ignore it (facts do
+	// not go stale within the TTL).
+	FreshUntil time.Time `json:"fresh_until,omitempty"`
+	// Tier records the retrieval difficulty that produced this entry:
+	// simple / general / complex / deep (retrieval tier P2 routing).
+	Tier string `json:"tier,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// NeedsRefresh reports whether a cached hit should trigger an incremental
+// update rather than being served as final. Time-sensitive entries whose
+// FreshUntil (or ExpiresAt fallback) has passed need a refresh; static facts
+// never do within their TTL. Callers still receive the stale entry, but
+// should kick off a web_search refresh and merge.
+func (e *KnowledgeEntry) NeedsRefresh(now time.Time) bool {
+	if e == nil {
+		return false
+	}
+	if !e.TimeSensitive {
+		return false
+	}
+	deadline := e.FreshUntil
+	if deadline.IsZero() {
+		deadline = e.ExpiresAt
+	}
+	return !deadline.IsZero() && now.After(deadline)
 }
 
 // Source is one citation surfaced by the model for a web_search turn.
