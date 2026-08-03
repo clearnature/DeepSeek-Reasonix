@@ -1,0 +1,284 @@
+# guides/speech-t2a-async.md
+
+> 来源: https://platform.minimaxi.com/docs/guides/speech-t2a-async.md
+
+> ## Documentation Index
+> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# 异步语音合成
+
+> MiniMax 提供异步语音合成 API，适用于长文本的音频合成任务，单个文件长度限制小于 10 万字符。
+
+1. 支持 100+系统音色、复刻音色自主选择
+2. 支持语调、语速、音量、比特率、采样率、输出格式调整
+3. 支持音频时长、音频大小等返回参数
+4. 支持时间戳（字幕）返回，精确到句
+5. 支持直接传入字符串与上传文本文件两种方式进行待合成文本的输入
+6. 支持非法字符检测：非法字符不超过 10%（包含 10%），音频会正常生成并返回非法字符占比；非法字符超过 10%，接口不返回结果（返回报错码），请检测后再次进行请求【非法字符定义：ascii 码中的控制符（不含制表符 `\t` 和换行符 `\n`）】
+
+## 支持模型
+
+以下为 MiniMax 已提供的语音模型及其特性说明。
+
+| 模型               | 特性                         |
+| :--------------- | :------------------------- |
+| speech-2.8-hd    | 情绪渲染融合语气词，重塑自然听感           |
+| speech-2.8-turbo | 极致生成速度，更自然逼真的音频效果          |
+| speech-2.6-hd    | 超低延时，归一化升级，更高自然度           |
+| speech-2.6-turbo | 极速版，更快更优惠，更适用于语音聊天和数字人场景   |
+| speech-02-hd     | 拥有出色的韵律、稳定性和复刻相似度，音质表现突出   |
+| speech-02-turbo  | 拥有出色的韵律和稳定性，小语种能力加强，性能表现出色 |
+
+## 支持语言
+
+MiniMax 的语音合成模型具备卓越的跨语言能力，全面支持 40 种全球广泛使用的语言。我们致力于打破语言壁垒，构建真正意义上的全球通用人工智能模型。
+
+目前支持的语言包含：
+
+| 支持语种                |                      |                       |
+| :------------------ | :------------------- | :-------------------- |
+| 1. 中文（Chinese）      | 15. 土耳其语（Turkish）    | 28. 马来语（Malay）        |
+| 2. 粤语（Cantonese）    | 16. 荷兰语（Dutch）       | 29. 波斯语（Persian）      |
+| 3. 英语（English）      | 17. 乌克兰语（Ukrainian）  | 30. 斯洛伐克语（Slovak）     |
+| 4. 西班牙语（Spanish）    | 18. 泰语（Thai）         | 31. 瑞典语（Swedish）      |
+| 5. 法语（French）       | 19. 波兰语（Polish）      | 32. 克罗地亚语（Croatian）   |
+| 6. 俄语（Russian）      | 20. 罗马尼亚语（Romanian）  | 33. 菲律宾语（Filipino）    |
+| 7. 德语（German）       | 21. 希腊语（Greek）       | 34. 匈牙利语（Hungarian）   |
+| 8. 葡萄牙语（Portuguese） | 22. 捷克语（Czech）       | 35. 挪威语（Norwegian）    |
+| 9. 阿拉伯语（Arabic）     | 23. 芬兰语（Finnish）     | 36. 斯洛文尼亚语（Slovenian） |
+| 10. 意大利语（Italian）   | 24. 印地语（Hindi）       | 37. 加泰罗尼亚语（Catalan）   |
+| 11. 日语（Japanese）    | 25. 保加利亚语（Bulgarian） | 38. 尼诺斯克语（Nynorsk）    |
+| 12. 韩语（Korean）      | 26. 丹麦语（Danish）      | 39. 泰米尔语（Tamil）       |
+| 13. 印尼语（Indonesian） | 27. 希伯来语（Hebrew）     | 40. 阿非利卡语（Afrikaans）  |
+| 14. 越南语（Vietnamese） |                      |                       |
+
+## 使用流程
+
+1. 若使用文件输入，需先调用 [文件上传 API](/docs/api-reference/file-management-upload) 上传文本并获取 file\_id。若使用文本作为输入，则跳过此步骤
+2. 调用[创建语音生成任务 API](/docs/api-reference/speech-t2a-async-create)，获取 `task_id`
+3. 调用[查询语音生成任务状态 API](/docs/api-reference/speech-t2a-async-query)，基于 `task_id` 获取语音合成任务进度
+4. 当任务完成时，上述调用查询语音生成任务状态 API 返回的 `file_id` 可用于调用 [文件下载 API](/docs/api-reference/file-management-retrieve-content) 下载音频结果
+
+注意：返回的下载 URL 自生成起 9 小时（32400 秒）内有效，过期后文件将失效，生成的信息便会丢失，请注意下载信息的时间，及时下载
+
+## 过程示例
+
+### 1. 获取 file\_id
+
+<CodeGroup dropdown>
+  ```python theme={null}
+  """
+  本示例用于待合成文本的 file_id。注意：需要先将密钥信息写入环境变量 `MINIMAX_API_KEY`。
+  """
+  import requests
+  import os
+
+  api_key = os.environ.get("MINIMAX_API_KEY")
+  url = "https://api.minimaxi.com/v1/files/upload"
+
+  payload = {'purpose': 't2a_async_input'}
+  files=[
+    ('file',('input_files.zip',open('path/to/input_files.zip','rb'),'application/zip'))
+  ]
+  headers = {
+    'authority': 'api.minimaxi.com',
+    'Authorization': f'Bearer {api_key}'
+  }
+
+  response = requests.request("POST", url, headers=headers, data=payload, files=files)
+
+  print(response.text)
+  ```
+
+  ```bash theme={null}
+  curl --location 'https://api.minimaxi.com/v1/files/upload' \
+  --header 'authority: api.minimaxi.com' \
+  --header "Authorization: Bearer $MINIMAX_API_KEY" \
+  --form 'purpose=t2a_async_input' \
+  --form 'file=@test-json.zip'
+  ```
+</CodeGroup>
+
+### 2. 创建语音合成任务
+
+<CodeGroup dropdown>
+  ```python theme={null}
+  """
+  本示例用于创建语音合成任务，若使用文件作为输入，则需要将<text_file_id>替换为文本文件的file_id，若使用文本作为输入，则设置"text"字段。注意：需要先将密钥信息写入环境变量 `MINIMAX_API_KEY`。
+  """
+  import requests
+  import json
+  import os
+
+  api_key = os.environ.get("MINIMAX_API_KEY")
+  url = "https://api.minimaxi.com/v1/t2a_async_v2"
+
+  payload = json.dumps({
+      "model": "speech-2.8-hd",
+      "text_file_id": <text_file_id>, # file as input
+
+      # "text":"微风拂过柔软的草地，清新的芳香伴随着鸟儿的歌唱。", # text as input
+
+      "language_boost": "auto",
+      "voice_setting": {
+      "voice_id": "audiobook_male_1",
+      "speed": 1,
+      "vol": 10,
+      "pitch": 1
+      },
+      "pronunciation_dict": {
+      "tone": [
+          "草地/(cao3)(di1)"
+      ]
+      },
+      "audio_setting": {
+          "audio_sample_rate": 32000,
+          "bitrate": 128000,
+          "format": "mp3",
+          "channel": 2
+      },
+      "voice_modify":{
+      "pitch":0,
+      "intensity":0,
+      "timbre":0,
+      "sound_effects":"spacious_echo"
+      }
+  })
+  headers = {
+      'Authorization': f'Bearer {api_key}',
+      'Content-Type': 'application/json'
+  }
+
+  response = requests.request("POST", url, headers=headers, data=payload)
+
+  print(response.text)
+  ```
+
+  ```bash theme={null}
+
+  # 若使用文件作为输入，则需要将<text_file_id>替换为文本文件的file_id，若使用文本作为输入，则设置"text"字段。注意：需要先将密钥信息写入环境变量 `MINIMAX_API_KEY`。
+  curl --location 'https://api.minimaxi.com/v1/t2a_async_v2' \
+  --header "authorization: Bearer ${MINIMAX_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "model": "speech-8-hd",
+    "text_file_id": <Your file_id>, # file as input
+    # "text":"微风拂过柔软的草地，清新的芳香伴随着鸟儿的歌唱。", # text as input
+    "language_boost": "auto",
+    "voice_setting": {
+      "voice_id": "audiobook_male_1",
+      "speed": 1,
+      "vol": 10,
+      "pitch": 1
+    },
+    "pronunciation_dict": {
+      "tone": [
+        "草地/(cao3)(di1)"
+      ]
+    },
+    "audio_setting": {
+      "audio_sample_rate": 32000,
+      "bitrate": 128000,
+      "format": "mp3",
+      "channel": 2
+    },
+    "voice_modify":{
+      "pitch":0,
+      "intensity":0,
+      "timbre":0,
+      "sound_effects":"spacious_echo"
+    }
+  }'
+  ```
+</CodeGroup>
+
+### 3. 查询语音合成进度
+
+<CodeGroup dropdown>
+  ```python theme={null}
+  """
+  本示例用于查询语音合成进度。注意：需要先将密钥信息写入环境变量 `MINIMAX_API_KEY`，并将需要查询任务的 id 写入环境变量 `TASK_ID`。
+  """
+  import requests
+  import json
+  import os
+
+  task_id = os.environ.get("TASK_ID")
+  api_key = os.environ.get("MINIMAX_API_KEY")
+  url = f"https://api.minimaxi.com/v1/query/t2a_async_query_v2?task_id={task_id}"
+
+  payload = {}
+  headers = {
+      'Authorization': f'Bearer {api_key}',
+      'content-type': 'application/json',
+  }
+
+  response = requests.request("GET", url, headers=headers, data=payload)
+
+  print(response.text)
+  ```
+
+  ```bash theme={null}
+
+  curl --location "https://api.minimaxi.com/v1/query/t2a_async_query_v2?task_id=${TASK_ID}" \
+  --header "authorization: Bearer ${MINIMAX_API_KEY}" \
+  --header 'content-type: application/json'
+  ```
+</CodeGroup>
+
+### 4. 下载语音合成文件
+
+<CodeGroup dropdown>
+  ```python theme={null}
+  """
+  本示例用于下载语音合成文件。注意：需要先将密钥信息写入环境变量 `MINIMAX_API_KEY`，并将待下载文件的 id 写入环境变量 `FILE_ID`。
+  """
+  import requests
+  import os
+
+  api_key = os.environ.get("MINIMAX_API_KEY")
+  file_id = os.environ.get("FILE_ID")
+
+  url = f"https://api.minimaxi.com/v1/files/retrieve_content?file_id={file_id}"
+
+  payload = {}
+  headers = {
+      'content-type': 'application/json',
+      'Authorization': f'Bearer {api_key}'
+  }
+
+  response = requests.request("GET", url, headers=headers, data=payload)
+
+  with open(<output_filename>, 'wb') as f:
+  f.write(response.content)
+  ```
+
+  ```bash theme={null}
+
+  curl --location "https://api.minimaxi.com/v1/files/retrieve?file_id=${FILE_ID}" \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${MINIMAX_API_KEY}" \
+  --output "${FILE_NAME}"
+  ```
+</CodeGroup>
+
+## 推荐阅读
+
+<Columns cols={2}>
+  <Card title="异步语音合成" icon="book-open" href="/docs/api-reference/speech-t2a-async-create" arrow="true" cta="点击查看">
+    使用 API 接口，创建异步语音合成任务。
+  </Card>
+
+  <Card title="同步语音合成 HTTP" icon="book-open" href="/docs/api-reference/speech-t2a-http" arrow="true" cta="点击查看">
+    使用 API 接口，在HTTP网络通信协议下进行同步语音合成。
+  </Card>
+
+  <Card title="产品定价" icon="book-open" href="/docs/guides/pricing-paygo#语音" arrow="true" cta="点击查看">
+    各模型的定价说明、计费方式及使用限制。
+  </Card>
+
+  <Card title="速率限制" icon="book-open" href="/docs/guides/rate-limits#3、我们的-api-的限速具体数值" arrow="true" cta="点击查看">
+    为保证资源的高效使用，引入速率限制，以确保服务的可用性、稳定性。
+  </Card>
+</Columns>

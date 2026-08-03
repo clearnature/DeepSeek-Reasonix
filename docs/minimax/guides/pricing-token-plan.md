@@ -1,0 +1,46 @@
+# guides/pricing-token-plan.md
+
+> 来源: https://platform.minimaxi.com/docs/guides/pricing-token-plan.md
+
+> ## Documentation Index
+> Fetch the complete documentation index at: https://platform.minimaxi.com/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Token Plan
+
+> MiniMax Token Plan订阅定价
+
+Token Plan 订阅通过订阅 Key 提供套餐内月度用量额度，并开放可用资源。用量在控制台以用量进度条展示。支持的文本、图像、语音、音乐资源共享同一额度。
+
+预付积分包价格见下方。团队版请参考 [Token Plan 团队版](/docs/guides/pricing-token-plan-team)。
+
+### 按月订阅
+
+<p style={{ marginBottom: "-24px" }}><a href="https://platform.minimaxi.com/subscribe/token-plan">去订阅</a></p>
+
+|              | **Plus**     | **Max**           | **Ultra**           |
+| :----------- | :----------- | :---------------- | :------------------ |
+| **价格**       | **¥49 /月**   | **¥119 /月**       | **¥469 /月**         |
+| **适合场景**     | 轻量个人开发与日常试用  | 高频编程 Agent 与多模态调用 | 重度 Agent 工作流与更长时间使用 |
+| **额度窗口**     | 5 小时固定窗口和周窗口 | 5 小时固定窗口和周窗口      | 5 小时固定窗口和周窗口        |
+| **Agent 用量** | 3-4 个 Agent  | 4-5 个 Agent       | 6-7 个 Agent         |
+
+<div style={{ fontSize: "11px", color: "#6b7280", lineHeight: 1.35, marginTop: "-16px", marginBottom: "12px" }}>可用模型覆盖 MiniMax 全系模型（M3 / M2.7 / 图像 / 语音 / 音乐），少量特殊模型（MiniMax H3、音色设计、快速复刻等）暂不支持。</div>
+
+## 积分包
+
+[充值积分](https://platform.minimaxi.com/user-center/payment/credits)
+
+积分包按 **1,000 积分 = ¥7** 换算。通过积分支付的用量，会按对应资源的按量计费目录价折算为等值积分扣减。
+
+| 购买价格     | 获得积分          |
+| :------- | :------------ |
+| **¥30**  | **4,285 积分**  |
+| **¥150** | **21,430 积分** |
+| **¥500** | **71,435 积分** |
+
+有效期：**365 天**（自单笔购买之日起计算）。
+
+<Info>
+  积分与 Token Plan 覆盖相同资源。若同一用量同时可由 Token Plan 套餐内额度和积分覆盖，优先使用套餐内额度，超出部分由积分抵扣。
+</Info>
