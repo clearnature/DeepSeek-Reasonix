@@ -399,3 +399,21 @@ func TestVariantPathEnforcesLanguageGate(t *testing.T) {
 		t.Fatal("ZH variant must still resolve")
 	}
 }
+
+// TestPlacesOverlap：地理一致性——温州 vs 北京拦截，同城放行。
+func TestPlacesOverlap(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"今天温州天气怎么样", "北京明天天气", false}, // 不同城市拦截
+		{"温州明天天气", "温州本周天气", true},     // 同城放行
+		{"今天天气怎么样", "北京明天天气", true},    // 无地名不拦截
+		{"温州天气", "上海天气", false},
+	}
+	for _, c := range cases {
+		if got := placesOverlap(c.a, c.b); got != c.want {
+			t.Errorf("placesOverlap(%q,%q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}

@@ -216,7 +216,7 @@ func loadKnowledgeEntry(dir, query string) (*KnowledgeEntry, string, bool) {
 	// 主题一致性验证（变体路径兜底）：变体映射可能由历史宽松阈值建立
 	// （ABC→CRT 错误映射，2026-08-03）——命中后仍要求主题词交集，
 	// 不信任历史映射文件。
-	if !topicsOverlap(query, e.Query) {
+	if !topicsOverlap(query, e.Query) || !placesOverlap(query, e.Query) {
 		_ = os.Remove(vpath)
 		return nil, "", false
 	}
@@ -436,6 +436,10 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 			continue
 		}
 		sim := NgramSimilarity(q, e.Query)
+		// 地理一致性：双方都含地名但不同（温州 vs 北京）→ 拦截。
+		if !placesOverlap(q, e.Query) {
+			sim = 0
+		}
 		// 时效查询不服务本地静态 domain 条目：用户要"最新论文/2026 进展"，
 		// 本地注入的库快照不是最新（数论检索污染教训 2026-08-03）。
 		if e.Tier == string(TierDomain) && HasFreshnessIntent(q) {
@@ -635,6 +639,50 @@ func topicsOverlap(a, b string) bool {
 	for _, wa := range wordsA {
 		for _, wb := range wordsB {
 			if wa == wb {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// placesVocabulary 是常见地名（中国主要城市 + 常用国家/地区），用于语义
+// 缓存的地理一致性校验：查询与缓存条目都含地名但不同（温州 vs 北京）
+// → 拦截（2026-08-03 温州天气误命中北京天气教训）。
+var placesVocabulary = []string{
+	"北京", "上海", "广州", "深圳", "温州", "杭州", "南京", "苏州", "天津", "重庆",
+	"成都", "武汉", "西安", "长沙", "郑州", "青岛", "大连", "厦门", "福州", "宁波",
+	"合肥", "南昌", "贵阳", "昆明", "兰州", "沈阳", "长春", "哈尔滨", "石家庄", "太原",
+	"济南", "南宁", "海口", "乌鲁木齐", "拉萨", "呼和浩特", "银川", "西宁", "香港", "澳门",
+	"台北", "高雄", "台中", "东京", "纽约", "伦敦", "巴黎", "柏林", "莫斯科", "新加坡",
+	"首尔", "曼谷", "悉尼", "迪拜", "温哥华", "旧金山", "洛杉矶", "美国", "日本", "中国",
+}
+
+// ExtractPlaces returns the place names present in a query (deduped, order
+// preserved). Empty when the query names no known place.
+func ExtractPlaces(query string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, p := range placesVocabulary {
+		if strings.Contains(query, p) && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// placesOverlap reports whether both sides name places and share at least
+// one. Two placeful queries with no common place are different geographies
+// (温州 vs 北京) and must not share a semantic cache hit.
+func placesOverlap(a, b string) bool {
+	pa, pb := ExtractPlaces(a), ExtractPlaces(b)
+	if len(pa) == 0 || len(pb) == 0 {
+		return true // 至少一方无地名：不拦截
+	}
+	for _, x := range pa {
+		for _, y := range pb {
+			if x == y {
 				return true
 			}
 		}
