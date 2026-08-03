@@ -71,6 +71,14 @@ func EffortCapabilityForEntry(e *ProviderEntry) EffortCapability {
 			// low/medium/high difference, so mirror the documented contract.
 			return mimoEffortCapability()
 		}
+		if isDeepSeekResponsesEntry(e) {
+			// DeepSeek's Responses API documents its own 7-level effort enum
+			// (none|minimal|low|medium|high|xhigh|max), wider than the OpenAI
+			// ladder. Even though the entry may be configured with
+			// reasoning_protocol=openai, the Responses wire accepts the full
+			// ladder — surface it so /effort is not lossy.
+			return deepSeekResponsesEffortCapability()
+		}
 		return openAIEffortCapability()
 	}
 	if cap, ok := resolvedModelReasoningCapability(e); ok {
@@ -171,6 +179,17 @@ func NormalizeEffort(e *ProviderEntry, raw string) (string, error) {
 				return level, nil
 			default:
 				return "", fmt.Errorf("usage: /effort auto|none|low|medium|high")
+			}
+		}
+		if isDeepSeekResponsesEntry(e) {
+			// DeepSeek Responses documents the full ladder; accept every value
+			// verbatim (none disables thinking, minimal/low are low depth,
+			// medium/high/xhigh are high depth, max is deepest).
+			switch level {
+			case "none", "minimal", "low", "medium", "high", "xhigh", "max":
+				return level, nil
+			default:
+				return "", fmt.Errorf("usage: /effort auto|none|minimal|low|medium|high|xhigh|max")
 			}
 		}
 		switch level {
@@ -400,6 +419,29 @@ func isMimoEntry(e *ProviderEntry) bool {
 // difference server-side). The vendor accepts the OpenAI depth vocabulary.
 func mimoEffortCapability() EffortCapability {
 	return EffortCapability{Supported: true, Levels: []string{"auto", "none", "low", "medium", "high"}, Default: "auto"}
+}
+
+// isDeepSeekResponsesEntry reports entries pointed at DeepSeek's Responses API
+// endpoint (kind="responses" + api.deepseek.com). DeepSeek's Responses API
+// documents its own effort vocabulary — none | minimal | low | medium | high |
+// xhigh | max — which is wider than both the OpenAI depth ladder (none..high)
+// and DeepSeek's Chat Completions ladder (disabled/high/max). The kind check
+// distinguishes it from isDeepSeekEntry (kind="openai" chat) so /effort offers
+// the full Responses ladder instead of a lossy subset.
+func isDeepSeekResponsesEntry(e *ProviderEntry) bool {
+	if e == nil || !strings.EqualFold(strings.TrimSpace(e.Kind), "responses") {
+		return false
+	}
+	u := strings.ToLower(strings.TrimSpace(e.BaseURL))
+	return strings.Contains(u, "api.deepseek.com")
+}
+
+// deepSeekResponsesEffortCapability mirrors the official Responses API effort
+// enum: none disables thinking; minimal/low map to low depth; medium/high/xhigh
+// map to high depth; max is the deepest. Exposing the full ladder keeps the
+// user-facing /effort vocabulary aligned with what the endpoint accepts.
+func deepSeekResponsesEffortCapability() EffortCapability {
+	return EffortCapability{Supported: true, Levels: []string{"auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"}, Default: "high"}
 }
 
 func resolvedModelReasoningCapability(e *ProviderEntry) (modelReasoningCapability, bool) {

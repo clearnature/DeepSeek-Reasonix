@@ -196,6 +196,44 @@ func TestMimoEffortSupportsNone(t *testing.T) {
 	}
 }
 
+func TestDeepSeekResponsesEffortFullLadder(t *testing.T) {
+	e := &ProviderEntry{
+		Kind:              "responses",
+		BaseURL:           "https://api.deepseek.com",
+		ReasoningProtocol: ReasoningProtocolOpenAI,
+	}
+	cap := EffortCapabilityForEntry(e)
+	if !cap.Supported {
+		t.Fatal("DeepSeek Responses effort must be supported")
+	}
+	// The full documented Responses ladder, not the lossy OpenAI subset.
+	for _, level := range []string{"auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"} {
+		if !containsString(cap.Levels, level) {
+			t.Errorf("DeepSeek Responses capability missing %q: %v", level, cap.Levels)
+		}
+	}
+	for _, level := range []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"} {
+		if got, err := NormalizeEffort(e, level); err != nil || got != level {
+			t.Fatalf("DeepSeek Responses %s = %q/%v, want %s/nil", level, got, err, level)
+		}
+	}
+	// Unknown levels still rejected.
+	if _, err := NormalizeEffort(e, "disabled"); err == nil {
+		t.Fatal("DeepSeek Responses disabled must be rejected (ladder has none, not disabled)")
+	}
+	// A plain OpenAI endpoint must NOT gain the DeepSeek ladder.
+	plain := &ProviderEntry{Kind: "openai", BaseURL: "https://example.com/v1", ReasoningProtocol: ReasoningProtocolOpenAI}
+	if got, err := NormalizeEffort(plain, "minimal"); err == nil || got != "" {
+		t.Fatalf("plain OpenAI minimal = %q/%v, want error", got, err)
+	}
+	// Chat-format DeepSeek (kind=openai) keeps the chat ladder, not responses.
+	chat := &ProviderEntry{Kind: "openai", BaseURL: "https://api.deepseek.com", ReasoningProtocol: ReasoningProtocolDeepSeek}
+	chatCap := EffortCapabilityForEntry(chat)
+	if containsString(chatCap.Levels, "minimal") {
+		t.Fatalf("DeepSeek chat capability must not gain minimal: %v", chatCap.Levels)
+	}
+}
+
 func TestEffortCapabilityZhipu(t *testing.T) {
 	e := &ProviderEntry{Kind: "openai", BaseURL: "https://open.bigmodel.cn/api/paas/v4", Model: "glm-4.5-air"}
 	cap := EffortCapabilityForEntry(e)
