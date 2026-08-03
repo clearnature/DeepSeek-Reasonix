@@ -5625,7 +5625,7 @@ function parseBotListInput(value: string): string[] {
     .filter(Boolean));
 }
 
-const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker({
+export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker({
   candidates,
   selectedModels,
   visionModels,
