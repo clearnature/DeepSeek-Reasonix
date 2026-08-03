@@ -24,6 +24,7 @@
 | `todo_write` | true | 记录并替换当前工作的结构化任务列表。 |
 | `wait` | true | 等待后台 job 完成并返回最终输出。 |
 | `web_fetch` | true | 通过 HTTP/HTTPS 获取 URL 文本内容。 |
+| `retrieve_info` | true | 查询本地知识缓存（此前 web_search 蒸馏的检索结果），零成本不联网。 |
 | `write_file` | false | 写入文件内容，必要时创建父目录。 |
 
 ## Schema 快照
