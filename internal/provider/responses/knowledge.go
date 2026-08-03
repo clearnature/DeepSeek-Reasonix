@@ -18,12 +18,12 @@ import (
 // already distilled into AnswerSummary/KeyFacts/Sources by the model, so a
 // cache hit answers instantly with zero token cost.
 type KnowledgeEntry struct {
-	Query         string    `json:"query"`
-	QueryHash     string    `json:"query_hash"`
-	AnswerSummary string    `json:"answer_summary"`
-	KeyFacts      []string  `json:"key_facts,omitempty"`
-	Sources       []Source  `json:"sources,omitempty"`
-	TotalTokens   int       `json:"total_tokens,omitempty"`
+	Query         string   `json:"query"`
+	QueryHash     string   `json:"query_hash"`
+	AnswerSummary string   `json:"answer_summary"`
+	KeyFacts      []string `json:"key_facts,omitempty"`
+	Sources       []Source `json:"sources,omitempty"`
+	TotalTokens   int      `json:"total_tokens,omitempty"`
 
 	// TimeSensitive marks time-critical content (news, markets, live
 	// events). FreshUntil bounds how long a hit may be served without a
@@ -66,6 +66,12 @@ type Source struct {
 	Title   string `json:"title,omitempty"`
 	URL     string `json:"url,omitempty"`
 	Snippet string `json:"snippet,omitempty"`
+	// Domain is the normalized registrable domain (e.g. reuters.com).
+	// Populated by quality.go scoring when the entry is saved.
+	Domain string `json:"domain,omitempty"`
+	// Credibility is the P3 gate-3 quality score (0..1) assigned to this
+	// source: whitelist + authority + cross-check + spam penalty.
+	Credibility float64 `json:"credibility,omitempty"`
 }
 
 // DefaultKnowledgeTTL bounds how long a search result is treated as fresh.
