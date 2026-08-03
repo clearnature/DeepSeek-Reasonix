@@ -122,6 +122,10 @@ func main() {
 		runRetrieve(key)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "-expert" {
+		runExpert()
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -362,4 +366,68 @@ func extractMarkdownFacts(text string) []string {
 		}
 	}
 	return out
+}
+
+// runExpert exercises the information-expert codec (planner.go / report.go /
+// clarification) — the deep-research methodology now living in the retrieval
+// system instead of local SKILL.md files.
+func runExpert() {
+	fmt.Println("=== 信息专家代码化冒烟（planner / report / clarification） ===")
+
+	// 1. 反问确认（Phase 1）
+	topics := []struct {
+		t     string
+		depth responses.ResearchDepth
+		want  bool
+	}{
+		{"2026年北京新能源产业政策", responses.DepthL1, false},
+		{"随便聊聊", responses.DepthL3, true},
+		{"这个", responses.DepthL1, true},
+	}
+	ok := true
+	for _, c := range topics {
+		got := responses.NeedClarification(c.t, c.depth)
+		mark := "✅"
+		if got != c.want {
+			mark = "❌"
+			ok = false
+		}
+		fmt.Printf("  %s 澄清[%s/%s] %q → %v (want %v)\n", mark, c.depth, "L1", c.t, got, c.want)
+	}
+	_ = ok
+
+	// 2. 四维检索规划（Phase 3）
+	for _, d := range []responses.ResearchDepth{responses.DepthL1, responses.DepthL2, responses.DepthL3} {
+		plan := responses.PlanResearch("人工智能监管", d)
+		tier := responses.PlanToTier(d)
+		fmt.Printf("  ✅ 规划[%s] → %d 查询, tier=%s, 覆盖 %d 维\n", d, len(plan.Queries), tier, len(plan.Coverage))
+		for i, q := range plan.Queries[:min(3, len(plan.Queries))] {
+			fmt.Printf("      [%d] %s: %s\n", i, q.Aspect, q.Query)
+		}
+	}
+
+	// 3. 报告合成（Phase 5）——用真实缓存 + 合成条目
+	e1, hit := responses.LoadKnowledge("2026年8月3日北京天气")
+	entries := []*responses.KnowledgeEntry{
+		{AnswerSummary: "北京天气报告", KeyFacts: []string{"高温 33℃", "有雷阵雨"},
+			Sources: []responses.Source{{Title: "气象台", URL: "https://gov.cn/a", Credibility: 0.8}}},
+	}
+	if hit {
+		fmt.Printf("  ✅ 真实缓存命中用于报告: %s\n", truncate(e1.AnswerSummary, 30))
+		entries = append(entries, e1)
+	} else {
+		fmt.Println("  ⚠️ 缓存未命中（报告用合成数据）")
+	}
+	report := responses.SynthesizeReport("北京 8 月天气", entries)
+	fmt.Printf("  ✅ 报告合成: %d 事实, %d 来源, 平均可信度 %.2f\n",
+		len(report.Sections), len(report.AllSources), report.AvgConfidence)
+	fmt.Println("  --- 报告预览 ---")
+	fmt.Println(truncate(report.Render(), 400))
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
