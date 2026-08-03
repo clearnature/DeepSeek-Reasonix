@@ -118,3 +118,21 @@ func TestFrameDomainFor(t *testing.T) {
 		}
 	}
 }
+
+// TestFrameSubdomainFor：域×子主题二级分类。
+func TestFrameSubdomainFor(t *testing.T) {
+	cases := []struct{ mod, want string }{
+		{"Sovereign.RootMath.DigitalRoot", "代数学·数字根"},
+		{"Sovereign.Coupling.SpinTwistor", "耦合与纤维丛·旋量"},
+		{"Sovereign.HoTT.T6Homotopy", "同伦与拓扑·环面同伦"},
+		{"Sovereign.Structology.MagicSquareM4", "全息与幻方·幻方M4"},
+		{"Sovereign.Problem.PvsNP.Complexity3", "问题与映射·PvsNP"},
+		{"Sovereign.RootMath.UnknownModule", "代数学"}, // 未知子模块回退域级
+		{"Sovereign.UnknownDir.Sub", ""},            // 未知域空
+	}
+	for _, c := range cases {
+		if got := FrameSubdomainFor(c.mod); got != c.want {
+			t.Errorf("FrameSubdomainFor(%q) = %q, want %q", c.mod, got, c.want)
+		}
+	}
+}

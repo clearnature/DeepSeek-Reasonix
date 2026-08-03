@@ -182,3 +182,60 @@ func FrameDomainFor(modulePath string) string {
 		return ""
 	}
 }
+
+// FrameSubdomainFor refines a module path into a domain×subtopic frame:
+// the directory (segs[1]) picks the 13 domain frames; the submodule
+// (segs[2]) narrows to a subtopic ("代数学·数字根", "耦合与纤维丛·旋量").
+// Returns "" when the subtopic is unknown — caller keeps the domain-level
+// frame. Unknown domain (FrameDomainFor=="") also returns "".
+func FrameSubdomainFor(modulePath string) string {
+	segs := strings.Split(modulePath, ".")
+	if len(segs) < 3 {
+		return ""
+	}
+	dom := FrameDomainFor(modulePath)
+	if dom == "" {
+		return ""
+	}
+	sub := segs[2]
+	topics := map[string]string{
+		// 代数学
+		"DigitalRoot": "数字根", "Eisenstein": "艾森斯坦整数", "AlgebraicComplex": "高斯整数",
+		"LengthLattice": "长度格", "EnergyGap": "能隙", "Tryte": "三进制编码", "GF9AlgebraicChain": "GF9链",
+		// 耦合与纤维丛
+		"LCM": "三进制归约", "Zhonglv": "仲吕", "CartanTorsion": "卡坦挠率", "SpinTwistor": "旋量",
+		"ParityViolation": "宇称破缺", "LossGain": "损益", "ZhonglvPhaseSync": "仲吕相移",
+		"Entanglement": "纠缠", "TQ10": "校验", "Winding": "缠绕",
+		// 同伦与拓扑
+		"T6Homotopy": "环面同伦", "ChernClass": "陈类", "Fibration": "纤维", "KanComposition": "Kan填充",
+		"DiscreteCCHM": "离散CCHM", "PhaseTransitionPaths": "相变路径", "ChernConservation": "陈守恒",
+		// 全息与幻方
+		"MagicSquareM4": "幻方M4", "HolographicSpace": "全息空间", "A4Representations": "A4群表示",
+		"BinaryTetrahedral": "二元四面体群", "Platonics": "柏拉图体", "TorusClosure": "环面闭包",
+		"Lattice": "格", "Aether": "以太", "WuXingTransition": "五行跃迁",
+		// 公理与宪法
+		"Boundaries": "边界", "WindingAsymmetry": "缠绕不对称",
+		// 分析学
+		"CRTLemmas": "CRT引理", "SpectralTheorem": "谱定理", "FunctionalAnalysisDiscrete": "离散泛函",
+		"DiscreteJacobi": "离散雅可比", "DiscreteLimit": "离散极限", "ConvergenceAlignment": "收敛对齐",
+		// 几何与投影
+		"ProjectiveTransform": "射影变换", "ProjectiveCore": "射影核", "ConformalCore": "共形核",
+		"ComplexProjection": "复投影", "ProjectionDifferential": "投影微分",
+		// 物理映射
+		"QuartzPhonon": "石英声子", "FineStructureMapping": "精细结构", "H2OC60": "水C60",
+		"EntropySpin": "熵自旋", "Resonance": "谐振", "Nayin": "纳音", "WuXing": "五行",
+		// 量子对应
+		"QuantumCorrespondence": "量子对应", "Foundation": "量子基础",
+		// 问题与映射
+		"PvsNP": "PvsNP", "Hodge": "霍奇", "Riemann": "黎曼", "Kakeya": "挂谷",
+		// 完备性与风险
+		"CompletenessTheorem": "完备性定理", "DegenerationTaxonomy": "退化分类",
+	}
+	if sub != "" {
+		if t, ok := topics[sub]; ok {
+			return dom + "·" + t
+		}
+	}
+	// 未知子模块：回退域级帧（不丢失分类）。
+	return dom
+}
