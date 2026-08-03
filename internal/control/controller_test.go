@@ -5227,3 +5227,30 @@ func TestCacheColdAfterFailureFallsBackTo24h(t *testing.T) {
 		t.Fatalf("test override 0 must still fall back to 24h, got %v", got)
 	}
 }
+
+// TestCacheColdAfterResolveModelFailureFallsBackTo24h：模型解析失败（未知
+// modelRef）同样保守回退 24h（评审 #7168 第 4 点，管理员要求覆盖未知模型）。
+func TestCacheColdAfterResolveModelFailureFallsBackTo24h(t *testing.T) {
+	c := New(Options{})
+	// 指向真实存在的配置但 modelRef 不存在 → ResolveModel 失败 → 24h
+	c.modelRef = "definitely-not-a-real-model-xyz"
+	if got := c.cacheColdAfter(); got != 24*time.Hour {
+		t.Fatalf("ResolveModel failure must fall back to 24h, got %v", got)
+	}
+}
+
+// TestWithTurnFormatInjectsFormatIntoContext：format 绑定 turn 的实际效果
+// ——withTurnFormat 注入后 agent 请求路径能读到（评审 #7234 第 2 点：
+// 不是全局槽，是 turn 上下文）。
+func TestWithTurnFormatInjectsFormatIntoContext(t *testing.T) {
+	c := New(Options{})
+	// 空 format：no-op（ctx 不变）
+	ctx := context.Background()
+	if got := agent.ResponseFormatFromRequest(c.withTurnFormat(ctx, "")); got != nil {
+		t.Fatalf("empty format must be no-op, got %+v", got)
+	}
+	// 非空 format：注入后 agent 请求路径读到 json_object
+	if got := agent.ResponseFormatFromRequest(c.withTurnFormat(ctx, "json_object")); got == nil || got.Type != "json_object" {
+		t.Fatalf("turn format must reach agent request, got %+v", got)
+	}
+}

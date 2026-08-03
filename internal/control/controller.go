@@ -929,6 +929,16 @@ func (c *Controller) runGoalLoopWithRaw(ctx context.Context, input, raw string) 
 	return c.runGoalLoopWithRawDisplay(ctx, input, raw, "")
 }
 
+// withTurnFormat binds a structured-output format to the turn context
+// (empty is a no-op). Extracted from the runGoalLoop closure so tests can
+// assert the format actually reaches the agent request path.
+func (c *Controller) withTurnFormat(ctx context.Context, format string) context.Context {
+	if format == "" {
+		return ctx
+	}
+	return agent.WithResponseFormat(ctx, format)
+}
+
 func (c *Controller) runGoalLoopWithRawDisplay(ctx context.Context, input, raw, display string) error {
 	// Structured-output format is bound to the submitted turn (passed via
 	// submitHTTPWithFormat → submitCommandOrTurn → runGoalLoop closure);
@@ -1198,10 +1208,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 	runRefTurn := c.runRefTurn
 	runRefTurnWithRefs := c.runRefTurnWithRefs
 	runGoalLoop := func(ctx context.Context, input, raw, display string) error {
-		if format != "" {
-			ctx = agent.WithResponseFormat(ctx, format)
-		}
-		return c.runGoalLoopWithRawDisplay(ctx, input, raw, display)
+		return c.runGoalLoopWithRawDisplay(c.withTurnFormat(ctx, format), input, raw, display)
 	}
 	if scopedRefsOnly {
 		runRefTurn = c.runScopedRefTurn

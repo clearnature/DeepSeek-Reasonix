@@ -1127,3 +1127,80 @@ func TestSingleSegmentReasoningWiredIntoWarningPolicy(t *testing.T) {
 		}
 	}
 }
+
+// TestReasoningMetaChunkEndToEnd：第一轮 SSE（reasoning item 带 id/status）
+// → meta chunk 携带 → 用捕获的 id/status 构造第二轮 Message →
+// messagesToInput 回传（评审 #7234 第 1 点要求的端到端回归路径）。
+func TestReasoningMetaChunkEndToEnd(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// 第一轮：reasoning item added（id）+ done（status）+ completed
+		writeEvents(w,
+			`{"type":"response.output_item.added","item":{"type":"reasoning","id":"rs_round1","summary":[],"content":[]}}`,
+			`{"type":"response.reasoning_text.delta","item_id":"rs_round1","delta":"think hard"}`,
+			`{"type":"response.output_item.done","item":{"type":"reasoning","id":"rs_round1","status":"completed"}}`,
+			`{"type":"response.completed","response":{"id":"resp_1","usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}}`,
+		)
+	}))
+	defer server.Close()
+	c := New(Config{Name: "deepseek-responses", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-pro"}).(*client)
+
+	// 第一轮：捕获 meta chunk 的 id/status
+	var rid, rstatus string
+	ch, _ := c.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkReasoning && chunk.ReasoningID != "" {
+			rid = chunk.ReasoningID
+			rstatus = chunk.ReasoningStatus
+		}
+	}
+	if rid != "rs_round1" || rstatus != "completed" {
+		t.Fatalf("meta chunk id/status = %q/%q, want rs_round1/completed", rid, rstatus)
+	}
+
+	// 第二轮：用捕获的 id/status 构造 assistant message → 请求体回传
+	body, _, _ := c.buildRequestBody(provider.Request{
+		Messages: []provider.Message{
+			{Role: provider.RoleUser, Content: "hi"},
+			{Role: provider.RoleAssistant, Content: "answer", ReasoningContent: "think hard",
+				ReasoningID: rid, ReasoningStatus: rstatus},
+		},
+	})
+	items := body["input"].([]map[string]any)
+	found := false
+	for _, item := range items {
+		if item["type"] == "reasoning" {
+			if item["id"] != "rs_round1" || item["status"] != "completed" {
+				t.Fatalf("round-2 reasoning item id/status = %v/%v, want rs_round1/completed",
+					item["id"], item["status"])
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("round-2 input must contain the reasoning item with captured id/status")
+	}
+}
+
+// TestFactoryPassesExtraThrough：newFromConfig 原样透传 cfg.Extra——
+// vision 开关经 provider factory 后仍生效（评审 #7234 第 3 点）。
+func TestFactoryPassesExtraThrough(t *testing.T) {
+	p, err := newFromConfig(provider.Config{
+		Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro",
+		Extra: map[string]any{"vision": true, "effort": "low", "mode": "stateless"},
+	})
+	if err != nil {
+		t.Fatalf("newFromConfig: %v", err)
+	}
+	cl := p.(*client)
+	if !cl.vision {
+		t.Fatal("vision must survive factory (Extra passthrough)")
+	}
+	if cl.effort != "low" {
+		t.Fatalf("effort = %q, want low", cl.effort)
+	}
+	if cl.mode != "stateless" {
+		t.Fatalf("mode = %q, want stateless", cl.mode)
+	}
+}
