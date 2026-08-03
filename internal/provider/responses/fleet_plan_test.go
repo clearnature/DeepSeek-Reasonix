@@ -99,3 +99,22 @@ func TestRetrievalPromptBaseQualityGates(t *testing.T) {
 		t.Fatal("orchestrator task must include quality base")
 	}
 }
+
+// TestFrameDomainFor：模块路径 → 数学域分类（segs[1] 目录为权威）。
+func TestFrameDomainFor(t *testing.T) {
+	cases := []struct{ mod, want string }{
+		{"Sovereign.Coupling.LCM", "耦合与纤维丛"},
+		{"Sovereign.RootMath.DigitalRoot", "代数学"},
+		{"Sovereign.HoTT.T6Homotopy", "同伦与拓扑"},
+		{"Sovereign.Structology.MagicSquareM4", "全息与幻方"},
+		{"Sovereign.Problem.PvsNP.Complexity3", "问题与映射"},
+		{"Sovereign.Physics.QuantumCorrespondence", "物理映射"},
+		{"Sovereign.Base.GF3", "公理与宪法"},
+		{"Sovereign.EnergyGap.Level1", "分析映射"},
+	}
+	for _, c := range cases {
+		if got := FrameDomainFor(c.mod); got != c.want {
+			t.Errorf("FrameDomainFor(%q) = %q, want %q", c.mod, got, c.want)
+		}
+	}
+}

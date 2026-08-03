@@ -135,3 +135,50 @@ func AssembleFrameView(topic string, rawReplies [][]byte) FrameView {
 	}
 	return MergeFrames(topic, frames)
 }
+
+// FrameDomainFor maps a sovereign module path ("Sovereign.Coupling.LCM" or
+// "Sovereign.Physics.QuantumCorrespondence") to its mathematical frame
+// domain. The directory segment (index 2) is the authoritative classifier —
+// 26 top-level dirs in src/Sovereign/ — so file-level knowledge entries
+// assemble into domain frames without an "Other" bucket. Unknown paths
+// return "" (caller falls back to a generic frame).
+func FrameDomainFor(modulePath string) string {
+	segs := strings.Split(modulePath, ".")
+	if len(segs) < 2 {
+		return ""
+	}
+	// 路径结构：Sovereign.<目录>.<子模块>（3 段）或 Sovereign.<顶层模块>
+	// （2 段）。目录是 segs[1]；子模块（segs[2]）不参与分帧。
+	switch segs[1] {
+	case "RootMath", "Algebra", "Binary", "Decimal", "Tryte", "GF9AlgebraicChain", "GF729":
+		return "代数学"
+	case "Coupling", "LCMVortexConnection", "L2Bridge", "LCM", "TQ10", "CartanTorsion", "Zhonglv", "Winding", "Aether":
+		return "耦合与纤维丛"
+	case "HoTT", "Topology", "LieDiscrete":
+		return "同伦与拓扑"
+	case "Structology", "Holographic", "MagicSquare", "A4Representations", "Platonics", "BinaryTetrahedral", "Closure", "Lattice", "TorusClosure", "KanComposition", "MagicSquareM4", "WuXingTransition":
+		return "全息与幻方"
+	case "Base", "Foundation", "Constitution", "SevenStages":
+		return "公理与宪法"
+	case "Arithmetic", "PigeonholeStandard", "SpectralTheorem", "DiscreteAnalysis", "FunctionalAnalysisDiscrete", "NormDiscrete", "LinearFunctionalDiscrete", "DiscreteLimit", "DiscreteJacobi", "DiscreteDE", "ConvergenceAlignment", "Analysis", "Integration", "Diagnosis":
+		return "分析学"
+	case "Geometry", "Projection", "ProjectiveTransform", "ProjectionDifferential", "ProjectionDiffGeo", "ComplexProjection", "ConformalCore", "ProjectiveCore", "ProjectiveOrbit", "ProjectionAnalysis":
+		return "几何与投影"
+	case "Physics", "PDE", "PDEDiscrete", "QuartzPhonon", "Resonance", "EntropySpin", "ElectricCivilization", "FineStructureMapping", "WindingAsymmetry", "Boundaries", "XuanwuAbsorption", "Nayin", "WuXing", "H2OC60", "QsUpdate", "External":
+		return "物理映射"
+	case "Quantum", "QuantumCorrespondence":
+		return "量子对应"
+	case "AI", "Coding", "Engine", "StateMachine", "DataAnchors", "Format", "Applied":
+		return "计算与工程"
+	case "Completeness", "CompletenessTheorem", "Density", "DegenerationTaxonomy", "DegenerationRisk", "SectionRisk", "MyopiaRisk":
+		return "完备性与风险"
+	case "MetaStructure", "TowerConnection", "Scaling", "Layer":
+		return "元结构"
+	case "Problem", "PvsNP", "Trust":
+		return "问题与映射"
+	case "Hodge", "Riemann", "Kakeya", "AlgebraicPoleUnified", "DiscreteRepresentation", "Jacobian", "FiniteDynamics", "EnergyGap", "HolographicPi", "HolographicSpace":
+		return "分析映射"
+	default:
+		return ""
+	}
+}
