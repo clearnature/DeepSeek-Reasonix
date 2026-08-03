@@ -22,7 +22,7 @@ type retrieveInfo struct{}
 func (retrieveInfo) Name() string { return "retrieve_info" }
 
 func (retrieveInfo) Description() string {
-	return "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中提示需联网授权。适合追问已检索过的事实/新闻/知识，避免重复联网。"
+	return "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中返回 needs_grant 标志——此时应使用 ask 工具询问用户是否允许联网检索（选项：本次会话/永久/拒绝），用户同意后再执行真正的联网检索。避免重复联网查询已检索过的事实。"
 }
 
 func (retrieveInfo) Schema() json.RawMessage {
@@ -66,9 +66,9 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 
 	if res.Entry == nil {
 		if res.WebBlocked {
-			// 未授权/授权过期：返回结构化标志，前端据此弹授权对话框。
+			// 未授权/授权过期：返回结构化标志，模型据此用 ask 工具询问用户。
 			// 简化（2026-08-03）：只提供两档时长——本次会话 / 永久。
-			return `{"needs_grant":true,"reason":"local cache miss; web fetch requires user grant","options":["session","permanent"],"message":"本地知识缓存未命中。允许联网检索吗？（本次会话 / 永久）"}`, nil
+			return `{"needs_grant":true,"reason":"local cache miss; web fetch requires user grant","options":["session","permanent"],"message":"本地知识缓存未命中。请使用 ask 工具询问用户：允许联网检索吗？（选项：本次会话 / 永久 / 拒绝）"}`, nil
 		}
 		return "本地知识缓存未命中。", nil
 	}
