@@ -83,3 +83,39 @@ LCM 引理 三进制归约       → 命中 1ms（补丁条目，短查询需专
   π₁(T⁶)≅GF(3)⁶、6624=144×46 全息闭合、2T 群等**具体数学内容**
 - 短查询召回：短查询（8 字）对长条目（15 字）L2 相似度不足——为高频
   短查询建专属条目（Query 贴近实际查询词），或依赖变体学习累积
+
+---
+
+# 补充：逐文件级完整学习（2026-08-03 第三次迭代）
+
+> 用户批评第二次只按域聚合 7 条（126 个含定理文件应逐文件学习）。
+> 本次自动化扫描 src/Sovereign/ 全部 .agda，每个含结构/定理/公理的
+> 文件生成一条知识条目（模块路径 + record/lemma/postulate 清单）。
+
+## 注入（domain_learn3.go 自动扫描）
+
+- 扫描 380 文件（src/Sovereign/），跳过纯 import/空文件
+- **注入 ~126 条**（模块名 + 结构名 + 中文域提示进 Query）
+- 每条含：record 结构清单 / lemma 签名 / postulate 计数（0 postulate 标注完全证明）
+- 缓存 23 → **149 条**（未超 MaxKnowledgeEntries=500）
+
+## 命中验证（8/8 零联网）
+
+```
+L1 Sovereign.Coupling.CartanTorsion    1ms
+L1 MagicSquareM4                       3ms
+L1 HolographicPi                       0ms
+L1 DiscreteBerryCurvature              0ms
+L1 卡坦挠率                            0ms
+L2 Sovereign.Structology.T6   sim=0.78
+L1 ZhonglvPhaseSync                    0ms
+L2 Sovereign.HoTT.CRTHarmonics sim=0.77
+```
+
+## 设计要点
+
+1. **Query 含三要素**（模块名 + 结构名 + 中文域提示）——L2 只比对 Query
+   字段，中文概念必须进 Query 才能被中文查询命中（"卡坦挠率"命中）。
+2. **逐文件粒度**：每个模块一条，126 条覆盖全库结构公理——查询任一
+   模块名/结构名即 L1 命中，中文概念 L2 语义命中。
+3. **0 postulate 标注**：完全证明的模块可检索（"（0 postulate：完全证明）"）。
