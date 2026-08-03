@@ -28,6 +28,12 @@ var negationHints = []string{
 	"denies", "denied", "contradicts", "refutes", "retracts", "no evidence",
 }
 
+// AdvanceEvent is the exported form of advanceEvent for external callers
+// (e.g. cmd/websearch-smoke event-stream testing).
+func AdvanceEvent(e *KnowledgeEntry, now time.Time, newFacts []string, conflictHints []string) {
+	advanceEvent(e, now, newFacts, conflictHints)
+}
+
 // advanceEvent applies one incremental update: bumps the counter, detects
 // conflict between the fresh facts and the stored ones, adjusts confidence,
 // and refreshes the timestamp. newFacts carries the latest update's key

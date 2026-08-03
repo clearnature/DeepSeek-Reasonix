@@ -126,6 +126,10 @@ func main() {
 		runExpert()
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "-war" {
+		runWarEventStream(key)
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -430,4 +434,69 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// runWarEventStream exercises P4 信息流模型（情报模式）：美伊冲突的完整
+// 时间追踪——初始事件 → 多维度增量轮 → 冲突检测 → 置信度演化 → 事件链
+// → 时间线报告。真实调用 DeepSeek web_search（每轮一次 API）。
+func runWarEventStream(key string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	fetch := realFetch(key)
+
+	fmt.Println("=== 美伊冲突 时间完整追踪（P4 信息流模型迭代） ===")
+
+	// 轮 1：初始事件
+	q1 := "美国伊朗冲突最新进展"
+	e1, err := fetch(ctx, q1, responses.TierComplex)
+	if err != nil {
+		fmt.Printf("❌ 初始事件失败: %v\n", err)
+		return
+	}
+	e1.Query = q1
+	e1.TimeSensitive = true
+	e1.Tier = string(responses.TierComplex)
+	responses.ScoreAndTagSources(e1)
+	responses.SaveKnowledge(e1)
+	fmt.Printf("① 初始事件: %d tokens, %d 来源, 摘要=%s\n",
+		e1.TotalTokens, len(e1.Sources), truncate(e1.AnswerSummary, 50))
+
+	// 轮 2-4：多维度增量
+	rounds := []struct {
+		q string
+		d string // 维度
+	}{
+		{"美国伊朗军事行动 最新", "军事"},
+		{"美国伊朗外交谈判 进展", "外交"},
+		{"美国伊朗 油价 市场 影响", "经济"},
+	}
+	main := e1
+	now := time.Now()
+	for i, r := range rounds {
+		eN, err := fetch(ctx, r.q, responses.TierComplex)
+		if err != nil {
+			fmt.Printf("⚠️ 轮%d(%s)失败: %v\n", i+2, r.d, err)
+			continue
+		}
+		eN.Query = r.q
+		eN.TimeSensitive = true
+		responses.ScoreAndTagSources(eN)
+		// P4: 增量更新主事件（冲突检测 + 置信度演化 + 时效刷新）
+		responses.AdvanceEvent(main, now, eN.KeyFacts, nil)
+		// 事件链：主事件 ↔ 本轮子事件
+		responses.LinkRelatedEvent(main, eN)
+		responses.SaveKnowledge(eN)
+		fmt.Printf("② 轮%d[%s]: 更新=%d 置信度=%.2f 冲突=%v 摘要=%s\n",
+			i+2, r.d, main.UpdateCount, main.Confidence, main.ConflictDetected, truncate(eN.AnswerSummary, 40))
+	}
+	responses.SaveKnowledge(main)
+
+	// 汇总：时间线报告
+	fmt.Printf("\n=== 追踪汇总 ===\n")
+	fmt.Printf("更新次数: %d | 置信度: %.2f | 冲突信号: %v | 事件链: %d 关联\n",
+		main.UpdateCount, main.Confidence, main.ConflictDetected, len(main.EventChain))
+	report := responses.SynthesizeReport("美国伊朗冲突时间线", []*responses.KnowledgeEntry{main})
+	fmt.Printf("报告: %d 事实, %d 来源, 平均可信度 %.2f\n", len(report.Sections), len(report.AllSources), report.AvgConfidence)
+	fmt.Println("--- 时间线报告预览 ---")
+	fmt.Println(truncate(report.Render(), 500))
 }
