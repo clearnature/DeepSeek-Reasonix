@@ -98,9 +98,17 @@ const DefaultKnowledgeTTL = 7 * 24 * time.Hour
 
 var errCacheDirUnavailable = errors.New("knowledge cache dir unavailable")
 
+// knowledgeDirOverride lets tests redirect the cache root to an isolated
+// temp dir so test runs never touch the real user cache (side-effect fix:
+// the 100-round hammer test previously wiped ~/.cache/reasonix/websearch).
+var knowledgeDirOverride string
+
 // knowledgeDir is the per-user cache root for web_search knowledge entries.
 func knowledgeDir() (string, error) {
 	root := config.CacheDir()
+	if knowledgeDirOverride != "" {
+		root = knowledgeDirOverride
+	}
 	if root == "" {
 		return "", errCacheDirUnavailable
 	}
