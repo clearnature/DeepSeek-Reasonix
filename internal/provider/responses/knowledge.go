@@ -68,6 +68,12 @@ type KnowledgeEntry struct {
 	// language compatibility (both empty, equal, or one empty) so an "en"
 	// frame never gets served a Chinese snapshot.
 	Language string `json:"language,omitempty"`
+	// QueryVariants are near-synonym queries that hit this entry via L2 and
+	// were promoted to L1 (learning loop): each is recorded in a
+	// variant_<hash>.json mapping file so the next identical query resolves
+	// in O(1) instead of a full-directory semantic scan. The more the cache
+	// is used, the more variants promote — 越使用越好, cost goes down.
+	QueryVariants []string `json:"query_variants,omitempty"`
 }
 
 // NeedsRefresh reports whether a cached hit should trigger an incremental
@@ -155,22 +161,47 @@ func LoadKnowledge(query string) (*KnowledgeEntry, bool) {
 	if err != nil {
 		return nil, false
 	}
-	path := filepath.Join(dir, KnowledgeHash(query)+".json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, false
-	}
-	var e KnowledgeEntry
-	if err := json.Unmarshal(data, &e); err != nil {
-		return nil, false
-	}
-	if !e.ExpiresAt.IsZero() && time.Now().After(e.ExpiresAt) {
-		_ = os.Remove(path)
+	e, path, ok := loadKnowledgeEntry(dir, query)
+	if !ok {
 		return nil, false
 	}
 	// L1 命中更新 LastAccess（LRU 治理的访问标记）。
-	touchEntry(path, &e)
-	return &e, true
+	touchEntry(path, e)
+	return e, true
+}
+
+// loadKnowledgeEntry resolves query to an entry: primary hash file first,
+// then the variant map (learning loop: a near-synonym promoted to L1 after
+// a prior L2 hit resolves in O(1) without scanning the directory).
+func loadKnowledgeEntry(dir, query string) (*KnowledgeEntry, string, bool) {
+	now := time.Now()
+	path := filepath.Join(dir, KnowledgeHash(query)+".json")
+	if data, err := os.ReadFile(path); err == nil {
+		var e KnowledgeEntry
+		if json.Unmarshal(data, &e) == nil && (e.ExpiresAt.IsZero() || !now.After(e.ExpiresAt)) {
+			return &e, path, true
+		}
+		_ = os.Remove(path)
+	}
+	// 变体映射：variant_<hash>.json 内容 = 主条目 hash。
+	vpath := filepath.Join(dir, "variant_"+KnowledgeHash(query)+".json")
+	data, err := os.ReadFile(vpath)
+	if err != nil {
+		return nil, "", false
+	}
+	target := strings.TrimSpace(string(data))
+	mainPath := filepath.Join(dir, target+".json")
+	md, err := os.ReadFile(mainPath)
+	if err != nil {
+		_ = os.Remove(vpath) // 主条目已淘汰，映射失效
+		return nil, "", false
+	}
+	var e KnowledgeEntry
+	if err := json.Unmarshal(md, &e); err != nil || (!e.ExpiresAt.IsZero() && now.After(e.ExpiresAt)) {
+		_ = os.Remove(vpath)
+		return nil, "", false
+	}
+	return &e, mainPath, true
 }
 
 // SaveKnowledge persists a distilled search result. Failures are swallowed:
@@ -232,7 +263,7 @@ func enforceKnowledgeCapacity(dir string) {
 		return
 	}
 	for _, de := range entries {
-		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") || strings.HasPrefix(de.Name(), "variant_") {
 			continue
 		}
 		path := filepath.Join(dir, de.Name())
@@ -407,10 +438,39 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 		// L2 命中同样更新 LastAccess（LRU 治理）。
 		if bestPath != "" {
 			touchEntry(bestPath, best)
+			// 学习闭环：把本次查询提升为 L1 变体（下次 O(1) 命中），
+			// 并关联进事件链——越使用越好，成本随使用下降。
+			learnVariant(bestPath, dir, q, best)
 		}
 		return best, bestSim, true
 	}
 	return nil, 0, false
+}
+
+// learnVariant promotes query to L1 for the entry that just L2-hit it
+// (learning loop): writes a variant_<hash>.json mapping file and records the
+// variant in QueryVariants. Zero cost, no network — the more the cache is
+// used, the more near-synonyms resolve in O(1). Also links the query into
+// EventChain (related-topic graph accumulates with use).
+func learnVariant(mainPath, dir, query string, e *KnowledgeEntry) {
+	if query == e.Query || e.Query == "" {
+		return
+	}
+	// 中立护栏：操纵/煽动查询（恐慌、营销话术）不建立变体关联——
+	// 避免敏感查询被提升为正常条目的 L1 变体（R65 场景：manip 查询
+	// 绕过"不落盘"隔离）。
+	if emotionHits(query)+marketingHits(query) > 0 {
+		return
+	}
+	e.QueryVariants = appendUnique(e.QueryVariants, query)
+	e.EventChain = appendUnique(e.EventChain, query)
+	if data, err := json.MarshalIndent(e, "", "  "); err == nil {
+		if err := os.WriteFile(mainPath+".tmp", data, 0o600); err == nil {
+			_ = os.Rename(mainPath+".tmp", mainPath)
+		}
+	}
+	vpath := filepath.Join(dir, "variant_"+KnowledgeHash(query)+".json")
+	_ = os.WriteFile(vpath, []byte(KnowledgeHash(e.Query)), 0o600)
 }
 
 // touchEntry updates LastAccess and persists it (LRU governance bookkeeping).

@@ -305,3 +305,72 @@ func TestCapacityEvictsLRU(t *testing.T) {
 		}
 	}
 }
+
+// ---- 学习闭环（2026-08-03 优化：越使用越好）----
+
+// TestVariantLearningLoop：首次 L2 命中 → 变体记录 → 二次同查询 L1 直接
+// 命中（跳过语义扫描），且事件链关联。
+func TestVariantLearningLoop(t *testing.T) {
+	cleanKnowledgeCache(t)
+	// 主条目落盘
+	SaveKnowledge(&KnowledgeEntry{
+		Query:         "北京今天天气怎么样",
+		AnswerSummary: "北京晴 30 度。",
+		ExpiresAt:     time.Now().Add(time.Hour),
+	})
+	// 首次：近义查询 L2 命中 → 学习变体
+	variant := "北京今天天气如何"
+	if _, sim, hit := LoadKnowledgeSemantic(variant, DefaultSemanticThreshold); !hit {
+		t.Fatalf("first L2 hit failed: sim=%.3f", sim)
+	}
+	// 二次：同变体 L1 直接命中（零扫描——通过 variant 映射）
+	if e, ok := LoadKnowledge(variant); !ok {
+		t.Fatal("variant must resolve via L1 after learning")
+	} else {
+		if e.Query != "北京今天天气怎么样" {
+			t.Fatalf("variant must map to main entry, got %q", e.Query)
+		}
+		// 变体已记录 + 事件链关联
+		found := false
+		for _, v := range e.QueryVariants {
+			if v == variant {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("variant must be recorded in QueryVariants: %v", e.QueryVariants)
+		}
+		foundChain := false
+		for _, c := range e.EventChain {
+			if c == variant {
+				foundChain = true
+			}
+		}
+		if !foundChain {
+			t.Fatalf("variant must be linked in EventChain: %v", e.EventChain)
+		}
+	}
+	// 变体文件存在
+	if _, err := os.Stat(filepath.Join(mustKnowledgeDir(t), "variant_"+KnowledgeHash(variant)+".json")); err != nil {
+		t.Fatalf("variant mapping file missing: %v", err)
+	}
+}
+
+// TestSensitiveQueryNotLearnedAsVariant：操纵/煽动查询不建立变体关联
+// （R65 场景：敏感查询不得绕过"manip 不落盘"隔离）。
+func TestSensitiveQueryNotLearnedAsVariant(t *testing.T) {
+	cleanKnowledgeCache(t)
+	SaveKnowledge(&KnowledgeEntry{
+		Query:         "地震应对指南",
+		AnswerSummary: "地震时应躲到桌下。",
+		ExpiresAt:     time.Now().Add(time.Hour),
+	})
+	// 敏感近义查询（含恐慌词）L2 命中 → 不学习变体
+	sensitive := "地震会不会死很多人"
+	if _, _, hit := LoadKnowledgeSemantic(sensitive, DefaultSemanticThreshold); !hit {
+		t.Skip("sensitive query did not L2-hit (topic gate) — guard not exercised")
+	}
+	if _, ok := LoadKnowledge(sensitive); ok {
+		t.Fatal("sensitive query must NOT be promoted to L1 variant")
+	}
+}
