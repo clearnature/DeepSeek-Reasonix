@@ -171,6 +171,13 @@ func isServerBuiltinTool(t string) bool {
 	}
 }
 
+// ExtractJSONFromOutput is the exported form of extractJSONFromOutput for
+// callers (e.g. cmd/websearch-smoke) that need to distill a model reply that
+// may wrap JSON in prose or fences.
+func ExtractJSONFromOutput(text string) (any, bool) {
+	return extractJSONFromOutput(text)
+}
+
 // extractJSONFromOutput pulls the first top-level JSON object or array out of
 // a model reply. json_schema output is guided, not enforced, so DeepSeek
 // sometimes wraps the object in markdown prose or fenced blocks; callers that
