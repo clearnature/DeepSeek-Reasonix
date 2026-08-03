@@ -3,9 +3,13 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"reasonix/internal/config"
+	"reasonix/internal/provider"
 	"reasonix/internal/provider/responses"
 	"reasonix/internal/tool"
 )
@@ -15,14 +19,17 @@ func init() { tool.RegisterBuiltin(retrieveInfo{}) }
 // retrieveInfo exposes the knowledge-cache lookup as a model-visible tool so
 // conversational auto-retrieval (2026-08-03 design) works: the model can
 // consult previously distilled web_search results with zero cost and zero
-// network. Web refresh is NOT granted through this tool — it returns a
-// blocked notice instead, keeping the "no silent web" guardrail (§9).
+// network. On a cache miss it reuses the system's deepseek-responses
+// provider pipeline (the API key the user already configured for the app) —
+// no separate key is required. Web fetch is gated by the session grant +
+// cooldown policy; without a configured deepseek-responses provider it
+// returns a needs_grant notice instead (§9 no-silent-web guardrail).
 type retrieveInfo struct{}
 
 func (retrieveInfo) Name() string { return "retrieve_info" }
 
 func (retrieveInfo) Description() string {
-	return "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中返回 needs_grant 标志——此时应使用 ask 工具询问用户是否允许联网检索（选项：本次会话/永久/拒绝），用户同意后再执行真正的联网检索。避免重复联网查询已检索过的事实。"
+	return "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中且系统已配置 deepseek-responses 时自动走该管道联网检索并落盘（复用系统 API 凭据，无需单独提供）；未配置时返回 needs_grant 标志，此时应使用 ask 工具询问用户是否允许联网检索。避免重复联网查询已检索过的事实。"
 }
 
 func (retrieveInfo) Schema() json.RawMessage {
@@ -57,18 +64,27 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 		return "", fmt.Errorf("retrieve_info: query is required")
 	}
 
-	// Local-only lookup: fetch stub is never called because the nil policy
-	// blocks web (WebBlocked path returns before fetch).
-	res, err := responses.Retrieve(ctx, p.Query, responses.RetrieveOptions{}, fetchStub)
+	// 会话策略：配置了 deepseek-responses 即视为会话级联网授权（管道复用，
+	// 不要求用户单独提供 API）。冷却/频率由 DynamicCooldown 控制。
+	pol := responses.DefaultPolicy()
+	pol.Approve(responses.GrantSession, time.Now())
+
+	res, err := responses.Retrieve(ctx, p.Query, responses.RetrieveOptions{
+		Policy:    &pol,
+		PanicMode: true, // #13 破壁引导（中立护栏，仅当前问题文本，无用户画像）
+	}, retrieveFetch)
 	if err != nil {
+		// 未配置 deepseek-responses / 凭据不可用 → 授权提示而非报错；
+		// 其余管道错误原样返回。
+		if errors.Is(err, errNoResponsesProvider) {
+			return blockedNotice(), nil
+		}
 		return "", err
 	}
 
 	if res.Entry == nil {
 		if res.WebBlocked {
-			// 未授权/授权过期：返回结构化标志，模型据此用 ask 工具询问用户。
-			// 简化（2026-08-03）：只提供两档时长——本次会话 / 永久。
-			return `{"needs_grant":true,"reason":"local cache miss; web fetch requires user grant","options":["session","permanent"],"message":"本地知识缓存未命中。请使用 ask 工具询问用户：允许联网检索吗？（选项：本次会话 / 永久 / 拒绝）"}`, nil
+			return blockedNotice(), nil
 		}
 		return "本地知识缓存未命中。", nil
 	}
@@ -78,7 +94,11 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 	}
 
 	var b strings.Builder
-	b.WriteString("【本地知识缓存命中】\n\n")
+	if res.FromCache {
+		b.WriteString("【本地知识缓存命中】\n\n")
+	} else {
+		b.WriteString("【联网检索完成（deepseek-responses 管道）】\n\n")
+	}
 	b.WriteString(res.Entry.AnswerSummary)
 	if len(res.Entry.KeyFacts) > 0 {
 		b.WriteString("\n\n关键事实：\n")
@@ -102,9 +122,104 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 	return b.String(), nil
 }
 
-// fetchStub is a fetch that must never run: the zero RetrieveOptions policy
-// blocks web access, so the WebBlocked path returns before it is called. It
-// exists to satisfy the non-nil FetchFunc contract defensively.
-var fetchStub responses.FetchFunc = func(ctx context.Context, query string, tier responses.RetrievalTier) (*responses.KnowledgeEntry, error) {
-	return nil, fmt.Errorf("retrieve_info: web fetch is not granted")
+func blockedNotice() string {
+	return `{"needs_grant":true,"reason":"local cache miss and no deepseek-responses provider configured; web fetch requires user grant","options":["session","permanent"],"message":"本地知识缓存未命中，且系统未配置 deepseek-responses 供应商。请使用 ask 工具询问用户：允许联网检索吗？（选项：本次会话 / 永久 / 拒绝）"}`
+}
+
+// errNoResponsesProvider marks a missing/unresolvable deepseek-responses
+// provider — the tool reports needs_grant instead of a hard error.
+var errNoResponsesProvider = errors.New("deepseek-responses provider not configured")
+
+// systemFetchTestHook lets tests replace the real network pipeline. The zero
+// value uses systemFetch (real deepseek-responses pipeline).
+var systemFetchTestHook responses.FetchFunc
+
+// retrieveFetch is the fetch indirection used by Execute: tests inject a
+// fake via systemFetchTestHook, production runs the system pipeline.
+func retrieveFetch(ctx context.Context, query string, tier responses.RetrievalTier) (*responses.KnowledgeEntry, error) {
+	if systemFetchTestHook != nil {
+		return systemFetchTestHook(ctx, query, tier)
+	}
+	return systemFetch(ctx, query, tier)
+}
+
+// systemFetch performs one real web_search retrieval through the system's
+// deepseek-responses provider pipeline — the same API key / endpoint the app
+// already uses for chat, so the tool needs no separate credentials. Returns
+// a distilled KnowledgeEntry (JSON extraction with markdown fallback).
+func systemFetch(ctx context.Context, query string, tier responses.RetrievalTier) (*responses.KnowledgeEntry, error) {
+	entry := responsesEntry()
+	if entry == nil {
+		return nil, errNoResponsesProvider
+	}
+	key := entry.APIKey()
+	if key == "" {
+		return nil, errNoResponsesProvider
+	}
+	p := responses.New(responses.Config{
+		Name: entry.Name, APIKey: key,
+		BaseURL: entry.BaseURL, Model: entry.Model,
+		Effort: "low",
+	})
+	req := provider.Request{
+		Messages:       []provider.Message{{Role: provider.RoleUser, Content: query}},
+		Tools:          []provider.ToolSchema{provider.WebSearchTool(false)},
+		ToolChoice:     &provider.ToolChoice{Type: "web_search"},
+		ResponseFormat: provider.JSONSchemaFormat("knowledge_extract", knowledgeSchema),
+	}
+	ch, err := p.Stream(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve_info: web_search stream: %w", err)
+	}
+	text := ""
+	tokens := 0
+	for c := range ch {
+		switch c.Type {
+		case provider.ChunkText:
+			text += c.Text
+		case provider.ChunkUsage:
+			if c.Usage != nil {
+				tokens = c.Usage.TotalTokens
+			}
+		}
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("retrieve_info: web_search returned no text for %q", query)
+	}
+	return responses.DistillEntry(query, text, tokens, string(tier)), nil
+}
+
+// responsesEntry finds the system's deepseek-responses provider entry
+// (kind="responses" on api.deepseek.com). LoadForRootReadOnly never writes
+// config files.
+func responsesEntry() *config.ProviderEntry {
+	cfg, err := config.LoadForRootReadOnly("")
+	if err != nil {
+		return nil
+	}
+	for i := range cfg.Providers {
+		e := &cfg.Providers[i]
+		if e.Kind == "responses" && strings.Contains(e.BaseURL, "api.deepseek.com") {
+			return e
+		}
+	}
+	return nil
+}
+
+// knowledgeSchema instructs the model to return structured knowledge; the
+// extraction is advisory (DeepSeek often replies markdown — DistillEntry
+// falls back to markdown source/fact extraction).
+var knowledgeSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"answer_summary": map[string]any{"type": "string"},
+		"key_facts":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"sources": map[string]any{"type": "array", "items": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"title": map[string]any{"type": "string"},
+				"url":   map[string]any{"type": "string"},
+			},
+		}},
+	},
 }
