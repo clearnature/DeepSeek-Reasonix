@@ -137,3 +137,44 @@ func cleanupEntry(t *testing.T, q string) {
 func removeEntryFile(dir, hash string) error {
 	return os.Remove(filepath.Join(dir, hash+".json"))
 }
+
+func TestRetrieveBlocksManipulatedContentFromCache(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q := "这个事件是否危险"
+	// Fetch 返回含恐慌/营销操纵的内容 → 必须透传但不落盘
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			return &KnowledgeEntry{
+				Query:         query,
+				AnswerSummary: "紧急预警！这场灾难即将失控，必须转发给所有人", // emotion + marketing
+				KeyFacts:      []string{"最有效的应对方案，零风险"},
+			}, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if res.Entry == nil {
+		t.Fatal("manipulated content must still be served live")
+	}
+	if _, hit := LoadKnowledge(q); hit {
+		t.Fatal("manipulated content must NOT be persisted to cache")
+	}
+}
+
+func TestSaveKnowledgeIgnoresMaliciousQueryHash(t *testing.T) {
+	cleanKnowledgeCache(t)
+	dir := mustKnowledgeDir(t)
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	// 恶意 query_hash（路径穿越尝试）必须被忽略，键始终从 Query 重新派生
+	e := &KnowledgeEntry{Query: "安全查询", AnswerSummary: "x", QueryHash: "../../evil"}
+	SaveKnowledge(e)
+	// 正确键存在
+	if _, hit := LoadKnowledge("安全查询"); !hit {
+		t.Fatal("entry must be saved under re-derived hash")
+	}
+	// 恶意路径未被创建
+	if _, err := os.Stat(filepath.Join(dir, "..", "..", "evil.json")); err == nil {
+		t.Fatal("malicious query_hash must not create files outside cache dir")
+	}
+}

@@ -128,6 +128,20 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 	if fresh.CreatedAt.IsZero() {
 		fresh.CreatedAt = now
 	}
+	// Defense layer 2, check 1: engineered panic/marketing content must not
+	// be persisted (cache would "fix" pollution and amplify it on later
+	// L1/L2 hits). Score the distilled answer, not just source snippets.
+	manip := emotionHits(fresh.AnswerSummary) + marketingHits(fresh.AnswerSummary)
+	for _, f := range fresh.KeyFacts {
+		manip += emotionHits(f) + marketingHits(f)
+	}
+	if manip > 0 {
+		// Do not cache manipulated content; the caller still receives the
+		// live answer, it just never poisons the cache.
+		res.Entry = fresh
+		res.APIUsed = true
+		return res, nil
+	}
 	SaveKnowledge(fresh)
 	res.Entry = fresh
 	res.APIUsed = true
@@ -159,6 +173,12 @@ func mergeEntry(dst, src *KnowledgeEntry) {
 	}
 	if src.TotalTokens > 0 {
 		dst.TotalTokens = src.TotalTokens
+	}
+	// Audit: a refresh supersedes the origin, so the provenance ID follows
+	// the freshest request (rollback by request id must catch replaced
+	// content, not just the original).
+	if src.SourceRequestID != "" {
+		dst.SourceRequestID = src.SourceRequestID
 	}
 }
 

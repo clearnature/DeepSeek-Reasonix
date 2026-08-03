@@ -143,7 +143,9 @@ func LoadKnowledge(query string) (*KnowledgeEntry, bool) {
 }
 
 // SaveKnowledge persists a distilled search result. Failures are swallowed:
-// caching is best-effort and must never break the calling turn.
+// caching is best-effort and must never break the calling turn. The cache key
+// is always re-derived from Query (never trusted from persisted JSON), so a
+// malicious stored query_hash cannot escape the cache dir via path traversal.
 func SaveKnowledge(e *KnowledgeEntry) {
 	dir, err := knowledgeDir()
 	if err != nil {
@@ -155,9 +157,9 @@ func SaveKnowledge(e *KnowledgeEntry) {
 	if e.ExpiresAt.IsZero() {
 		e.ExpiresAt = time.Now().Add(DefaultKnowledgeTTL)
 	}
-	if e.QueryHash == "" {
-		e.QueryHash = KnowledgeHash(e.Query)
-	}
+	// Re-derive unconditionally: QueryHash in persisted JSON is advisory
+	// metadata, not a path component source.
+	e.QueryHash = KnowledgeHash(e.Query)
 	data, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
 		return
@@ -235,10 +237,11 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 	)
 	now := time.Now()
 	for _, de := range entries {
-		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+		if de.IsDir() || de.Type()&os.ModeSymlink != 0 || !strings.HasSuffix(de.Name(), ".json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, de.Name()))
+		path := filepath.Join(dir, de.Name())
+		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
@@ -247,7 +250,7 @@ func LoadKnowledgeSemantic(q string, threshold float64) (*KnowledgeEntry, float6
 			continue
 		}
 		if !e.ExpiresAt.IsZero() && now.After(e.ExpiresAt) {
-			_ = os.Remove(filepath.Join(dir, de.Name()))
+			_ = os.Remove(path)
 			continue
 		}
 		sim := NgramSimilarity(q, e.Query)
@@ -277,7 +280,7 @@ func ListKnowledge() []KnowledgeEntry {
 	now := time.Now()
 	var out []KnowledgeEntry
 	for _, de := range entries {
-		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+		if de.IsDir() || de.Type()&os.ModeSymlink != 0 || !strings.HasSuffix(de.Name(), ".json") {
 			continue
 		}
 		path := filepath.Join(dir, de.Name())
@@ -313,7 +316,7 @@ func DeleteKnowledge(pred func(*KnowledgeEntry) bool) int {
 	}
 	deleted := 0
 	for _, de := range entries {
-		if de.IsDir() || !strings.HasSuffix(de.Name(), ".json") {
+		if de.IsDir() || de.Type()&os.ModeSymlink != 0 || !strings.HasSuffix(de.Name(), ".json") {
 			continue
 		}
 		path := filepath.Join(dir, de.Name())
