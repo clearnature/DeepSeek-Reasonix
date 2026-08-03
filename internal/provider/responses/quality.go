@@ -52,6 +52,37 @@ var spamDomains = map[string]bool{
 // unknown domains.
 var spamURLHints = []string{"utm_source=ad", "sponsored", "affiliate", "advertorial", "/ads/", "click.php"}
 
+// marketingHints are content-level manipulation markers (#11 细节检验法):
+// absolute claims, blurry authority endorsements, over-perfect descriptions.
+// Unlike domain-based signals these apply to the snippet/answer text itself,
+// catching polished-but-unverifiable content on otherwise unknown domains.
+var marketingHints = []string{
+	"最有效", "零风险", "100%保证", "100%有效", "绝对安全", "包治", "立竿见影",
+	"专家推荐", "官方认证", "权威背书", "不可错过", "限时抢购", "最后机会",
+	"guaranteed", "100% effective", "zero risk", "miracle", "cure-all",
+	"expert recommended", "act now", "limited time",
+}
+
+// marketingHits counts content-level manipulation markers in text. A nonzero
+// count is a strong signal the source is promotional rather than factual.
+func marketingHits(text string) int {
+	if text == "" {
+		return 0
+	}
+	lower := strings.ToLower(text)
+	hits := 0
+	for _, h := range marketingHints {
+		if strings.Contains(lower, strings.ToLower(h)) {
+			hits++
+		}
+	}
+	return hits
+}
+
+// MarketingHits is the exported form of marketingHits for callers that want
+// to gate answers on promotional content (agent layer, UI badge, etc.).
+func MarketingHits(text string) int { return marketingHits(text) }
+
 // domainOf extracts the normalized registrable domain (host minus scheme,
 // port, and www. prefix) from a URL. Empty on unparsable input.
 func domainOf(raw string) string {
@@ -112,6 +143,11 @@ func scoreSource(s Source, allSources []Source) float64 {
 	}
 	if hasSpamHint(s.URL) {
 		score -= 0.10
+	}
+	// Content-level manipulation: absolute claims / blurry endorsements in
+	// the snippet are promotional, not factual.
+	if hits := marketingHits(s.Snippet); hits > 0 {
+		score -= 0.10 * float64(hits)
 	}
 	// Cross-check: at least two distinct domains among all sources.
 	seen := map[string]bool{}

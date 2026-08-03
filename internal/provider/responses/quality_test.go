@@ -64,3 +64,34 @@ func TestSpamDomainPenalized(t *testing.T) {
 		t.Fatalf("spam domain must score below whitelist: %.2f vs %.2f", e.Sources[0].Credibility, e.Sources[1].Credibility)
 	}
 }
+
+func TestMarketingHits(t *testing.T) {
+	if h := MarketingHits("这款产品最有效，100%保证见效"); h < 2 {
+		t.Fatalf("absolute claims should hit, got %d", h)
+	}
+	if h := MarketingHits("专家推荐，限时抢购最后机会"); h < 3 {
+		t.Fatalf("blurry endorsement + urgency should hit, got %d", h)
+	}
+	if h := MarketingHits("北京市气象台发布暴雨蓝色预警，午后局地有强降水"); h != 0 {
+		t.Fatalf("neutral fact must not hit, got %d", h)
+	}
+	if h := MarketingHits(""); h != 0 {
+		t.Fatalf("empty must be 0, got %d", h)
+	}
+}
+
+func TestMarketingSnippetPenalizesScore(t *testing.T) {
+	e := &KnowledgeEntry{Sources: []Source{
+		{URL: "https://blog-a.example.com/a", Snippet: "最有效的解决方案，零风险，专家推荐"}, // 3 marketing hits
+		{URL: "https://news-b.example.org/b", Snippet: "今天北京多云转阴"},          // neutral
+	}}
+	ScoreAndTagSources(e)
+	if e.Sources[0].Credibility >= e.Sources[1].Credibility {
+		t.Fatalf("marketing snippet must score below neutral: %.2f vs %.2f",
+			e.Sources[0].Credibility, e.Sources[1].Credibility)
+	}
+	// 中性 snippet 不被误伤（有交叉验证分）
+	if e.Sources[1].Credibility < 0.3 {
+		t.Fatalf("neutral snippet unexpectedly penalized: %.2f", e.Sources[1].Credibility)
+	}
+}
