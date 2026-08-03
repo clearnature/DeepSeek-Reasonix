@@ -24,6 +24,11 @@ const (
 	// review. Delegated to the deep-research subagent (L1/L2/L3), up to
 	// twelve rounds (loop-engineer cap).
 	TierDeep RetrievalTier = "deep"
+	// TierDomain is locally-injected knowledge (a project/library distilled
+	// into the cache, not a live web_search result). Tier encodes the
+	// knowledge SOURCE: domain entries are pre-verified by the owner, so
+	// they skip web freshness entirely and never trigger refresh.
+	TierDomain RetrievalTier = "domain"
 )
 
 // maxRounds bounds web_search turns per tier. The agent layer owns the loop;

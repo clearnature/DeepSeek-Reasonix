@@ -48,3 +48,15 @@ func TestTierMaxRounds(t *testing.T) {
 		t.Errorf("deep rounds=%d want 12", TierDeep.maxRounds())
 	}
 }
+
+// TestTierDomainValid：本地注入知识域是合法 Tier，且不触发 web 刷新。
+func TestTierDomainValid(t *testing.T) {
+	if TierDomain != "domain" {
+		t.Fatalf("TierDomain must be \"domain\", got %q", TierDomain)
+	}
+	// tierOf 接受 domain 并原样返回
+	e := &KnowledgeEntry{Tier: string(TierDomain)}
+	if got := tierOf(e); got != TierDomain {
+		t.Fatalf("tierOf must preserve domain, got %q", got)
+	}
+}
