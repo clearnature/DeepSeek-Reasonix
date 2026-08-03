@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -236,4 +237,51 @@ func TestRetrieveExactHitNeverBypasses(t *testing.T) {
 	if res.APIUsed || fetches != 0 {
 		t.Fatalf("exact hit must never bypass: APIUsed=%v fetches=%d", res.APIUsed, fetches)
 	}
+}
+
+func TestRetrievePanicModeAppendsReassurance(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q := "今晚北京会地震吗？"
+	defer cleanupEntry(t, q)
+
+	// PanicMode 开启：答案追加安抚行（不拦截检索本身）
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{PanicMode: true},
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			return &KnowledgeEntry{Query: query, AnswerSummary: "未监测到异常地震活动"}, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if !contains(res.Entry.AnswerSummary, "温馨提示") || !contains(res.Entry.AnswerSummary, "官方应急渠道") {
+		t.Fatalf("panic mode must append reassurance, got %q", res.Entry.AnswerSummary)
+	}
+	// 检索答案本身未被拦截
+	if !contains(res.Entry.AnswerSummary, "未监测到异常地震活动") {
+		t.Fatal("original answer must be preserved")
+	}
+	// 落盘时也带安抚行（缓存命中同样生效）
+	if e, hit := LoadKnowledge(q); !hit || !contains(e.AnswerSummary, "温馨提示") {
+		t.Fatalf("cached panic answer must carry reassurance, got %q", e.AnswerSummary)
+	}
+}
+
+func TestRetrievePanicModeOffByDefault(t *testing.T) {
+	cleanKnowledgeCache(t)
+	q := "明天会有海啸吗？"
+	defer cleanupEntry(t, q)
+
+	res, err := Retrieve(context.Background(), q, RetrieveOptions{}, // PanicMode 默认 false
+		func(ctx context.Context, query string, tier RetrievalTier) (*KnowledgeEntry, error) {
+			return &KnowledgeEntry{Query: query, AnswerSummary: "请关注官方预警"}, nil
+		})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if contains(res.Entry.AnswerSummary, "温馨提示") {
+		t.Fatalf("panic mode off must not append reassurance, got %q", res.Entry.AnswerSummary)
+	}
+}
+
+func contains(s, sub string) bool {
+	return strings.Contains(s, sub)
 }

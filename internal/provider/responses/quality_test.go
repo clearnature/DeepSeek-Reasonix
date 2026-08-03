@@ -119,3 +119,22 @@ func TestEmotionSnippetPenalizesScore(t *testing.T) {
 			e.Sources[0].Credibility, e.Sources[1].Credibility)
 	}
 }
+
+func TestPanicScore(t *testing.T) {
+	cases := []struct {
+		query string
+		want  int
+	}{
+		{"今晚北京会地震吗", 1},   // 地震 + 今晚
+		{"明天会有海啸吗", 1},    // 海啸 + 明天
+		{"地震是什么原因造成的", 0}, // 无时间紧迫词（知识性）
+		{"今天天气怎么样", 0},    // 无灾难词
+		{"附近核电站会不会泄漏", 2}, // 核/泄漏 + 附近 + 会不会
+		{"", 0},
+	}
+	for _, c := range cases {
+		if got := PanicScore(c.query); got != c.want {
+			t.Errorf("PanicScore(%q)=%d want %d", c.query, got, c.want)
+		}
+	}
+}

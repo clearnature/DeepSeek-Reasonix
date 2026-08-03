@@ -92,6 +92,51 @@ func emotionHits(text string) int {
 // EmotionHits is the exported form of emotionHits for gate-2 pre-write checks.
 func EmotionHits(text string) int { return emotionHits(text) }
 
+// panicHints are high-destruction disaster nouns. PanicScore combines these
+// with time-urgency words to flag anxiety-amped queries (defense #13 layer 1).
+// IMPORTANT (compliance): PanicScore is stateless — it inspects the current
+// query text only and never tracks user behavior/frequency. Any user-profile
+// features must be explicitly opted-in by the user (画像需用户主动提供或可拒绝).
+var panicHints = []string{
+	"地震", "海啸", "爆炸", "泄漏", "核", "辐射", "毒", "疫情", "战争", "袭击",
+	"火灾", "洪水", "坍塌", "空难", "事故", "earthquake", "tsunami", "explosion",
+	"radiation", "chemical", "attack", "war", "disaster",
+}
+
+// timeUrgencyHints amplify a disaster noun into "imminent threat" phrasing.
+var timeUrgencyHints = []string{
+	"今晚", "明天", "马上", "即将", "要来了", "会不会", "几点", "现在", "附近",
+	"tonight", "tomorrow", "imminent", "coming", "nearby",
+}
+
+// PanicScore returns 0..N where N counts (disaster noun, time-urgency word)
+// pairs in the query. 0 = no panic signal; >=1 flags the query for the
+// optional 破壁引导 (wall-breaking guide) — the answer is never withheld,
+// only supplemented with an authority-grounded reassurance line.
+func PanicScore(query string) int {
+	if query == "" {
+		return 0
+	}
+	lower := strings.ToLower(query)
+	hasDisaster := false
+	for _, h := range panicHints {
+		if strings.Contains(lower, strings.ToLower(h)) {
+			hasDisaster = true
+			break
+		}
+	}
+	if !hasDisaster {
+		return 0
+	}
+	score := 0
+	for _, h := range timeUrgencyHints {
+		if strings.Contains(lower, strings.ToLower(h)) {
+			score++
+		}
+	}
+	return score
+}
+
 // marketingHits counts content-level manipulation markers in text. A nonzero
 // count is a strong signal the source is promotional rather than factual.
 func marketingHits(text string) int {

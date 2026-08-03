@@ -37,6 +37,12 @@ type RetrieveOptions struct {
 	// repeatedly served from the same distilled snapshot). 0 disables
 	// bypass (default, cost-first); 1 always refreshes near-synonyms.
 	BypassProbability float64
+	// PanicMode enables the #13 破壁引导 (wall-breaking reassurance): when
+	// the query carries a disaster+time-urgency signal (PanicScore > 0),
+	// the answer is NOT withheld — an authority-grounded reassurance line is
+	// appended to AnswerSummary before caching. This is an explicit,
+	// user-visible opt-in policy choice; it never inspects user history.
+	PanicMode bool
 }
 
 // bypassThreshold is the L2 similarity above which a hit is treated as
@@ -148,12 +154,10 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 	}
 	ScoreAndTagSources(fresh)
 	fresh.Sources = FilterSources(fresh.Sources, opts.MinCredibility)
-	if fresh.CreatedAt.IsZero() {
-		fresh.CreatedAt = now
-	}
 	// Defense layer 2, check 1: engineered panic/marketing content must not
 	// be persisted (cache would "fix" pollution and amplify it on later
-	// L1/L2 hits). Score the distilled answer, not just source snippets.
+	// L1/L2 hits). Score the distilled answer BEFORE appending the
+	// reassurance line so the guide itself never trips the gate.
 	manip := emotionHits(fresh.AnswerSummary) + marketingHits(fresh.AnswerSummary)
 	for _, f := range fresh.KeyFacts {
 		manip += emotionHits(f) + marketingHits(f)
@@ -164,6 +168,14 @@ func Retrieve(ctx context.Context, query string, opts RetrieveOptions, fetch Fet
 		res.Entry = fresh
 		res.APIUsed = true
 		return res, nil
+	}
+	// 破壁引导 (#13): 显式开启时，对灾难+时间紧迫查询追加权威核实安抚行。
+	// 不拦截、不训斥——只补充一句有温度的事实核查。
+	if opts.PanicMode && PanicScore(query) > 0 {
+		fresh.AnswerSummary += "\n\n" + panicReassurance
+	}
+	if fresh.CreatedAt.IsZero() {
+		fresh.CreatedAt = now
 	}
 	SaveKnowledge(fresh)
 	res.Entry = fresh
@@ -209,6 +221,12 @@ var (
 	errFetchFuncRequired = errCacheAPI("fetch function required")
 	errEmptyFetchResult  = errCacheAPI("fetch returned nil entry")
 )
+
+// panicReassurance is the #13 wall-breaking guide appended to disaster queries
+// under explicit PanicMode. It grounds the answer in official sources and
+// gently redirects anxiety toward actionable safety behavior — never blocks or
+// lectures. Wording is deliberately calm and concrete.
+const panicReassurance = "⏳ 温馨提示：以上信息截至检索时刻。突发灾害动态请以官方应急渠道为准（如应急管理部门、气象/地震台网官方公告）。反复搜索灾难信息可能放大焦虑——掌握科学避险知识比持续刷新更有效。如感到不安，可联系身边亲友或当地援助热线。"
 
 type errCacheAPI string
 
