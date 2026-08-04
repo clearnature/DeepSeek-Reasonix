@@ -2353,3 +2353,47 @@ func TestNormaliseUsageAnthropicStyleFallback(t *testing.T) {
 		})
 	}
 }
+
+// TestVendorEffortEscapesHonorSupportedEfforts（#4099/#3561 残余）：binary
+// vendor（minimax/zhipu/longcat）与 ollamaCloud 分支——用户声明
+// supported_efforts 时尊重声明词汇（#7273 模式补全），未声明仍内置校验。
+func TestVendorEffortEscapesHonorSupportedEfforts(t *testing.T) {
+	cases := []struct {
+		name    string
+		baseURL string
+		efforts []string
+		ok      []string
+		bad     []string
+	}{
+		{"minimax", "https://api.minimaxi.com/v1", []string{"adaptive", "disabled", "high"}, []string{"high", "adaptive"}, []string{"medium"}},
+		{"zhipu", "https://open.bigmodel.cn/api/paas/v4", []string{"enabled", "disabled", "high"}, []string{"high", "disabled"}, []string{"medium"}},
+		{"longcat", "https://api.longcat.chat/v1", []string{"enabled", "disabled", "max"}, []string{"max", "enabled"}, []string{"medium"}},
+		{"ollamaCloud", "https://ollama.com/v1", []string{"none", "low", "medium", "high", "max"}, []string{"max", "low"}, []string{"xhigh"}},
+	}
+	for _, tc := range cases {
+		for _, lvl := range tc.ok {
+			cfg := provider.Config{Name: tc.name, BaseURL: tc.baseURL, Model: "m", APIKey: "k",
+				Extra: map[string]any{"effort": lvl, "supported_efforts": tc.efforts}}
+			if _, err := New(cfg); err != nil {
+				t.Fatalf("%s: declared effort %q must pass with supported_efforts %v: %v", tc.name, lvl, tc.efforts, err)
+			}
+		}
+		for _, lvl := range tc.bad {
+			cfg := provider.Config{Name: tc.name, BaseURL: tc.baseURL, Model: "m", APIKey: "k",
+				Extra: map[string]any{"effort": lvl, "supported_efforts": tc.efforts}}
+			if _, err := New(cfg); err == nil {
+				t.Fatalf("%s: undeclared effort %q must be rejected with supported_efforts %v", tc.name, lvl, tc.efforts)
+			}
+		}
+		// 未声明：内置校验保持（binary 词汇打回深度词）。
+		// ollamaCloud 内置接受全部词汇（xhigh→max 映射）——无拒绝用例，跳过。
+		if tc.name == "ollamaCloud" {
+			continue
+		}
+		cfg := provider.Config{Name: tc.name, BaseURL: tc.baseURL, Model: "m", APIKey: "k",
+			Extra: map[string]any{"effort": "high"}}
+		if _, err := New(cfg); err == nil {
+			t.Fatalf("%s: without supported_efforts, %q must still be rejected", tc.name, "high")
+		}
+	}
+}

@@ -164,6 +164,14 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// NormalizeEffort remaps them to "adaptive" already, so anything
 		// reaching here is expected to be one of: "", "adaptive", "disabled".
 		effort = strings.ToLower(strings.TrimSpace(effort))
+		if hasExplicitEfforts {
+			// 用户声明 supported_efforts 定义端点完整词汇表（#7273 模式）——
+			// 尊重声明，跳过内置 binary 校验（第三方代理可能转译深度词汇）。
+			if !supportsEffort(supportedEfforts, effort) {
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+			}
+			break
+		}
 		switch effort {
 		case "": // auto — leave empty so the wire emits thinking.type=adaptive
 		case "adaptive", "disabled":
@@ -175,6 +183,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// (enabled|disabled) and silently ignores reasoning_effort, so /effort
 		// mirrors that binary knob. The config effort layer normalises depth
 		// levels onto one of these; "" means auto == the GLM default (thinking on).
+		if hasExplicitEfforts {
+			if !supportsEffort(supportedEfforts, effort) {
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+			}
+			break
+		}
 		switch effort {
 		case "", "enabled", "disabled":
 		default:
@@ -184,6 +198,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// LongCat exposes a binary thinking knob on its OpenAI-compatible endpoint:
 		// thinking.type=enabled|disabled. It documents reasoning text via
 		// reasoning_content, but not the generic reasoning_effort scale.
+		if hasExplicitEfforts {
+			if !supportsEffort(supportedEfforts, effort) {
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+			}
+			break
+		}
 		switch effort {
 		case "", "enabled", "disabled":
 		default:
@@ -194,6 +214,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// legacy/off aliases intentionally omit the field, which lets the model
 		// run without thinking. Local Ollama is not auto-detected because its
 		// model/version support varies.
+		if hasExplicitEfforts {
+			if !supportsEffort(supportedEfforts, effort) {
+				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
+			}
+			break
+		}
 		switch effort {
 		case "", "none", "disabled", "off":
 			effort = ""
