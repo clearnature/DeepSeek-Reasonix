@@ -16,6 +16,8 @@
 | #7304 | ChatGPT/Codex OAuth 原生 provider | 配置层 | 新协议入口（OAuth）——provider 抽象扩展 | open——feature |
 | #4099 | MiniMax thinking effort 校验错误 | 协议层 | effort 必须 adaptive/disabled 硬校验 | closed——与 #7273 同族 |
 | #3561 | deepseek thinking effort 校验错误 | 协议层 | effort 必须 high/max 硬校验 | closed——与 #7273 同族 |
+| #7451 | subagent effort 被拦截：TokenHub 实际支持却被判不可配置 | 协议层 | effort 判定过于自信——实际支持 reasoning_effort 的 vendor 被客户端拦截 | open——effort 家族第 4 成员 |
+| #7410 | retrieve_info 工具上游 feature 请求（检索系统） | 工具层/架构层 | DeepSeek flash 免费 web-search 服务端检索 + 检索系统能力（grant/缓存/变体/护栏/编排） | open——本地 dev 完整实现，待上游化 |
 
 ## 时间线（问题演变）
 
@@ -42,6 +44,7 @@
 | #4099 | MiniMax effort 必须 adaptive/disabled | vendor 特定硬校验打回用户配置 |
 | #3561 | deepseek effort 必须 high/max | 同上 |
 | #7273 | supported_efforts 覆盖第三方代理 | 官方判定后强加校验（已修） |
+| #7451 | TokenHub 实际支持 reasoning_effort 却被判不可配置 | subagent profile effort 判定拦截（open） |
 
 **同源结论**：三问题都是"vendor 判定后硬校验 effort"——用户配置在
 "代码假定我知道 vendor"时被覆盖。修复模式统一：能力表/条件序列化。
@@ -56,3 +59,10 @@ MiMo 截断（da3aadd34）：长 reasoning 顶到 max_output_tokens → incomple
 
 交叉结论：计费记录依赖"流正常走完"——中断/截断/异常终止三路径
 都必须显式处理 usage 上报（agent 失败路径对齐已部分覆盖）。
+
+## 检索系统上游化（#7410 ↔ tools-server-web-search 分支）
+
+#7410 是 retrieve_info 的上游 feature 请求（body 描述即本地 dev 的检索系统：
+grant 简化/知识缓存/变体/护栏/编排层）——与 tools-server-web-search 分支
+（检索系统完整版 + 场景覆盖优化）对应。上游化路径：feature 请求已提交，
+代码在本地分支待 PR。
