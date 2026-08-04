@@ -83,3 +83,29 @@ grant 简化/知识缓存/变体/护栏/编排层）——与 tools-server-web-s
 在官方 provider 路径的变体）。#7357 修复（用户声明 providers 清空默认）
 覆盖自定义路径；#4814（官方路径 RMB 覆盖）仍是 open——修复方向：
 DeepSeekOfficialPricingLanguage 尊重用户 currency 配置（去掉硬编码 zh）。
+
+## 修复状态总览（2026-08-04 全量）
+
+| # | 问题 | 家族 | 状态 | 修复/提交 |
+|---|---|---|---|---|
+| #7357 | 自定义 provider 继承 DeepSeek 默认 | A 默认注入 | ✅ 已修 | 2db41eb95→e2e2dae0c（dev）+ 统一分支/PR 分支 |
+| #7358 | context_window 1M backfill | A 默认注入 | ✅ 已修 | 同 #7357（清空默认覆盖） |
+| #4814 | RMB pricing 覆盖 USD | A 默认注入 | ✅ 已修（含残余 P2b） | 上游 provenance（2fefeef06）+ 本地 Price 检查（997d2bdbb） |
+| #7273 | effort 硬编码校验覆盖 | A+B | ✅ 已修（上游） | e36b6aa80/12fdaa830（PR #7350） |
+| #7451 | TokenHub effort 被拦截 | B vendor 硬校验 | ✅ 已修（本地 P0） | efc1fe786（generic 回退）+ 逃生口 d181fc307 |
+| #4099 | MiniMax effort 校验 | B vendor 硬校验 | ✅ 已修（本地 P2a） | d181fc307（逃生口） |
+| #3561 | deepseek effort 校验 | B vendor 硬校验 | ✅ 已修（本地 P2a） | d181fc307（逃生口） |
+| #4711 | tool name 空值 400 | B 严格校验 | ✅ 已修 | c7cbed768（*string）——#7234 含 |
+| #7168 | DashScope 协议兼容 | C 完成语义 | ✅ 已修 | 统一分支全部 + P2c（1e6119053 完成语义完整版） |
+| #7234 | MiMo wire 对齐 | 协议层 | ✅ 已修 | 统一分支全部（vendor 表/budget/multimodal/name/JSON） |
+| #7184 | 中断计费丢失 | C 计费 | ✅ 已修（P1a/P1b 缺口补完） | 上游 70097ea08 + 本地 1caca8a96 |
+| #6259 | 工具轮缺 thinking | D 会话鲁棒 | ✅ 已修（降级） | 客户端降级 + 24h 限流（#6259 已关） |
+| #7191 | corrupt meta 中止启动 | D 会话鲁棒 | ✅ 已修 | a7f7cd4aa（跳过 corrupt） |
+| #7111 | 微信 bot 工具轮静默 | D 会话鲁棒 | ⏳ open（UI） | 流式进度展示（前端） |
+| #7200 | Responses 标准化（feature） | E 生态 | 📋 open（讨论） | vendor 能力表是代码内对应物 |
+| #7099 | 上游 Responses 地基 | E 生态 | ✅ 已合 | 上游 MERGED（7-31） |
+| #7304 | ChatGPT/Codex OAuth provider | 配置层 | 📋 open（feature） | 待上游 |
+| #7410 | retrieve_info 上游化 | 工具层 | 📋 feature 已提交 | 代码在 tools-server-web-search 分支 |
+
+**汇总：14/18 已修，4 开放（#7111 UI / #7200 生态 / #7304 feature / #7410 上游化）**
+**本轮（P0-P2c 六缺口）闭环 8 条：#7357/#7358/#4814残余/#7451/#4099/#3561/#7184缺口/#7168完成语义**
