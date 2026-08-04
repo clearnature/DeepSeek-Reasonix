@@ -517,8 +517,8 @@ func TestCuratedProviderPresetCapabilities(t *testing.T) {
 	if !ok {
 		t.Fatal("opencode-go/glm-5.2 did not resolve")
 	}
-	if cap := EffortCapabilityForEntry(plain); cap.Supported {
-		t.Fatalf("opencode plain model effort capability = %+v, want unsupported without override", cap)
+	if cap := EffortCapabilityForEntry(plain); !cap.Supported {
+		t.Fatalf("opencode plain model effort capability = %+v, want generic openai fallback (#7451)", cap)
 	}
 	zen, ok := cfg.Provider("opencode-zen-anthropic")
 	if !ok {

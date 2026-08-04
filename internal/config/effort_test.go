@@ -484,3 +484,47 @@ func TestEffectiveEffortMiniMax(t *testing.T) {
 		t.Errorf("explicit EffectiveEffort = %q, want disabled", got)
 	}
 }
+
+// TestEffortCapabilityGenericOpenAIFallback（#7451）：未知 OpenAI 兼容端点
+// （TokenHub/自托管 vLLM/第三方代理）回退到 OpenAI 通用词汇——配置层
+// 不再 fail-closed 拦截（与协议层 generic 分支对称）。
+func TestEffortCapabilityGenericOpenAIFallback(t *testing.T) {
+	e := &ProviderEntry{Kind: "openai", BaseURL: "https://tokenhub.tencentmaas.com/plan/v3"}
+	cap := EffortCapabilityForEntry(e)
+	if !cap.Supported {
+		t.Fatal("generic openai endpoint must support effort (fail-open, #7451)")
+	}
+	want := []string{"auto", "low", "medium", "high"}
+	if len(cap.Levels) != len(want) {
+		t.Fatalf("levels = %v, want %v", cap.Levels, want)
+	}
+	for i := range want {
+		if cap.Levels[i] != want[i] {
+			t.Fatalf("levels[%d] = %q, want %q", i, cap.Levels[i], want[i])
+		}
+	}
+	// 自托管 vLLM 同样回退
+	vllm := &ProviderEntry{Kind: "openai", BaseURL: "http://localhost:8021/v1"}
+	if !EffortCapabilityForEntry(vllm).Supported {
+		t.Fatal("self-hosted vLLM must support effort")
+	}
+	// 非 openai（anthropic 已单独分支；未知 kind）保持 fail-closed
+	unknown := &ProviderEntry{Kind: "weird", BaseURL: "https://x.example.com/v1"}
+	if EffortCapabilityForEntry(unknown).Supported {
+		t.Fatal("unknown kind must stay fail-closed")
+	}
+}
+
+// TestNormalizeEffortGenericOpenAI（#7451）：未知 openai 端点 NormalizeEffort
+// 接受 auto|low|medium|high|max；非法值报错；subagent profile 路径不再拦截。
+func TestNormalizeEffortGenericOpenAI(t *testing.T) {
+	e := &ProviderEntry{Kind: "openai", BaseURL: "https://tokenhub.tencentmaas.com/plan/v3"}
+	for _, level := range []string{"auto", "low", "medium", "high", "max"} {
+		if _, err := NormalizeEffort(e, level); err != nil {
+			t.Fatalf("level %q must be accepted for generic openai endpoint: %v", level, err)
+		}
+	}
+	if _, err := NormalizeEffort(e, "xhigh"); err == nil {
+		t.Fatal("xhigh must be rejected (generic openai vocabulary has no xhigh)")
+	}
+}
