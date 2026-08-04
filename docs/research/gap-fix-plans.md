@@ -160,3 +160,23 @@ P2c（stop 也发）↔ #7168 zero-usage 语义：DashScope 全零场景会多�
   ——这正是 #7168 评审"完成语义保留"的完整实现（原实现只做了一半）
 P1a ↔ P1b：同一中断路径的两个面（agent 侧 best-effort + provider 侧留存）
   ——实施时应同批做，测试共享中断场景
+
+
+## 计费透明性原则（用户 2026-08-04 产品认知）
+
+**现状核实**：
+- mimo preset **无 BalanceURL**（provider_presets.go:333）——mimo 钱包显示不在内置
+- mimo 费用 = **价格表估算**（mimoDomesticPrices，#4617 实现）——非余额查询
+- deepseek = **唯一官方计费接口**（/user/balance，config.go:1883/1884）
+- 用户此前提供的 mimo 余额地址（platform.xiaomimimo.com/console/balance）是
+  **网页控制台**，不是 API 查询接口
+
+**设计原则（商业隐私约束）**：
+1. `balance_url` 只在厂商提供官方查询接口时预设（当前仅 deepseek）
+2. 黑箱计费 vendor（mimo 等）：只做**价格估算**（价格表），不做**余额查询**
+   猜测——推测建模的接口准确性和局限性都不可控（用户自行配置非官方
+   balance_url 属自担准确性）
+3. 透明计费（deepseek 官方接口）vs 黑箱计费（mimo 等）是**厂商商业决策**——
+   客户端尊重，不试图绕过/模拟
+4. #7357 修复（不继承默认 balance_url）与原则 1 一致：用户 provider 绝不
+   被写入非官方的余额端点（含隐私外呼风险）
