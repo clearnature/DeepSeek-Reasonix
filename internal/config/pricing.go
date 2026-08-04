@@ -193,9 +193,13 @@ func isStandardDeepSeekProviderTemplate(p *ProviderEntry) bool {
 	if p == nil || officialProviderKind(p) != "deepseek" {
 		return false
 	}
+	// Price/Prices 未改（仍是官方默认或未设）才算标准模板——用户改了价格
+	// （如自定义 USD 表）则 provenance 保留，locale 自动刷新不得覆盖
+	// （#4814 残余：标准模板+只改价格组合曾被无条件刷新成 CNY）。
 	return strings.TrimSpace(p.APIKeyEnv) == "DEEPSEEK_API_KEY" &&
 		strings.TrimSpace(p.BalanceURL) == "https://api.deepseek.com/user/balance" &&
-		p.ContextWindow == 1_000_000
+		p.ContextWindow == 1_000_000 &&
+		p.Price == nil && len(p.Prices) == 0
 }
 
 func completeDeepSeekOfficialPricingCurrency(p *ProviderEntry) string {

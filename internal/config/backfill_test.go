@@ -1792,3 +1792,47 @@ func TestNormalizeLegacyDeepSeekResponsesPresetSkipsUnrelatedEntries(t *testing.
 		t.Fatal("must not create a deepseek-responses entry out of thin air")
 	}
 }
+
+// TestStandardTemplateWithCustomPriceKeepsProvenance（#4814 残余）：
+// 标准 deepseek 模板 + 用户自定义价格（USD 表）→ 非标准模板 →
+// persistedOfficialCurrency 保留 → locale 自动刷新不覆盖用户价格。
+func TestStandardTemplateWithCustomPriceKeepsProvenance(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	raw := `config_version = 5
+
+[desktop]
+currency = "auto"
+
+[[providers]]
+name        = "deepseek"
+kind        = "openai"
+base_url    = "https://api.deepseek.com"
+models      = ["deepseek-v4-flash"]
+api_key_env = "DEEPSEEK_API_KEY"
+balance_url = "https://api.deepseek.com/user/balance"
+context_window = 1000000
+price = { cache_hit = 0.0028, input = 0.14, output = 0.28, currency = "$" }
+`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := LoadForEdit(path)
+	if len(cfg.Providers) != 1 {
+		t.Fatalf("providers = %d", len(cfg.Providers))
+	}
+	p := cfg.Providers[0]
+	if isStandardDeepSeekProviderTemplate(&p) {
+		t.Fatal("template with custom price must not be standard (provenance must survive)")
+	}
+	if p.Price == nil || p.Price.Currency != "$" {
+		t.Fatalf("custom USD price must survive load: %+v", p.Price)
+	}
+	// 无自定义价格的官方模板：仍是标准模板（可被 locale 刷新——官方默认）
+	p2 := p
+	p2.Price = nil
+	p2.Prices = nil
+	if !isStandardDeepSeekProviderTemplate(&p2) {
+		t.Fatal("official template without custom price must remain standard")
+	}
+}
