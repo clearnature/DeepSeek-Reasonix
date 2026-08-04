@@ -2,7 +2,7 @@
 
 | # | 问题 | 归属层 | 根因 | 修复 |
 |---|---|---|---|---|
-| #7357 | custom provider 继承 DeepSeek 默认(balance/price/cw) | 配置层 | Default()+decode 按 index 合并 slice（7de6a2474 初始，417366028 balance_url 加剧） | 2db41eb95（本地 dev）：用户声明 providers 则清空默认 |
+| #7357 | custom provider 继承 DeepSeek 默认(balance/price/cw) | 配置层 | Default()+decode 按 index 合并 slice（7de6a2474 初始，417366028 balance_url 加剧） | 2db41eb95→e2e2dae0c（dev 已合入）：用户声明 providers 则清空默认 |
 | #7273 | supported_efforts 被 DeepSeek thinking 硬编码校验覆盖 | 配置层/协议层 | 官方 DeepSeek 判定硬编码 thinking 校验，覆盖第三方代理自定义 effort | 上游已合（2026-08-03） |
 | #7234 | MiMo Responses wire 对齐（summary/reasoning/JSON） | 协议层 | vendor 差异散落：summary 无字段折回膨胀/温度无效/max_output_tokens 截断/reasoning id 未贯通 | vendor 能力表 + 评审 3 点修复（本地） |
 | #7168 | DashScope 协议兼容 + completion 语义 | 协议层 | summary 必须（缺 400）/reasoning id 重放/zero-usage/FinishReason/TTL | 统一实现（本地） |
