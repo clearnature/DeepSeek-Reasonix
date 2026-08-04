@@ -800,6 +800,13 @@ func mergeFileSnapshotWithRead(cfg *Config, path string, readFile func(string) (
 	if _, err := decodeTOMLBytes(data, &validated); err != nil {
 		return toml.MetaData{}, fmt.Errorf("config %s: %w", path, err)
 	}
+	// 用户 config 声明 [[providers]] 数组 → 整体替换默认 provider，绝不与
+	// 内置默认（deepseek-flash/pro 带 balance_url/price/context_window）按
+	// index 合并字段——否则自定义 openai provider（如自托管 vLLM）会继承
+	// DeepSeek 的余额端点/价格表/上下文窗口（issue #7357）。
+	if validated.Providers != nil {
+		cfg.Providers = nil
+	}
 	meta, err := decodeTOMLBytes(data, cfg)
 	if err != nil {
 		return toml.MetaData{}, fmt.Errorf("config %s: %w", path, err)
