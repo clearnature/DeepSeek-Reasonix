@@ -663,6 +663,21 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 
 	if ctx.Err() != nil {
+		// #7184：中断前已收到的 usage（message_start 的 input/cache 计数）
+		// 不能丢——先发 ChunkUsage 再退出（prompt tokens 是计费大头，
+		// agent 侧 best-effort 无法估算）。
+		if haveUsage {
+			usage := &provider.Usage{
+				PromptTokens:     inTok + cacheCreate + cacheRead,
+				CompletionTokens: outTok,
+				TotalTokens:      inTok + cacheCreate + cacheRead + outTok,
+				CacheHitTokens:   cacheRead,
+				CacheMissTokens:  inTok + cacheCreate,
+				FinishReason:     "interrupted",
+			}
+			provider.ApplyRequestAttemptCount(ctx, usage)
+			_ = send(provider.Chunk{Type: provider.ChunkUsage, Usage: usage})
+		}
 		return
 	}
 	if stalled.Load() {

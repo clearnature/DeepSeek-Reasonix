@@ -2859,15 +2859,16 @@ func (a *Agent) stream(ctx context.Context, turn int, sink event.Sink) (string, 
 			a.sessCacheMiss.Add(int64(chunk.Usage.CacheMissTokens))
 			a.lastAPICallAt = time.Now()
 		case provider.ChunkError:
+			stored, _ := finishReasoning()
+			// 中断路径统一 best-effort 计费（#7184）：无论 StreamInterrupted
+			// 还是普通流错误，都补估算 + request count——usage 通常在流尾，
+			// 中断时 provider 往往未发出（否则 emitTurnUsage(nil) 跳过，
+			// 该次请求计费完全丢失）。与 ctx.Done 分支（2768-2772）对齐。
+			usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), "interrupted")
+			usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 			if provider.IsStreamInterrupted(chunk.Err) {
-				stored, _ := finishReasoning()
 				return text.String(), stored, signature, reasoningID, reasoningStatus, calls, usage, true, partialToolStarted, partialCalls, chunk.Err
 			}
-			stored, _ := finishReasoning()
-			usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), "interrupted")
-			usage = provider.UsageWithRequestAttemptCount(ctx, usage)
-			usage = bestEffortStreamUsage(usage, text.Len(), reasoning.Len(), "interrupted")
-			usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 			return text.String(), stored, signature, reasoningID, reasoningStatus, calls, usage, false, partialToolStarted, partialCalls, chunk.Err
 
 		}
