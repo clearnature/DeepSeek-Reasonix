@@ -123,3 +123,40 @@ locale 自动刷新把 USD 刷成 CNY。
 P0（#7451）→ P1a（StreamInterrupted）→ P2a（逃生口）→ P2b（#4814）
 → P2c（完成语义）→ P1b（prompt 估算，改动最大最后做）
 ```
+
+
+## 第二轮分析补充（2026-08-04 实施前验证）
+
+### P0 影响面实测（现有测试无冲突）
+- effort_test.go 现有 12 个测试全部是 vendor 特定断言（deepseek/miniMax/zhipu/
+  longcat/ollamaCloud/glm-gateway）——**无"未知 openai 端点不支持"断言**
+- isOllamaCloudEntry 的 localhost=false 是 vendor 判定（不受 default 分支影响）
+- → P0 修复不破坏现有测试，只需新增 generic 回退测试
+
+### P1a 下游确认（interrupted 标志独立）
+- interrupted=true 消费在 2689-2693（恢复提示文案）——与 usage 修改无耦合
+- → 修复 StreamInterrupted 分支的 usage 对齐不影响恢复路径
+
+### P1b 三 provider 具体改法（留存已收 usage）
+```
+anthropic.go:665  if ctx.Err() != nil { return }  →  return 前：
+                 if haveUsage { send(ChunkUsage{usage}) }  // mergeUsage 已收 input tokens
+responses.go:760  同样——terminal 已到、usage 已收集时先发再 return
+openai.go:1084    收到 usage 即发（993-1001）——中断时若 usage chunk 已到已发；
+                  未到才丢（agent best-effort 兜底，可接受）
+```
+
+### P2c 计费层验证（方案 2 安全）
+- Pricing.Cost（provider.go:715）：全零 usage（hit/miss/prompt/completion 全 0）
+  → 返回 0 成本——**计费层天然过滤零记录**
+- sessCacheHit/Miss 加 0 不影响 cache-ratio
+- → 抑制条件放宽为 `TotalTokens > 0 || FinishReason != ""`（stop 也发）
+  零记录不污染任何统计，完成语义恢复——方案 2 无副作用
+
+### 缺口间关联
+```
+P2c（stop 也发）↔ #7168 zero-usage 语义：DashScope 全零场景会多一条
+  ChunkUsage（FinishReason=stop）——agent 收到后 reasoningOnly 完成 honored
+  ——这正是 #7168 评审"完成语义保留"的完整实现（原实现只做了一半）
+P1a ↔ P1b：同一中断路径的两个面（agent 侧 best-effort + provider 侧留存）
+  ——实施时应同批做，测试共享中断场景
