@@ -160,7 +160,6 @@ func New(cfg Config) provider.Provider {
 		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache, webSearch: cfg.WebSearch,
 		vision: vision, maxOutputTokens: maxOutputTokens,
 		http: httpClient, idleTimeout: defaultStreamIdleTimeout,
-
 	}
 }
 
@@ -761,7 +760,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 				}
 			}
 
-
 			if event.Item != nil {
 				switch event.Item.Type {
 				case "function_call":
@@ -868,7 +866,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	if completedResponseID != "" {
 		assistant := provider.Message{Role: provider.RoleAssistant, Content: text.String(), ReasoningContent: reasoning.String(), ReasoningID: reasoningID, ReasoningStatus: reasoningStatus, ResponsesItems: responsesItems}
 
-
 		for _, itemID := range callOrder {
 			call := calls[itemID]
 			if call.completed {
@@ -965,7 +962,6 @@ type sseEvent struct {
 type sseItem struct {
 	ID, Type, CallID, Name, Arguments, Status string
 	Raw                                       json.RawMessage
-
 }
 
 func (i *sseItem) UnmarshalJSON(data []byte) error {
@@ -981,7 +977,6 @@ func (i *sseItem) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*i = sseItem{ID: wire.ID, Type: wire.Type, CallID: wire.CallID, Name: wire.Name, Arguments: wire.Arguments, Status: wire.Status, Raw: append(json.RawMessage(nil), data...)}
-
 
 	return nil
 }
