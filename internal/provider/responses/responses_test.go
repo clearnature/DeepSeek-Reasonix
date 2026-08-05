@@ -673,8 +673,8 @@ func TestMiMoDefaultMaxOutputTokensRaised(t *testing.T) {
 		if err := json.Unmarshal(body, &reqBody); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
-		if got := reqBody["max_output_tokens"]; got != float64(65536) {
-			t.Fatalf("MiMo default max_output_tokens = %v, want 65536", got)
+		if got := reqBody["max_output_tokens"]; got != float64(131072) {
+			t.Fatalf("MiMo default max_output_tokens = %v, want 131072", got)
 		}
 		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
 	}))
@@ -1383,21 +1383,21 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 }
 
 // TestVendorTableMaxOutputTokens：默认输出预算完全由 vendor 表驱动——
-// mimo 65536（长思考不截断）、deepseek 32K、unknown 不设。
+// mimo 131072（pro 默认值，思考模式不设会顶到服务端默认截断）、deepseek 32K、unknown 不设。
 func TestVendorTableMaxOutputTokens(t *testing.T) {
 	msg := []provider.Message{{Role: provider.RoleUser, Content: "hi"}}
 
-	// mimo：表默认 65536（思考模式不设会顶到服务端 32768 截断）
+	// mimo：表默认 131072（pro 模型默认值，思考模式不设会顶到服务端默认截断）
 	mimo := New(Config{Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro"}).(*client)
 	body, _, _ := mimo.buildRequestBody(provider.Request{Messages: msg})
-	if got := body["max_output_tokens"]; got != 65536 {
-		t.Fatalf("mimo max_output_tokens = %#v, want 65536 (vendor table)", got)
+	if got := body["max_output_tokens"]; got != 131072 {
+		t.Fatalf("mimo max_output_tokens = %#v, want 131072 (vendor table)", got)
 	}
-	// mimo 思考禁用也设 65536（mimo 无 thinking-disabled 豁免——表无条件）
+	// mimo 思考禁用也设 131072（mimo 无 thinking-disabled 豁免——表无条件）
 	noThinking := New(Config{Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro", Effort: "none"}).(*client)
 	nb, _, _ := noThinking.buildRequestBody(provider.Request{Messages: msg})
-	if nb["max_output_tokens"] != 65536 {
-		t.Fatalf("mimo thinking-disabled budget = %#v, want 65536", nb["max_output_tokens"])
+	if nb["max_output_tokens"] != 131072 {
+		t.Fatalf("mimo thinking-disabled budget = %#v, want 131072", nb["max_output_tokens"])
 	}
 	// deepseek 值来自表（非硬编码常量）
 	ds := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro"}).(*client)
