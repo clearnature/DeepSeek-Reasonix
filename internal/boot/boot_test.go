@@ -2223,6 +2223,7 @@ func defaultFullBootToolNames() []string {
 		"slash_command",
 		"task",
 		"todo_write",
+		"update_goal",
 		"wait",
 		"web_fetch",
 		"write_file",
@@ -2238,6 +2239,7 @@ func economyBootToolNames() []string {
 		"edit_file",
 		"kill_shell",
 		"read_file",
+		"update_goal",
 		"wait",
 		"write_file",
 	}
@@ -2289,6 +2291,7 @@ command = "reasonix-missing-mockmcp"
 		"edit_file",
 		"kill_shell",
 		"read_file",
+		"update_goal",
 		"wait",
 		"write_file",
 	}

@@ -2,7 +2,7 @@
 
 export const REMOTE_SCHEMA_FORMAT = "reasonix.remote.schema.v1" as const;
 export const REMOTE_PROTOCOL_VERSION = "1" as const;
-export const REMOTE_SCHEMA_HASH = "sha256:0d375052ced55d421251b9cc9bc535a29604308e6a3e9a9d3a90ef02e7b138d7" as const;
+export const REMOTE_SCHEMA_HASH = "sha256:06d0d381b12ab56d3fefd6c81214c6342c5680e29bf05898dbbe31723f880a8c" as const;
 
 export const REMOTE_FIXED_RESOURCES = {
   "protocol": {
@@ -3515,6 +3515,36 @@ export type SessionGoalClearResultHydrated = {
   "cleared": true;
 };
 
+export type SessionGoalPauseParamsRaw = {
+  "expectedHostEpoch": string;
+  "expectedRuntimeEpoch": string;
+  "requestId": string;
+  "target": {
+    "sessionId": string;
+    "workspaceId": string;
+  };
+};
+export type SessionGoalPauseParamsHydrated = {
+  "expectedHostEpoch": string;
+  "expectedRuntimeEpoch": string;
+  "requestId": string;
+  "target": {
+    "sessionId": string;
+    "workspaceId": string;
+  };
+};
+
+export type SessionGoalPauseResultRaw = {
+  "goal": string;
+  "paused": boolean;
+  "status": "blocked" | "complete" | "running" | "stopped";
+};
+export type SessionGoalPauseResultHydrated = {
+  "goal": string;
+  "paused": boolean;
+  "status": "blocked" | "complete" | "running" | "stopped";
+};
+
 export type SessionGoalResumeParamsRaw = {
   "expectedHostEpoch": string;
   "expectedRuntimeEpoch": string;
@@ -4264,6 +4294,17 @@ export type SessionSubscribeResultRaw = {
         };
       };
       "goal": string | null;
+      "goalRuntime"?: {
+        "budgetExtensions": number;
+        "lastReason"?: string;
+        "noProgressLimit": number;
+        "noProgressTurns": number;
+        "stopCause"?: string;
+        "tokensLimit": number;
+        "tokensUsed": number;
+        "turnsLimit": number;
+        "turnsUsed": number;
+      };
       "goalStatus"?: "blocked" | "complete" | "running" | "stopped";
       "resolvedProfile": {
         "collaborationMode": "goal" | "normal" | "plan";
@@ -4687,6 +4728,17 @@ export type SessionSubscribeResultHydrated = {
         };
       };
       "goal": string;
+      "goalRuntime"?: {
+        "budgetExtensions": number;
+        "lastReason"?: string;
+        "noProgressLimit": number;
+        "noProgressTurns": number;
+        "stopCause"?: string;
+        "tokensLimit": number;
+        "tokensUsed": number;
+        "turnsLimit": number;
+        "turnsUsed": number;
+      };
       "goalStatus"?: "blocked" | "complete" | "running" | "stopped";
       "resolvedProfile": {
         "collaborationMode": "goal" | "normal" | "plan";
@@ -5602,6 +5654,7 @@ export const REMOTE_METHODS = [
   { method: "session/event", direction: "host_to_client_notification", class: "host_notification" },
   { method: "session/fork", direction: "client_to_host_request", class: "session_mutation" },
   { method: "session/goal/clear", direction: "client_to_host_request", class: "session_mutation" },
+  { method: "session/goal/pause", direction: "client_to_host_request", class: "session_mutation" },
   { method: "session/goal/resume", direction: "client_to_host_request", class: "session_mutation" },
   { method: "session/goal/set", direction: "client_to_host_request", class: "session_mutation" },
   { method: "session/history", direction: "client_to_host_request", class: "session_query" },
@@ -5677,6 +5730,7 @@ export interface RemoteRequestParamsRawByMethod {
   "session/create": SessionCreateParamsRaw;
   "session/fork": SessionForkParamsRaw;
   "session/goal/clear": SessionGoalClearParamsRaw;
+  "session/goal/pause": SessionGoalPauseParamsRaw;
   "session/goal/resume": SessionGoalResumeParamsRaw;
   "session/goal/set": SessionGoalSetParamsRaw;
   "session/history": SessionHistoryParamsRaw;
@@ -5749,6 +5803,7 @@ export interface RemoteRequestParamsHydratedByMethod {
   "session/create": SessionCreateParamsHydrated;
   "session/fork": SessionForkParamsHydrated;
   "session/goal/clear": SessionGoalClearParamsHydrated;
+  "session/goal/pause": SessionGoalPauseParamsHydrated;
   "session/goal/resume": SessionGoalResumeParamsHydrated;
   "session/goal/set": SessionGoalSetParamsHydrated;
   "session/history": SessionHistoryParamsHydrated;
@@ -5821,6 +5876,7 @@ export interface RemoteRequestResultRawByMethod {
   "session/create": SessionCreateResultRaw;
   "session/fork": SessionForkResultRaw;
   "session/goal/clear": SessionGoalClearResultRaw;
+  "session/goal/pause": SessionGoalPauseResultRaw;
   "session/goal/resume": SessionGoalResumeResultRaw;
   "session/goal/set": SessionGoalSetResultRaw;
   "session/history": HistoryPageRaw;
@@ -5893,6 +5949,7 @@ export interface RemoteRequestResultHydratedByMethod {
   "session/create": SessionCreateResultHydrated;
   "session/fork": SessionForkResultHydrated;
   "session/goal/clear": SessionGoalClearResultHydrated;
+  "session/goal/pause": SessionGoalPauseResultHydrated;
   "session/goal/resume": SessionGoalResumeResultHydrated;
   "session/goal/set": SessionGoalSetResultHydrated;
   "session/history": HistoryPageHydrated;
