@@ -47,15 +47,16 @@ func (e *ProviderEntry) EffectiveCacheTTL() time.Duration {
 // detectCacheVendor identifies the provider vendor from its base_url for
 // cache policy purposes. Mirrors provider/responses.DetectVendor but lives in
 // the config layer to avoid an import cycle (control → config, not control →
-// provider).
+// provider). Host-based exact/suffix matching (not full-URL substring) so
+// unrelated or attacker-controlled URLs can't be misdetected.
 func detectCacheVendor(baseURL string) string {
-	u := strings.ToLower(strings.TrimSpace(baseURL))
+	host := officialProviderHost(baseURL)
 	switch {
-	case strings.Contains(u, "dashscope.aliyuncs.com"), strings.Contains(u, ".maas.aliyuncs.com"):
+	case host == "dashscope.aliyuncs.com", strings.HasSuffix(host, ".dashscope.aliyuncs.com"), strings.HasSuffix(host, ".maas.aliyuncs.com"):
 		return "dashscope"
-	case strings.Contains(u, "api.deepseek.com"):
+	case host == "api.deepseek.com", strings.HasSuffix(host, ".deepseek.com"):
 		return "deepseek"
-	case strings.Contains(u, "api.xiaomimimo.com"):
+	case host == "api.xiaomimimo.com", strings.HasSuffix(host, ".xiaomimimo.com"):
 		// MiMo: verified 2026-08-02 with a 8.8K-token prefix — cached_tokens
 		// reaches 99.9% hit (17024/17034) and survives 2h+ (short prefixes
 		// also hit, but take ~1.5-2h to warm). Aligns with the vendor's
@@ -63,7 +64,7 @@ func detectCacheVendor(baseURL string) string {
 		// unknown-vendor default is correct; do not move MiMo to the 5min
 		// tier.
 		return "mimo"
-	case strings.Contains(u, "api.anthropic.com"):
+	case host == "api.anthropic.com", strings.HasSuffix(host, ".anthropic.com"):
 		return "anthropic"
 	default:
 		return ""

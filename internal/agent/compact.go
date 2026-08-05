@@ -101,7 +101,7 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 	if a.contextWindow <= 0 || u == nil || u.PromptTokens == 0 {
 		return
 	}
-soft, snip, high := a.compactThresholds()
+	soft, snip, high := a.compactThresholds()
 
 	// Cache-aware compaction deferral: when the recent turn's cache hit rate is
 	// high (≥70%) and we haven't hit the force ratio, delay compaction by one

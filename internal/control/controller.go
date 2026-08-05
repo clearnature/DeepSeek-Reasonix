@@ -129,7 +129,8 @@ type Controller struct {
 	disableColdResumePrune bool
 	// testCacheColdAfter overrides cacheColdAfter() in tests. Zero uses the
 	// vendor-aware resolution from config.
-	testCacheColdAfter                time.Duration
+	testCacheColdAfter time.Duration
+
 	shell                             sandbox.Shell                    // interpreter for user-invoked "!" commands; zero = auto
 	startedOnce                       bool                             // guards the one-shot SessionStart hook on first turn
 	closeOnce                         sync.Once                        // makes close idempotent under racing teardown paths
@@ -1039,9 +1040,9 @@ func (c *Controller) SubmitHTTP(input string) {
 
 // SubmitHTTPFormat is SubmitHTTP with an optional structured-output format
 // ("json_object") applied to the turn's completion requests. Empty format
-// behaves exactly like SubmitHTTP. A format attached to a slash command or
-// other non-turn input is discarded (nothing consumes it; see
-// takePendingResponseFormat).
+// behaves exactly like SubmitHTTP. A format attached to a slash command,
+// or other non-turn input is discarded; @reference turns preserve it because
+// the format is bound to every submitted turn rather than a global slot.
 func (c *Controller) SubmitHTTPFormat(input, format string) {
 	// format 绑定到本次提交的 turn（随请求参数传递），不再写入 Controller
 	// 全局一次性槽——评审 #7234 第 2 点：全局槽存在跨请求串用的逻辑竞态
@@ -1050,6 +1051,9 @@ func (c *Controller) SubmitHTTPFormat(input, format string) {
 	if f != "" && isNonTurnHTTPInput(input) {
 		f = "" // 非 turn 输入（slash 命令/! 前缀）不携带 format
 	}
+	// @ 引用 turn（FileRefLine/SlashPathLineRef 等）同样绑定 format——
+	// runRefTurnWithFormat 族 wrapper 注入 ctx（review fix7234and7168：
+	// format 是每个被接纳 turn 的属性，统一架构）。
 	c.submitHTTPWithFormat(input, "", f)
 }
 
@@ -1224,21 +1228,29 @@ func (c *Controller) submitHTTPWithFormat(input, display, format string) {
 }
 
 func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedRefsOnly bool, editedOriginal, format string) {
-	runRefTurn := c.runRefTurn
-	runRefTurnWithRefs := c.runRefTurnWithRefs
+	runRefTurn := func(input, display string) {
+		c.runRefTurnWithFormat(input, display, format)
+	}
+	runRefTurnWithRefs := func(input, refLine, display string) {
+		c.runRefTurnWithRefsFormat(input, refLine, display, format)
+	}
 	runGoalLoop := func(ctx context.Context, input, raw, display string) error {
 		return c.runGoalLoopWithRawDisplay(c.withTurnFormat(ctx, format), input, raw, display)
 	}
 	if scopedRefsOnly {
-		runRefTurn = c.runScopedRefTurn
-		runRefTurnWithRefs = c.runScopedRefTurnWithRefs
+		runRefTurn = func(input, display string) {
+			c.runScopedRefTurnWithFormat(input, display, format)
+		}
+		runRefTurnWithRefs = func(input, refLine, display string) {
+			c.runScopedRefTurnWithRefsFormat(input, refLine, display, format)
+		}
 	}
 	if strings.TrimSpace(editedOriginal) != "" {
 		runRefTurn = func(input, display string) {
-			c.runEditedRefTurn(input, display, editedOriginal)
+			c.runEditedRefTurnWithFormat(input, display, editedOriginal, format)
 		}
 		runRefTurnWithRefs = func(input, refLine, display string) {
-			c.runEditedRefTurnWithRefs(input, refLine, display, editedOriginal)
+			c.runEditedRefTurnWithRefsFormat(input, refLine, display, editedOriginal, format)
 		}
 		runGoalLoop = func(ctx context.Context, input, raw, display string) error {
 			return c.runEditedGoalLoopWithRawDisplay(ctx, input, raw, display, editedOriginal)
@@ -1697,12 +1709,44 @@ func (c *Controller) runRefTurn(input, display string) {
 	c.runRefTurnWithRefs(input, input, display)
 }
 
-func (c *Controller) runEditedRefTurn(input, display, original string) {
-	c.runEditedRefTurnWithRefs(input, input, display, original)
+// runRefTurnWithFormat runs a reference turn with a structured-output
+// format bound to its context (symmetric with runGoalLoop's withTurnFormat
+// injection — format is a property of every accepted turn, not just the
+// plain-goal path; review #7234 binds format to the accepted turn).
+func (c *Controller) runRefTurnWithFormat(input, display, format string) {
+	c.runGuarded(func(ctx context.Context) error {
+		return c.runRefTurnWithResolverSync(c.withTurnFormat(ctx, format), input, input, display, "", c.ResolveRefs)
+	})
 }
 
-func (c *Controller) runScopedRefTurn(input, display string) {
-	c.runScopedRefTurnWithRefs(input, input, display)
+func (c *Controller) runScopedRefTurnWithFormat(input, display, format string) {
+	c.runGuarded(func(ctx context.Context) error {
+		return c.runRefTurnWithResolverSync(c.withTurnFormat(ctx, format), input, input, display, "", c.ResolveScopedRefs)
+	})
+}
+
+func (c *Controller) runRefTurnWithRefsFormat(input, refLine, display, format string) {
+	c.runGuarded(func(ctx context.Context) error {
+		return c.runRefTurnWithResolverSync(c.withTurnFormat(ctx, format), input, refLine, display, "", c.ResolveRefs)
+	})
+}
+
+func (c *Controller) runScopedRefTurnWithRefsFormat(input, refLine, display, format string) {
+	c.runGuarded(func(ctx context.Context) error {
+		return c.runRefTurnWithResolverSync(c.withTurnFormat(ctx, format), input, refLine, display, "", c.ResolveScopedRefs)
+	})
+}
+
+func (c *Controller) runEditedRefTurnWithFormat(input, display, original, format string) {
+	c.runGuarded(func(ctx context.Context) error {
+		return c.runRefTurnWithResolverSync(c.withTurnFormat(ctx, format), input, input, display, original, c.ResolveRefs)
+	})
+}
+
+func (c *Controller) runEditedRefTurnWithRefsFormat(input, refLine, display, original, format string) {
+	c.runGuarded(func(ctx context.Context) error {
+		return c.runRefTurnWithResolverSync(c.withTurnFormat(ctx, format), input, refLine, display, original, c.ResolveRefs)
+	})
 }
 
 // runRefTurnWithRefs resolves references from refLine while preserving input as
@@ -1712,23 +1756,9 @@ func (c *Controller) runRefTurnWithRefs(input, refLine, display string) {
 	c.runRefTurnWithResolver(input, refLine, display, c.ResolveRefs)
 }
 
-func (c *Controller) runEditedRefTurnWithRefs(input, refLine, display, original string) {
-	c.runEditedRefTurnWithResolver(input, refLine, display, original, c.ResolveRefs)
-}
-
-func (c *Controller) runScopedRefTurnWithRefs(input, refLine, display string) {
-	c.runRefTurnWithResolver(input, refLine, display, c.ResolveScopedRefs)
-}
-
 func (c *Controller) runRefTurnWithResolver(input, refLine, display string, resolve func(context.Context, string) (string, []string)) {
 	c.runGuarded(func(ctx context.Context) error {
 		return c.runRefTurnWithResolverSync(ctx, input, refLine, display, "", resolve)
-	})
-}
-
-func (c *Controller) runEditedRefTurnWithResolver(input, refLine, display, original string, resolve func(context.Context, string) (string, []string)) {
-	c.runGuarded(func(ctx context.Context) error {
-		return c.runRefTurnWithResolverSync(ctx, input, refLine, display, original, resolve)
 	})
 }
 
@@ -3505,11 +3535,12 @@ func (c *Controller) ResetPlannerSession() {
 // cacheColdAfter resolves how long the active provider keeps a prompt prefix
 // cached. A session idle longer than this resumes against a cold cache, so a
 // history rewrite at that moment costs no extra cache misses — it only shrinks
-// the full-price first request. The TTL is vendor-aware: DashScope 5m,
-// DeepSeek 60m, Anthropic 5m, unknown 10m. Users can override per-provider
+// the full-price first request. The TTL is vendor-aware: DeepSeek/unknown
+// 24h (legacy default deliberately preserved), DashScope 5m, Anthropic 5m.
+// Users can override per-provider
 // with cache_ttl_minutes in config.toml.
 func (c *Controller) cacheColdAfter() time.Duration {
-	if c.testCacheColdAfter > 0 || c.testCacheColdAfter == -1 {
+	if c.testCacheColdAfter != 0 {
 		if c.testCacheColdAfter == -1 {
 			return 0
 		}

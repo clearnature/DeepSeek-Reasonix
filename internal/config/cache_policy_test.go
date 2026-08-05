@@ -58,6 +58,8 @@ func TestDetectCacheVendor(t *testing.T) {
 		{"https://api.xiaomimimo.com/v1", "mimo"},
 		{"https://api.anthropic.com", "anthropic"},
 		{"https://openrouter.ai/api/v1", ""},
+		{"https://dashscope.aliyuncs.com.attacker.example/v1", ""},
+		{"https://example.com/?u=api.anthropic.com", ""},
 		{"", ""},
 	}
 	for _, tc := range cases {
