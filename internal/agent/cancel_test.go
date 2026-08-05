@@ -667,7 +667,7 @@ func TestStreamInterruptedEmitsBestEffortUsage(t *testing.T) {
 		{Type: provider.ChunkError, Err: &provider.StreamInterruptedError{Err: errors.New("conn reset")}},
 	}}
 	a := New(prov, echoRegistry(), NewSession(""), Options{}, event.Discard)
-	_, _, _, _, _, _, usage, interrupted, _, _, err := a.stream(context.Background(), 1, &recordSink{})
+	_, _, _, _, _, _, _, usage, interrupted, _, _, err := a.stream(context.Background(), 1, &recordSink{})
 	if err == nil {
 		t.Fatal("expected StreamInterrupted error")
 	}

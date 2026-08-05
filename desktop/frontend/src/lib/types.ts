@@ -474,6 +474,45 @@ export interface CheckpointMeta {
   time: number; // unix ms
   canCode?: boolean;
   canConversation?: boolean;
+  coverage?: string;
+  coverageGaps?: string[];
+  expiredFilePayload?: boolean;
+  activeWriters?: number;
+  legacy?: boolean;
+  canUndoFiles?: boolean;
+  disabledReason?: string;
+}
+
+export interface RewindPlanView {
+  planId?: string;
+  turn?: number;
+  scope?: string;
+  coverage?: string;
+  coverageGaps?: string[];
+  legacy?: boolean;
+  expiredFilePayload?: boolean;
+  canFiles?: boolean;
+  canConversation?: boolean;
+  disabledReason?: string;
+  conflicts?: string[];
+  files?: string[];
+  fileCount?: number;
+  activeWriters?: number;
+  path?: string;
+  ok?: boolean;
+  error?: string;
+}
+
+export interface RewindResultView {
+  ok?: boolean;
+  transactionId?: string;
+  undoAvailable?: boolean;
+  written?: string[];
+  deleted?: string[];
+  conversationOk?: boolean;
+  error?: string;
+  conflicts?: string[];
+  coverage?: string;
 }
 
 // SessionMeta is one saved session for the history panel.
@@ -718,6 +757,7 @@ export interface WorkspaceChangeView {
   turns?: number[];
   latestPrompt?: string;
   latestTime?: number;
+  canSessionRevert?: boolean;
 }
 
 export interface WorkspaceChangesView {
@@ -1403,6 +1443,7 @@ export interface ProviderView {
   contextWindow: number;
   reasoningProtocol: string; // auto|deepseek|glm|openai|none; empty = auto/model registry
   thinking: string; // provider-specific thinking override: ""|enabled|disabled|adaptive
+  webSearch?: boolean; // expose a provider-executed web search tool when supported
   supportedEfforts: string[]; // custom /effort levels; empty = use built-in Kind/BaseURL default
   defaultEffort: string; // /effort level when user picks "auto" or unset; "" = supportedEfforts[0]
   modelOverrides?: ProviderModelOverrideView[] | null;
@@ -1837,6 +1878,7 @@ export interface SettingsView {
   telemetry: boolean; // anonymous launch ping + scrubbed next-launch native crash diagnostics
   metrics: boolean; // aggregate quality/lifecycle metrics (anonymous signal/bucket counts)
   configPath: string;
+  shadowedByPath?: string; // workspace reasonix.toml that outranks configPath, when one exists
   providerKinds: string[]; // provider implementations the kernel registered (for the kind picker)
   autoApproveTools: boolean;
   bypass: boolean; // legacy JSON key for live YOLO/full-access tool auto-approval

@@ -50,6 +50,7 @@ func TestDetectVendorAndModeDefaults(t *testing.T) {
 		{"https://api.deepseek.com", "deepseek", "stateless"},
 		{"https://api.xiaomimimo.com/v1", "mimo", "stateless"},
 		{"https://eu.deepseek.com/v1", "deepseek", "stateless"},
+		{"https://api.xiaomimimo.com/v1", "mimo", "stateless"},
 		{"https://dashscope.aliyuncs.com/compatible-mode/v1", "dashscope", "stateful"},
 		{"https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", "dashscope", "stateful"},
 		{"https://api.deepseek.com.attacker.example/v1", "", "stateful"},
@@ -150,6 +151,39 @@ func TestFactoryPreservesUnsetLegacyStatefulForVendorDetection(t *testing.T) {
 	}
 }
 
+func TestFactoryPropagatesWebSearch(t *testing.T) {
+	p, err := newFromConfig(provider.Config{
+		Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash",
+		Extra: map[string]any{"web_search": true},
+	})
+	if err != nil {
+		t.Fatalf("newFromConfig: %v", err)
+	}
+	if !p.(*client).webSearch {
+		t.Fatal("web_search was not propagated to the Responses client")
+	}
+}
+
+func TestWebSearchToolPrecedesFunctionTools(t *testing.T) {
+	client := New(Config{
+		Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", WebSearch: true,
+	}).(*client)
+	body, _, _ := client.buildRequestBody(provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "latest release"}},
+		Tools:    []provider.ToolSchema{{Name: "read_file", Description: "Read a file", Parameters: json.RawMessage(`{"type":"object"}`)}},
+	})
+	tools, ok := body["tools"].([]map[string]any)
+	if !ok || len(tools) != 2 {
+		t.Fatalf("tools = %#v, want web_search plus one function", body["tools"])
+	}
+	if got := tools[0]["type"]; got != "web_search" {
+		t.Fatalf("tools[0] = %#v, want stable web_search first", tools[0])
+	}
+	if got := tools[1]["type"]; got != "function" {
+		t.Fatalf("tools[1] = %#v, want function tool", tools[1])
+	}
+}
+
 func TestStatelessRequestReplaysReasoningContentAndToolPair(t *testing.T) {
 	var body map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -237,6 +271,133 @@ func TestStreamDoesNotDuplicateDoneText(t *testing.T) {
 	}
 	if chunks[len(chunks)-1].Type != provider.ChunkDone {
 		t.Fatalf("last chunk = %v", chunks[len(chunks)-1].Type)
+	}
+}
+
+func TestStreamToleratesWebSearchLifecycleEvents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeEvents(w,
+			`{"type":"response.web_search_call.in_progress","item_id":"ws_1"}`,
+			`{"type":"response.web_search_call.searching","item_id":"ws_1"}`,
+			`{"type":"response.web_search_call.completed","item_id":"ws_1"}`,
+			`{"type":"response.output_text.delta","item_id":"msg_1","content_index":0,"delta":"found it"}`,
+			`{"type":"response.completed","response":{"id":"resp_1","usage":{"input_tokens":4,"output_tokens":2,"total_tokens":6}}}`,
+		)
+	}))
+	defer server.Close()
+
+	chunks := collect(t, New(Config{Name: "deepseek", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-flash", Mode: "stateless", WebSearch: true}), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "search"}},
+	})
+	var text string
+	for _, chunk := range chunks {
+		if chunk.Type == provider.ChunkText {
+			text += chunk.Text
+		}
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("unexpected stream error: %v", chunk.Err)
+		}
+	}
+	if text != "found it" || chunks[len(chunks)-1].Type != provider.ChunkDone {
+		t.Fatalf("chunks = %#v, want searched answer followed by done", chunks)
+	}
+}
+
+func TestDeepSeekStatelessReplayPreservesCompletedWebSearchCall(t *testing.T) {
+	var bodies []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		bodies = append(bodies, body)
+		if len(bodies) == 1 {
+			writeEvents(w,
+				`{"type":"response.output_item.done","item":{"id":"ws_1","type":"web_search_call","status":"completed","action":{"type":"search","query":"latest release","sources":[{"url":"https://api-docs.deepseek.com/updates/"}]}}}`,
+				`{"type":"response.output_text.delta","item_id":"msg_1","content_index":0,"delta":"found it"}`,
+				`{"type":"response.completed","response":{"id":"resp_1","usage":{"input_tokens":4,"output_tokens":2,"total_tokens":6}}}`,
+			)
+			return
+		}
+		writeEvents(w, `{"type":"response.completed","response":{"id":"resp_2","usage":{"input_tokens":8,"output_tokens":2,"total_tokens":10}}}`)
+	}))
+	defer server.Close()
+
+	client := New(Config{Name: "deepseek", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-flash", Mode: "stateless", WebSearch: true}).(*client)
+	// The test server is local, so pin the vendor classification to the official
+	// DeepSeek behavior under test without weakening production URL detection.
+	client.vendor = "deepseek"
+	first := collect(t, client, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "search"}}})
+	var replayItems []json.RawMessage
+	for _, chunk := range first {
+		if chunk.Type == provider.ChunkResponsesItem {
+			replayItems = append(replayItems, chunk.ResponsesItem)
+		}
+	}
+	if len(replayItems) != 1 {
+		t.Fatalf("replay items = %d, want one completed web_search_call: %#v", len(replayItems), first)
+	}
+
+	collect(t, client, provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "search"},
+		{Role: provider.RoleAssistant, Content: "found it", ResponsesItems: replayItems},
+		{Role: provider.RoleUser, Content: "which source?"},
+	}})
+	if len(bodies) != 2 {
+		t.Fatalf("request bodies = %d, want 2", len(bodies))
+	}
+	items, ok := bodies[1]["input"].([]any)
+	if !ok || len(items) != 4 {
+		t.Fatalf("follow-up input = %#v, want user/search-call/assistant/user", bodies[1]["input"])
+	}
+	search, ok := items[1].(map[string]any)
+	if !ok || search["type"] != "web_search_call" || search["id"] != "ws_1" {
+		t.Fatalf("replayed search item = %#v", items[1])
+	}
+	action, _ := search["action"].(map[string]any)
+	if action["query"] != "latest release" {
+		t.Fatalf("replayed search action = %#v", action)
+	}
+}
+
+func TestResponsesItemsAreIgnoredOutsideOfficialDeepSeekWire(t *testing.T) {
+	raw := json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)
+	client := New(Config{Name: "compatible", BaseURL: "https://gateway.example", Model: "m", Mode: "stateless"}).(*client)
+	body, _, _ := client.buildRequestBody(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "search"},
+		{Role: provider.RoleAssistant, Content: "answer", ResponsesItems: []json.RawMessage{raw}},
+	}})
+	items := body["input"].([]map[string]any)
+	for _, item := range items {
+		if item["type"] == "web_search_call" {
+			t.Fatalf("foreign Responses endpoint received DeepSeek replay item: %#v", items)
+		}
+	}
+}
+
+func TestDeepSeekReplayDropsMalformedOrIncompleteSearchItems(t *testing.T) {
+	items := []json.RawMessage{
+		json.RawMessage(`{"id":"ws_valid","type":"web_search_call","status":"completed","action":{"type":"search"}}`),
+		json.RawMessage(`{"id":"ws_failed","type":"web_search_call","status":"failed"}`),
+		json.RawMessage(`{"type":"web_search_call","status":"completed"}`),
+		json.RawMessage(`{"id":"fc_1","type":"function_call","status":"completed"}`),
+		json.RawMessage(`{"id":`),
+	}
+	client := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", Mode: "stateless"}).(*client)
+	body, _, _ := client.buildRequestBody(provider.Request{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: "search"},
+		{Role: provider.RoleAssistant, Content: "answer", ResponsesItems: items},
+	}})
+	wire := body["input"].([]map[string]any)
+	var searches []map[string]any
+	for _, item := range wire {
+		if item["type"] == "web_search_call" {
+			searches = append(searches, item)
+		}
+	}
+	if len(searches) != 1 || searches[0]["id"] != "ws_valid" {
+		t.Fatalf("replayed searches = %#v, want only completed valid item", searches)
 	}
 }
 
@@ -622,6 +783,7 @@ func TestWarnOnMissingToolCallReasoningIsModelScoped(t *testing.T) {
 	other := New(Config{Name: "other", BaseURL: "https://example.com", Model: "m"})
 	if provider.WarnOnMissingToolCallReasoning(other) {
 		t.Fatal("unknown Responses endpoint must not warn on missing tool-call reasoning")
+
 	}
 }
 
@@ -1119,6 +1281,9 @@ func mustKnowledgeDir(t *testing.T) string {
 // capability 驱动运行时行为——MiMo（单段）工具轮缺思考不警告、DashScope
 // （无回传契约）不警告、DeepSeek 非 flash（多段+需回传）警告。
 // Copilot review: wire into behavior or drop — wired.
+// TestSingleSegmentReasoningWiredIntoWarningPolicy：singleSegmentReasoning
+// capability 驱动警告策略（评审 #7234 Copilot：wire into behavior）。
+
 func TestSingleSegmentReasoningWiredIntoWarningPolicy(t *testing.T) {
 	cases := []struct {
 		name, baseURL, model string
@@ -1129,13 +1294,33 @@ func TestSingleSegmentReasoningWiredIntoWarningPolicy(t *testing.T) {
 		{"deepseek pro 多段警告", "https://api.deepseek.com", "deepseek-v4-pro", true},
 		{"deepseek flash 豁免", "https://api.deepseek.com", "deepseek-v4-flash", false},
 	}
-	for _, c := range cases {
-		pro := New(Config{Name: "t", APIKey: "k", BaseURL: c.baseURL, Model: c.model}).(interface {
+	for _, tc := range cases {
+		pro := New(Config{Name: "t", APIKey: "k", BaseURL: tc.baseURL, Model: tc.model}).(interface {
 			WarnOnMissingToolCallReasoning() bool
 		})
-		if got := pro.WarnOnMissingToolCallReasoning(); got != c.want {
-			t.Errorf("%s: WarnOnMissingToolCallReasoning = %v, want %v", c.name, got, c.want)
+		if got := pro.WarnOnMissingToolCallReasoning(); got != tc.want {
+			t.Errorf("%s: WarnOnMissingToolCallReasoning = %v, want %v", tc.name, got, tc.want)
+
 		}
+	}
+}
+
+// TestFactoryPassesExtraThrough：newFromConfig 原样透传 cfg.Extra——
+// vision 开关经 provider factory 后仍生效（评审 #7234 第 3 点）。
+func TestFactoryPassesExtraThrough(t *testing.T) {
+	p, err := newFromConfig(provider.Config{
+		Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro",
+		Extra: map[string]any{"vision": true, "effort": "low", "mode": "stateless"},
+	})
+	if err != nil {
+		t.Fatalf("newFromConfig: %v", err)
+	}
+	cl := p.(*client)
+	if !cl.vision {
+		t.Fatal("vision must survive factory (Extra passthrough)")
+	}
+	if cl.effort != "low" {
+		t.Fatalf("effort = %q, want low", cl.effort)
 	}
 }
 
@@ -1145,6 +1330,7 @@ func TestSingleSegmentReasoningWiredIntoWarningPolicy(t *testing.T) {
 func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// 第一轮：reasoning item added（id）+ done（status）+ completed
+
 		writeEvents(w,
 			`{"type":"response.output_item.added","item":{"type":"reasoning","id":"rs_round1","summary":[],"content":[]}}`,
 			`{"type":"response.reasoning_text.delta","item_id":"rs_round1","delta":"think hard"}`,
@@ -1156,6 +1342,7 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 	c := New(Config{Name: "deepseek-responses", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-pro"}).(*client)
 
 	// 第一轮：捕获 meta chunk 的 id/status
+
 	var rid, rstatus string
 	ch, _ := c.Stream(context.Background(), provider.Request{
 		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
@@ -1171,6 +1358,7 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 	}
 
 	// 第二轮：用捕获的 id/status 构造 assistant message → 请求体回传
+
 	body, _, _ := c.buildRequestBody(provider.Request{
 		Messages: []provider.Message{
 			{Role: provider.RoleUser, Content: "hi"},
@@ -1194,24 +1382,28 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 	}
 }
 
-// TestFactoryPassesExtraThrough：newFromConfig 原样透传 cfg.Extra——
-// vision 开关经 provider factory 后仍生效（评审 #7234 第 3 点）。
-func TestFactoryPassesExtraThrough(t *testing.T) {
-	p, err := newFromConfig(provider.Config{
-		Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro",
-		Extra: map[string]any{"vision": true, "effort": "low", "mode": "stateless"},
-	})
-	if err != nil {
-		t.Fatalf("newFromConfig: %v", err)
+// TestVendorTableMaxOutputTokens：默认输出预算完全由 vendor 表驱动——
+// mimo 65536（长思考不截断）、deepseek 32K、unknown 不设。
+func TestVendorTableMaxOutputTokens(t *testing.T) {
+	msg := []provider.Message{{Role: provider.RoleUser, Content: "hi"}}
+
+	// mimo：表默认 65536（思考模式不设会顶到服务端 32768 截断）
+	mimo := New(Config{Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro"}).(*client)
+	body, _, _ := mimo.buildRequestBody(provider.Request{Messages: msg})
+	if got := body["max_output_tokens"]; got != 65536 {
+		t.Fatalf("mimo max_output_tokens = %#v, want 65536 (vendor table)", got)
 	}
-	cl := p.(*client)
-	if !cl.vision {
-		t.Fatal("vision must survive factory (Extra passthrough)")
+	// mimo 思考禁用也设 65536（mimo 无 thinking-disabled 豁免——表无条件）
+	noThinking := New(Config{Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro", Effort: "none"}).(*client)
+	nb, _, _ := noThinking.buildRequestBody(provider.Request{Messages: msg})
+	if nb["max_output_tokens"] != 65536 {
+		t.Fatalf("mimo thinking-disabled budget = %#v, want 65536", nb["max_output_tokens"])
 	}
-	if cl.effort != "low" {
-		t.Fatalf("effort = %q, want low", cl.effort)
-	}
-	if cl.mode != "stateless" {
-		t.Fatalf("mode = %q, want stateless", cl.mode)
+	// deepseek 值来自表（非硬编码常量）
+	ds := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro"}).(*client)
+	db, _, _ := ds.buildRequestBody(provider.Request{Messages: msg})
+	if got := db["max_output_tokens"]; got != capabilitiesFor("deepseek").defaultMaxOutputTokens {
+		t.Fatalf("deepseek budget must come from vendor table, got %#v", got)
+
 	}
 }

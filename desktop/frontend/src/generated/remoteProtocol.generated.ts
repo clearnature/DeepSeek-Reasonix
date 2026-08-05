@@ -2,7 +2,7 @@
 
 export const REMOTE_SCHEMA_FORMAT = "reasonix.remote.schema.v1" as const;
 export const REMOTE_PROTOCOL_VERSION = "1" as const;
-export const REMOTE_SCHEMA_HASH = "sha256:e35216efaf3685d5b05d13e0071cbd034d0fb9f4802af20a4187500a1d672ad8" as const;
+export const REMOTE_SCHEMA_HASH = "sha256:0d375052ced55d421251b9cc9bc535a29604308e6a3e9a9d3a90ef02e7b138d7" as const;
 
 export const REMOTE_FIXED_RESOURCES = {
   "protocol": {
@@ -912,6 +912,7 @@ export type BrokerStreamChunkParamsRaw = {
     };
     "reasoningID"?: string;
     "reasoningStatus"?: string;
+    "responsesItem"?: RemoteJSONValue;
     "signature"?: string;
     "text"?: string;
     "toolCall"?: {
@@ -926,7 +927,7 @@ export type BrokerStreamChunkParamsRaw = {
       "resolved_read_only"?: boolean;
       "thought_signature"?: string;
     };
-    "type": "done" | "error" | "reasoning" | "text" | "tool_call" | "tool_call_args_delta" | "tool_call_start" | "usage";
+    "type": "done" | "error" | "reasoning" | "responses_item" | "text" | "tool_call" | "tool_call_args_delta" | "tool_call_start" | "usage";
     "usage"?: {
       "cacheHitTokens": number;
       "cacheMissTokens": number;
@@ -950,6 +951,7 @@ export type BrokerStreamChunkParamsHydrated = {
     };
     "reasoningID"?: string;
     "reasoningStatus"?: string;
+    "responsesItem"?: RemoteJSONValue;
     "signature"?: string;
     "text"?: string;
     "toolCall"?: {
@@ -964,7 +966,7 @@ export type BrokerStreamChunkParamsHydrated = {
       "resolved_read_only"?: boolean;
       "thought_signature"?: string;
     };
-    "type": "done" | "error" | "reasoning" | "text" | "tool_call" | "tool_call_args_delta" | "tool_call_start" | "usage";
+    "type": "done" | "error" | "reasoning" | "responses_item" | "text" | "tool_call" | "tool_call_args_delta" | "tool_call_start" | "usage";
     "usage"?: {
       "cacheHitTokens": number;
       "cacheMissTokens": number;
@@ -1033,6 +1035,7 @@ export type BrokerStreamOpenParamsRaw = {
       "reasoning_id"?: string;
       "reasoning_signature"?: string;
       "reasoning_status"?: string;
+      "responses_items"?: Array<RemoteJSONValue>;
       "role": "assistant" | "system" | "tool" | "user";
       "tool_call_id"?: string;
       "tool_calls"?: Array<{
@@ -1104,6 +1107,7 @@ export type BrokerStreamOpenParamsHydrated = {
       "reasoning_id"?: string;
       "reasoning_signature"?: string;
       "reasoning_status"?: string;
+      "responses_items"?: Array<RemoteJSONValue>;
       "role": "assistant" | "system" | "tool" | "user";
       "tool_call_id"?: string;
       "tool_calls"?: Array<{
@@ -2723,6 +2727,12 @@ export type SessionCatalogParamsHydrated = {
 };
 
 export type SessionCatalogResultRaw = {
+  "builtinCommands"?: Array<{
+    "description"?: string;
+    "group"?: string;
+    "hint"?: string;
+    "name": string;
+  }>;
   "commands": Array<{
     "description"?: string;
     "name": string;
@@ -2746,6 +2756,12 @@ export type SessionCatalogResultRaw = {
   }>;
 };
 export type SessionCatalogResultHydrated = {
+  "builtinCommands"?: Array<{
+    "description"?: string;
+    "group"?: string;
+    "hint"?: string;
+    "name": string;
+  }>;
   "commands": Array<{
     "description"?: string;
     "name": string;

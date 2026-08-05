@@ -228,8 +228,6 @@ func runTask(bin, model, profile string, t task) result {
 	metricsPath := filepath.Join(work, ".run-metrics.json")
 	args := buildRunTaskArgs(metricsPath, model, profile, t.MaxSteps, t.Prompt)
 
-
-
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = work
 	cmd.Stdout = os.Stderr // stream the run to the job log, keep stdout clean for the report
