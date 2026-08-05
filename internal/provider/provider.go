@@ -800,6 +800,7 @@ type Chunk struct {
 	// from the SSE stream, so the Agent can persist them into the session
 	// and the next turn's input reasoning item round-trips them (OpenAI
 	// Responses schema marks Reasoning.id required).
+
 	ReasoningID     string          // ChunkReasoning: provider-issued reasoning item id
 	ReasoningStatus string          // ChunkReasoning: final reasoning item status ("completed")
 	ToolCall        *ToolCall       // ChunkToolCallStart (ID+Name only), ChunkToolCallArgsDelta (ID+Name), ChunkToolCall (complete)

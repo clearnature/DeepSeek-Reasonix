@@ -2764,6 +2764,7 @@ func (a *Agent) stream(ctx context.Context, turn int, sink event.Sink) (string, 
 	if err != nil {
 		failUsage := provider.UsageWithRequestAttemptCount(ctx, nil)
 		return "", "", "", "", "", nil, nil, failUsage, false, false, nil, err
+
 	}
 
 	// A PostLLMCall hook rewrites the whole reasoning block, so when one is wired
@@ -2894,6 +2895,7 @@ func (a *Agent) stream(ctx context.Context, turn int, sink event.Sink) (string, 
 			a.sessCacheMiss.Add(int64(chunk.Usage.CacheMissTokens))
 			a.lastAPICallAt = time.Now()
 		case provider.ChunkError:
+
 			stored, _ := finishReasoning()
 			// 中断路径统一 best-effort 计费（#7184）：无论 StreamInterrupted
 			// 还是普通流错误，都补估算 + request count——usage 通常在流尾，
@@ -2904,6 +2906,7 @@ func (a *Agent) stream(ctx context.Context, turn int, sink event.Sink) (string, 
 			if provider.IsStreamInterrupted(chunk.Err) {
 				return text.String(), stored, signature, reasoningID, reasoningStatus, calls, responsesItems, usage, true, partialToolStarted, partialCalls, chunk.Err
 			}
+
 			return text.String(), stored, signature, reasoningID, reasoningStatus, calls, responsesItems, usage, false, partialToolStarted, partialCalls, chunk.Err
 		}
 	}
