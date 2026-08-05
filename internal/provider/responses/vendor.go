@@ -51,10 +51,18 @@ type vendorCapabilities struct {
 	// let the server use its own default". MiMo's server default (32768)
 	// covers reasoning + visible output, and its thinking mode can spend a
 	// large chunk of that budget on reasoning before the visible answer —
-	// truncating tool calls mid-JSON on long turns. Raise it to the next
-	// documented tier (65536, within the allowed [1, 131072] range) so the
-	// answer survives long reasoning.
+	// truncating tool calls mid-JSON on long turns. Raise it to 128000
+	// (MiMo-Code's MIMO_OUTPUT_TOKEN_MAX, within the allowed [1, 131072]
+	// range) so the answer survives long reasoning.
 	defaultMaxOutputTokens int
+
+	// summaryMode, when non-empty, is sent as reasoning.summary in the
+	// request body. MiMo-Code sends "detailed" or "none" to control
+	// whether the server emits reasoning summaries that consume output
+	// budget. DashScope requires "detailed" (handled via summaryRequired
+	// on input items, not this field). Empty means "do not send
+	// reasoning.summary" (the OpenAI default).
+	summaryMode string
 
 	// summaryRequired marks vendors whose Responses API requires the
 	// `summary` list on input reasoning items (DashScope; without it the
@@ -88,9 +96,10 @@ var vendorTable = map[string]vendorCapabilities{
 		stateless:              true,
 		sessionCacheHeader:     false,
 		toolCallReasoning:      true,
-		singleSegmentReasoning: true,
+		singleSegmentReasoning: false,
 		ignoresTemperature:     true,
-		defaultMaxOutputTokens: 131072,
+		defaultMaxOutputTokens: 128000,
+		summaryMode:            "detailed",
 	},
 	// "" (unknown OpenAI-compatible endpoint) → zero value = default behavior.
 }

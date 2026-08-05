@@ -583,7 +583,7 @@ func TestVendorCapabilityTableCoversKnownEndpoints(t *testing.T) {
 		singleSegment        bool
 	}{
 		{"https://api.deepseek.com", "deepseek", true, true, false, false},
-		{"https://api.xiaomimimo.com/v1", "mimo", true, true, true, true},
+		{"https://api.xiaomimimo.com/v1", "mimo", true, true, true, false},
 		{"https://dashscope.aliyuncs.com/compatible-mode/v1", "dashscope", false, false, false, false},
 		{"https://example.com/v1", "", false, false, false, false},
 	}
@@ -648,6 +648,39 @@ func TestMiMoOmitsTemperatureFromRequestBody(t *testing.T) {
 	}
 }
 
+func TestMiMoSendsReasoningSummaryMode(t *testing.T) {
+	// MiMo-Code sends reasoning.summary to control whether the server emits
+	// reasoning summaries that consume output budget. Our vendor table sets
+	// summaryMode="detailed" for MiMo; verify it appears in the request body.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var reqBody map[string]any
+		if err := json.Unmarshal(body, &reqBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		reasoning, ok := reqBody["reasoning"].(map[string]any)
+		if !ok {
+			t.Fatalf("request must carry reasoning object, got %#v", reqBody["reasoning"])
+		}
+		if reasoning["effort"] != "high" {
+			t.Fatalf("reasoning.effort = %v, want high", reasoning["effort"])
+		}
+		if reasoning["summary"] != "detailed" {
+			t.Fatalf("reasoning.summary = %v, want detailed", reasoning["summary"])
+		}
+		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
+	}))
+	defer server.Close()
+
+	p := New(Config{Name: "mimo", APIKey: "key", BaseURL: server.URL, Model: "mimo-v2.5-pro", Effort: "high"}).(*client)
+	p.vendor = "mimo"
+	p.caps = capabilitiesFor("mimo")
+	if p.caps.summaryMode != "detailed" {
+		t.Fatalf("MiMo summaryMode = %q, want detailed", p.caps.summaryMode)
+	}
+	collect(t, p, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
+}
+
 func TestRequiresToolCallReasoningForStatelessVendors(t *testing.T) {
 	deepseek := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash"})
 	if !provider.RequiresToolCallReasoning(deepseek) {
@@ -666,15 +699,15 @@ func TestRequiresToolCallReasoningForStatelessVendors(t *testing.T) {
 func TestMiMoDefaultMaxOutputTokensRaised(t *testing.T) {
 	// MiMo's 32768 server default (reasoning + visible output) truncates
 	// tool calls on long-reasoning turns; the vendor capability raises the
-	// unset cap to 65536 (within the documented [1,131072] range).
+	// unset cap to 65536 (within [1,131072] range).
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var reqBody map[string]any
 		if err := json.Unmarshal(body, &reqBody); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
-		if got := reqBody["max_output_tokens"]; got != float64(131072) {
-			t.Fatalf("MiMo default max_output_tokens = %v, want 131072", got)
+		if got := reqBody["max_output_tokens"]; got != float64(128000) {
+			t.Fatalf("MiMo default max_output_tokens = %v, want 128000", got)
 		}
 		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
 	}))
@@ -1383,21 +1416,21 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 }
 
 // TestVendorTableMaxOutputTokens：默认输出预算完全由 vendor 表驱动——
-// mimo 131072（pro 默认值，思考模式不设会顶到服务端默认截断）、deepseek 32K、unknown 不设。
+// mimo 128000（MiMo-Code's MIMO_OUTPUT_TOKEN_MAX）、deepseek 32K、unknown 不设。
 func TestVendorTableMaxOutputTokens(t *testing.T) {
 	msg := []provider.Message{{Role: provider.RoleUser, Content: "hi"}}
 
-	// mimo：表默认 131072（pro 模型默认值，思考模式不设会顶到服务端默认截断）
+	// mimo：表默认 128000（pro 模型默认值，思考模式不设会顶到服务端默认截断）
 	mimo := New(Config{Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro"}).(*client)
 	body, _, _ := mimo.buildRequestBody(provider.Request{Messages: msg})
-	if got := body["max_output_tokens"]; got != 131072 {
-		t.Fatalf("mimo max_output_tokens = %#v, want 131072 (vendor table)", got)
+	if got := body["max_output_tokens"]; got != 128000 {
+		t.Fatalf("mimo max_output_tokens = %#v, want 128000 (vendor table)", got)
 	}
-	// mimo 思考禁用也设 131072（mimo 无 thinking-disabled 豁免——表无条件）
+	// mimo 思考禁用也设 128000（mimo 无 thinking-disabled 豁免——表无条件）
 	noThinking := New(Config{Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro", Effort: "none"}).(*client)
 	nb, _, _ := noThinking.buildRequestBody(provider.Request{Messages: msg})
-	if nb["max_output_tokens"] != 131072 {
-		t.Fatalf("mimo thinking-disabled budget = %#v, want 131072", nb["max_output_tokens"])
+	if nb["max_output_tokens"] != 128000 {
+		t.Fatalf("mimo thinking-disabled budget = %#v, want 128000", nb["max_output_tokens"])
 	}
 	// deepseek 值来自表（非硬编码常量）
 	ds := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro"}).(*client)
