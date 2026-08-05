@@ -99,7 +99,7 @@ var vendorTable = map[string]vendorCapabilities{
 		singleSegmentReasoning: false,
 		ignoresTemperature:     true,
 		defaultMaxOutputTokens: 128000,
-		summaryMode:            "detailed",
+		summaryMode:            "none",
 	},
 	// "" (unknown OpenAI-compatible endpoint) → zero value = default behavior.
 }

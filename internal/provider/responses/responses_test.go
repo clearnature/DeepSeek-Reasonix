@@ -651,7 +651,7 @@ func TestMiMoOmitsTemperatureFromRequestBody(t *testing.T) {
 func TestMiMoSendsReasoningSummaryMode(t *testing.T) {
 	// MiMo-Code sends reasoning.summary to control whether the server emits
 	// reasoning summaries that consume output budget. Our vendor table sets
-	// summaryMode="detailed" for MiMo; verify it appears in the request body.
+	// summaryMode: "none"" for MiMo; verify it appears in the request body.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var reqBody map[string]any
@@ -665,8 +665,8 @@ func TestMiMoSendsReasoningSummaryMode(t *testing.T) {
 		if reasoning["effort"] != "high" {
 			t.Fatalf("reasoning.effort = %v, want high", reasoning["effort"])
 		}
-		if reasoning["summary"] != "detailed" {
-			t.Fatalf("reasoning.summary = %v, want detailed", reasoning["summary"])
+		if reasoning["summary"] != "none" {
+			t.Fatalf("reasoning.summary = %v, want none", reasoning["summary"])
 		}
 		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
 	}))
@@ -675,8 +675,8 @@ func TestMiMoSendsReasoningSummaryMode(t *testing.T) {
 	p := New(Config{Name: "mimo", APIKey: "key", BaseURL: server.URL, Model: "mimo-v2.5-pro", Effort: "high"}).(*client)
 	p.vendor = "mimo"
 	p.caps = capabilitiesFor("mimo")
-	if p.caps.summaryMode != "detailed" {
-		t.Fatalf("MiMo summaryMode = %q, want detailed", p.caps.summaryMode)
+	if p.caps.summaryMode != "none" {
+		t.Fatalf("MiMo summaryMode = %q, want none", p.caps.summaryMode)
 	}
 	collect(t, p, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
 }
