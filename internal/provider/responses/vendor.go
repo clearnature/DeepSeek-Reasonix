@@ -3,6 +3,7 @@ package responses
 import (
 	"net/url"
 	"strings"
+	"time"
 )
 
 // vendorCapabilities describes how a Responses-compatible endpoint deviates
@@ -73,6 +74,12 @@ type vendorCapabilities struct {
 	// chain-of-thought echoed each turn and inflating reasoning output
 	// until truncation. Only send it where the wire demands it.
 	summaryRequired bool
+
+	// streamIdleTimeout overrides the default SSE stream idle timeout for
+	// this vendor. MiMo's cold-path TTFT can reach ~5 minutes for long
+	// reasoning turns; the default 120s would abort prematurely. Zero means
+	// use defaultStreamIdleTimeout.
+	streamIdleTimeout time.Duration
 }
 
 var vendorTable = map[string]vendorCapabilities{
@@ -95,7 +102,7 @@ var vendorTable = map[string]vendorCapabilities{
 		toolCallReasoning:      true,
 		singleSegmentReasoning: false,
 		ignoresTemperature:     false,
-		defaultMaxOutputTokens: 32 * 1024,
+		defaultMaxOutputTokens: 131072,
 		summaryMode:            "detailed",
 	},
 	"mimo": {
@@ -106,6 +113,10 @@ var vendorTable = map[string]vendorCapabilities{
 		ignoresTemperature:     true,
 		defaultMaxOutputTokens: 128000,
 		summaryMode:            "none",
+		// MiMo only accepts effort values: none, low, medium, high
+		// (case-sensitive lowercase). auto/disabled/off/HIGH are rejected
+		// with HTTP 400. NormalizeEffort in effort.go handles the mapping.
+		streamIdleTimeout: 8 * time.Minute, // cold-path TTFT ~5min
 	},
 	// "" (unknown OpenAI-compatible endpoint) → zero value = default behavior.
 }
