@@ -77,3 +77,15 @@ System-prompt-review: <reviewer/approval note>
 ```
 
 Values `n/a`, `none`, `todo`, `tbd` are rejected — use a descriptive reason instead.
+
+<!-- MENTAL-SEAL:START -->
+
+## 🎯 核心目标（由 Mental Seal · 思想钢印 管理）
+
+> 以下目标在每次会话启动时自动注入 AI 的 system prompt，永不被压缩遗忘。
+
+- **前缀缓存是第一原则**：任何发送侧改动（序列化/字段/顺序/重放）先问「会不会改变前缀字节？」——会 = 破坏服务端缓存 = 用户付全价，否决或必须有缓存收益补偿。
+- **B2 小 turns 保留窗口必须按「消息位置固定」实现**（保留 `[head, head+N]` 区间），禁止「最新 N 条」动态保留——否则每次 compaction 前缀漂移、服务端缓存反复打穿。
+- **打开历史会话/recovery 恢复时先压缩再发送（C1 重放门控）**：把「赌前缀恰好命中缓存」变成「确定的小前缀 + 后续稳定命中」——重放 1.2M 前缀差一字节就是全价。
+
+<!-- MENTAL-SEAL:END -->
