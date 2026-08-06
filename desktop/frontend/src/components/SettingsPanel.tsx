@@ -1531,22 +1531,13 @@ function providerKindLabel(kind: string, t: ReturnType<typeof useT>): string {
       return t("settings.providerProtocolAnthropic");
     case "openai":
       return t("settings.providerProtocolOpenAI");
-    case "responses":
-      return t("settings.providerProtocolResponses");
     default:
       return kind;
   }
 }
 
 function providerKindHint(kind: string, t: ReturnType<typeof useT>): string {
-  switch (kind) {
-    case "anthropic":
-      return t("settings.providerProtocolAnthropicHint");
-    case "responses":
-      return t("settings.providerProtocolResponsesHint");
-    default:
-      return t("settings.providerProtocolOpenAIHint");
-  }
+  return kind === "anthropic" ? t("settings.providerProtocolAnthropicHint") : t("settings.providerProtocolOpenAIHint");
 }
 
 function reasoningProtocolLabel(protocol: string, t: ReturnType<typeof useT>): string {
@@ -6035,9 +6026,6 @@ export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker
   const visibleCandidates = q
     ? candidates.filter((model) => model.toLowerCase().includes(q))
     : candidates;
-  // NOTE: hooks must run unconditionally before any early return, otherwise
-  // React #310 (rendered more hooks than during the previous render) fires
-  // when candidates transitions from empty to non-empty after model fetch.
   const deferredCandidates = useDeferredValue(visibleCandidates);
   if (candidates.length === 0) return null;
   const selected = new Set(selectedModels);

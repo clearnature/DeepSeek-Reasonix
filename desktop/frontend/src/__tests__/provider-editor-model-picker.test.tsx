@@ -8,7 +8,6 @@ import { LocaleProvider } from "../lib/i18n";
 import { ProviderEditor, ProviderEditorModelPicker, providerSupportsServerWebSearch } from "../components/SettingsPanel";
 import type { ProviderView } from "../lib/types";
 
-
 let passed = 0;
 let failed = 0;
 
@@ -166,8 +165,6 @@ try {
 
 ok(!editorThrew, "provider editor can switch from built-in to custom without changing hook order");
 ok(rootEl.textContent?.includes("OpenAI-compatible") === true, "provider editor renders the custom provider fields after the switch");
-
-
 
 await act(async () => {
   root.render(<div />);

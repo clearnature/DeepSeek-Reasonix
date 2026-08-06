@@ -564,10 +564,6 @@ export const zh: Record<DictKey, string> = {
   "caps.skillRootShowAllSkills": "查看全部 {count} 个",
   "caps.showDiagnostics": "查看隐藏路径 {count}",
   "caps.hideDiagnostics": "隐藏诊断路径",
-  "caps.switchBusy": "当前有任务在进行，暂时不能修改此设置。请稍后再试。",
-  "caps.switchBusyRunning": "当前回答仍在运行，暂时不能修改此设置。请先停止回答，或等待它完成。",
-  "caps.switchBusyPrompt": "有待处理的确认问题，暂时不能修改此设置。请先完成处理。",
-  "caps.switchBusyJobs": "仍有 {n} 个后台任务在运行，暂时不能修改此设置。请先停止它们。",
 
   // 子智能体档案（设置 > 子智能体）
   "subagents.tabHint": "内置 + 你自己的 agent 档案",
@@ -2587,8 +2583,6 @@ export const zh: Record<DictKey, string> = {
   "settings.providerProtocol": "接入协议",
   "settings.providerProtocolOpenAI": "OpenAI-compatible",
   "settings.providerProtocolOpenAIHint": "适用于兼容 OpenAI API 的代理、聚合平台和自建服务。",
-  "settings.providerProtocolResponses": "Responses API",
-  "settings.providerProtocolResponsesHint": "适用于官方 Responses 协议端点（如 DeepSeek 官方 stateless Responses API），支持思考模式与工具调用。",
   "settings.providerProtocolAnthropic": "Anthropic-compatible",
   "settings.providerProtocolAnthropicHint": "适用于 Claude Messages API 风格的服务，例如部分 coding plan 端点。",
   "settings.providerBaseUrlLabel": "API 地址",

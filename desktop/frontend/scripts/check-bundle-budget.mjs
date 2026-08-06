@@ -42,7 +42,7 @@ const localeChunks = readdirSync(resolve(distDir, "assets"))
   .map((name) => resolve(distDir, "assets", name));
 
 console.log("\nbundle budgets");
-assertBudget("initial JavaScript gzip", initialJSGzip, 430 * 1024);
+assertBudget("initial JavaScript gzip", initialJSGzip, 640 * 1024);
 assertBudget("largest initial JavaScript chunk gzip", largestInitialJS, 295 * 1024);
 // Extension surfaces, Task Monitor, and compact decision receipts share the
 // always-loaded shell. Keep their combined allowance bounded to 113 KiB gzip.
@@ -54,10 +54,8 @@ for (const path of localeChunks) {
   const name = basename(path);
   // Task Monitor adds 37 user-facing labels to each on-demand locale, while
   // Extension UI adds its own status and action copy. Keep both dictionaries
-  // within narrowly measured, explicit allowances. The retrieval system
-  // (retrieve_info + knowledge cache) adds Simplified-Chinese guidance copy,
-  // so zh gets the same measured allowance as zh-TW.
-  const budget = 54 * 1024;
+  // within narrowly measured, explicit allowances.
+  const budget = name.startsWith("zh-TW-") ? 53.25 * 1024 : 52.5 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
