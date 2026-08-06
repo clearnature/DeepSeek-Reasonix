@@ -91,6 +91,7 @@ var vendorTable = map[string]vendorCapabilities{
 		singleSegmentReasoning: false,
 		ignoresTemperature:     false,
 		defaultMaxOutputTokens: 32 * 1024,
+		summaryMode:            "detailed",
 	},
 	"mimo": {
 		stateless:              true,
