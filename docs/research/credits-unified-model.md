@@ -131,6 +131,20 @@
 - 支持模型：qwen3.7-plus、qwen3.6-plus、kimi-k2.5、glm-5、MiniMax-M2.5 等
 - 专属 Key 格式 `sk-sp-xxxxx`，Base URL `https://coding.dashscope.aliyuncs.com/v1`
 
+### Qwen 实测用量（Reasonix stats，2026 年 8 月）
+
+| 模型 | 输入命中 | 输入未命中 | 输入合计 | 命中率 | 请求数 |
+|---|---|---|---|---|---|
+| qwen3.8-max | 232.89M | 16.91M | 249.79M | 93.23% | 525 |
+| qwen3.8-max-preview | 60.07M | 5.87M | 65.93M | 91.10% | 246 |
+| qwen-coding-plan-cn/deepseek-v4-flash-0731 | 150.59M | 0.72M | 151.31M | 99.52% | 532 |
+| **Qwen 合计** | **443.54M** | **23.50M** | **467.03M** | **94.97%** | 1,303 |
+
+**观察**：
+- qwen3.8-max 命中率 93.23%，略低于 DeepSeek（98.56%）——会话更短/前缀变化更多
+- qwen-coding-plan（flash-0731）命中率 99.52% 最高——长会话稳定复用
+- 各厂商命中率 91-99% 区间，缓存机制均正常工作
+
 ## 六、统一换算速查（以 DeepSeek 为锚）
 
 **把任意厂商消耗换算成"等值人民币"**：
