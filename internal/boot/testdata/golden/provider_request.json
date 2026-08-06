@@ -1363,6 +1363,22 @@
       }
     },
     {
+      "name": "retrieve_info",
+      "description": "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中且系统已配置 deepseek-responses 时自动走该管道联网检索并落盘（复用系统 API 凭据，无需单独提供）；未配置时返回 needs_grant 标志，此时应使用 ask 工具询问用户是否允许联网检索。避免重复联网查询已检索过的事实。",
+      "parameters": {
+        "properties": {
+          "query": {
+            "description": "要查询的问题（与之前的检索问题相同或语义相近）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "review",
       "description": "Review the pending changes (current branch diff) in an isolated subagent — flags correctness / security / missing-tests / hidden behavior per file:line. Read-only; you decide what to act on. Use before suggesting a PR-shaped change or after finishing a multi-step edit.",
       "parameters": {
@@ -1640,6 +1656,7 @@
       }
     }
   ],
+  "ToolChoice": null,
   "Temperature": 0.7,
   "MaxTokens": 1024
 }
