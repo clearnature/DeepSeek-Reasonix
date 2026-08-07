@@ -171,18 +171,19 @@ func systemFetch(ctx context.Context, query string, tier responses.RetrievalTier
 	if err != nil {
 		return nil, fmt.Errorf("retrieve_info: web_search stream: %w", err)
 	}
-	text := ""
+	var sb strings.Builder
 	tokens := 0
 	for c := range ch {
 		switch c.Type {
 		case provider.ChunkText:
-			text += c.Text
+			sb.WriteString(c.Text)
 		case provider.ChunkUsage:
 			if c.Usage != nil {
 				tokens = c.Usage.TotalTokens
 			}
 		}
 	}
+	text := sb.String()
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("retrieve_info: web_search returned no text for %q", query)
 	}
@@ -262,7 +263,7 @@ func SaveCompactionDigest(summary string) {
 // firstLine returns the first non-empty line of s, trimmed, for use as the
 // semantic key prefix.
 func firstLine(s string) string {
-	for _, ln := range strings.Split(s, "\n") {
+	for ln := range strings.SplitSeq(s, "\n") {
 		if t := strings.TrimSpace(ln); t != "" {
 			return t
 		}
