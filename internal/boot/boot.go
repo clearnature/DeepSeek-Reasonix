@@ -264,6 +264,19 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// sit on the shared sink the agents emit into.
 	sink = control.NewGoalUsageTee(sink)
 
+	// P2 dream bridge: when a compaction pass completes with a non-empty
+	// rolling-merge summary, distill it into the shared knowledge cache so
+	// future sessions can recall what this session learned even after the
+	// canonical transcript is compacted away. The listener sits on the shared
+	// sink (created above) so every agent's compaction emits here.
+	inner := sink
+	sink = event.FuncSink(func(e event.Event) {
+		if e.Kind == event.CompactionDone && e.Compaction.Summary != "" {
+			builtin.SaveCompactionDigest(e.Compaction.Summary)
+		}
+		inner.Emit(e)
+	})
+
 	// Extension preflight (stages 5b/7): start the installed, enabled v1 runtime
 	// packages ONCE, here, before model resolution, so plugin-namespaced refs
 	// (plugin/<plugin>/<provider>/<model>) resolve on the very first boot and the

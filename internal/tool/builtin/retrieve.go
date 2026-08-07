@@ -231,3 +231,34 @@ var knowledgeSchema = map[string]any{
 		}},
 	},
 }
+
+// SaveCompactionDigest distills an A1 rolling-merge summary into the shared
+// knowledge cache (P2 dream bridge). Called by the boot sink listener when a
+// compaction pass completes with a non-empty summary. The entry is stored
+// under a synthetic query so future sessions can L2-semantic-recall what the
+// session learned even after its canonical transcript is compacted away.
+// Best-effort: failures are swallowed by SaveKnowledge.
+func SaveCompactionDigest(summary string) {
+	if strings.TrimSpace(summary) == "" {
+		return
+	}
+	// Query is the L2 semantic key; answer summary carries the digest body.
+	// Tier "compaction-digest" lets retrieve tiers distinguish distilled
+	// session knowledge from web_search snapshots.
+	responses.SaveKnowledge(&responses.KnowledgeEntry{
+		Query:         "compaction-digest:" + firstLine(summary),
+		AnswerSummary: summary,
+		Tier:          "compaction-digest",
+	})
+}
+
+// firstLine returns the first non-empty line of s, trimmed, for use as the
+// semantic key prefix.
+func firstLine(s string) string {
+	for _, ln := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(ln); t != "" {
+			return t
+		}
+	}
+	return ""
+}

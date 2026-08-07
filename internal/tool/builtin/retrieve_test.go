@@ -111,3 +111,33 @@ func cleanCacheForTool(t *testing.T) {
 		_ = os.Remove(filepath.Join(dir, de.Name()))
 	}
 }
+
+func TestSaveCompactionDigestWritesKnowledgeCache(t *testing.T) {
+	cleanCacheForTool(t)
+	responses.SetKnowledgeDirOverride(t.TempDir())
+	defer responses.SetKnowledgeDirOverride("")
+
+	// Empty summary is a no-op.
+	SaveCompactionDigest("")
+	if n := len(responses.ListKnowledge()); n != 0 {
+		t.Fatalf("empty summary wrote %d entries, want 0", n)
+	}
+
+	// Non-empty summary lands as a compaction-digest tier entry.
+	SaveCompactionDigest("GOAL: ship projection\nFACTS: canonical never rewritten")
+	entries := responses.ListKnowledge()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 distilled entry, got %d", len(entries))
+	}
+	e := entries[0]
+	if e.Tier != "compaction-digest" {
+		t.Fatalf("tier = %q, want compaction-digest", e.Tier)
+	}
+	if !strings.Contains(e.AnswerSummary, "canonical never rewritten") {
+		t.Fatalf("summary body missing: %q", e.AnswerSummary)
+	}
+	// L2 semantic recall finds the distilled entry from a related query.
+	if hit, sim, ok := responses.LoadKnowledgeSemantic("projection architecture", 0.3); !ok || sim <= 0 || hit.Tier != "compaction-digest" {
+		t.Fatalf("semantic recall failed: ok=%v sim=%.2f hit=%+v", ok, sim, hit)
+	}
+}
