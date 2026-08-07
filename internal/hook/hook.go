@@ -1222,6 +1222,12 @@ func claudeToolResponse(p Payload) any {
 }
 
 func runResolvedHook(ctx context.Context, h ResolvedHook, in SpawnInput, spawner Spawner) SpawnResult {
+	// The tool that fired this hook was cancelled (user interrupt, deadline,
+	// session teardown). Running the hook's side effects on a dead context
+	// only produces a misleading "context canceled" outcome, so skip it.
+	if ctx.Err() != nil {
+		return SpawnResult{ExitCode: 0}
+	}
 	if h.Scope == ScopePlugin && h.ContextFile != "" {
 		return readContextFile(h.ContextFile)
 	}
