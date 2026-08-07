@@ -667,23 +667,23 @@ func TestStreamInterruptedEmitsBestEffortUsage(t *testing.T) {
 		{Type: provider.ChunkError, Err: &provider.StreamInterruptedError{Err: errors.New("conn reset")}},
 	}}
 	a := New(prov, echoRegistry(), NewSession(""), Options{}, event.Discard)
-	_, _, _, _, _, _, _, usage, interrupted, _, _, err := a.stream(context.Background(), 1, &recordSink{})
-	if err == nil {
+	st := a.stream(context.Background(), 1, &recordSink{})
+	if st.err == nil {
 		t.Fatal("expected StreamInterrupted error")
 	}
-	if !interrupted {
+	if !st.interrupted {
 		t.Fatal("interrupted flag must be true")
 	}
-	if usage == nil {
+	if st.usage == nil {
 		t.Fatal("usage must be non-nil after best-effort (was dropped pre-fix)")
 	}
-	if !usage.Estimated {
+	if !st.usage.Estimated {
 		t.Fatal("best-effort usage must be marked Estimated")
 	}
-	if usage.ReasoningTokens < 90 {
-		t.Fatalf("reasoning tokens = %d, want best-effort estimate ≈100", usage.ReasoningTokens)
+	if st.usage.ReasoningTokens < 90 {
+		t.Fatalf("reasoning tokens = %d, want best-effort estimate ≈100", st.usage.ReasoningTokens)
 	}
 	// RequestCount 依赖 ctx 的 attempt counter（由 run 路径封装注入）；
 	// 本测试直接调 stream 裸 ctx——不断言该字段，其余 best-effort 契约已验。
-	_ = usage.RequestCount
+	_ = st.usage.RequestCount
 }
