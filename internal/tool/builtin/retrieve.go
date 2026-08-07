@@ -242,6 +242,13 @@ func SaveCompactionDigest(summary string) {
 	if strings.TrimSpace(summary) == "" {
 		return
 	}
+	// Noise gate: skip digests that are semantically near-duplicates of an
+	// existing compaction-digest entry (sim >= 0.6). Repeated compactions of
+	// the same session produce similar rolling summaries; storing every one
+	// would flood the knowledge cache with near-identical frames.
+	if hit, sim, ok := responses.LoadKnowledgeSemantic(summary, 0.6); ok && hit.Tier == "compaction-digest" && sim >= 0.6 {
+		return
+	}
 	// Query is the L2 semantic key; answer summary carries the digest body.
 	// Tier "compaction-digest" lets retrieve tiers distinguish distilled
 	// session knowledge from web_search snapshots.

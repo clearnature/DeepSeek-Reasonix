@@ -141,3 +141,16 @@ func TestSaveCompactionDigestWritesKnowledgeCache(t *testing.T) {
 		t.Fatalf("semantic recall failed: ok=%v sim=%.2f hit=%+v", ok, sim, hit)
 	}
 }
+
+func TestSaveCompactionDigestDeduplicatesSimilar(t *testing.T) {
+	cleanCacheForTool(t)
+	responses.SetKnowledgeDirOverride(t.TempDir())
+	defer responses.SetKnowledgeDirOverride("")
+
+	SaveCompactionDigest("GOAL: ship the projection architecture with stable prefix")
+	SaveCompactionDigest("GOAL: ship the projection architecture with stable prefix bytes")
+	// The second digest is a near-duplicate of the first → skipped.
+	if n := len(responses.ListKnowledge()); n != 1 {
+		t.Fatalf("expected dedup to 1 entry, got %d", n)
+	}
+}
