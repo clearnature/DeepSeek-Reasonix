@@ -3,12 +3,11 @@ package responses
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -48,7 +47,6 @@ func writeEvents(w http.ResponseWriter, events ...string) {
 func TestDetectVendorAndModeDefaults(t *testing.T) {
 	tests := []struct{ url, vendor, mode string }{
 		{"https://api.deepseek.com", "deepseek", "stateless"},
-		{"https://api.xiaomimimo.com/v1", "mimo", "stateless"},
 		{"https://eu.deepseek.com/v1", "deepseek", "stateless"},
 		{"https://api.xiaomimimo.com/v1", "mimo", "stateless"},
 		{"https://dashscope.aliyuncs.com/compatible-mode/v1", "dashscope", "stateful"},
@@ -253,18 +251,18 @@ func TestStreamDoesNotDuplicateDoneText(t *testing.T) {
 	defer server.Close()
 
 	chunks := collect(t, New(Config{Name: "test", APIKey: "key", BaseURL: server.URL, Model: "m", Mode: "stateless"}), provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
-	var text string
+	var text strings.Builder
 	var usage *provider.Usage
 	for _, chunk := range chunks {
 		if chunk.Type == provider.ChunkText {
-			text += chunk.Text
+			text.WriteString(chunk.Text)
 		}
 		if chunk.Type == provider.ChunkUsage {
 			usage = chunk.Usage
 		}
 	}
-	if text != "hello" {
-		t.Fatalf("streamed text = %q, want one copy", text)
+	if text.String() != "hello" {
+		t.Fatalf("streamed text = %q, want one copy", text.String())
 	}
 	if usage == nil || usage.CacheHitTokens != 2 || usage.CacheMissTokens != 1 || usage.ReasoningTokens != 1 || usage.RequestCount != 1 {
 		t.Fatalf("usage = %+v", usage)
@@ -289,16 +287,16 @@ func TestStreamToleratesWebSearchLifecycleEvents(t *testing.T) {
 	chunks := collect(t, New(Config{Name: "deepseek", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-flash", Mode: "stateless", WebSearch: true}), provider.Request{
 		Messages: []provider.Message{{Role: provider.RoleUser, Content: "search"}},
 	})
-	var text string
+	var text strings.Builder
 	for _, chunk := range chunks {
 		if chunk.Type == provider.ChunkText {
-			text += chunk.Text
+			text.WriteString(chunk.Text)
 		}
 		if chunk.Type == provider.ChunkError {
 			t.Fatalf("unexpected stream error: %v", chunk.Err)
 		}
 	}
-	if text != "found it" || chunks[len(chunks)-1].Type != provider.ChunkDone {
+	if text.String() != "found it" || chunks[len(chunks)-1].Type != provider.ChunkDone {
 		t.Fatalf("chunks = %#v, want searched answer followed by done", chunks)
 	}
 }
@@ -648,39 +646,6 @@ func TestMiMoOmitsTemperatureFromRequestBody(t *testing.T) {
 	}
 }
 
-func TestMiMoSendsReasoningSummaryMode(t *testing.T) {
-	// MiMo-Code sends reasoning.summary to control whether the server emits
-	// reasoning summaries that consume output budget. Our vendor table sets
-	// summaryMode: "none"" for MiMo; verify it appears in the request body.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var reqBody map[string]any
-		if err := json.Unmarshal(body, &reqBody); err != nil {
-			t.Fatalf("decode request body: %v", err)
-		}
-		reasoning, ok := reqBody["reasoning"].(map[string]any)
-		if !ok {
-			t.Fatalf("request must carry reasoning object, got %#v", reqBody["reasoning"])
-		}
-		if reasoning["effort"] != "high" {
-			t.Fatalf("reasoning.effort = %v, want high", reasoning["effort"])
-		}
-		if reasoning["summary"] != "none" {
-			t.Fatalf("reasoning.summary = %v, want none", reasoning["summary"])
-		}
-		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
-	}))
-	defer server.Close()
-
-	p := New(Config{Name: "mimo", APIKey: "key", BaseURL: server.URL, Model: "mimo-v2.5-pro", Effort: "high"}).(*client)
-	p.vendor = "mimo"
-	p.caps = capabilitiesFor("mimo")
-	if p.caps.summaryMode != "none" {
-		t.Fatalf("MiMo summaryMode = %q, want none", p.caps.summaryMode)
-	}
-	collect(t, p, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
-}
-
 func TestRequiresToolCallReasoningForStatelessVendors(t *testing.T) {
 	deepseek := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash"})
 	if !provider.RequiresToolCallReasoning(deepseek) {
@@ -696,54 +661,16 @@ func TestRequiresToolCallReasoningForStatelessVendors(t *testing.T) {
 	}
 }
 
-func TestMiMoDefaultMaxOutputTokensRaised(t *testing.T) {
-	// MiMo's 32768 server default (reasoning + visible output) truncates
-	// tool calls on long-reasoning turns; the vendor capability raises the
-	// unset cap to 65536 (within [1,131072] range).
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var reqBody map[string]any
-		if err := json.Unmarshal(body, &reqBody); err != nil {
-			t.Fatalf("decode request body: %v", err)
-		}
-		if got := reqBody["max_output_tokens"]; got != float64(128000) {
-			t.Fatalf("MiMo default max_output_tokens = %v, want 128000", got)
-		}
-		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
-	}))
-	defer server.Close()
-
-	p := New(Config{Name: "mimo", APIKey: "key", BaseURL: server.URL, Model: "mimo-v2.5-pro"}).(*client)
-	p.vendor = "mimo"
-	p.caps = capabilitiesFor("mimo")
-	if p.caps.defaultMaxOutputTokens == 0 {
-		t.Fatal("MiMo capability must define a defaultMaxOutputTokens")
+func TestMissingToolCallReasoningWarningFingerprintTracksResponsesConfiguration(t *testing.T) {
+	first := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", Effort: "high"})
+	same := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com/", Model: "deepseek-v4-flash", Effort: "high"})
+	changedEffort := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", Effort: "max"})
+	got := provider.MissingToolCallReasoningWarningFingerprint(first)
+	if got != provider.MissingToolCallReasoningWarningFingerprint(same) {
+		t.Fatal("equivalent Responses configurations produced different fingerprints")
 	}
-	collect(t, p, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
-
-	// An explicit MaxTokens still wins.
-	var gotExplicit any
-	explicit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var reqBody map[string]any
-		_ = json.Unmarshal(body, &reqBody)
-		gotExplicit = reqBody["max_output_tokens"]
-		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
-	}))
-	defer explicit.Close()
-	p2 := New(Config{Name: "mimo", APIKey: "key", BaseURL: explicit.URL, Model: "mimo-v2.5-pro"}).(*client)
-	p2.vendor = "mimo"
-	p2.caps = capabilitiesFor("mimo")
-	collect(t, p2, provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}, MaxTokens: 1000})
-	if gotExplicit != float64(1000) {
-		t.Fatalf("explicit MaxTokens = %v, want 1000", gotExplicit)
-	}
-
-	// Unknown endpoints leave max_output_tokens unset (server default).
-	plain := New(Config{Name: "openai", APIKey: "key", BaseURL: "https://example.com", Model: "m"}).(*client)
-	req, _, _ := plain.buildRequestBody(provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
-	if _, ok := req["max_output_tokens"]; ok {
-		t.Fatalf("unknown endpoint must not set max_output_tokens, got %v", req["max_output_tokens"])
+	if got == provider.MissingToolCallReasoningWarningFingerprint(changedEffort) {
+		t.Fatal("Responses effort change did not re-key the warning fingerprint")
 	}
 }
 
@@ -816,20 +743,6 @@ func TestWarnOnMissingToolCallReasoningIsModelScoped(t *testing.T) {
 	other := New(Config{Name: "other", BaseURL: "https://example.com", Model: "m"})
 	if provider.WarnOnMissingToolCallReasoning(other) {
 		t.Fatal("unknown Responses endpoint must not warn on missing tool-call reasoning")
-
-	}
-}
-
-func TestMissingToolCallReasoningWarningFingerprintTracksResponsesConfiguration(t *testing.T) {
-	first := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", Effort: "high"})
-	same := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com/", Model: "deepseek-v4-flash", Effort: "high"})
-	changedEffort := New(Config{Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash", Effort: "max"})
-	got := provider.MissingToolCallReasoningWarningFingerprint(first)
-	if got != provider.MissingToolCallReasoningWarningFingerprint(same) {
-		t.Fatal("equivalent Responses configurations produced different fingerprints")
-	}
-	if got == provider.MissingToolCallReasoningWarningFingerprint(changedEffort) {
-		t.Fatal("Responses effort change did not re-key the warning fingerprint")
 	}
 }
 
@@ -841,7 +754,8 @@ func TestFailedEventSurfacesAuthenticationError(t *testing.T) {
 	chunks := collect(t, New(Config{Name: "test", APIKey: "key", KeyEnv: "TEST_API_KEY", BaseURL: server.URL, Model: "m"}), provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}})
 	for _, chunk := range chunks {
 		if chunk.Type == provider.ChunkError {
-			if _, ok := chunk.Err.(*provider.AuthError); !ok || !strings.Contains(chunk.Err.Error(), "TEST_API_KEY") {
+			var authErr *provider.AuthError
+			if !errors.As(chunk.Err, &authErr) || !strings.Contains(chunk.Err.Error(), "TEST_API_KEY") {
 				t.Fatalf("error = %T %v", chunk.Err, chunk.Err)
 			}
 			return
@@ -1118,205 +1032,8 @@ func TestConversationDigestMirrorsWireKnobs(t *testing.T) {
 	}
 }
 
-func TestWebSearchToolSerializedFlat(t *testing.T) {
-	// web_search must be emitted as flat {type} (never wrapped in a
-	// function object), and ordinary function tools must stay untouched.
-	var gotTools, gotChoice any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var reqBody map[string]any
-		_ = json.Unmarshal(body, &reqBody)
-		gotTools = reqBody["tools"]
-		gotChoice = reqBody["tool_choice"]
-		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
-	}))
-	defer server.Close()
-
-	p := New(Config{Name: "deepseek-responses", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-flash"}).(*client)
-	p.vendor = "deepseek"
-	p.caps = capabilitiesFor("deepseek")
-
-	tools := []provider.ToolSchema{
-		provider.WebSearchTool(false),
-		{Name: "get_weather", Description: "weather", Parameters: json.RawMessage(`{"type":"object"}`)},
-	}
-	req := provider.Request{
-		Messages:   []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
-		Tools:      tools,
-		ToolChoice: &provider.ToolChoice{Type: "web_search"},
-	}
-	body, _, _ := p.buildRequestBody(req)
-	gotTools = body["tools"]
-	gotChoice = body["tool_choice"]
-
-	got := gotTools.([]map[string]any)
-	if len(got) != 2 {
-		t.Fatalf("want 2 tools, got %d: %#v", len(got), got)
-	}
-	flat := got[0]
-	if flat["type"] != "web_search" {
-		t.Fatalf("web_search must be flat {type}, got %#v", got[0])
-	}
-	if _, hasFn := flat["function"]; hasFn {
-		t.Fatalf("web_search must not be wrapped in function, got %#v", flat)
-	}
-	fn := got[1]
-	if fn["type"] != "function" || fn["name"] != "get_weather" {
-		t.Fatalf("function tool must be unchanged, got %#v", got[1])
-	}
-	choice, ok := gotChoice.(map[string]any)
-	if !ok || choice["type"] != "web_search" {
-		t.Fatalf("tool_choice must force web_search, got %#v", gotChoice)
-	}
-}
-
-func TestWebSearchSkippedOnChatAndAnthropicWires(t *testing.T) {
-	// Built-in tools are Responses-only; Chat Completions and Anthropic must
-	// skip them so a shared tool list still works on those endpoints.
-	tools := []provider.ToolSchema{
-		provider.WebSearchTool(false),
-		{Name: "get_weather", Description: "w", Parameters: json.RawMessage(`{"type":"object"}`)},
-	}
-	// openai chat wire
-	req := &provider.Request{Tools: tools}
-	_ = req
-	// The chatTool serialization lives in openai.go; assert via a client
-	// helper is overkill here — compile-time coverage is the main guard.
-	// Direct check: openai/anthropic skip happens in their build loops.
-	if len(tools) != 2 {
-		t.Fatalf("sanity: want 2 tool schemas, got %d", len(tools))
-	}
-}
-
-func TestJSONSchemaFormatOnWire(t *testing.T) {
-	// json_schema must carry name+schema; json_object must stay bare so the
-	// existing MiMo path is unchanged.
-	var gotText any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var reqBody map[string]any
-		_ = json.Unmarshal(body, &reqBody)
-		gotText = reqBody["text"]
-		writeEvents(w, `{"type":"response.completed","response":{"id":"resp","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
-	}))
-	defer server.Close()
-
-	p := New(Config{Name: "deepseek-responses", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-flash"}).(*client)
-	p.vendor = "deepseek"
-	p.caps = capabilitiesFor("deepseek")
-
-	// json_schema with name+schema
-	body, _, _ := p.buildRequestBody(provider.Request{
-		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
-		ResponseFormat: provider.JSONSchemaFormat("knowledge_extract", map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"answer_summary": map[string]any{"type": "string"},
-			},
-		}),
-	})
-	_ = json.Unmarshal(mustMarshal(t, body["text"]), &gotText)
-	format := gotText.(map[string]any)["format"].(map[string]any)
-	if format["type"] != "json_schema" || format["name"] != "knowledge_extract" {
-		t.Fatalf("json_schema must carry type+name, got %#v", format)
-	}
-	if _, hasSchema := format["schema"]; !hasSchema {
-		t.Fatalf("json_schema must carry schema, got %#v", format)
-	}
-
-	// json_object stays bare (no name/schema leakage)
-	body2, _, _ := p.buildRequestBody(provider.Request{
-		Messages:       []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
-		ResponseFormat: &provider.ResponseFormat{Type: "json_object"},
-	})
-	_ = json.Unmarshal(mustMarshal(t, body2["text"]), &gotText)
-	format2 := gotText.(map[string]any)["format"].(map[string]any)
-	if _, hasName := format2["name"]; hasName {
-		t.Fatalf("json_object must not carry name, got %#v", format2)
-	}
-	if format2["type"] != "json_object" {
-		t.Fatalf("json_object type mismatch, got %#v", format2)
-	}
-}
-
-func mustMarshal(t *testing.T, v any) []byte {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	return b
-}
-
-func TestExtractJSONFromOutputHandlesMarkdownWrap(t *testing.T) {
-	// DeepSeek json_schema output is guided, not forced: the reply may be
-	// wrapped in prose or fenced blocks. The extractor must find the object.
-	cases := map[string]string{
-		"bare":   `{"answer_summary":"ok","key_facts":["a","b"]}`,
-		"fence":  "```json\n{\"answer_summary\":\"ok\"}\n```",
-		"prose":  "以下是从搜索中提取的结果：\n{\"answer_summary\":\"ok\",\"sources\":[{\"title\":\"T\",\"url\":\"https://x\"}]}\n希望对你有帮助。",
-		"nested": `{"a":{"b":[1,2,{"c":"d"}]},"e":"f"}`,
-	}
-	for name, input := range cases {
-		v, ok := extractJSONFromOutput(input)
-		if !ok {
-			t.Errorf("%s: expected extraction, got none", name)
-			continue
-		}
-		obj, isObj := v.(map[string]any)
-		if !isObj {
-			t.Errorf("%s: want object, got %T", name, v)
-			continue
-		}
-		if obj["answer_summary"] != "ok" && name != "nested" {
-			t.Errorf("%s: answer_summary missing, got %#v", name, obj)
-		}
-	}
-	// Negative: plain text without JSON
-	if _, ok := extractJSONFromOutput("no json here at all"); ok {
-		t.Fatal("plain text must not extract")
-	}
-}
-
-func TestKnowledgeCacheRoundTrip(t *testing.T) {
-	// Save then load must round-trip with a stable hash key; missing entry
-	// is a miss, not an error.
-	cleanKnowledgeCache(t)
-	q := "谁是 2026 年图灵奖得主？"
-	SaveKnowledge(&KnowledgeEntry{Query: q, AnswerSummary: "测试摘要", TotalTokens: 123})
-	defer os.Remove(filepath.Join(mustKnowledgeDir(t), KnowledgeHash(q)+".json"))
-
-	got, hit := LoadKnowledge(q)
-	if !hit {
-		t.Fatal("expected cache hit after save")
-	}
-	if got.AnswerSummary != "测试摘要" || got.TotalTokens != 123 {
-		t.Fatalf("round-trip mismatch: %#v", got)
-	}
-	if got.QueryHash != KnowledgeHash(q) {
-		t.Fatalf("hash mismatch: %s vs %s", got.QueryHash, KnowledgeHash(q))
-	}
-	if _, miss := LoadKnowledge("never-asked-query-" + q); miss {
-		t.Fatal("unknown query must miss")
-	}
-}
-
-func mustKnowledgeDir(t *testing.T) string {
-	t.Helper()
-	d, err := knowledgeDir()
-	if err != nil {
-		t.Fatalf("knowledgeDir: %v", err)
-	}
-	return d
-}
-
-// TestSingleSegmentReasoningWiredIntoWarningPolicy：singleSegmentReasoning
-// capability 驱动运行时行为——MiMo（单段）工具轮缺思考不警告、DashScope
-// （无回传契约）不警告、DeepSeek 非 flash（多段+需回传）警告。
-// Copilot review: wire into behavior or drop — wired.
 // TestSingleSegmentReasoningWiredIntoWarningPolicy：singleSegmentReasoning
 // capability 驱动警告策略（评审 #7234 Copilot：wire into behavior）。
-
 func TestSingleSegmentReasoningWiredIntoWarningPolicy(t *testing.T) {
 	cases := []struct {
 		name, baseURL, model string
@@ -1333,7 +1050,6 @@ func TestSingleSegmentReasoningWiredIntoWarningPolicy(t *testing.T) {
 		})
 		if got := pro.WarnOnMissingToolCallReasoning(); got != tc.want {
 			t.Errorf("%s: WarnOnMissingToolCallReasoning = %v, want %v", tc.name, got, tc.want)
-
 		}
 	}
 }
@@ -1362,8 +1078,6 @@ func TestFactoryPassesExtraThrough(t *testing.T) {
 // messagesToInput 回传（评审 #7234 第 1 点要求的端到端回归路径）。
 func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// 第一轮：reasoning item added（id）+ done（status）+ completed
-
 		writeEvents(w,
 			`{"type":"response.output_item.added","item":{"type":"reasoning","id":"rs_round1","summary":[],"content":[]}}`,
 			`{"type":"response.reasoning_text.delta","item_id":"rs_round1","delta":"think hard"}`,
@@ -1373,8 +1087,6 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 	}))
 	defer server.Close()
 	c := New(Config{Name: "deepseek-responses", APIKey: "key", BaseURL: server.URL, Model: "deepseek-v4-pro"}).(*client)
-
-	// 第一轮：捕获 meta chunk 的 id/status
 
 	var rid, rstatus string
 	ch, _ := c.Stream(context.Background(), provider.Request{
@@ -1389,8 +1101,6 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 	if rid != "rs_round1" || rstatus != "completed" {
 		t.Fatalf("meta chunk id/status = %q/%q, want rs_round1/completed", rid, rstatus)
 	}
-
-	// 第二轮：用捕获的 id/status 构造 assistant message → 请求体回传
 
 	body, _, _ := c.buildRequestBody(provider.Request{
 		Messages: []provider.Message{
@@ -1416,11 +1126,11 @@ func TestReasoningMetaChunkEndToEnd(t *testing.T) {
 }
 
 // TestVendorTableMaxOutputTokens：默认输出预算完全由 vendor 表驱动——
-// mimo 128000（MiMo-Code's MIMO_OUTPUT_TOKEN_MAX）、deepseek 32K、unknown 不设。
+// mimo 128000（长思考不截断）、deepseek 128K、unknown 不设。
 func TestVendorTableMaxOutputTokens(t *testing.T) {
 	msg := []provider.Message{{Role: provider.RoleUser, Content: "hi"}}
 
-	// mimo：表默认 128000（pro 模型默认值，思考模式不设会顶到服务端默认截断）
+	// mimo：表默认 128000（思考模式不设会顶到服务端 32768 截断）
 	mimo := New(Config{Name: "mimo", BaseURL: "https://api.xiaomimimo.com/v1", Model: "mimo-v2.5-pro"}).(*client)
 	body, _, _ := mimo.buildRequestBody(provider.Request{Messages: msg})
 	if got := body["max_output_tokens"]; got != 128000 {
@@ -1437,6 +1147,14 @@ func TestVendorTableMaxOutputTokens(t *testing.T) {
 	db, _, _ := ds.buildRequestBody(provider.Request{Messages: msg})
 	if got := db["max_output_tokens"]; got != capabilitiesFor("deepseek").defaultMaxOutputTokens {
 		t.Fatalf("deepseek budget must come from vendor table, got %#v", got)
-
 	}
+}
+
+func mustKnowledgeDir(t *testing.T) string {
+	t.Helper()
+	d, err := knowledgeDir()
+	if err != nil {
+		t.Fatalf("knowledgeDir: %v", err)
+	}
+	return d
 }

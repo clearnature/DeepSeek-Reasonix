@@ -51,9 +51,10 @@ func newFromConfig(cfg provider.Config) (provider.Provider, error) {
 	return New(Config{
 		Name: cfg.Name, APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Model,
 		Effort: effort, Mode: mode, Stateful: stateful, WebSearch: webSearch, Proxy: proxy,
-		KeyEnv: keyEnv, KeySource: keySource,
-		// Extra 原样透传（评审 #7234 第 3 点：vision 在 factory 路径丢失）。
-		Extra: cfg.Extra, MaxOutputTokens: maxOutputTokens,
+		KeyEnv: keyEnv, KeySource: keySource, MaxOutputTokens: maxOutputTokens,
+		// Extra 原样透传：vision 等能力开关由调用方（boot/CLI）写入
+		// cfg.Extra，factory 若丢弃则 New() 读不到（评审 #7234 第 3 点）。
+		Extra: cfg.Extra,
 	}), nil
 }
 
@@ -66,6 +67,7 @@ type Config struct {
 	Effort    string
 	Mode      string // stateful | stateless; empty uses vendor detection.
 	Stateful  *bool  // legacy form of Mode; nil preserves vendor detection.
+	WebSearch bool   // expose the provider-executed web_search tool.
 	Proxy     netclient.ProxySpec
 	KeyEnv    string
 	KeySource string
@@ -76,9 +78,6 @@ type Config struct {
 	// SessionCache controls DashScope's opt-in header. The header is never sent
 	// to non-DashScope endpoints even when this value is true.
 	SessionCache *bool
-	// WebSearch exposes the provider-executed web_search tool (#7466): when
-	// true the server tool is emitted first and stable across turns.
-	WebSearch bool
 	// Extra carries kind-specific options; "vision" (bool) enables embedding
 	// attached Images as input_image parts on user turns.
 	Extra map[string]any
@@ -110,9 +109,9 @@ type client struct {
 	vendor, mode                    string
 	caps                            vendorCapabilities
 	sessionCache                    bool
-	vision                          bool // model accepts image input; embed Images as input_image parts
-	maxOutputTokens                 int
 	webSearch                       bool
+	maxOutputTokens                 int
+	vision                          bool // model accepts image input; embed Images as input_image parts
 	http                            *http.Client
 	idleTimeout                     time.Duration
 	authed                          atomic.Bool
@@ -126,9 +125,9 @@ type client struct {
 func New(cfg Config) provider.Provider {
 	vendor := DetectVendor(cfg.BaseURL)
 	cap := capabilitiesFor(vendor)
-	sessionCache := cap.sessionCacheHeader
 	maxOutputTokens := cfg.MaxOutputTokens
 	// 默认输出预算从 vendor 表取（deepseek 128K / mimo 128K）——消除硬编码
+
 	// 常量分叉（review：responses.go 硬编码与 caps.defaultMaxOutputTokens
 	// 职责重叠）。条件保留：thinking-disabled 的 deepseek 请求不设自动
 	// 预算（与 openai.go 一致——服务端默认即可；测试断言该行为）。
@@ -136,6 +135,7 @@ func New(cfg Config) provider.Provider {
 		!(vendor == "deepseek" && responsesReasoningDisabled(cfg.Effort)) {
 		maxOutputTokens = cap.defaultMaxOutputTokens
 	}
+	sessionCache := cap.sessionCacheHeader
 	if cfg.SessionCache != nil {
 		sessionCache = *cfg.SessionCache
 	}
@@ -152,7 +152,7 @@ func New(cfg Config) provider.Provider {
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"), model: cfg.Model, effort: cfg.Effort,
 		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache, webSearch: cfg.WebSearch, maxOutputTokens: maxOutputTokens,
 		vision: vision,
-		http:   httpClient, idleTimeout: cap.streamIdleTimeout,
+		http:   httpClient, idleTimeout: defaultStreamIdleTimeout,
 	}
 }
 
@@ -174,6 +174,16 @@ func (c *client) RequiresToolCallReasoning() bool {
 	return c.caps.toolCallReasoning
 }
 
+func (c *client) MissingToolCallReasoningWarningIdentity() string {
+	if c == nil {
+		return ""
+	}
+	return strings.Join([]string{
+		"responses", strings.TrimSpace(c.name), strings.TrimSpace(c.baseURL),
+		strings.TrimSpace(c.model), strings.TrimSpace(c.vendor), strings.TrimSpace(c.mode), strings.TrimSpace(c.effort),
+	}, "\x00")
+}
+
 // WarnOnMissingToolCallReasoning reports a tool_calls turn that arrived
 // without reasoning only for vendors whose endpoint reliably emits it.
 // DeepSeek's official API emits tool-call reasoning for its pro-tier models,
@@ -181,15 +191,11 @@ func (c *client) RequiresToolCallReasoning() bool {
 // MiMo documents reasoning alongside tool calls but does not guarantee it on
 // every round (observed: mimo-v2.5-pro tool-call turn with empty reasoning),
 // so a missing chain-of-thought is endpoint-conditional, not a degradation
-// signal — silence the warning. This mirrors openai.go's model-scoped gate.
-//
-// Vendor-scoped (2026-08-07, MiMo-Code alignment):
-// MiMo preserves reasoning on replay but does not guarantee it every
-// round (observed: mimo-v2.5-pro tool-call turn with empty reasoning),
-// so a missing chain-of-thought is endpoint-conditional, not a
-// degradation worth a warning. toolCallReasoning=false vendors
-// (DashScope) never warn — no round-trip contract. Only DeepSeek
-// warns, scoped to non-flash models.
+// signal — silence the warning. Capability-driven (review #7234):
+// toolCallReasoning=false vendors (DashScope) never warn — no round-trip
+// contract; singleSegmentReasoning=true vendors (MiMo) never warn — their
+// tool-call thinking is a single optional segment. Only multi-segment
+// thinking vendors that require replay (DeepSeek) warn, scoped to non-flash.
 func (c *client) WarnOnMissingToolCallReasoning() bool {
 	if !c.caps.toolCallReasoning {
 		return false
@@ -201,100 +207,21 @@ func (c *client) WarnOnMissingToolCallReasoning() bool {
 	if c.vendor == "mimo" {
 		return false
 	}
+	// singleSegmentReasoning=true vendors (unknown OpenAI-compatible
+	// gateways) never warn — their tool-call thinking is a single optional
+	// segment. Only multi-segment thinking vendors that require replay
+	// (DeepSeek) warn, scoped to non-flash.
+	if c.caps.singleSegmentReasoning {
+		return false
+	}
 	model := strings.ToLower(strings.TrimSpace(c.model))
 	// Flash-tier DeepSeek models do not emit tool-call reasoning (same carve
 	// as openai.go expectsDeepSeekToolCallReasoning).
 	return !strings.Contains(model, "flash")
 }
 
-func (c *client) MissingToolCallReasoningWarningIdentity() string {
-	if c == nil {
-		return ""
-	}
-	return strings.Join([]string{
-		"responses", strings.TrimSpace(c.name), strings.TrimSpace(c.baseURL),
-		strings.TrimSpace(c.model), strings.TrimSpace(c.vendor), strings.TrimSpace(c.mode), strings.TrimSpace(c.effort),
-	}, "\x00")
-}
-
 func (c *client) sendOpts() provider.SendOptions {
 	return provider.SendOptions{Provider: c.name, KeyEnv: c.keyEnv, KeySource: c.keySource, KeyPresent: c.apiKey != "", RetryAuth: c.authed.Load()}
-}
-
-// isServerBuiltinTool reports whether t names a server-side built-in tool
-// (e.g. "web_search" / "web_search_2025_08_26") that Responses endpoints
-// execute themselves instead of a client-defined function.
-func isServerBuiltinTool(t string) bool {
-	switch t {
-	case "web_search", "web_search_2025_08_26":
-		return true
-	default:
-		return t != "" && t != "function"
-	}
-}
-
-// ExtractJSONFromOutput is the exported form of extractJSONFromOutput for
-// callers (e.g. cmd/websearch-smoke) that need to distill a model reply that
-// may wrap JSON in prose or fences.
-func ExtractJSONFromOutput(text string) (any, bool) {
-	return extractJSONFromOutput(text)
-}
-
-// extractJSONFromOutput pulls the first top-level JSON object or array out of
-// a model reply. json_schema output is guided, not enforced, so DeepSeek
-// sometimes wraps the object in markdown prose or fenced blocks; callers that
-// need the structured payload use this before falling back to raw text.
-func extractJSONFromOutput(text string) (any, bool) {
-	text = strings.TrimSpace(text)
-	// Strip a ```json ... ``` fence if present.
-	if strings.HasPrefix(text, "```") {
-		if idx := strings.Index(text, "\n"); idx > 0 {
-			text = text[idx+1:]
-		}
-		if idx := strings.LastIndex(text, "```"); idx > 0 {
-			text = text[:idx]
-		}
-		text = strings.TrimSpace(text)
-	}
-	for i := 0; i < len(text); i++ {
-		if text[i] != '{' && text[i] != '[' {
-			continue
-		}
-		depth := 0
-		inStr := false
-		esc := false
-		for j := i; j < len(text); j++ {
-			c := text[j]
-			if esc {
-				esc = false
-				continue
-			}
-			switch c {
-			case '\\':
-				if inStr {
-					esc = true
-				}
-			case '"':
-				inStr = !inStr
-			case '{', '[':
-				if !inStr {
-					depth++
-				}
-			case '}', ']':
-				if !inStr {
-					depth--
-					if depth == 0 {
-						var v any
-						if err := json.Unmarshal([]byte(text[i:j+1]), &v); err == nil {
-							return v, true
-						}
-						return nil, false
-					}
-				}
-			}
-		}
-	}
-	return nil, false
 }
 
 // ResetContext drops stateful continuation metadata. Full-input stateless mode
@@ -369,11 +296,7 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 		effort = "none"
 	}
 	if effort != "" {
-		reasoning := map[string]any{"effort": effort}
-		if c.caps.summaryMode != "" {
-			reasoning["summary"] = c.caps.summaryMode
-		}
-		body["reasoning"] = reasoning
+		body["reasoning"] = map[string]any{"effort": effort}
 	}
 	maxOutputTokens := req.MaxTokens
 	if maxOutputTokens == 0 {
@@ -388,48 +311,26 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	}
 	if maxOutputTokens > 0 {
 		body["max_output_tokens"] = maxOutputTokens
-	} else if c.caps.defaultMaxOutputTokens > 0 && maxOutputTokens >= 0 &&
-		!(c.vendor == "deepseek" && responsesReasoningDisabled(c.effort)) {
-		// No explicit cap: use the vendor default when one is defined (MiMo),
-		// whose 32768 server default can truncate long-reasoning turns before
-		// the visible answer/tool call finishes. thinking-disabled DeepSeek
-		// and negative (explicitly disabled) budgets keep the server default.
-		body["max_output_tokens"] = c.caps.defaultMaxOutputTokens
+	}
+	if req.ResponseFormat != nil && req.ResponseFormat.Type != "" {
+		// Structured output: Responses text.format. MiMo/DashScope/OpenAI
+		// all accept {"text":{"format":{"type":"json_object"}}}. The model
+		// only emits JSON when the instructions also demand it.
+		body["text"] = map[string]any{
+			"format": map[string]any{"type": req.ResponseFormat.Type},
+		}
 	}
 	if req.Temperature != nil && !c.caps.ignoresTemperature {
 		body["temperature"] = *req.Temperature
 	}
-	if req.ResponseFormat != nil && req.ResponseFormat.Type != "" {
-		// Structured output: Responses text.format. MiMo/DashScope/OpenAI
-		// accept text.format; json_schema carries name + schema.
-		format := map[string]any{"type": req.ResponseFormat.Type}
-		if req.ResponseFormat.Type == "json_schema" && req.ResponseFormat.Name != "" {
-			format["name"] = req.ResponseFormat.Name
-			if len(req.ResponseFormat.Schema) > 0 {
-				format["schema"] = json.RawMessage(req.ResponseFormat.Schema)
-			}
-		}
-		text := map[string]any{}
-		if existing, ok := body["text"].(map[string]any); ok {
-			text = existing
-		}
-		text["format"] = format
-		body["text"] = text
-	}
 	if c.webSearch || len(req.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(req.Tools)+1)
-		// Keep the server tool first and stable across turns (#7466). DeepSeek
-		// executes this tool itself; ordinary Reasonix tools remain function entries.
+		// Keep the server tool first and stable across turns. DeepSeek executes
+		// this tool itself; ordinary Reasonix tools remain function entries.
 		if c.webSearch {
 			tools = append(tools, map[string]any{"type": "web_search"})
 		}
 		for _, tool := range req.Tools {
-			if isServerBuiltinTool(tool.Type) {
-				// Server-side built-in tool (web_search): emit flat
-				// {type}, never wrapped in a function object.
-				tools = append(tools, map[string]any{"type": tool.Type})
-				continue
-			}
 			parameters := tool.Parameters
 			if len(parameters) == 0 {
 				parameters = provider.CanonicalizeSchema(nil)
@@ -440,26 +341,6 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 			})
 		}
 		body["tools"] = tools
-		if req.ToolChoice != nil {
-			if isServerBuiltinTool(req.ToolChoice.Type) {
-				// {"type": "web_search"} forces a server-side search. The
-				// tools array must contain the matching built-in, otherwise
-				// DeepSeek rejects with 400.
-				body["tool_choice"] = map[string]any{"type": req.ToolChoice.Type}
-			} else {
-				body["tool_choice"] = req.ToolChoice.Type
-			}
-		}
-	}
-	if req.ToolChoice != nil {
-		if isServerBuiltinTool(req.ToolChoice.Type) {
-			// {"type": "web_search"} forces a server-side search. The
-			// tools array must contain the matching built-in, otherwise
-			// DeepSeek rejects with 400.
-			body["tool_choice"] = map[string]any{"type": req.ToolChoice.Type}
-		} else {
-			body["tool_choice"] = req.ToolChoice.Type
-		}
 	}
 	instructions, rest := splitInstructions(messages)
 	if instructions != "" {
@@ -724,7 +605,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 					if event.Item.ID != "" {
 						// 多段推理（DeepSeek 长思考分多段）时末段 id 覆盖：round-trip
 						// 合并为一个 reasoning item 只带末段 id（服务端接受）。
-
 						reasoningID = event.Item.ID
 					}
 				}
@@ -764,7 +644,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 					}
 				}
 			}
-
 			if event.Item != nil {
 				switch event.Item.Type {
 				case "function_call":
@@ -877,7 +756,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 	if completedResponseID != "" {
 		assistant := provider.Message{Role: provider.RoleAssistant, Content: text.String(), ReasoningContent: reasoning.String(), ReasoningID: reasoningID, ReasoningStatus: reasoningStatus, ResponsesItems: responsesItems}
-
 		for _, itemID := range callOrder {
 			call := calls[itemID]
 			if call.completed {
@@ -894,10 +772,8 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 	if !failed {
 		// 把 reasoning item 的 id/status 作为元数据 chunk 流给 Agent
-		// （空 Text，随最后一个 ChunkReasoning 语义）——Agent 持久化进
-		// session，下一轮 input reasoning item 回传 id/status
-		// （评审 #7234 第 1 点：SSE → session → 第二轮 真实链路）。
-
+		// （空 Text，随 ChunkReasoning 语义）——Agent 持久化进 session，
+		// 下一轮 input reasoning item 回传 id/status（评审 #7234 第 1 点）。
 		if reasoningID != "" || reasoningStatus != "" {
 			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, ReasoningID: reasoningID, ReasoningStatus: reasoningStatus}) {
 				return
@@ -935,10 +811,7 @@ func usageFromResponse(response *sseResponse) *provider.Usage {
 	if u.OutputTokensDetails != nil {
 		reasoning = u.OutputTokensDetails.ReasoningTokens
 	}
-	miss := u.InputTokens - cached
-	if miss < 0 {
-		miss = 0
-	}
+	miss := max(u.InputTokens-cached, 0)
 	total := u.TotalTokens
 	if total == 0 {
 		total = u.InputTokens + u.OutputTokens
@@ -990,7 +863,6 @@ func (i *sseItem) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*i = sseItem{ID: wire.ID, Type: wire.Type, CallID: wire.CallID, Name: wire.Name, Arguments: wire.Arguments, Status: wire.Status, Raw: append(json.RawMessage(nil), data...)}
-
 	return nil
 }
 
@@ -1019,3 +891,66 @@ type sseUsage struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"output_tokens_details"`
 }
+
+func ExtractJSONFromOutput(text string) (any, bool) {
+	return extractJSONFromOutput(text)
+}
+
+// extractJSONFromOutput pulls the first top-level JSON object or array out of
+// a model reply. json_schema output is guided, not enforced, so DeepSeek
+// sometimes wraps the object in markdown prose or fenced blocks; callers that
+// need the structured payload use this before falling back to raw text.
+func extractJSONFromOutput(text string) (any, bool) {
+	text = strings.TrimSpace(text)
+	// Strip a ```json ... ``` fence if present.
+	if strings.HasPrefix(text, "```") {
+		if idx := strings.Index(text, "\n"); idx > 0 {
+			text = text[idx+1:]
+		}
+		if idx := strings.LastIndex(text, "```"); idx > 0 {
+			text = text[:idx]
+		}
+		text = strings.TrimSpace(text)
+	}
+	for i := 0; i < len(text); i++ {
+		if text[i] != '{' && text[i] != '[' {
+			continue
+		}
+		depth := 0
+		inStr := false
+		esc := false
+		for j := i; j < len(text); j++ {
+			c := text[j]
+			if esc {
+				esc = false
+				continue
+			}
+			switch c {
+			case '\\':
+				if inStr {
+					esc = true
+				}
+			case '"':
+				inStr = !inStr
+			case '{', '[':
+				if !inStr {
+					depth++
+				}
+			case '}', ']':
+				if !inStr {
+					depth--
+					if depth == 0 {
+						var v any
+						if err := json.Unmarshal([]byte(text[i:j+1]), &v); err == nil {
+							return v, true
+						}
+						return nil, false
+					}
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+// ResetContext drops stateful continuation metadata. Full-input stateless mode

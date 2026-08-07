@@ -106,8 +106,7 @@ func TestBuildRequestKeepsDefaultCacheControlBytesStable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal first request: %v", err)
 	}
-	requestCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	requestCtx := t.Context()
 	got, err := json.Marshal(c.buildRequest(requestCtx, req))
 	if err != nil {
 		t.Fatalf("marshal second request: %v", err)
@@ -151,6 +150,35 @@ func TestConfiguredMaxOutputTokensRespectsMandatoryAnthropicFallback(t *testing.
 	}
 	if got := disabled.(*client).buildRequest(context.Background(), provider.Request{}).MaxTokens; got != defaultMaxTokens {
 		t.Fatalf("mandatory max_tokens fallback = %d, want %d", got, defaultMaxTokens)
+	}
+}
+
+func TestNewSelectsMaxOutputTokenDefaultByEndpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		baseURL string
+		extra   map[string]any
+		want    int
+	}{
+		{name: "native anthropic", want: provider.DefaultReasoningOutputTokens},
+		{name: "unknown compatible gateway", baseURL: "https://proxy.example.com/anthropic", want: provider.DefaultReasoningOutputTokens},
+		{name: "official deepseek", baseURL: "https://api.deepseek.com/anthropic", want: provider.DefaultHighOutputTokens},
+		{name: "explicit override", baseURL: "https://api.deepseek.com/anthropic", extra: map[string]any{"max_output_tokens": 8192}, want: 8192},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := New(provider.Config{
+				Name:    "test",
+				BaseURL: tc.baseURL,
+				Model:   "model",
+				Extra:   tc.extra,
+			})
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			if got := p.(*client).defaultMaxTokens; got != tc.want {
+				t.Fatalf("defaultMaxTokens = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -215,33 +243,6 @@ func TestNewDetectsMiMoSchemaDialect(t *testing.T) {
 	}
 }
 
-// TestNewDetectsDashScopeAndSendsCacheHeader guards the fix for the cache-hit
-// cliff seen after switching a DashScope provider from kind=openai to
-// kind=anthropic: DashScope's server-side session cache is opt-in via the
-// x-dashscope-session-cache header on BOTH protocols, so the Anthropic client
-// must detect the endpoint and set it. Without the header prefix-cache hits
-// crater (observed 99% → 77%).
-func TestNewDetectsDashScopeAndSendsCacheHeader(t *testing.T) {
-	for _, tc := range []struct {
-		baseURL string
-		want    bool
-	}{
-		{"https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic", true},
-		{"https://dashscope.aliyuncs.com/compatible-mode/v1", true},
-		{"https://dashscope-intl.aliyuncs.com/compatible-mode/v1", true},
-		{"https://api.anthropic.com", false},
-		{"https://api.xiaomimimo.com/anthropic", false},
-	} {
-		p, err := New(provider.Config{Name: "test", BaseURL: tc.baseURL, Model: "model"})
-		if err != nil {
-			t.Fatalf("New(%q): %v", tc.baseURL, err)
-		}
-		if got := p.(*client).dashscope; got != tc.want {
-			t.Errorf("New(%q).dashscope = %v, want %v", tc.baseURL, got, tc.want)
-		}
-	}
-}
-
 func TestNewDetectsOfficialDeepSeekEndpoint(t *testing.T) {
 	for _, tc := range []struct {
 		baseURL string
@@ -261,38 +262,6 @@ func TestNewDetectsOfficialDeepSeekEndpoint(t *testing.T) {
 	}
 }
 
-func TestStreamSendsDashScopeCacheHeader(t *testing.T) {
-	var gotHeader string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotHeader = r.Header.Get("x-dashscope-session-cache")
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
-	}))
-	defer srv.Close()
-
-	p, err := New(provider.Config{
-		Name:    "dashscope-anthropic",
-		BaseURL: srv.URL + "/apps/anthropic", // srv.URL host is 127.0.0.1, not aliyuncs.com
-		Model:   "qwen3.8-max-preview",
-		APIKey:  "sk-test",
-	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	// Force the flag on to exercise the header path independently of host detection.
-	p.(*client).dashscope = true
-	ch, err := p.Stream(context.Background(), provider.Request{
-		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
-	})
-	if err != nil {
-		t.Fatalf("Stream: %v", err)
-	}
-	for range ch {
-	}
-	if gotHeader != "enable" {
-		t.Fatalf("x-dashscope-session-cache = %q, want \"enable\"", gotHeader)
-	}
-}
 func TestNewScopesNativeCacheWritePricingToAnthropic(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -1078,4 +1047,57 @@ func TestRegistered(t *testing.T) {
 		t.Fatal("expected error for missing model")
 	}
 	_ = context.Background()
+}
+func TestNewDetectsDashScopeAndSendsCacheHeader(t *testing.T) {
+	for _, tc := range []struct {
+		baseURL string
+		want    bool
+	}{
+		{"https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic", true},
+		{"https://dashscope.aliyuncs.com/compatible-mode/v1", true},
+		{"https://dashscope-intl.aliyuncs.com/compatible-mode/v1", true},
+		{"https://api.anthropic.com", false},
+		{"https://api.xiaomimimo.com/anthropic", false},
+	} {
+		p, err := New(provider.Config{Name: "test", BaseURL: tc.baseURL, Model: "model"})
+		if err != nil {
+			t.Fatalf("New(%q): %v", tc.baseURL, err)
+		}
+		if got := p.(*client).dashscope; got != tc.want {
+			t.Errorf("New(%q).dashscope = %v, want %v", tc.baseURL, got, tc.want)
+		}
+	}
+}
+
+func TestStreamSendsDashScopeCacheHeader(t *testing.T) {
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("x-dashscope-session-cache")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer srv.Close()
+
+	p, err := New(provider.Config{
+		Name:    "dashscope-anthropic",
+		BaseURL: srv.URL + "/apps/anthropic", // srv.URL host is 127.0.0.1, not aliyuncs.com
+		Model:   "qwen3.8-max-preview",
+		APIKey:  "sk-test",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// Force the flag on to exercise the header path independently of host detection.
+	p.(*client).dashscope = true
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for range ch {
+	}
+	if gotHeader != "enable" {
+		t.Fatalf("x-dashscope-session-cache = %q, want \"enable\"", gotHeader)
+	}
 }

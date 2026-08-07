@@ -51,10 +51,14 @@ const (
 	// defaultBaseURL is the first-party endpoint; config may override it (e.g. a
 	// gateway). Bedrock/Vertex use a different request shape and are out of scope.
 	defaultBaseURL = "https://api.anthropic.com"
-	// defaultMaxTokens is the output ceiling used when neither the provider config
-	// nor the request supplies one. Anthropic requires max_tokens, so unlike the
-	// optional OpenAI-compatible budget it cannot be omitted.
-	defaultMaxTokens = 131072
+	// defaultMaxTokens is the conservative output ceiling used when neither the
+	// provider config nor the request supplies one. Anthropic requires max_tokens,
+	// but support is model-specific, so native Anthropic and unknown compatible
+	// gateways must not inherit a universal 128K request.
+	defaultMaxTokens = provider.DefaultReasoningOutputTokens
+	// deepSeekDefaultMaxTokens is safe only for the official DeepSeek Anthropic-
+	// compatible endpoint, whose reasoning models support the higher ceiling.
+	deepSeekDefaultMaxTokens = provider.DefaultHighOutputTokens
 )
 
 func init() {
@@ -74,6 +78,22 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
+	// Anthropic's API surface is at {root}/v1/messages, so c.baseURL stores
+	// the *root* -- without any trailing /v1. The setup wizard, however, lets
+	// users paste a full OpenAI-compatible URL (e.g.
+	// "https://proxy.example.com/v1") because that's what /models probes
+	// expect. Stripping the trailing /v1 here makes both forms land on the
+	// same endpoint without forcing users to remember Anthropic's quirky
+	// root-vs-versioned split. Without this, a user pasting
+	// "https://proxy.example.com/v1" would probe /v1/models successfully
+	// but get the chat client concatenating onto
+	// "https://proxy.example.com/v1/v1/messages" -- a 404.
+	root := strings.TrimRight(baseURL, "/")
+	root = strings.TrimSuffix(root, "/v1")
+	if root == "" {
+		root = defaultBaseURL
+	}
+	officialDeepSeek := openai.IsDeepSeek(root)
 	keyEnv, _ := cfg.Extra["api_key_env"].(string) // for actionable auth errors
 	keySource, _ := cfg.Extra["api_key_source"].(string)
 	thinking, _ := cfg.Extra["thinking"].(string)
@@ -89,25 +109,13 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// Messages requires max_tokens, so an optional-budget disable request
 		// falls back to the provider's stable mandatory default.
 		maxOutputTokens = defaultMaxTokens
+		if officialDeepSeek {
+			maxOutputTokens = deepSeekDefaultMaxTokens
+		}
 	}
 	httpClient, err := newHTTPClient(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic: network: %w", err)
-	}
-	// Anthropic's API surface is at {root}/v1/messages, so c.baseURL stores
-	// the *root* — without any trailing /v1. The setup wizard, however, lets
-	// users paste a full OpenAI-compatible URL (e.g.
-	// "https://proxy.example.com/v1") because that's what /models probes
-	// expect. Stripping the trailing /v1 here makes both forms land on the
-	// same endpoint without forcing users to remember Anthropic's quirky
-	// root-vs-versioned split. Without this, a user pasting
-	// "https://proxy.example.com/v1" would probe /v1/models successfully
-	// but get the chat client concatenating onto
-	// "https://proxy.example.com/v1/v1/messages" — a 404.
-	root := strings.TrimRight(baseURL, "/")
-	root = strings.TrimSuffix(root, "/v1")
-	if root == "" {
-		root = defaultBaseURL
 	}
 	return &client{
 		name:             name,
@@ -117,16 +125,16 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		baseURL:          root,
 		model:            cfg.Model,
 		nativeAnthropic:  strings.EqualFold(root, defaultBaseURL),
-		deepseek:         openai.IsDeepSeek(root),
+		deepseek:         officialDeepSeek,
 		thinking:         thinking,
 		effort:           effort,
 		vision:           vision,
-		webSearch:        webSearch,
-		defaultMaxTokens: maxOutputTokens,
 		mimo:             provider.IsMiMoEndpoint(root),
 		dashscope:        provider.IsDashScopeEndpoint(root),
+		webSearch:        webSearch,
 		headers:          cleanCustomHeaders(headers),
 		authHeader:       authHeader,
+		defaultMaxTokens: maxOutputTokens,
 		http:             httpClient, // no overall timeout; lifecycle is ctx-driven
 		idleTimeout:      defaultStreamIdleTimeout,
 	}, nil
@@ -149,16 +157,15 @@ type client struct {
 	thinking         string // "adaptive" enables extended thinking; "" = off (config-driven)
 	effort           string // output_config.effort: low|medium|high|xhigh|max; "" = provider default
 	vision           bool   // model accepts image input — embed attached images as base64 image blocks
-	webSearch        bool   // enable server-side web_search tool (DeepSeek Anthropic API)
-	defaultMaxTokens int    // output ceiling when req.MaxTokens unset
 	mimo             bool   // true for MiMo — upgrades legacy tuple schemas to Draft 2020-12
 	dashscope        bool   // true for DashScope — opts into server-side session cache via header
+	webSearch        bool   // enable server-side web_search tool (DeepSeek Anthropic API)
 	headers          map[string]string
 	authHeader       bool // send Authorization: Bearer instead of Anthropic's x-api-key header
+	defaultMaxTokens int
 	http             *http.Client
 	idleTimeout      time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
 	authed           atomic.Bool   // a request has succeeded — gate transient-401 retry
-
 }
 
 func (c *client) Name() string { return c.name }
@@ -288,13 +295,13 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 			httpReq.Header.Set("x-api-key", c.apiKey)
 		}
 		httpReq.Header.Set("anthropic-version", anthropicVersion)
-		applyCustomHeaders(httpReq.Header, c.headers)
 		if c.dashscope {
 			// DashScope's server-side session cache is opt-in via this header.
 			// It applies regardless of wire protocol (OpenAI or Anthropic), so
 			// the Anthropic client must set it too or prefix-cache hits crater.
 			httpReq.Header.Set("x-dashscope-session-cache", "enable")
 		}
+		applyCustomHeaders(httpReq.Header, c.headers)
 		return httpReq, nil
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
@@ -390,11 +397,6 @@ func (c *client) buildRequest(_ context.Context, req provider.Request) anthReque
 		tools = append(tools, anthTool{Type: "web_search_20250305", Name: "web_search"})
 	}
 	for _, t := range req.Tools {
-		if t.Type != "" && t.Type != "function" {
-			// Server-side built-in tools (web_search) are only honored by
-			// Responses endpoints; skip them on the Anthropic wire.
-			continue
-		}
 		schema := t.Parameters
 		if len(schema) == 0 {
 			schema = json.RawMessage(`{"type":"object","properties":{}}`)
@@ -673,21 +675,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 
 	if ctx.Err() != nil {
-		// #7184：中断前已收到的 usage（message_start 的 input/cache 计数）
-		// 不能丢——先发 ChunkUsage 再退出（prompt tokens 是计费大头，
-		// agent 侧 best-effort 无法估算）。
-		if haveUsage {
-			usage := &provider.Usage{
-				PromptTokens:     inTok + cacheCreate + cacheRead,
-				CompletionTokens: outTok,
-				TotalTokens:      inTok + cacheCreate + cacheRead + outTok,
-				CacheHitTokens:   cacheRead,
-				CacheMissTokens:  inTok + cacheCreate,
-				FinishReason:     "interrupted",
-			}
-			provider.ApplyRequestAttemptCount(ctx, usage)
-			_ = send(provider.Chunk{Type: provider.ChunkUsage, Usage: usage})
-		}
 		return
 	}
 	if stalled.Load() {
@@ -801,7 +788,7 @@ func formatWebSearchResults(raw json.RawMessage) string {
 	return "\n" + b.String() + "\n"
 }
 
-// --- Messages API wire protocol ---
+// Messages API wire protocol
 
 const cacheWrite5MinuteInputMultiplier = 1.25
 
