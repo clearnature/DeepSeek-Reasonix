@@ -14,6 +14,7 @@ import (
 
 	"reasonix/internal/ablation"
 	"reasonix/internal/event"
+	"reasonix/internal/nilutil"
 	"reasonix/internal/provider"
 )
 
@@ -95,6 +96,24 @@ func (a *Agent) compactThresholds() (soft, snip, high int) {
 	return soft, snip, high
 }
 
+// forceThreshold is the prompt-token high-water mark that forces compaction.
+// It never exceeds the provider's real input allowance: when the provider
+// requests a total output budget, the window's tail is reserved for it, so a
+// request below this threshold can never be rejected for exceeding the model
+// context length (DeepSeek rejects messages+completion > context_window). The
+// 8K reserve absorbs per-message estimate drift against the real tokenizer.
+// The more conservative of the ratio mark and the budget-aware mark wins.
+func (a *Agent) forceThreshold() int {
+	force := int(float64(a.contextWindow) * a.compactForceRatio)
+	if a.outputBudget > 0 {
+		budgetAware := a.contextWindow - a.outputBudget - 8192
+		if budgetAware < force {
+			force = budgetAware
+		}
+	}
+	return force
+}
+
 // maybeCompact compacts into a context projection when the last turn's prompt
 // has grown to the configured fraction of the context window. It never rewrites
 // the canonical transcript. No-op when compaction is disabled or usage is
@@ -136,7 +155,7 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 	if a.compactStuck {
 		return
 	}
-	force := u.PromptTokens >= int(float64(a.contextWindow)*a.compactForceRatio)
+	force := u.PromptTokens >= a.forceThreshold()
 	// Projection-only prune before folding. Install the pruned view first so the
 	// next request (and its real usage) can measure whether a paid summarize is
 	// still needed — never rewrite the canonical transcript.
@@ -583,6 +602,117 @@ func tailStart(msgs []provider.Message, head, budgetTokens int, tokPerChar float
 		start--
 	}
 	return start
+}
+
+// outputBudgetOf reads the provider's total output budget so compaction force
+// thresholds can stay inside the real input allowance (context_window - output).
+// Zero means the provider does not expose one (or requests omit the field).
+func outputBudgetOf(p provider.Provider) int {
+	if nilutil.IsNil(p) {
+		return 0
+	}
+	if bp, ok := p.(provider.OutputBudgetProvider); ok {
+		return bp.OutputBudget()
+	}
+	return 0
+}
+
+// sharesContextWindow reports whether the provider's output budget competes
+// with the prompt input for the same context window (DeepSeek). False for
+// unknown/independent-ceiling providers, keeping their default budgets intact.
+func sharesContextWindow(p provider.Provider) bool {
+	if nilutil.IsNil(p) {
+		return false
+	}
+	if sp, ok := p.(provider.SharedWindowOutputProvider); ok {
+		return sp.SharesContextWindow()
+	}
+	return false
+}
+
+// effectiveOutputBudget returns the max_output_tokens to request next round.
+// Shared-window providers (DeepSeek) must keep input + output inside
+// context_window or the API rejects with HTTP 400, so the budget is clipped to
+// the window's remaining allowance minus an estimate reserve. Returns
+// (0, false) to keep the caller's/provider's default when no clip is needed or
+// the window is unknown; (clipped, true) forces the smaller budget.
+func (a *Agent) effectiveOutputBudget(msgs []provider.Message) (int, bool) {
+	if a == nil || a.contextWindow <= 0 || !sharesContextWindow(a.prov) {
+		return 0, false
+	}
+	// A user override wins; otherwise the provider's configured default.
+	budget := a.outputBudget
+	if a.maxOutputTokens > 0 {
+		budget = a.maxOutputTokens
+	}
+	if budget <= 0 {
+		return 0, false
+	}
+	est := estimateMessagesTokens(provider.ModelMessages(msgs))
+	if a.session != nil {
+		est += estimateTextTokens(a.systemPrompt())
+	}
+	if a.tools != nil {
+		for _, s := range a.tools.Schemas() {
+			est += estimateTextTokens(s.Name) + estimateTextTokens(s.Description) + estimateTextTokens(string(s.Parameters))
+		}
+	}
+	avail := a.contextWindow - est - outputBudgetReserve
+	if budget <= avail {
+		return 0, false // full budget still fits; keep the default
+	}
+	if avail < minOutputBudget {
+		return minOutputBudget, true // never clip below a usable floor
+	}
+	return avail, true
+}
+
+// outputBudgetReserve absorbs per-message estimate drift against the real
+// tokenizer when clipping a shared-window output budget.
+const outputBudgetReserve = 8192
+
+// minOutputBudget is the floor for a clipped shared-window budget: a request
+// that near-exhausts the window still needs room to emit a tool call.
+const minOutputBudget = 8 * 1024
+
+// MaybeCompactOnResume compacts a freshly resumed session before the first
+// send when the prompt cannot fit inside the provider's shared context window
+// alongside the output budget (DeepSeek rejects input + max_output_tokens >
+// context_window with HTTP 400), or when the cache is cold and the prompt has
+// grown past the budget-aware force mark. Warm resumes with a small prompt are
+// left untouched so the cached prefix survives. Never rewrites the canonical
+// transcript; only the model-visible projection changes.
+func (a *Agent) MaybeCompactOnResume(ctx context.Context) {
+	if a == nil || a.session == nil || a.contextWindow <= 0 {
+		return
+	}
+	if !sharesContextWindow(a.prov) {
+		return
+	}
+	msgs, _ := a.session.snapshotMessagesVersion()
+	est := estimateMessagesTokens(provider.ModelMessages(msgs))
+	budget := a.outputBudget
+	if a.maxOutputTokens > 0 {
+		budget = a.maxOutputTokens
+	}
+	// The prompt alone already leaves no room for output: any request would be
+	// rejected regardless of cache state. Compact unconditionally.
+	if est >= a.contextWindow-minOutputBudget-outputBudgetReserve {
+		if err := a.CompactNow(ctx, ""); err == nil {
+			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
+				"resumed session prompt ~%d tokens est. exceeds the shared context window's input allowance — compacted before first send", est)})
+		}
+		return
+	}
+	// Cold cache + prompt past the budget-aware force mark: a full-history
+	// replay would pay the miss price on the whole prefix. Compact once so the
+	// first send is a small, stable, cacheable prefix.
+	if budget > 0 && a.cacheState == CacheStateCold && est >= a.forceThreshold() {
+		if err := a.CompactNow(ctx, ""); err == nil {
+			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
+				"resumed after provider-cache expiry with ~%d tokens est. — compacted before first send (cold replay would pay full price)", est)})
+		}
+	}
 }
 
 // tokPerChar derives a tokens-per-character ratio from the last turn's real
