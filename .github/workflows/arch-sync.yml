@@ -1,0 +1,27 @@
+name: Architecture doc sync guard
+
+on:
+  pull_request_target:
+    branches: [main-v2]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arch-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  arch-sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Execute only the trusted base-branch checker; never run contributor code
+      # from a pull_request_target workflow.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Check ARCHITECTURE.md sync with internal packages
+        run: |
+          ./scripts/check-arch-sync.sh
