@@ -250,3 +250,48 @@ func TestMaybeCompactOnResumeWarmSmallPromptUntouched(t *testing.T) {
 		t.Fatal("warm small resume must keep the cached prefix untouched")
 	}
 }
+
+// capturingBudgetProvider embeds sharedFakeProvider and records the MaxTokens
+// of the last streamed request plus how many streams ran.
+type capturingBudgetProvider struct {
+	sharedFakeProvider
+	maxTokens int
+	streams   int
+}
+
+func (p *capturingBudgetProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+	p.maxTokens = req.MaxTokens
+	p.streams++
+	return p.sharedFakeProvider.Stream(ctx, req)
+}
+
+var _ provider.Provider = (*capturingBudgetProvider)(nil)
+var _ provider.OutputBudgetProvider = (*capturingBudgetProvider)(nil)
+var _ provider.SharedWindowOutputProvider = (*capturingBudgetProvider)(nil)
+
+// TestSummarizeClipsSharedWindowBudget verifies the compaction summarizer clips
+// its own MaxTokens for a shared-window vendor: an unclipped default made
+// compaction itself fail with HTTP 400 near the window edge.
+func TestSummarizeClipsSharedWindowBudget(t *testing.T) {
+	cap := &capturingBudgetProvider{}
+	cap.fakeProvider = &fakeProvider{reply: "SUMMARY"}
+	cap.budget = 128 * 1024
+	a := &Agent{
+		prov:          cap,
+		contextWindow: 1_048_576,
+		outputBudget:  128 * 1024,
+		sink:          event.Discard,
+	}
+	// Region near the window edge: input alone estimates past the allowance.
+	region := []provider.Message{{Role: provider.RoleUser, Content: bigTokenString(900_000)}}
+	summary, _, err := a.summarize(context.Background(), region, "")
+	if err != nil {
+		t.Fatalf("summarize: %v", err)
+	}
+	if summary != "SUMMARY" {
+		t.Fatalf("summary = %q, want %q", summary, "SUMMARY")
+	}
+	if cap.maxTokens == 0 || cap.maxTokens >= 128*1024 {
+		t.Fatalf("MaxTokens = %d, want a clipped value under the 128K default", cap.maxTokens)
+	}
+}

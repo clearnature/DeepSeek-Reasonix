@@ -687,6 +687,18 @@ func (a *Agent) effectiveOutputBudget(msgs []provider.Message) (int, bool) {
 			est += estimateTextTokens(s.Name) + estimateTextTokens(s.Description) + estimateTextTokens(string(s.Parameters))
 		}
 	}
+	return a.sharedWindowClip(budget, est)
+}
+
+// sharedWindowClip clips an output budget so budget + estimated input stays
+// inside the provider's shared context window (DeepSeek rejects the sum above
+// context_window with HTTP 400). Returns (0, false) to keep the caller's
+// default when no clip is needed; (clipped, true) forces the smaller budget,
+// never below the 8K usable floor.
+func (a *Agent) sharedWindowClip(budget, est int) (int, bool) {
+	if a == nil || a.contextWindow <= 0 || budget <= 0 {
+		return 0, false
+	}
 	avail := a.contextWindow - est - outputBudgetReserve
 	if budget <= avail {
 		return 0, false // full budget still fits; keep the default
@@ -788,11 +800,27 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 			a.sink.Emit(event.Event{Kind: event.Usage, ModelRef: a.modelRef, Usage: usage, Pricing: a.pricing, UsageSource: event.UsageSourceCompaction})
 		}
 	}()
+	// The summarizer hits the provider's shared context window too (its input
+	// is the whole folded region), so clip the output budget the same way as
+	// normal requests — an unclipped default 128K made compaction itself fail
+	// with HTTP 400 near the window edge.
+	reqMsgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: sys},
+		{Role: provider.RoleUser, Content: renderTranscript(region)},
+	}
+	maxTokens := 0
+	if sharesContextWindow(a.prov) {
+		budget := a.outputBudget
+		if a.maxOutputTokens > 0 {
+			budget = a.maxOutputTokens
+		}
+		if clipped, ok := a.sharedWindowClip(budget, a.estimatedPromptTokens(reqMsgs)); ok {
+			maxTokens = clipped
+		}
+	}
 	ch, err := a.prov.Stream(ctx, provider.Request{
-		Messages: []provider.Message{
-			{Role: provider.RoleSystem, Content: sys},
-			{Role: provider.RoleUser, Content: renderTranscript(region)},
-		},
+		Messages:    reqMsgs,
+		MaxTokens:   maxTokens,
 		Temperature: provider.OptionalTemperature(a.temperature),
 	})
 	if err != nil {
