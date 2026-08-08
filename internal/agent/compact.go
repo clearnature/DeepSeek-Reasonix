@@ -272,7 +272,12 @@ func (a *Agent) estimatedPromptTokens(msgs []provider.Message) int {
 	}
 	tpc := a.tokPerChar()
 	if tpc > 0 && tpc != fallbackTokPerChar {
-		return int(float64(est) * tpc / fallbackTokPerChar)
+		// estimateMessagesTokens counts ~1 rune per token, so the calibration
+		// factor is the measured ratio itself. Scaling by tpc/fallback would
+		// inflate the estimate ~4x whenever the measured ratio exceeds the
+		// 4-chars-per-token baseline (measured 1.8x under-count is already
+		// covered by LatestPromptTokens-based calibration on real usage).
+		return int(float64(est) * tpc)
 	}
 	return est * promptEstimateSafetyFactor
 }
@@ -769,9 +774,13 @@ func (a *Agent) MaybeCompactOnResume(ctx context.Context) {
 // actually sent (the provider strips it). Falls back to ~4 chars/token before
 // any usage is known, and ignores absurd ratios.
 func (a *Agent) tokPerChar() float64 {
-	if u := a.lastUsage.Load(); u != nil && u.PromptTokens > 0 {
+	if u := a.lastUsage.Load(); u != nil && u.LatestPromptTokens() > 0 {
+		// LatestPromptTokens keeps the calibration on the latest single-request
+		// shape: retry aggregates would inflate the ratio and over-estimate the
+		// prompt, triggering compaction below the real threshold (same reason
+		// maybeCompact gates on the latest value).
 		if c := charsOfMessages(a.session.Messages); c > 0 {
-			if r := float64(u.PromptTokens) / float64(c); r > 0.05 && r < 2 {
+			if r := float64(u.LatestPromptTokens()) / float64(c); r > 0.05 && r < 2 {
 				return r
 			}
 		}
@@ -779,16 +788,17 @@ func (a *Agent) tokPerChar() float64 {
 	return fallbackTokPerChar
 }
 
-// msgChars counts the characters that ride to the provider for one message —
+// msgChars counts the runes that ride to the provider for one message —
 // content plus tool-call names and arguments, but not reasoning (stripped on
-// send).
+// send). Runes, not bytes: estimateTextTokens is also rune-based, so token
+// ratios and estimates share one unit regardless of script.
 func msgChars(m provider.Message) int {
 	if m.LocalOnly {
 		return 0
 	}
-	n := len(m.Content)
+	n := utf8.RuneCountInString(m.Content)
 	for _, tc := range m.ToolCalls {
-		n += len(tc.Name) + len(tc.Arguments)
+		n += utf8.RuneCountInString(tc.Name) + utf8.RuneCountInString(tc.Arguments)
 	}
 	return n
 }
