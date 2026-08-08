@@ -361,3 +361,46 @@ func TestMaybeCompactPausesOnTooLargeInput(t *testing.T) {
 		t.Fatalf("expected a 'too large to compact' notice, got %v", notices)
 	}
 }
+
+// TestMaybePredictOverflowFires verifies a record-only notice when the
+// estimated prompt + max output leaves less than 8K of headroom.
+func TestMaybePredictOverflowFires(t *testing.T) {
+	var notices []string
+	sink := event.FuncSink(func(e event.Event) {
+		if e.Kind == event.Notice {
+			notices = append(notices, e.Text)
+		}
+	})
+	a := &Agent{
+		contextWindow: 1_048_576,
+		sink:          sink,
+	}
+	// est 1M, max 128K → headroom = 1M - 1M - 128K = -128K < 8K → fires.
+	a.maybePredictOverflow(1_048_576, 131_072)
+	found := false
+	for _, n := range notices {
+		if n == "context window nearly full" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected overflow notice, got %v", notices)
+	}
+}
+
+// TestMaybePredictOverflowDoesNotFire when there is adequate headroom.
+func TestMaybePredictOverflowDoesNotFire(t *testing.T) {
+	count := 0
+	sink := event.FuncSink(func(e event.Event) {
+		count++
+	})
+	a := &Agent{
+		contextWindow: 1_048_576,
+		sink:          sink,
+	}
+	// est 100K, max 128K → headroom = 1M - 100K - 128K = ~820K >> 8K → no fire.
+	a.maybePredictOverflow(100_000, 131_072)
+	if count > 0 {
+		t.Fatalf("overflow predicted on a small prompt (%d events)", count)
+	}
+}
