@@ -182,6 +182,14 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 		}
 	}
 	if _, err := a.compactToProjection(ctx, "auto", "", force); err != nil {
+		if errors.Is(err, ErrCompactionInputTooLarge) {
+			// The fold alone exceeds what the window can hold, so compaction
+			// cannot help; pausing avoids re-running the doomed request every
+			// turn (it would 400 on the provider side each time).
+			a.compactStuck = true
+			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "Automatic context cleanup paused: context too large to compact.", Detail: err.Error()})
+			return
+		}
 		a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "Context cleanup skipped for now.", Detail: fmt.Sprintf("compaction skipped: %v", err)})
 		return
 	}
@@ -717,6 +725,12 @@ const outputBudgetReserve = 8192
 // that near-exhausts the window still needs room to emit a tool call.
 const minOutputBudget = 8 * 1024
 
+// ErrCompactionInputTooLarge reports that the fold to summarize cannot fit
+// beside a usable output budget in the shared context window. Retrying the
+// same fold cannot succeed, so callers pause auto-compaction instead of
+// re-running a doomed request every turn.
+var ErrCompactionInputTooLarge = errors.New("compaction input exceeds the provider context window")
+
 // MaybeCompactOnResume compacts a freshly resumed session before the first
 // send when the prompt cannot fit inside the provider's shared context window
 // alongside the output budget (DeepSeek rejects input + max_output_tokens >
@@ -804,9 +818,10 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 	// is the whole folded region), so clip the output budget the same way as
 	// normal requests — an unclipped default 128K made compaction itself fail
 	// with HTTP 400 near the window edge.
+	transcript := renderTranscript(region)
 	reqMsgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: sys},
-		{Role: provider.RoleUser, Content: renderTranscript(region)},
+		{Role: provider.RoleUser, Content: transcript},
 	}
 	maxTokens := 0
 	if sharesContextWindow(a.prov) {
@@ -816,6 +831,17 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 		}
 		if clipped, ok := a.sharedWindowClip(budget, a.estimatedPromptTokens(reqMsgs)); ok {
 			maxTokens = clipped
+		}
+		// Reject when the fold itself cannot fit beside a usable output budget:
+		// the request would 400 again, and retrying the same fold every turn
+		// just re-runs the failure. Estimate the real request shape (framing
+		// overhead included, no safety factor) so healthy folds near the window
+		// still pass — a transcript-only estimate would under-count reasoning
+		// content and tool-call arguments.
+		if a.contextWindow > minOutputBudget {
+			if est := estimateMessagesTokens(reqMsgs); est >= a.contextWindow-minOutputBudget {
+				return "", nil, ErrCompactionInputTooLarge
+			}
 		}
 	}
 	ch, err := a.prov.Stream(ctx, provider.Request{

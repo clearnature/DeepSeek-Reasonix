@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -293,5 +294,70 @@ func TestSummarizeClipsSharedWindowBudget(t *testing.T) {
 	}
 	if cap.maxTokens == 0 || cap.maxTokens >= 128*1024 {
 		t.Fatalf("MaxTokens = %d, want a clipped value under the 128K default", cap.maxTokens)
+	}
+}
+
+// TestSummarizeRejectsTooLargeInput verifies the summarizer refuses a fold
+// that cannot fit beside a usable output budget: the request would 400 again
+// and retrying it every turn just re-runs the failure.
+func TestSummarizeRejectsTooLargeInput(t *testing.T) {
+	cap := &capturingBudgetProvider{}
+	cap.fakeProvider = &fakeProvider{reply: "SUMMARY"}
+	cap.budget = 128 * 1024
+	a := &Agent{
+		prov:          cap,
+		contextWindow: 500_000,
+		outputBudget:  128 * 1024,
+		sink:          event.Discard,
+	}
+	// Fold larger than window - minOutputBudget: the rendered transcript
+	// estimates ~500K tokens.
+	region := []provider.Message{{Role: provider.RoleUser, Content: bigTokenString(500_000)}}
+	_, _, err := a.summarize(context.Background(), region, "")
+	if !errors.Is(err, ErrCompactionInputTooLarge) {
+		t.Fatalf("summarize err = %v, want ErrCompactionInputTooLarge", err)
+	}
+	if cap.streams != 0 {
+		t.Fatalf("summarize streamed %d requests; a too-large fold must be rejected before sending", cap.streams)
+	}
+}
+
+// TestMaybeCompactPausesOnTooLargeInput verifies auto-compaction stops retrying
+// when the fold cannot fit the window: compactStuck latches and a warn notice
+// explains why, instead of re-running a doomed summarize every turn.
+func TestMaybeCompactPausesOnTooLargeInput(t *testing.T) {
+	cap := &capturingBudgetProvider{}
+	cap.fakeProvider = &fakeProvider{reply: "SUMMARY"}
+	cap.budget = 128 * 1024
+	var notices []string
+	sink := event.FuncSink(func(e event.Event) {
+		if e.Kind == event.Notice {
+			notices = append(notices, e.Text)
+		}
+	})
+	sess := NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: bigTokenString(500_000)})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "ok"})
+	a := &Agent{
+		prov:              cap,
+		contextWindow:     500_000,
+		outputBudget:      128 * 1024,
+		compactRatio:      0.8,
+		compactForceRatio: 0.9,
+		sink:              sink,
+	}
+	a.session = sess
+	a.maybeCompact(context.Background(), &provider.Usage{PromptTokens: 500_000})
+	if !a.compactStuck {
+		t.Fatal("too-large fold must latch compactStuck to stop auto-retry")
+	}
+	found := false
+	for _, n := range notices {
+		if strings.Contains(n, "too large to compact") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a 'too large to compact' notice, got %v", notices)
 	}
 }
