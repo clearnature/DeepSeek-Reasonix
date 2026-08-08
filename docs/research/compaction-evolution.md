@@ -13,6 +13,58 @@
 - **前缀唯一改写点**：压缩本身（projection 重建）是唯一允许改变发送前缀的位置，且必须「一次性改写 + 改写后稳定保持」。
 - **低成本恢复**：24h 缓存窗口内 resume 原样重放（命中 ¥0.32 vs 全价 ¥11.90），是便宜的知识恢复，不是赌博。
 
+## 一.5 数学视角：投影不变量（Sovereign 证明库映射）
+
+> 参考 `/data/work/discrete-mathematics/src/Sovereign`（`Projection/Binary.agda`、`Projection.agda`、`Geometry/ProjectiveInvariants.agda`）。context projection 的设计与四组形式化定理同构：
+
+### 1. 有损投影定理 → canonical 是唯一事实源
+
+```agda
+-- Sovereign: 投影有损 — T₀ ≠ T₂ 但投影到相同 Bit（信息折叠不可逆）
+projectionIsLossy : ¬ (T.T₀ ≡ T.T₂) × (projectTritToBit T.T₀ ≡ projectTritToBit T.T₂)
+```
+
+- 工程对应：canonical → 摘要投影是**有损且不可逆**的（不同消息可折叠进同一摘要）。
+- 推论：canonical 永不改写 + `archive/` 归档 = 「有损投影必须保留源」的工程化；摘要仅存在于投影视图。
+
+### 2. 上下文恢复定理 → 投影使用必须携带上下文（fail closed）
+
+```agda
+record Context : Set where
+  field currentPhase : Fin 144
+        wuxingMask   : Fin 5
+restoreTritWithContext : Bit → Context → T.Trit    -- 恢复必须携带上下文
+restoreT1Perfect : ∀ ctx → restore (project T₁) ctx ≡ T₁   -- 无损部分可完美恢复
+```
+
+- 工程对应：sidecar 元数据 `CoveredCount / CoveredPrefixHash / PromptCacheKey / SummaryHash` 即 Context。
+- `projectionValid` **fail-closed**（缺 CoveredPrefixHash 或 lineage key 不匹配 → 丢弃重建）——数学上即「无上下文不投影」。
+- `restoreT1Perfect`（无损恢复）↔ verbatim 保留（pinned/kept/tail）不依赖摘要质量；`restoreT0CorrectInNonEarthRegions`（有损部分依赖上下文）↔ SPEC §3.6「oversized message 里的事实依赖 summarizer 捕获」= best-effort。
+
+### 3. 投影链条定理 → 增量折叠是链条的原子步
+
+```agda
+data ProjectionChain : Category → Category → Set where
+  nil : ∀ {A} → ProjectionChain A A                  -- 恒等链 = 不动
+  _∷_ : Step B C → ProjectionChain A B → ProjectionChain A C
+chainAssoc : f ∘ (g ∘ h) ≡ (f ∘ g) ∘ h              -- 复合结合律
+```
+
+- 工程对应：每次增量折叠推进 `covered`（只增不减）= 链条的一个原子步；`nil` = 投影有效时 covered 内不重压。
+- **链条不变量（covered 单调）**：canonical append-only + `coveredPrefixHash` 校验 ⇒ covered 严格单调，链条任意前缀良定义；折叠顺序（增量 vs 全量）不影响最终 covered 状态（结合律）。
+
+### 4. 射影不变量 → 前缀字节是投影下的保持量
+
+```agda
+t-is-6624 : t ≡ 6624     -- 投影下保持的量（refl 验证）
+```
+
+- 工程对应：投影下必须保持的量 = 已覆盖前缀的字节。`coveredPrefixHash` 校验即「前缀不变量」的运行时证明——投影合法 ⟺ 前缀哈希匹配（与 `t-is-6624` 的 refl 验证同构）。
+
+### 设计结论
+
+实现完全符合 Sovereign 投影框架四原则（有损保留源、上下文校验、链条稳定、前缀不变量）——增量折叠正是「投影链条」的工程实现。
+
 ## 二、演变史（按阶段）
 
 ### 阶段 0：基线（32K 输出预算，append-only + 低频折叠）
