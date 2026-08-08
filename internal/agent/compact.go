@@ -10,11 +10,9 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"reasonix/internal/ablation"
 	"reasonix/internal/event"
-	"reasonix/internal/nilutil"
 	"reasonix/internal/provider"
 )
 
@@ -32,7 +30,6 @@ const (
 	defaultTailTokens          = 16384 // verbatim recent-tail budget, in tokens
 	minRecentKeep              = 2     // never keep fewer recent messages than this
 	minCompactMessages         = 2     // skip compaction below this many compactable messages
-	fallbackTokPerChar         = 0.25  // ~4 chars/token, used before any usage is available to calibrate
 	maxPinnedFirstUserTokens   = 1500  // ceiling on pinning the first user turn verbatim; larger first turns (pasted content) stay foldable
 	pinnedFirstUserWindowFrac  = 0.15  // and never pin a first turn worth more than this fraction of the window
 	maxKeepSmallUserTurns      = 20    // position-fixed keep window for small user turns in the fold region; the first N survive verbatim, older ones fold (prefix byte-stable, never "latest N")
@@ -96,32 +93,6 @@ func (a *Agent) compactThresholds() (soft, snip, high int) {
 	return soft, snip, high
 }
 
-// forceThreshold is the prompt-token high-water mark that forces compaction.
-// It never exceeds the provider's real input allowance: when the provider
-// shares its context window with the output (DeepSeek), the window's tail is
-// reserved for the output budget so a request below this threshold can never
-// be rejected for exceeding the model context length (DeepSeek rejects
-// messages+completion > context_window). Independent-ceiling providers keep
-// the plain ratio mark. The 8K reserve absorbs per-message estimate drift
-// against the real tokenizer. The more conservative of the ratio mark and the
-// budget-aware mark wins.
-func (a *Agent) forceThreshold() int {
-	force := int(float64(a.contextWindow) * a.compactForceRatio)
-	if sharesContextWindow(a.prov) {
-		budget := a.outputBudget
-		if a.maxOutputTokens > 0 {
-			budget = a.maxOutputTokens
-		}
-		if budget > 0 {
-			budgetAware := a.contextWindow - budget - 8192
-			if budgetAware < force {
-				force = budgetAware
-			}
-		}
-	}
-	return force
-}
-
 // maybeCompact compacts into a context projection when the last turn's prompt
 // has grown to the configured fraction of the context window. It never rewrites
 // the canonical transcript. No-op when compaction is disabled or usage is
@@ -135,13 +106,9 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 		return
 	}
 	soft, snip, high := a.compactThresholds()
-	// A turn that sits under the trigger is the breathing room a healthy
-	// compaction buys; it clears the stuck latch and the run counter. This has to
-	// happen before the soft/snip branches return, because a compaction that
-	// settles the prompt anywhere in [snip, high) is working exactly as intended:
-	// leaving a stale run count behind there would latch the *next* compaction as
-	// "the window is too small" and silently disable auto-compaction for the rest
-	// of the session.
+	// Clearing the latch before the soft/snip returns keeps a settled prompt
+	// from being counted against the next turn; a too-small-window session
+	// otherwise latches and disables auto-compaction for the session.
 	if promptTokens < high {
 		a.consecutiveCompacts = 0
 		a.compactStuck = false
@@ -219,73 +186,6 @@ func foldEconomics(region []provider.Message) bool {
 	const minFoldTokens = 400
 	return estimateMessagesTokens(region) >= minFoldTokens
 }
-
-func estimateMessagesTokens(msgs []provider.Message) int {
-	total := 0
-	for _, m := range msgs {
-		if m.LocalOnly {
-			continue
-		}
-		total += 4 // chat-message framing overhead
-		total += estimateTextTokens(m.Content)
-		total += estimateTextTokens(m.ReasoningContent)
-		total += estimateTextTokens(m.Name)
-		total += estimateTextTokens(m.ToolCallID)
-		for _, tc := range m.ToolCalls {
-			total += 8
-			total += estimateTextTokens(tc.ID)
-			total += estimateTextTokens(tc.Name)
-			total += estimateTextTokens(tc.Arguments)
-		}
-		for _, item := range m.ResponsesItems {
-			total += estimateTextTokens(string(item))
-		}
-	}
-	return total
-}
-
-func estimateTextTokens(s string) int {
-	if s == "" {
-		return 0
-	}
-	// A conservative cross-language approximation: English-ish text trends near
-	// four bytes per token, while CJK-heavy text is closer to one rune per token.
-	bytes := len(s)
-	runes := utf8.RuneCountInString(s)
-	byBytes := (bytes + 3) / 4
-	if runes > byBytes {
-		return runes
-	}
-	return byBytes
-}
-
-// estimatedPromptTokens returns a conservative prompt-token estimate for the
-// overflow-guard paths (preflight force, resume gate, shared-window budget
-// clipping). The fixed estimator under-counts CJK-heavy transcripts (measured
-// ~1.8x on a real 4.3K-message session: estimated 681K vs 1.24M actual), so
-// without usage data it applies the safety factor; once a turn reports real
-// usage, tokPerChar calibrates the estimate instead.
-func (a *Agent) estimatedPromptTokens(msgs []provider.Message) int {
-	est := estimateMessagesTokens(provider.ModelMessages(msgs))
-	if est <= 0 {
-		return 0
-	}
-	tpc := a.tokPerChar()
-	if tpc > 0 && tpc != fallbackTokPerChar {
-		// estimateMessagesTokens counts ~1 rune per token, so the calibration
-		// factor is the measured ratio itself. Scaling by tpc/fallback would
-		// inflate the estimate ~4x whenever the measured ratio exceeds the
-		// 4-chars-per-token baseline (measured 1.8x under-count is already
-		// covered by LatestPromptTokens-based calibration on real usage).
-		return int(float64(est) * tpc)
-	}
-	return est * promptEstimateSafetyFactor
-}
-
-// promptEstimateSafetyFactor is the measured under-count of the fixed CJK
-// estimator before any usage calibrates it (~1.8x real, rounded up so the
-// overflow guards stay inside the provider window).
-const promptEstimateSafetyFactor = 2
 
 // SummarizeFrom replaces the messages from fromIdx onward with a single summary,
 // keeping everything before it verbatim ("summarize from here"). fromIdx is a turn
@@ -650,165 +550,6 @@ func tailStart(msgs []provider.Message, head, budgetTokens int, tokPerChar float
 		start--
 	}
 	return start
-}
-
-// outputBudgetOf reads the provider's total output budget so compaction force
-// thresholds can stay inside the real input allowance (context_window - output).
-// Zero means the provider does not expose one (or requests omit the field).
-func outputBudgetOf(p provider.Provider) int {
-	if nilutil.IsNil(p) {
-		return 0
-	}
-	if bp, ok := p.(provider.OutputBudgetProvider); ok {
-		return bp.OutputBudget()
-	}
-	return 0
-}
-
-// sharesContextWindow reports whether the provider's output budget competes
-// with the prompt input for the same context window (DeepSeek). False for
-// unknown/independent-ceiling providers, keeping their default budgets intact.
-func sharesContextWindow(p provider.Provider) bool {
-	if nilutil.IsNil(p) {
-		return false
-	}
-	if sp, ok := p.(provider.SharedWindowOutputProvider); ok {
-		return sp.SharesContextWindow()
-	}
-	return false
-}
-
-// effectiveOutputBudget returns the max_output_tokens to request next round.
-// Shared-window providers (DeepSeek) must keep input + output inside
-// context_window or the API rejects with HTTP 400, so the budget is clipped to
-// the window's remaining allowance minus an estimate reserve. Returns
-// (0, false) to keep the caller's/provider's default when no clip is needed or
-// the window is unknown; (clipped, true) forces the smaller budget.
-func (a *Agent) effectiveOutputBudget(msgs []provider.Message) (int, bool) {
-	if a == nil || a.contextWindow <= 0 || !sharesContextWindow(a.prov) {
-		return 0, false
-	}
-	// A user override wins; otherwise the provider's configured default.
-	budget := a.outputBudget
-	if a.maxOutputTokens > 0 {
-		budget = a.maxOutputTokens
-	}
-	if budget <= 0 {
-		return 0, false
-	}
-	// msgs already carries the system prompt (modelVisibleMessages includes
-	// system messages), so only tool schemas are added on top.
-	est := a.estimatedPromptTokens(msgs)
-	if a.tools != nil {
-		for _, s := range a.tools.Schemas() {
-			est += estimateTextTokens(s.Name) + estimateTextTokens(s.Description) + estimateTextTokens(string(s.Parameters))
-		}
-	}
-	return a.sharedWindowClip(budget, est)
-}
-
-// sharedWindowClip clips an output budget so budget + estimated input stays
-// inside the provider's shared context window (DeepSeek rejects the sum above
-// context_window with HTTP 400). Returns (0, false) to keep the caller's
-// default when no clip is needed; (clipped, true) forces the smaller budget,
-// never below the 8K usable floor.
-func (a *Agent) sharedWindowClip(budget, est int) (int, bool) {
-	if a == nil || a.contextWindow <= 0 || budget <= 0 {
-		return 0, false
-	}
-	avail := a.contextWindow - est - outputBudgetReserve
-	if budget <= avail {
-		return 0, false // full budget still fits; keep the default
-	}
-	if avail < minOutputBudget {
-		return minOutputBudget, true // never clip below a usable floor
-	}
-	return avail, true
-}
-
-// outputBudgetReserve absorbs per-message estimate drift against the real
-// tokenizer when clipping a shared-window output budget.
-const outputBudgetReserve = 8192
-
-// minOutputBudget is the floor for a clipped shared-window budget: a request
-// that near-exhausts the window still needs room to emit a tool call.
-const minOutputBudget = 8 * 1024
-
-// ErrCompactionInputTooLarge reports that the fold to summarize cannot fit
-// beside a usable output budget in the shared context window. Retrying the
-// same fold cannot succeed, so callers pause auto-compaction instead of
-// re-running a doomed request every turn.
-var ErrCompactionInputTooLarge = errors.New("compaction input exceeds the provider context window")
-
-// MaybeCompactOnResume compacts a freshly resumed session before the first
-// send when the prompt cannot fit inside the provider's shared context window
-// alongside the output budget (DeepSeek rejects input + max_output_tokens >
-// context_window with HTTP 400). Warm resumes and cold resumes within the
-// input allowance are left untouched so the cached prefix survives — matching
-// the deferred-compaction policy upstream: cold-cache replay pays the miss
-// price once, which is cheaper than rewriting the prefix on every resume.
-// Never rewrites the canonical transcript; only the model-visible projection
-// changes.
-func (a *Agent) MaybeCompactOnResume(ctx context.Context) {
-	if a == nil || a.session == nil || a.contextWindow <= 0 {
-		return
-	}
-	if !sharesContextWindow(a.prov) {
-		return
-	}
-	msgs, _ := a.session.snapshotMessagesVersion()
-	est := a.estimatedPromptTokens(msgs)
-	// The prompt alone already leaves no room for output: any request would be
-	// rejected regardless of cache state. Compact unconditionally.
-	if est >= a.contextWindow-minOutputBudget-outputBudgetReserve {
-		if err := a.CompactNow(ctx, ""); err == nil {
-			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
-				"resumed session prompt ~%d tokens est. exceeds the shared context window's input allowance — compacted before first send", est)})
-		}
-	}
-}
-
-// tokPerChar derives a tokens-per-character ratio from the last turn's real
-// usage so per-message estimates track the provider's tokenizer without a local
-// one. Reasoning content is excluded from the char count to match the prompt
-// actually sent (the provider strips it). Falls back to ~4 chars/token before
-// any usage is known, and ignores absurd ratios.
-func (a *Agent) tokPerChar() float64 {
-	if u := a.lastUsage.Load(); u != nil && u.LatestPromptTokens() > 0 {
-		// LatestPromptTokens keeps the calibration on the latest single-request
-		// shape: retry aggregates would inflate the ratio and over-estimate the
-		// prompt, triggering compaction below the real threshold (same reason
-		// maybeCompact gates on the latest value).
-		if c := charsOfMessages(a.session.Messages); c > 0 {
-			if r := float64(u.LatestPromptTokens()) / float64(c); r > 0.05 && r < 2 {
-				return r
-			}
-		}
-	}
-	return fallbackTokPerChar
-}
-
-// msgChars counts the runes that ride to the provider for one message —
-// content plus tool-call names and arguments, but not reasoning (stripped on
-// send). Runes, not bytes: estimateTextTokens is also rune-based, so token
-// ratios and estimates share one unit regardless of script.
-func msgChars(m provider.Message) int {
-	if m.LocalOnly {
-		return 0
-	}
-	n := utf8.RuneCountInString(m.Content)
-	for _, tc := range m.ToolCalls {
-		n += utf8.RuneCountInString(tc.Name) + utf8.RuneCountInString(tc.Arguments)
-	}
-	return n
-}
-
-func charsOfMessages(msgs []provider.Message) int {
-	n := 0
-	for _, m := range msgs {
-		n += msgChars(m)
-	}
-	return n
 }
 
 // summarize asks the executor's own provider (no tools) to distill the region
