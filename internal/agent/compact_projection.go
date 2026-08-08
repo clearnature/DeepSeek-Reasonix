@@ -714,9 +714,9 @@ func (a *Agent) compactIncremental(ctx context.Context, trigger, instructions st
 	added := append([]provider.Message{formatSummaryMessage(summary)}, kept...)
 	added = append(added, msgs[start:]...)
 	added = provider.ModelMessages(added)
-	if a.strictAlternatingRoles {
-		added = coalesceProjectionUserRuns(added)
-	}
+	// V2 keeps logical user-turn boundaries in the projection sidecar (explicit
+	// compress anchors resolve against them); role coalescing happens only on
+	// the outbound copy in providerProjectionMessages.
 	projMsgs := append(base, added...)
 
 	projTokens := estimateMessagesTokens(projMsgs)
