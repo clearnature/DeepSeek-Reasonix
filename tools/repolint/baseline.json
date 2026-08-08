@@ -4,12 +4,12 @@
     "commented-code": 1,
     "complexity": 2079,
     "essay": 4188,
-    "file-size": 113603,
-    "function-size": 9250,
+    "file-size": 113615,
+    "function-size": 9232,
     "layering": 2,
     "marker": 0,
     "narrative": 74,
-    "test-file-size": 69106
+    "test-file-size": 69146
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -438,7 +438,7 @@
       "essay": 27
     },
     "internal/agent/compact_projection.go": {
-      "function-size": 24
+      "function-size": 6
     },
     "internal/agent/compact_test.go": {
       "essay": 4
@@ -1051,13 +1051,13 @@
     "internal/control/controller.go": {
       "complexity": 14,
       "essay": 184,
-      "file-size": 5370,
+      "file-size": 5382,
       "function-size": 92,
       "narrative": 4
     },
     "internal/control/controller_test.go": {
       "essay": 10,
-      "test-file-size": 4540
+      "test-file-size": 4580
     },
     "internal/control/errmsg.go": {
       "essay": 2
