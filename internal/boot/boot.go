@@ -257,12 +257,11 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		sink = stats.NewRecorder(sink, config.StatsDir(), source)
 	}
 	// Goal token-budget accounting: the controller detects this tee and
-	// attributes billable usage events to the active goal turn's recorder, so
-	// executor/planner/subagent/compaction/classifier/router/reviewer/evaluator
-	// calls under one Goal scope accumulate into its observational token total.
-	// The tee must
-	// sit on the shared sink the agents emit into.
-	sink = control.NewGoalUsageTee(sink)
+	// attributes billable usage to the active goal turn's recorder. Both the
+	// tee and the delta coalescer must ride the shared sink agents emit into
+	// directly — wrapping only the controller's reference would leave the
+	// executor's per-chunk Text/Reasoning stream uncoalesced.
+	sink = control.NewGoalUsageTee(event.Coalesce(sink, event.DefaultStreamDeltaWindow))
 
 	// P2 dream bridge: when a compaction pass completes with a non-empty
 	// rolling-merge summary, distill it into the shared knowledge cache so
