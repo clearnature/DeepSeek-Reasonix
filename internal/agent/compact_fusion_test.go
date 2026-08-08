@@ -27,9 +27,10 @@ func TestIncrementalFoldPreservesUserTurnBoundariesForExplicitCompress(t *testin
 	ctx := context.Background()
 	prov := &fakeProvider{reply: "s"}
 	a := New(prov, tool.NewRegistry(), sess, Options{
-		ContextWindow: 20000,
-		RecentKeep:    2,
-		ArchiveDir:    t.TempDir(),
+		ContextWindow:          20000,
+		RecentKeep:             2,
+		ArchiveDir:             t.TempDir(),
+		StrictAlternatingRoles: true, // force the V1 in-projection coalesce path if it regresses
 	}, event.Discard)
 
 	// First compaction installs a full-fold projection (manual degrades).
@@ -41,11 +42,11 @@ func TestIncrementalFoldPreservesUserTurnBoundariesForExplicitCompress(t *testin
 		t.Fatalf("first compaction malformed: %+v", proj1)
 	}
 
-	// Append content so the incremental path runs.
+	// Two consecutive user turns (no assistant between) exercise the V1/V2
+	// fork: V1 coalesces them in-projection and erases the anchor; V2 keeps
+	// both boundaries and coalesces only on the outbound copy.
 	sess.Add(provider.Message{Role: provider.RoleUser, Content: strings.Repeat("x ", 5000)})
-	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "h"})
 	sess.Add(provider.Message{Role: provider.RoleUser, Content: "keep-boundary-anchor"})
-	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "j"})
 
 	prov.got = nil
 	if _, err := a.compactToProjection(ctx, CompactionTriggerPressure, "", false); err != nil {
@@ -56,6 +57,19 @@ func TestIncrementalFoldPreservesUserTurnBoundariesForExplicitCompress(t *testin
 		if !reflect.DeepEqual(proj2.Messages[i], proj1.Messages[i]) {
 			t.Fatalf("incremental fold changed prior projection bytes at %d", i)
 		}
+	}
+	// Prove the incremental path actually ran: the summarizer must see only the
+	// appended segment, never the covered history (a degraded full re-fold
+	// would re-submit it).
+	if prov.got == nil {
+		t.Fatal("incremental fold never reached the summarizer")
+	}
+	var joined []string
+	for _, m := range prov.got {
+		joined = append(joined, m.Content)
+	}
+	if strings.Contains(strings.Join(joined, "|"), strings.Repeat("a ", 500)) {
+		t.Fatalf("incremental fold re-folded covered history: %q", strings.Join(joined, "|")[:160])
 	}
 
 	// V2: the incremental fold must not coalesce the appended kept tail — the

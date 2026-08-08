@@ -542,10 +542,6 @@ func (a *Agent) incrementalFoldTarget(msgs []provider.Message, transcriptVersion
 	if trigger == CompactionTriggerManual || trigger == CompactionTriggerOverflow {
 		return ContextProjection{}, 0, 0, false
 	}
-	if a.strictAlternatingRoles && len(st.Projection.Messages) > 0 &&
-		st.Projection.Messages[len(st.Projection.Messages)-1].Role == provider.RoleUser {
-		return ContextProjection{}, 0, 0, false
-	}
 	head, start, ok = a.incrementalFoldRange(msgs, covered)
 	if !ok {
 		return ContextProjection{}, 0, 0, false
@@ -719,7 +715,10 @@ func (a *Agent) compactIncremental(ctx context.Context, trigger, instructions st
 	// the outbound copy in providerProjectionMessages.
 	projMsgs := append(base, added...)
 
-	projTokens := estimateMessagesTokens(projMsgs)
+	// Estimate against the outbound shape (role coalescing applied), matching
+	// the full-fold path — the projection token gauge must use the same
+	// denominator for both compaction routes.
+	projTokens := estimateMessagesTokens(a.providerProjectionMessages(projMsgs))
 	tele.ProjectionTokens = projTokens
 	a.emitCompactionTelemetry(tele)
 
