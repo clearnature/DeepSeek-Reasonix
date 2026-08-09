@@ -84,4 +84,10 @@ func TestCompactionTelemetrySourceTokensCalibrated(t *testing.T) {
 	if tele.Status != CompactionStatusNoop {
 		t.Fatalf("status=%q, want noop", tele.Status)
 	}
+	if tele.TokPerChar != a.tokPerChar() {
+		t.Fatalf("telemetry tpc=%v, want tokPerChar %v", tele.TokPerChar, a.tokPerChar())
+	}
+	if tele.TokPerChar <= 0 {
+		t.Fatalf("telemetry tpc must be positive once calibration exists, got %v", tele.TokPerChar)
+	}
 }
