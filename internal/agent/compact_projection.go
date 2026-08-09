@@ -685,7 +685,7 @@ func (a *Agent) runCompactionSummary(ctx context.Context, fold []provider.Messag
 }
 
 // snipToProjection builds a projection that only snips stale tool results.
-func (a *Agent) snipToProjection(ctx context.Context) error {
+func (a *Agent) snipToProjection(ctx context.Context, trigger string) error {
 	_ = ctx
 	msgs, _ := a.session.snapshotMessagesVersion()
 	snipped, st := a.applyToolResultMaintenanceView(msgs, toolResultSnip)
@@ -696,12 +696,14 @@ func (a *Agent) snipToProjection(ctx context.Context) error {
 	saved := int(float64(st.SavedChars) * ratio)
 	a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
 		"snipped %d stale tool results (~%d tokens est.) before compaction", st.Results, saved)})
-	return a.installPruneProjection(snipped, st)
+	return a.installPruneProjection(snipped, st, trigger)
 }
 
 // installPruneProjection stores a projection whose messages are a snipped/pruned
-// view of the canonical transcript (no summarizer call).
-func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats) error {
+// view of the canonical transcript (no summarizer call), and records the pass as
+// compaction telemetry so auto-path snips/prunes land in the stats file the same
+// way manual /compress-fast rows do.
+func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats, trigger string) error {
 	msgs, version := a.session.snapshotMessagesVersion()
 	view = provider.ModelMessages(view)
 	src := a.estimatedPromptTokens(msgs)
@@ -729,7 +731,13 @@ func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats) e
 		UpdatedAt:        time.Now().UTC(),
 	}
 	_ = st
-	return a.installProjection(state)
+	err := a.installProjection(state)
+	a.emitCompactionTelemetry(CompactionTelemetry{
+		Trigger: trigger, CacheState: a.CacheState(), Mode: CompactionModeSnip,
+		Status: CompactionStatusInstalled, SourceTokens: src, ProjectionTokens: dst,
+		Results: st.Results, SavedChars: st.SavedChars, TokPerChar: a.tokPerChar(),
+	})
+	return err
 }
 
 // emitCompactionTelemetry records structured compaction observability without

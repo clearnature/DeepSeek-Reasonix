@@ -48,7 +48,7 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 	// Prefer a free prune/snip projection before a paid summarize call.
 	pruned, pst := a.applyToolResultMaintenanceView(msgs, toolResultPrune)
 	if pst.Results > 0 {
-		if err := a.installPruneProjection(pruned, pst); err == nil {
+		if err := a.installPruneProjection(pruned, pst, trigger); err == nil {
 			projEst := a.estimatedPromptTokens(pruned)
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
 				"pruned %d stale tool results (~%d tokens est.) before request", pst.Results, est-projEst)})

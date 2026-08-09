@@ -132,7 +132,7 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 	}
 	if promptTokens >= snip && promptTokens < high {
 		// Snip only into a projection view — never rewrite the canonical log.
-		if err := a.snipToProjection(ctx); err != nil {
+		if err := a.snipToProjection(ctx, CompactionTriggerAuto); err != nil {
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "Context snip skipped for now.", Detail: err.Error()})
 		}
 		return
@@ -154,7 +154,7 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 		saved := int(float64(pst.SavedChars) * ratio)
 		a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
 			"pruned %d stale tool results (~%d tokens est.) before compaction", pst.Results, saved)})
-		_ = a.installPruneProjection(pruned, pst)
+		_ = a.installPruneProjection(pruned, pst, CompactionTriggerAuto)
 		if !force {
 			// Defer summarization until a later turn still reports pressure under
 			// the pruned projection. Force-ratio turns still fold immediately.
