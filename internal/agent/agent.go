@@ -309,10 +309,12 @@ type Agent struct {
 	cacheDeferCompacts int
 
 	// lastAPICallAt records when the last provider API call completed. Used to
-	// detect DashScope's 5-minute explicit cache TTL expiry: if the gap between
-	// turns exceeds 5 minutes, the server-side cache is cold and the next turn
-	// will pay full input price regardless of prefix stability.
-	lastAPICallAt time.Time
+	// detect vendor cache-TTL expiry (DashScope 5m, Anthropic 5m, DeepSeek
+	// 24h): if the gap between turns exceeds the TTL, the server-side cache is
+	// cold and the next turn pays full input price regardless of prefix
+	// stability. Atomic because /compress-fast reads it from a command
+	// goroutine while the run loop writes it.
+	lastAPICallAt atomic.Int64
 
 	// lastPrefixShape records the previous provider request's cacheable prefix
 	// so usage events can explain prefix churn on the next request.
@@ -839,6 +841,27 @@ func (a *Agent) SetSession(s *Session) {
 // gauge alongside the prompt; the actual cache decisions still live inside
 // maybeCompact.
 func (a *Agent) LastUsage() *provider.Usage { return a.lastUsage.Load() }
+
+// LastAPICallAt returns when the last provider API call completed (zero if
+// none). /compress-fast uses it to estimate whether the server-side prefix
+// cache is still warm: idle shorter than the vendor TTL means a rewrite would
+// punch a hole in a cache the next turn would otherwise have hit.
+func (a *Agent) LastAPICallAt() time.Time {
+	if a == nil {
+		return time.Time{}
+	}
+	return time.Unix(0, a.lastAPICallAt.Load())
+}
+
+// RecordAPICallForTest stamps lastAPICallAt as if a provider call completed at
+// the given time. Test-only hook so controller cache-gate tests can simulate
+// a warm server-side cache without a live provider. Do not call from
+// production code — the run loop owns lastAPICallAt.
+func (a *Agent) RecordAPICallForTest(at time.Time) {
+	if a != nil {
+		a.lastAPICallAt.Store(at.UnixNano())
+	}
+}
 
 // SessionCache returns the cumulative cache hit/miss prompt tokens across every
 // API call this session — the basis for the status line's aggregate hit-rate.
@@ -2506,7 +2529,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 			a.lastUsage.Store(chunk.Usage)
 			a.sessCacheHit.Add(int64(chunk.Usage.CacheHitTokens))
 			a.sessCacheMiss.Add(int64(chunk.Usage.CacheMissTokens))
-			a.lastAPICallAt = time.Now()
+			a.lastAPICallAt.Store(time.Now().UnixNano())
 		case provider.ChunkError:
 			// 中断路径统一 best-effort 计费（#7184）：无论 StreamInterrupted
 			// 还是普通流错误，都补估算 + request count——usage 通常在流尾，
