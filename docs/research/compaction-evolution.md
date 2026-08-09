@@ -135,6 +135,22 @@ canonical（只增不减）
 - **stuck 投影保护**：`compactStuck` 只在投影有效时放行；无投影则 force guard 拒绝超窗发送。
 - **增量后收敛**：`tryIncrementalFold` 增量后若投影仍 ≥ `high - tailBudget`（无呼吸空间）→ 递归全量折叠一次——否则每轮增长必超 high → 连续压缩（守卫测试 `TestCompactionHealthyWindowNeverLoops` 断言 consecutive ≤ 1）。
 
+### 阶段 9：prune 延迟死循环修复（maybeCompact 高/force 之间不折叠）
+
+- **症状**（用户实测 2026-08-09）：prompt 802k→837k（high=800k 与 force=864k 之间），**142 条请求、0 次压缩**持续数分钟；session 有 19 次 "pruned" notice 但从未 summarize。
+- **根因**：`maybeCompact` 在 `!force` 时装完 prune 投影后**无条件 `return`**（"延迟到 force"）。当**大 user 内容主导**（tool 结果占比不足以把投影压到 high 以下）时，prune 投影 `projEst` 仍 ≥ high，但代码已返回——下一轮 preflight 见投影 `projEst ≥ high` 不放行、继续 prune 装投影，又 return → **死循环**。只有到 force（864k）才强制折叠，中间 64k 的死窗口。
+- **修复**：prune 装投影后，用 `estimateMessagesTokens`（未校准、保守）估算 pruned 视图——**只有投影真的降到 high 以下才 return 延迟**；否则继续 `compactToProjection` 立即折叠。
+- **回归测试**：`TestMaybeCompactFoldsWhenPruneCannotRelievePressure`（790k user + 20 条 stale tool → prune 后投影仍 ≥ high → 必须折叠）。
+- **关联**：这是 `foldEconomics` 之外的第二个"折叠被跳过"路径——之前是 fold 太小不划算（400 token 门槛），现在是 prune 延迟错误判断"投影已降"。估算口径原则见 §四。
+
+### 阶段 9b：fitFoldToWindow 条件反写导致 manual /compact 假成功
+
+- **症状**（用户实测 2026-08-09）：`/compact` 显示 "compacted" 但 0 次 summarizer 调用、prompt 不降；stats 无 `mode=summarized` 记录。真实会话：canonical 估算 2.18M tokens（**assistant reasoning 818K 是估算大头**）、fold 区域 2812 条消息。
+- **根因**：`fitFoldToWindow` 第二个边界循环条件写反——`foldTokens-remaining <= maxCompactFoldTokens`（已移走量 ≤ cap）在进入时必为 false（`folded=1.3M > 600K` 才进来），循环一路走到 `cut=0` **把 fold 全部移进 kept**；`planFold` 见 `len(fold)==0` → `CompactionNoop, nil`；`CompactNow` 忽略 outcome 返回 nil → "compacted" 假成功。
+- **修复**：条件改为 `remaining <= maxCompactFoldTokens`（保留的 fold ≤ cap 即停）——fold 至少保留 cap 内的量，其余 defer 到后续轮次。
+- **回归测试**：`TestFitFoldToWindowKeepsFoldBounded`（reasoning 45K × 40，minFold=1.14M > cap → fold 必须存活）。
+- **数据链证据**：官方 #8024 CompactionBench 显示 fold 输入超窗时提供者拒绝；本 bug 是估算超窗时我们自己的裁剪逻辑先把它裁没了。
+
 ## 三、当前架构（阶段 8 后）
 
 ```
@@ -174,6 +190,7 @@ canonical transcript（只增不减，永久事实源）
 | `TestCompactionPausesWhenWindowTooSmall` | total ≤ 2、paused | 单条 tool 输出超阈值仍循环重压 |
 | `TestCompactionHealthyWindowNeverLoops` | consecutive ≤ 1、paused=false | 健康窗口压缩后无呼吸空间 |
 | `TestPruneKeepsToolHeavySessionBounded` | 会话有界 | 工具密集会话剪枝后仍超限 |
+| `TestMaybeCompactFoldsWhenPruneCannotRelievePressure` | summarize 被调用 | high/force 之间 prune 延迟死循环（阶段 9）|
 
 ## 六、残余风险与后续
 
@@ -181,6 +198,7 @@ canonical transcript（只增不减，永久事实源）
 2. **canonical 磁盘增长**：只增不减（历史完整性代价），归档目录（`reasonix/archive/`）可追溯。
 3. **上游同步**：main-v2 已含 C1/A1/B2（01528449a）但缺阶段 2-5/7-8 的修复——增量折叠方案可移植（diff 集中在 compact_projection.go/preflight.go/budget.go）。
 4. **响应侧缓存验证**（CCB 分析唯一实质差距）：DeepSeek `prompt_cache_hit_tokens` 已在 Usage，只差判定逻辑（>5% 且 ≥2000 tokens 记录不告警）——待真实会话验证 token 语义后实施。
+5. **阶段 9 边界**：prune 延迟改为"投影真降才 return"后，若投影 `projEst` 恰在 high 附近（估算误差 ±），可能高频"折叠→重建"——由 `TestCompactionHealthyWindowNeverLoops`（consecutive ≤ 1）守护，观测中。
 
 ## 七、时间线
 

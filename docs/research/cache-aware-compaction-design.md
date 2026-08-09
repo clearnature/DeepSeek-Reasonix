@@ -54,6 +54,15 @@ canonical transcript (Session.Messages，普通压缩永不改写)
 - 摘要失败：不写 mechanical marker，不安装半成品，也不改写 canonical；
 - tool loop 进行中：只发 notice，由后续 preflight/stuck guard 处理，避免中断工具调用配对。
 
+### maybeCompact 的 prune 延迟判定（阶段 9）
+
+turn 结束后 `maybeCompact` 在 `[high, force)` 区间优先尝试免费 prune（旧 tool 结果 elide），装投影后**只有投影真的降到 high 以下才延迟折叠**：
+
+- 投影 `projEst < high`（用未校准 `estimateMessagesTokens` 估算 pruned 视图）→ 返回延迟，下一轮用投影发送、真实 usage 下降后不再压；
+- 投影 `projEst ≥ high`（大 user 内容主导，prune 不足以降压）→ **继续 `compactToProjection` 立即折叠**，不能无条件 `return`。
+
+早期实现曾无条件延迟（"等 force"），导致 [high, force) 之间的死窗口：prune 每轮装投影但从不折叠，prompt 卡在 800k+ 数分钟（实测 802k→837k、142 请求、0 压缩）。修复后折叠必达，投影只是免费的降压尝试。
+
 ### Provider-visible 顺序
 
 projection 使用稳定顺序：

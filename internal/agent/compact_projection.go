@@ -866,7 +866,7 @@ func (a *Agent) fitFoldToWindow(fold, kept []provider.Message, headTokens, tailT
 			sizes[i] = estimateMessagesTokens([]provider.Message{fold[i]})
 			remaining -= sizes[i]
 			cut = i
-			if foldTokens-remaining <= maxCompactFoldTokens || cut == 0 {
+			if remaining <= maxCompactFoldTokens || cut == 0 {
 				break
 			}
 		}
