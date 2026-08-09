@@ -392,48 +392,6 @@ func TestSummarizeRejectsTooLargeInput(t *testing.T) {
 	}
 }
 
-// TestMaybeCompactPausesOnTooLargeInput verifies auto-compaction stops retrying
-// when the fold cannot fit the window: compactStuck latches and a warn notice
-// explains why, instead of re-running a doomed summarize every turn.
-func TestMaybeCompactPausesOnTooLargeInput(t *testing.T) {
-	cap := &capturingBudgetProvider{}
-	cap.fakeProvider = &fakeProvider{reply: "SUMMARY"}
-	cap.budget = 128 * 1024
-	var notices []string
-	sink := event.FuncSink(func(e event.Event) {
-		if e.Kind == event.Notice {
-			notices = append(notices, e.Text)
-		}
-	})
-	sess := NewSession("sys")
-	sess.Add(provider.Message{Role: provider.RoleUser, Content: bigTokenString(500_000)})
-	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "ok"})
-	a := &Agent{
-		prov:              cap,
-		contextWindow:     500_000,
-		outputBudget:      128 * 1024,
-		compactRatio:      0.8,
-		compactForceRatio: 0.9,
-		sink:              sink,
-	}
-	a.session = sess
-	a.maybeCompact(context.Background(), &provider.Usage{PromptTokens: 500_000})
-	if !a.compactStuck {
-		t.Fatal("too-large fold must latch compactStuck to stop auto-retry")
-	}
-	found := false
-	for _, n := range notices {
-		if strings.Contains(n, "too large to compact") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected a 'too large to compact' notice, got %v", notices)
-	}
-}
-
-// TestMaybePredictOverflowFires verifies a record-only notice when the
-// estimated prompt + max output leaves less than 8K of headroom.
 func TestMaybePredictOverflowFires(t *testing.T) {
 	var notices []string
 	sink := event.FuncSink(func(e event.Event) {

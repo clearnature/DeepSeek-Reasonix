@@ -200,8 +200,12 @@ export const zh: Record<DictKey, string> = {
   "topicBar.exportImageParts": "会话较长，已拆分导出为 {count} 个连续编号的 PNG 文件。",
   "topicBar.exportFailed": "导出失败：{error}",
   "externalOpener.openIn": "使用 {name} 打开",
+  "externalOpener.openDefault": "使用默认应用打开",
+  "externalOpener.reveal": "在文件管理器中显示",
   "externalOpener.choose": "选择打开应用",
   "externalOpener.failed": "无法使用 {name} 打开：{error}",
+  "externalOpener.saveAs": "另存为…",
+  "externalOpener.saved": "已保存到 {path}",
   "externalOpener.persistFailed": "已打开，但无法将 {name} 保存为默认：{error}",
 
   // 范围标签
@@ -2867,8 +2871,6 @@ export const zh: Record<DictKey, string> = {
   "notice.compactionNoSummary": "上下文已压缩，但未生成摘要。",
   "notice.goalNotReady": "目标暂未达到完成条件，继续处理剩余工作。",
   "notice.goalUnfinished": "目标还有未完成的任务状态，继续处理。",
-  "notice.autoresearchStatusFailed": "AutoResearch 状态更新失败。",
-  "notice.autoresearchBlocked": "AutoResearch 任务已标记为阻塞。",
   "notice.backgroundJobFailed": "后台 {kind} 需要处理。",
   "notice.jobArtifactMigrationFailed": "任务产物迁移失败。",
   "notice.jobTeardownTimeout": "后台任务清理超时。",

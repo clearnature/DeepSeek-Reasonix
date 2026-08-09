@@ -134,32 +134,6 @@ func consecutiveCompactingTurns(perTurn []int) int {
 	return worst
 }
 
-// TestCompactionPausesWhenWindowTooSmall covers the user report: a tool output
-// that alone exceeds the trigger used to make every "continue" turn re-compact
-// forever. The stuck guard now caps it — at most two compactions, then a paused
-// notice — instead of looping turn after turn.
-func TestCompactionPausesWhenWindowTooSmall(t *testing.T) {
-	// One fat_read result (~1750 tok) exceeds the 0.8×1600 trigger on its own.
-	perTurn, paused, _ := compactionsPerTurn(t, 1600, strings.Repeat("LARGE FILE CONTENTS. ", 350), "", 8)
-
-	total := 0
-	for _, n := range perTurn {
-		total += n
-	}
-	t.Logf("compactions per turn: %v (total %d), paused=%v", perTurn, total, paused)
-
-	if total > 2 {
-		t.Errorf("compacted %d times; the stuck guard should cap it at ≤2, not loop", total)
-	}
-	if !paused {
-		t.Errorf("expected an auto-compaction-paused notice")
-	}
-}
-
-// TestCompactionHealthyWindowNeverLoops is the companion: when growth comes from
-// assistant text (which pruning never touches), compaction still fires as the
-// session grows but reclaims enough headroom that it never fires on consecutive
-// turns and never trips the stuck guard.
 func TestCompactionHealthyWindowNeverLoops(t *testing.T) {
 	perTurn, paused, _ := compactionsPerTurn(t, 40000, "small tool output", strings.Repeat("analysis paragraph. ", 600), 20)
 

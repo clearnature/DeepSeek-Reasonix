@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
+	"reasonix/internal/ablation"
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
 	"reasonix/internal/tool"
@@ -104,8 +104,10 @@ func compressionVisibleMessages(msgs []provider.Message) []provider.Message {
 	return out
 }
 
-// Legacy schema-v1 sidecars may persist a strict-role merge of summary+user
-// turn; split that shape for range planning, new sidecars stay separate.
+// Older schema-v1 sidecars may have persisted a strict-role merge of the
+// summary and its following user turn. Split that legacy shape for range
+// planning; new sidecars keep the logical messages separate and coalesce only
+// on the provider request copy.
 func splitLegacyCoalescedSummary(msg provider.Message) (provider.Message, provider.Message, bool) {
 	if !isCompactionSummary(msg) {
 		return provider.Message{}, provider.Message{}, false
@@ -179,8 +181,9 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
-	summary, mode, usage, providerReqID, err := a.runCompactionSummary(ctx, prepared.fold, prepared.instructions)
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, mode, usage, providerReqID)
+	res, err := a.foldToSummary(ctx, prepared.fold, prepared.instructions)
+	summary := res.Text
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -200,7 +203,7 @@ func (a *Agent) compressVisibleRange(
 	tele.ProjectionTokens = projectionTokens
 	result.Messages = len(plan.fold)
 	result.ProjectionTokens = projectionTokens
-	result.Mode = mode
+	result.Mode = res.Mode
 	if projectionTokens >= result.SourceTokens {
 		result.Reason = "compressed context would not be smaller"
 		a.emitCompactionTelemetry(tele)
@@ -208,7 +211,7 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
-	if err := a.installVisibleCompression(snap, trigger, mode, summary, projection, result.SourceTokens, projectionTokens, usage); err != nil {
+	if err := a.installVisibleCompression(snap, trigger, res.Mode, summary, projection, result.SourceTokens, projectionTokens, res.Usage); err != nil {
 		if errors.Is(err, errCompressStaleContext) {
 			tele.Error = err.Error()
 			a.emitCompactionTelemetry(tele)
@@ -363,12 +366,15 @@ func (a *Agent) installVisibleCompression(snap explicitCompressionSnapshot, trig
 	return nil
 }
 
-func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, mode string, usage *provider.Usage, providerReqID string) CompactionTelemetry {
+func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary) CompactionTelemetry {
 	tele := CompactionTelemetry{
-		Trigger: trigger, CacheState: cacheState, Mode: mode,
-		Native: mode == CompactionModeNative, SourceTokens: sourceTokens,
-		ProviderRequestID: providerReqID,
+		Trigger: trigger, CacheState: cacheState, Mode: res.Mode,
+		Native: res.Mode == CompactionModeNative, SourceTokens: sourceTokens,
+		ProviderRequestID: res.RequestID,
+		FoldTokens:        res.FoldTokens,
+		Spans:             res.Spans,
 	}
+	usage := res.Usage
 	if usage == nil {
 		return tele
 	}
@@ -390,9 +396,11 @@ func (a *Agent) compact(ctx context.Context, trigger, instructions string, force
 	return err
 }
 
-// compactToProjection summarizes the session's middle into a model-visible
-// projection; canonical is never rewritten. CompactionNoop means nothing to
-// fold; force-threshold callers must treat that as a hard failure.
+// compactToProjection summarizes the older middle of the session into a model-
+// visible projection. The canonical transcript is never rewritten. force
+// bypasses the fold-economics skip. CompactionNoop means no projection was
+// installed (nothing to fold); callers at the force threshold must treat that
+// as a hard failure rather than sending the oversized canonical prompt.
 func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force bool) (outcome CompactionOutcome, err error) {
 	canonical, transcriptVersion := a.session.snapshotMessagesVersion()
 	// Silent exits (Noop/aborted) must still land in the stats file: a fold
@@ -409,24 +417,17 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		}
 		emit(a.silentCompactionTelemetry(trigger, canonical, err))
 	}()
-	// Fold the model-visible view when a valid projection exists (a prune/snip
-	// projection already collapsed stale tool results); coverage maps to canonical.
-	msgs := canonical
-	if st := a.compactionState; projectionValid(st, canonical, transcriptVersion, a.currentPromptCacheKey()) {
-		if visible := modelVisibleFromProjection(st.Projection, canonical); len(visible) > 0 {
-			msgs = visible
-		}
-	}
-	// Incremental fold: with a valid projection, fold only the appended
-	// messages; prior bytes keep hitting. Otherwise a full re-fold is rare.
-	if o, e := a.tryIncrementalFold(ctx, trigger, instructions, force, canonical, transcriptVersion); e != nil || o != CompactionNoop {
-		if e != nil {
-			emitted = true // compactIncremental emitted its own failure record
-		}
-		return o, e
-	}
-	head, start, kept, fold, ok := a.planFold(msgs, force)
+	msgs := a.foldSource(canonical)
+	head, start, ok := a.planFoldRegion(msgs)
 	if !ok {
+		return CompactionNoop, nil
+	}
+	region := msgs[head:start]
+	early, carried, kept, fold := a.partitionFoldForProjection(region)
+	if len(fold) == 0 {
+		return CompactionNoop, nil
+	}
+	if !force && !foldEconomics(fold) {
 		return CompactionNoop, nil
 	}
 
@@ -461,9 +462,10 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		archived = path
 	}
 
-	sourceTokens := estimateMessagesTokens(provider.ModelMessages(msgs))
-	summary, mode, usage, providerReqID, err := a.runCompactionSummary(ctx, fold, instructions)
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, mode, usage, providerReqID)
+	sourceTokens := estimateMessagesTokens(provider.ModelMessages(canonical))
+	res, err := a.foldToSummary(ctx, fold, instructions)
+	summary := res.Text
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
 	if err != nil {
 		tele.Error = err.Error()
 		emit(tele)
@@ -479,10 +481,10 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		return CompactionNoop, err
 	}
 
-	early := a.fixedEarlyUserTurns(msgs, head)
-	projMsgs := make([]provider.Message, 0, head+len(early)+1+len(kept)+len(msgs)-start)
+	projMsgs := make([]provider.Message, 0, head+len(early)+len(carried)+1+len(kept)+len(msgs)-start)
 	projMsgs = append(projMsgs, msgs[:head]...)
 	projMsgs = append(projMsgs, early...)
+	projMsgs = append(projMsgs, carried...)
 	projMsgs = append(projMsgs, formatSummaryMessage(summary))
 	projMsgs = append(projMsgs, kept...)
 	projMsgs = append(projMsgs, msgs[start:]...)
@@ -494,100 +496,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	emit(tele)
 
 	projVersion := a.compactionState.Projection.ProjectionVersion + 1
-	st := a.buildCompactionState(projMsgs, canonical, transcriptVersion, summary, mode, usage, sourceTokens, projTokens, projVersion, trigger)
-	if err := a.installProjection(st); err != nil {
-		a.emitCompactionAborted(trigger)
-		return CompactionNoop, fmt.Errorf("persist projection: %w", err)
-	}
-	a.session.NoteContentRewrite("compact_" + trigger)
-
-	a.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
-		Trigger: trigger, Messages: len(fold), Summary: summary, Archive: archived,
-	}})
-	return CompactionInstalled, nil
-}
-
-// tryIncrementalFold runs the incremental path when a valid projection covers
-// the earlier history. Returns CompactionNoop when no incremental fold applies.
-func (a *Agent) tryIncrementalFold(ctx context.Context, trigger, instructions string, force bool, msgs []provider.Message, transcriptVersion uint64) (CompactionOutcome, error) {
-	base, head, start, ok := a.incrementalFoldTarget(msgs, transcriptVersion, trigger)
-	if !ok {
-		return CompactionNoop, nil
-	}
-	outcome, err := a.compactIncremental(ctx, trigger, instructions, force, base, msgs, transcriptVersion, head, start)
-	if err != nil || outcome != CompactionInstalled {
-		return outcome, err
-	}
-	// Chain invariant: an incremental step must strictly advance coverage. A
-	// projection that does not move is a stale chain link — fail closed rather
-	// than keep riding it (Sovereign chainAssoc analog: every step well-defined).
-	if got := a.compactionState.Projection.CoveredCount; got <= base.CoveredCount {
-		return CompactionNoop, fmt.Errorf("incremental fold did not advance coverage (%d → %d)", base.CoveredCount, got)
-	}
-	// Keep prior bytes (prefix hit) but converge if too close to the trigger.
-	_, _, high := a.compactThresholds()
-	if a.estimatedPromptTokens(a.compactionState.Projection.Messages) >= high-a.compactionTailBudget() {
-		return a.compactToProjection(ctx, trigger, instructions, force)
-	}
-	return CompactionInstalled, nil
-}
-
-// incrementalFoldTarget picks append-to-projection over a full re-fold when
-// un-covered messages fit the budget and the trigger is not manual/overflow.
-func (a *Agent) incrementalFoldTarget(msgs []provider.Message, transcriptVersion uint64, trigger string) (baseProj ContextProjection, head, start int, ok bool) {
-	st := a.compactionState
-	if !projectionValid(st, msgs, transcriptVersion, a.currentPromptCacheKey()) {
-		return ContextProjection{}, 0, 0, false
-	}
-	covered := st.Projection.CoveredCount
-	if covered <= 0 || covered >= len(msgs) {
-		return ContextProjection{}, 0, 0, false
-	}
-	if a.estimatedPromptTokens(st.Projection.Messages) >= a.projectionCompactBudget() {
-		return ContextProjection{}, 0, 0, false
-	}
-	if trigger == CompactionTriggerManual || trigger == CompactionTriggerOverflow {
-		return ContextProjection{}, 0, 0, false
-	}
-	head, start, ok = a.incrementalFoldRange(msgs, covered)
-	if !ok {
-		return ContextProjection{}, 0, 0, false
-	}
-	return st.Projection, head, start, true
-}
-
-// incrementalFoldRange returns [head,start) of the canonical messages appended
-// since the covered projection, aligned off tool messages; ok=false if none.
-func (a *Agent) incrementalFoldRange(msgs []provider.Message, covered int) (head, start int, ok bool) {
-	head = covered
-	for head >= 0 && head < len(msgs) && msgs[head].Role == provider.RoleTool {
-		head--
-	}
-	// A tool result at the boundary belongs to a pre-covered turn; folding it
-	// would duplicate base content, so degrade and let the caller use full.
-	if head < covered {
-		return covered, covered, false
-	}
-	start = tailStart(msgs, head, a.compactionTailBudget(), a.tokPerChar(), a.tailFloor())
-	if start <= head {
-		return head, start, false
-	}
-	return head, start, true
-}
-
-// projectionCompactBudget is the projection-size ceiling before a full re-fold:
-// below it incremental extends, at/above only full applies. Half the window
-// keeps the view under the 80% fold trigger even with a fresh tail.
-func (a *Agent) projectionCompactBudget() int {
-	if a.contextWindow <= 0 {
-		return 0
-	}
-	return int(float64(a.contextWindow) * 0.5)
-}
-
-// buildCompactionState assembles the sidecar payload shared by the full and
-// incremental fold paths.
-func (a *Agent) buildCompactionState(projMsgs []provider.Message, msgs []provider.Message, transcriptVersion uint64, summary, mode string, usage *provider.Usage, sourceTokens, projTokens int, projVersion uint64, trigger string) CompactionState {
 	st := CompactionState{
 		SchemaVersion:     compactionStateSchemaCurrent,
 		TranscriptVersion: transcriptVersion,
@@ -595,8 +503,8 @@ func (a *Agent) buildCompactionState(projMsgs []provider.Message, msgs []provide
 			Messages:          projMsgs,
 			TranscriptVersion: transcriptVersion,
 			ProjectionVersion: projVersion,
-			CoveredCount:      len(msgs),
-			CoveredPrefixHash: coveredPrefixHash(msgs, len(msgs)),
+			CoveredCount:      len(canonical),
+			CoveredPrefixHash: coveredPrefixHash(canonical, len(canonical)),
 			SummaryHash:       summaryContentHash(summary),
 			SourceTokens:      sourceTokens,
 			ProjectionTokens:  projTokens,
@@ -605,128 +513,14 @@ func (a *Agent) buildCompactionState(projMsgs []provider.Message, msgs []provide
 		PromptCacheKey:   a.currentPromptCacheKey(),
 		LastCacheState:   a.CacheState(),
 		LastTrigger:      trigger,
-		LastMode:         mode,
+		LastMode:         res.Mode,
 		LastSourceTokens: sourceTokens,
 		LastResultTokens: projTokens,
 		UpdatedAt:        time.Now().UTC(),
 	}
-	if a.pricing != nil && usage != nil {
-		st.LastCompactionCost = a.pricing.Cost(usage)
+	if a.pricing != nil && res.Usage != nil {
+		st.LastCompactionCost = a.pricing.Cost(res.Usage)
 	}
-	return st
-}
-
-// compactIncremental folds only messages appended since the last projection
-// and appends the digest; prior bytes stay untouched (server prefix keeps
-// hitting). Canonical is never rewritten; dropped originals are archived.
-func (a *Agent) compactIncremental(ctx context.Context, trigger, instructions string, force bool, baseProj ContextProjection, msgs []provider.Message, transcriptVersion uint64, head, start int) (CompactionOutcome, error) {
-	region := msgs[head:start]
-	kept, fold := a.partitionFoldForProjectionIncremental(region)
-	if len(fold) == 0 {
-		return CompactionNoop, nil
-	}
-	// Same bound as the full path: one summarize call must stay in budget.
-	headTokens := estimateMessagesTokens(provider.ModelMessages(msgs[:head]))
-	tailTokens := estimateMessagesTokens(provider.ModelMessages(msgs[start:]))
-	fold, kept = a.fitFoldToWindow(fold, kept, headTokens, tailTokens)
-	if len(fold) == 0 {
-		return CompactionNoop, nil
-	}
-	if !force && !foldEconomics(fold) {
-		return CompactionNoop, nil
-	}
-
-	a.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
-
-	if a.hooks != nil {
-		if hookInstr := a.hooks.PreCompact(ctx, trigger); hookInstr != "" {
-			if instructions != "" {
-				instructions += "\n"
-			}
-			instructions += hookInstr
-		}
-	}
-
-	var err error
-	fold, instructions, err = a.interceptCompactionPrepare(ctx, fold, instructions)
-	if err != nil {
-		a.emitCompactionAborted(trigger)
-		return CompactionNoop, err
-	}
-	if len(fold) == 0 {
-		a.emitCompactionAborted(trigger)
-		return CompactionNoop, nil
-	}
-
-	archived := ""
-	if a.archiveDir != "" {
-		path, aerr := archiveMessages(a.archiveDir, fold)
-		if aerr != nil {
-			a.emitCompactionAborted(trigger)
-			return CompactionNoop, fmt.Errorf("archive: %w", aerr)
-		}
-		archived = path
-	}
-
-	sourceTokens := estimateMessagesTokens(provider.ModelMessages(msgs))
-	summary, mode, usage, providerReqID, err := a.runCompactionSummary(ctx, fold, instructions)
-	tele := CompactionTelemetry{
-		Trigger:           trigger,
-		CacheState:        a.CacheState(),
-		Mode:              mode,
-		Native:            mode == CompactionModeNative,
-		SourceTokens:      sourceTokens,
-		ProviderRequestID: providerReqID,
-	}
-	if usage != nil {
-		tele.InputTokens = usage.PromptTokens
-		tele.OutputTokens = usage.CompletionTokens
-		tele.CacheHitTokens = usage.CacheHitTokens
-		tele.CacheMissTokens = usage.CacheMissTokens
-		tele.CacheWriteTokens = usage.CacheWriteTokens
-		tele.RequestCount = usage.RequestCount
-		if tele.RequestCount <= 0 {
-			tele.RequestCount = 1
-		}
-	}
-	if err != nil {
-		tele.Error = err.Error()
-		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
-		return CompactionNoop, err
-	}
-
-	summary, err = a.interceptCompactionComplete(ctx, summary)
-	if err != nil {
-		tele.Error = err.Error()
-		a.emitCompactionTelemetry(tele)
-		a.emitCompactionAborted(trigger)
-		return CompactionNoop, err
-	}
-
-	// Append-only rebuild: prior bytes verbatim; coalescing only the added
-	// segment (the caller degraded to a full fold when the boundary touches a
-	// trailing user run).
-	base := append([]provider.Message(nil), baseProj.Messages...)
-	added := append([]provider.Message{formatSummaryMessage(summary)}, kept...)
-	added = append(added, msgs[start:]...)
-	added = provider.ModelMessages(added)
-	projMsgs := append(base, added...)
-
-	// V2 keeps logical user-turn boundaries in the projection sidecar (explicit
-	// compress anchors resolve against them); role coalescing happens only on
-	// the outbound copy in providerProjectionMessages.
-
-	// Estimate against the outbound shape (role coalescing applied), matching
-	// the full-fold path — the projection token gauge must use the same
-	// denominator for both compaction routes.
-	projTokens := estimateMessagesTokens(a.providerProjectionMessages(projMsgs))
-	tele.ProjectionTokens = projTokens
-	tele.Status = CompactionStatusInstalled
-	a.emitCompactionTelemetry(tele)
-
-	projVersion := baseProj.ProjectionVersion + 1
-	st := a.buildCompactionState(projMsgs, msgs, transcriptVersion, summary, mode, usage, sourceTokens, projTokens, projVersion, trigger)
 	if err := a.installProjection(st); err != nil {
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, fmt.Errorf("persist projection: %w", err)
@@ -739,142 +533,112 @@ func (a *Agent) compactIncremental(ctx context.Context, trigger, instructions st
 	return CompactionInstalled, nil
 }
 
-// partitionFoldForProjection is like partitionFold but prior digests join the
-// fold so A1 rolling merge produces a single latest summary. Fixed early user
-// turns are excluded from both kept and fold — the caller re-inserts them from
-// the full transcript so their bytes stay position-stable.
-func (a *Agent) partitionFoldForProjection(region []provider.Message) (kept, fold []provider.Message) {
-	return a.partitionFoldForProjectionMode(region, true)
-}
-
-// partitionFoldForProjectionIncremental is the incremental-path variant: the
-// fixed early-window skip is disabled because the fold region starts at the
-// covered boundary — there is no early user prefix to re-insert, and skipping
-// would silently drop freshly appended small user turns from the projection.
-func (a *Agent) partitionFoldForProjectionIncremental(region []provider.Message) (kept, fold []provider.Message) {
-	return a.partitionFoldForProjectionMode(region, false)
-}
-
-func (a *Agent) partitionFoldForProjectionMode(region []provider.Message, skipEarly bool) (kept, fold []provider.Message) {
-	policyKeep := keepIndexes(region, a.keepPolicy)
-	earlySeen := 0
-	const maxEarly = 3
-	for i, m := range region {
-		if m.LocalOnly {
-			continue
-		}
-		// Skip the fixed early small user turns — they are re-added from the
-		// full transcript after the summary so the prefix stays byte-stable.
-		if skipEarly && m.Role == provider.RoleUser && !isCompactionSummary(m) && a.fixedPinnableUserTurn(m) && earlySeen < maxEarly {
-			earlySeen++
-			continue
-		}
-		if isCompactionSummary(m) {
-			fold = append(fold, m)
-			continue
-		}
-		if policyKeep[i] {
-			kept = append(kept, m)
-			continue
-		}
-		if m.Role == provider.RoleUser && a.fixedPinnableUserTurn(m) {
-			// Additional small user turns beyond the fixed early window fold so
-			// the projection does not grow unbounded with every user fact.
-			fold = append(fold, m)
-			continue
-		}
-		fold = append(fold, m)
-	}
-	return kept, fold
-}
-
-// planFold picks the fold region and applies bounded folding: when the fold
-// alone cannot fit the shared window (an invalidated sidecar rebuild starts
-// from canonical, possibly far over the window), the newer tail drops back
-// into kept instead of failing — later turns fold it.
-func (a *Agent) planFold(msgs []provider.Message, force bool) (head, start int, kept, fold []provider.Message, ok bool) {
+// planFoldRegion locates msgs[head:start] for a fold, stopping short of an
+// active turn so a tool loop is never folded mid-flight. ok is false when there
+// is nothing left to fold.
+func (a *Agent) planFoldRegion(msgs []provider.Message) (head, start int, ok bool) {
 	head, start, ok = a.planCompaction(msgs, minCompactMessages)
 	if !ok {
 		head, start, ok = a.planCompaction(msgs, 1)
 	}
 	if !ok {
-		return 0, 0, nil, nil, false
+		return head, start, false
 	}
 	if active := a.activeTurnStart(msgs); active >= head && active < start {
 		start = active
-		if start <= head {
-			return 0, 0, nil, nil, false
-		}
 	}
-	region := msgs[head:start]
-	kept, fold = a.partitionFoldForProjection(region)
-	headTokens := estimateMessagesTokens(provider.ModelMessages(msgs[:head]))
-	tailTokens := estimateMessagesTokens(provider.ModelMessages(msgs[start:]))
-	fold, kept = a.fitFoldToWindow(fold, kept, headTokens, tailTokens)
-	if len(fold) == 0 {
-		return 0, 0, nil, nil, false
-	}
-	if !force && !foldEconomics(fold) {
-		return 0, 0, nil, nil, false
-	}
-	return head, start, kept, fold, true
+	return head, start, start > head
 }
 
-// maxCompactFoldTokens caps one summarizer fold so a single call finishes
-// within summaryTimeout. The effective cap is the smaller of this and the
-// projection budget (window - head - tail - kept - summary).
-const maxCompactFoldTokens = 600_000
+// foldSource picks what a fold reads. By default every fold re-derives its
+// digest from the canonical transcript, so digests never chain — at the cost of
+// re-reading the whole session each time. The incremental experiment folds the
+// model-visible view instead, which feeds the previous digest back through the
+// summarizer: cheaper per fold, and lossy in a way CompactionBench measures.
+func (a *Agent) foldSource(canonical []provider.Message) []provider.Message {
+	if !a.ablation.Off(ablation.FullFold) {
+		return canonical
+	}
+	if visible := a.modelVisibleMessages(); len(visible) > 0 {
+		return visible
+	}
+	return canonical
+}
 
-// summaryTokensBudget reserves space for the distilled summary inside the new
-// projection, so the fold budget keeps the projection inside the window.
-const summaryTokensBudget = 12_000
+// partitionFoldForProjection splits the fold region three ways: user turns
+// hoisted verbatim ahead of the digest, messages the keep policy protects, and
+// the remainder that folds (prior digests included, so a merge yields one
+// summary). The groups partition the region — one pass decides each message
+// once, so no turn can fall between a hoist rule and a fold rule that disagree.
+func (a *Agent) partitionFoldForProjection(region []provider.Message) (early, carried, kept, fold []provider.Message) {
+	policyKeep := keepIndexes(region, a.keepPolicy)
+	hoist := a.earlyUserTurns(region)
+	carryDigests := a.carryPriorDigests(region)
+	for i, m := range region {
+		switch {
+		case m.LocalOnly: // display-only output never reaches a provider
+		case hoist[i]:
+			early = append(early, m)
+		case isCompactionSummary(m):
+			if carryDigests {
+				carried = append(carried, m)
+				continue
+			}
+			fold = append(fold, m)
+		case policyKeep[i]:
+			kept = append(kept, m)
+		default:
+			fold = append(fold, m)
+		}
+	}
+	return early, carried, kept, fold
+}
 
-// fitFoldToWindow bounds the fold so the rebuilt projection (head + summary +
-// kept + tail) fits the shared window: fold at least foldTokens - avail but no
-// more than maxCompactFoldTokens per call; the deferred tail folds later.
-func (a *Agent) fitFoldToWindow(fold, kept []provider.Message, headTokens, tailTokens int) ([]provider.Message, []provider.Message) {
-	if a.contextWindow <= minOutputBudget || !sharesContextWindow(a.prov) || len(fold) == 0 {
-		return fold, kept
+// carryPriorDigests reports whether the digests already in the region survive
+// this fold verbatim instead of being re-summarized. Re-summarizing a digest is
+// the only step in a fold where a fact can be dropped and never recovered, so
+// an incremental fold carries them — until they outgrow their budget, when one
+// consolidating fold merges them and the chain starts over.
+func (a *Agent) carryPriorDigests(region []provider.Message) bool {
+	if !a.ablation.Off(ablation.FullFold) {
+		return false
 	}
-	keptTokens := estimateMessagesTokens(provider.ModelMessages(kept))
-	foldTokens := estimateMessagesTokens(provider.ModelMessages(fold))
-	avail := a.contextWindow - minOutputBudget - headTokens - tailTokens - keptTokens - summaryTokensBudget
-	minFold := foldTokens - avail
-	if minFold <= 0 {
-		return fold, kept // the projection already fits; nothing to trim
+	total := 0
+	for _, m := range region {
+		if isCompactionSummary(m) {
+			total += summaryInputTokens([]provider.Message{m})
+		}
 	}
-	if minFold > maxCompactFoldTokens {
-		minFold = maxCompactFoldTokens // single-round limit; the rest folds later
+	if total > maxCarriedDigestTokens {
+		a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
+			"consolidating %d tokens est. of carried digests into one; earlier facts now depend on this merge", total)})
+		return false
 	}
-	// Move the newer tail back into kept until the remaining fold fits the
-	// projection budget; when even maxCompactFoldTokens cannot reach it, fold
-	// the cap and defer the rest to later turns (window may exceed this round).
-	sizes := make([]int, len(fold))
-	remaining := foldTokens
-	cut := len(fold)
-	for i := len(fold) - 1; i >= 0; i-- {
-		sizes[i] = estimateMessagesTokens([]provider.Message{fold[i]})
-		remaining -= sizes[i]
-		cut = i
-		if remaining <= avail {
+	return true
+}
+
+// earlyUserTurns marks the region positions of the small user turns hoisted
+// verbatim ahead of the digest. Selecting from the fold region alone keeps the
+// set disjoint from the verbatim tail, and taking the first N (never the latest
+// N) keeps the hoisted bytes identical across folds: the region only ever grows
+// at its end, so the set can gain a member but never reorder or lose one.
+func (a *Agent) earlyUserTurns(region []provider.Message) []bool {
+	hoist := make([]bool, len(region))
+	n := 0
+	for i, m := range region {
+		if n == maxEarlyUserTurns {
 			break
 		}
-	}
-	if cut == len(fold) || cut == 0 {
-		return fold, kept // nothing to move, or a single message exceeds the budget
-	}
-	if folded := foldTokens - remaining; folded > maxCompactFoldTokens {
-		for i := cut - 1; i >= 0; i-- {
-			sizes[i] = estimateMessagesTokens([]provider.Message{fold[i]})
-			remaining -= sizes[i]
-			cut = i
-			if remaining <= maxCompactFoldTokens || cut == 0 {
-				break
-			}
+		if m.LocalOnly || m.Role != provider.RoleUser || isCompactionSummary(m) {
+			continue
 		}
+		if !a.fixedPinnableUserTurn(m) {
+			continue
+		}
+		hoist[i] = true
+		n++
 	}
-	movedMsgs := append([]provider.Message(nil), fold[cut:]...)
-	return fold[:cut], append(movedMsgs, kept...)
+	return hoist
 }
 
 // runCompactionSummary tries native compaction first, then summarizeWithRetry.
@@ -937,9 +701,6 @@ func (a *Agent) snipToProjection(ctx context.Context) error {
 // installPruneProjection stores a projection whose messages are a snipped/pruned
 // view of the canonical transcript (no summarizer call).
 func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats) error {
-	// Let the response-side cache-break detector know the prefix intentionally
-	// shrank (snip/prune) — without this, hit-token drops would be misreported.
-	a.session.NoteContentRewrite("snip")
 	msgs, version := a.session.snapshotMessagesVersion()
 	view = provider.ModelMessages(view)
 	src := estimateMessagesTokens(provider.ModelMessages(msgs))
@@ -971,25 +732,10 @@ func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats) e
 }
 
 // emitCompactionTelemetry records structured compaction observability without
-// transcript content; the slog record persists to the session log file.
+// logging sensitive transcript content.
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
-	attrs := []any{
-		"trigger", t.Trigger, "mode", t.Mode, "status", t.Status, "cache", t.CacheState,
-		"src", t.SourceTokens, "proj", t.ProjectionTokens,
-		"in", t.InputTokens, "out", t.OutputTokens,
-		"hit", t.CacheHitTokens, "miss", t.CacheMissTokens,
-		"write", t.CacheWriteTokens, "reqs", t.RequestCount,
-	}
-	if t.ProviderRequestID != "" {
-		attrs = append(attrs, "provider_request_id", t.ProviderRequestID)
-	}
-	if t.Error != "" {
-		slog.Warn("agent: compaction", append(attrs, "err", t.Error)...)
-	} else {
-		slog.Info("agent: compaction", attrs...)
-	}
-	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d",
-		t.Trigger, t.Mode, t.Status, t.CacheState, t.SourceTokens, t.ProjectionTokens,
+	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d",
+		t.Trigger, t.Mode, t.Status, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID

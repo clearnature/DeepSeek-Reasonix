@@ -33,7 +33,8 @@ const (
 	minCompactMessages         = 2     // skip compaction below this many compactable messages
 	maxPinnedFirstUserTokens   = 1500  // ceiling on pinning the first user turn verbatim; larger first turns (pasted content) stay foldable
 	pinnedFirstUserWindowFrac  = 0.15  // and never pin a first turn worth more than this fraction of the window
-	maxKeepSmallUserTurns      = 20    // position-fixed keep window for small user turns in the fold region; the first N survive verbatim, older ones fold (prefix byte-stable, never "latest N")
+	maxCarriedDigestTokens     = 12000 // ceiling on digests carried verbatim across folds before one consolidating fold merges them
+	maxEarlyUserTurns          = 3     // small user turns hoisted verbatim ahead of the digest; position-fixed (the first N of the fold region, never "the latest N") so the projection prefix stays byte-stable
 )
 
 // summaryTag wraps the compaction summary so the model can distinguish it from
@@ -107,16 +108,14 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 		return
 	}
 	soft, snip, high := a.compactThresholds()
-	// Clearing the latch keeps a settled prompt from counting against the
-	// next turn; keep it while the projection cannot fit the window with a
-	// usable output budget — clearing would re-fire the doomed fold.
+	// A turn that sits under the trigger is the breathing room a healthy
+	// compaction buys; it clears the stuck latch and the run counter. This has to
+	// happen before the soft/snip branches return, because a compaction that
+	// settles the prompt anywhere in [snip, high) is working exactly as intended:
+	// leaving a stale run count behind there would latch the *next* compaction as
+	// "the window is too small" and silently disable auto-compaction for the rest
+	// of the session.
 	if promptTokens < high {
-		msgs, ver := a.session.snapshotMessagesVersion()
-		if st := a.compactionState; projectionValid(st, msgs, ver, a.currentPromptCacheKey()) {
-			if a.estimatedPromptTokens(modelVisibleFromProjection(st.Projection, msgs))+minOutputBudget > a.contextWindow {
-				return
-			}
-		}
 		a.consecutiveCompacts = 0
 		a.compactStuck = false
 	}
@@ -141,7 +140,7 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 	if a.compactStuck {
 		return
 	}
-	force := promptTokens >= a.forceThreshold()
+	force := promptTokens >= int(float64(a.contextWindow)*a.compactForceRatio)
 	// Projection-only prune before folding. Install the pruned view first so the
 	// next request (and its real usage) can measure whether a paid summarize is
 	// still needed — never rewrite the canonical transcript.
@@ -154,24 +153,12 @@ func (a *Agent) maybeCompact(ctx context.Context, u *provider.Usage) {
 			"pruned %d stale tool results (~%d tokens est.) before compaction", pst.Results, saved)})
 		_ = a.installPruneProjection(pruned, pst)
 		if !force {
-			// Defer only when the pruned view really drops under the trigger
-			// (un-calibrated estimate): otherwise folding must proceed now,
-			// or [high, force) never folds (prompt stuck at 800k+ minutes).
-			projEst := estimateMessagesTokens(provider.ModelMessages(pruned))
-			if projEst < high {
-				return
-			}
+			// Defer summarization until a later turn still reports pressure under
+			// the pruned projection. Force-ratio turns still fold immediately.
+			return
 		}
 	}
 	if _, err := a.compactToProjection(ctx, "auto", "", force); err != nil {
-		if errors.Is(err, ErrCompactionInputTooLarge) {
-			// The fold alone exceeds what the window can hold, so compaction
-			// cannot help; pausing avoids re-running the doomed request every
-			// turn (it would 400 on the provider side each time).
-			a.compactStuck = true
-			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "Automatic context cleanup paused: context too large to compact.", Detail: err.Error()})
-			return
-		}
 		a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "Context cleanup skipped for now.", Detail: fmt.Sprintf("compaction skipped: %v", err)})
 		return
 	}
@@ -316,14 +303,11 @@ func isCompactionSummary(m provider.Message) bool {
 		strings.HasPrefix(strings.TrimLeft(m.Content, "\n "), summaryTagOpen)
 }
 
-// pinnedPrefixLen counts the leading messages a fold keeps verbatim: the system
-// prompt, the first user turn (its task + stated facts/constraints) when it is
-// small enough to be a brief, and the NEWEST prior summary — so a fold never
-// summarizes the user's facts away. Older summaries are NOT pinned: they enter
-// the fold region and are merged into the next digest (A1 rolling merge), so a
-// long session cannot accumulate an unbounded chain of digests. Merging re-feeds
-// the old summary text into the summarizer, so the facts it captured survive in
-// the new digest instead of being silently dropped.
+// pinnedPrefixLen counts the leading messages a fold keeps verbatim ahead of
+// everything else: the system prompt and the first user turn (its task + stated
+// facts/constraints) when it is small enough to be a brief. Digests are never
+// pinned — any digest in the transcript enters the fold region and is merged
+// into the next one, so a session cannot accumulate a chain of them.
 func (a *Agent) pinnedPrefixLen(msgs []provider.Message) int {
 	i := 0
 	if i < len(msgs) && msgs[i].Role == provider.RoleSystem {
@@ -332,10 +316,6 @@ func (a *Agent) pinnedPrefixLen(msgs []provider.Message) int {
 	if i < len(msgs) && msgs[i].Role == provider.RoleUser && !isCompactionSummary(msgs[i]) && a.fixedPinnableUserTurn(msgs[i]) {
 		i++
 	}
-	// The entire summary run stays inside the fold region; partitionFold keeps
-	// the NEWEST summary verbatim and folds the older ones into the next digest
-	// (A1 rolling merge) — re-feeding their text through the summarizer so a
-	// long session cannot accumulate an unbounded chain of digests.
 	return i
 }
 
@@ -353,57 +333,6 @@ func (a *Agent) fixedPinnableUserTurn(m provider.Message) bool {
 		}
 	}
 	return int(float64(msgChars(m))*fallbackTokPerChar) <= budget
-}
-
-// partitionFold splits a compaction region into what is kept verbatim — small user
-// turns (a fact the user stated is never summarized away) — and the rest, which
-// folds. Order within each group is preserved.
-//
-// Prior digests inside the region are folded (not kept verbatim): the newest
-// digest is already pinned by pinnedPrefixLen outside the region, so any summary
-// seen here is an older one being merged into the next digest (A1 rolling merge).
-// Merging re-feeds the old summary text into the summarizer, preserving its facts.
-//
-// The small-turn keep window is position-fixed (only the first keepSmallUserTurns
-// small user turns in the region survive), never "the most recent N" — a dynamic
-// tail window would move with every compaction and rewrite the kept prefix,
-// cratering the server-side prefix cache (mental-seal: prefix stability is the
-// first principle). A fixed prefix window keeps the surviving bytes identical
-// across compactions; only the folded middle is replaced by a digest.
-func (a *Agent) partitionFold(region []provider.Message) (kept, fold []provider.Message) {
-	policyKeep := keepIndexes(region, a.keepPolicy)
-	keptSmallUserTurns := 0
-	// The NEWEST summary in the region (the last one in the contiguous summary
-	// run) is kept verbatim; older digests fold into the next digest (A1 rolling
-	// merge) and are re-fed through the summarizer, so the digest chain cannot
-	// accumulate unboundedly.
-	lastSummary := -1
-	for i, m := range region {
-		if isCompactionSummary(m) {
-			lastSummary = i
-		}
-	}
-	for i, m := range region {
-		keep := m.LocalOnly || policyKeep[i] || (isCompactionSummary(m) && i == lastSummary)
-		if !keep && m.Role == provider.RoleUser && !isCompactionSummary(m) && a.fixedPinnableUserTurn(m) {
-			// Position-fixed small-turn keep window: the first N small user turns
-			// in the region survive verbatim; older ones fold into the digest so
-			// a long session cannot accumulate unbounded verbatim user turns.
-			// N is fixed (not "latest N"), so the kept prefix stays byte-stable.
-			// Digests are excluded: they are governed by the A1 rolling merge
-			// (only the newest survives verbatim; older ones re-enter the fold).
-			if keptSmallUserTurns < maxKeepSmallUserTurns {
-				keep = true
-			}
-			keptSmallUserTurns++
-		}
-		if keep {
-			kept = append(kept, m)
-		} else {
-			fold = append(fold, m)
-		}
-	}
-	return kept, fold
 }
 
 func keepIndexes(region []provider.Message, policy KeepPolicy) []bool {

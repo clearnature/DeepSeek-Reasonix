@@ -199,8 +199,12 @@ export const en = {
   "topicBar.exportImageParts": "This conversation is long, so it was exported as {count} numbered PNG files.",
   "topicBar.exportFailed": "Export failed: {error}",
   "externalOpener.openIn": "Open in {name}",
+  "externalOpener.openDefault": "Open with default application",
+  "externalOpener.reveal": "Reveal in file manager",
   "externalOpener.choose": "Choose application",
   "externalOpener.failed": "Could not open {name}: {error}",
+  "externalOpener.saveAs": "Save as…",
+  "externalOpener.saved": "Saved to {path}",
   "externalOpener.persistFailed": "Opened, but could not save {name} as default: {error}",
 
   // scope labels
@@ -1225,7 +1229,7 @@ export const en = {
   "recovery.branch": "Conflict copy",
   "recovery.badge": "Copy",
   "recovery.noticeSavedCopy": "The session changed on disk, so the unsaved local transcript was kept as a conflict copy.",
-  "recovery.noticeKeptCurrent": "Repeated save conflicts were detected, so the current conflict copy was saved in place.",
+  "recovery.noticeKeptCurrent": "Repeated save conflicts were detected, so the current conflict copy was saved in an isolated recovery branch.",
   "recovery.noticeAdopted": "The session changed on disk, so Reasonix adopted the newer transcript.",
   "recovery.noticeAdoptedCovered": "The session changed on disk, so Reasonix adopted the newer transcript; the local changes were already covered.",
 
@@ -2864,8 +2868,6 @@ export const en = {
   "notice.compactionNoSummary": "Context was compacted without a generated summary.",
   "notice.goalNotReady": "Goal is not ready to complete yet; continuing the remaining work.",
   "notice.goalUnfinished": "Goal still has unfinished task state; continuing the remaining work.",
-  "notice.autoresearchStatusFailed": "AutoResearch status update failed.",
-  "notice.autoresearchBlocked": "AutoResearch task marked blocked.",
   "notice.backgroundJobFailed": "Background {kind} needs attention.",
   "notice.jobArtifactMigrationFailed": "Job artifact migration failed.",
   "notice.jobTeardownTimeout": "Background job teardown timed out.",

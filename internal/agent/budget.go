@@ -34,8 +34,11 @@ func (a *Agent) forceThreshold() int {
 		if a.maxOutputTokens > 0 {
 			budget = a.maxOutputTokens
 		}
-		if budget > 0 {
-			budgetAware := a.contextWindow - budget - 8192
+		// Only shrink the force mark when a real shared window exists (window
+		// larger than the output budget + reserve); tiny windows go negative
+		// and would force a fold every turn.
+		if budget > 0 && a.contextWindow > budget+minOutputBudget {
+			budgetAware := a.contextWindow - budget - minOutputBudget
 			if budgetAware < force {
 				force = budgetAware
 			}

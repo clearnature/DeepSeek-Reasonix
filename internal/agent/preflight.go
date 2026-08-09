@@ -23,27 +23,20 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 	}
 	msgs, version := a.session.snapshotMessagesVersion()
 	cacheKey := a.currentPromptCacheKey()
-	// Paused sessions with a projection keep sending under it: re-firing
-	// compaction every turn only craters the cache for no gain. Without a
-	// projection, fall through so the force guard refuses the send.
-	if a.compactStuck {
-		if st := a.compactionState; projectionValid(st, msgs, version, cacheKey) {
-			return nil
-		}
-	}
 	// Conservative estimate: the fixed estimator under-counts CJK-heavy
-	// transcripts (~1.8x), so the overflow guard uses the calibrated value.
+	// transcripts, so the overflow guard uses the usage-calibrated value once
+	// a turn has reported real token counts.
 	est := a.estimatedPromptTokens(msgs)
 	_, _, high := a.compactThresholds()
 	force := max(a.forceThreshold(), high)
 
-	// A valid projection below the high-water mark passes; the old
-	// projection<canonical comparison was a tautology that disabled the force
-	// guard below.
+	// A projection below the high-water mark passes; a projection smaller
+	// than the canonical transcript also passes while it still fits the
+	// window beside a usable output budget (re-fold only at the 400 edge).
 	if st := a.compactionState; projectionValid(st, msgs, version, cacheKey) {
 		visible := modelVisibleFromProjection(st.Projection, msgs)
 		projEst := a.estimatedPromptTokens(visible)
-		if projEst < high {
+		if projEst < high || (projEst < est && projEst+max(a.outputBudget, minOutputBudget) <= a.contextWindow) {
 			return nil
 		}
 	}
@@ -56,7 +49,7 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 	pruned, pst := a.applyToolResultMaintenanceView(msgs, toolResultPrune)
 	if pst.Results > 0 {
 		if err := a.installPruneProjection(pruned, pst); err == nil {
-			projEst := a.estimatedPromptTokens(pruned)
+			projEst := estimateMessagesTokens(provider.ModelMessages(pruned))
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
 				"pruned %d stale tool results (~%d tokens est.) before request", pst.Results, est-projEst)})
 			if projEst < high {
@@ -70,10 +63,6 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 	outcome, err := a.compactToProjection(ctx, trigger, "", forceCompact)
 	if err != nil {
 		if est >= force {
-			// At the force mark, a failed fold cannot be retried usefully —
-			// latch the pause so the preflight stops re-running the doomed
-			// compaction every turn (mirrors maybeCompact's too-large pause).
-			a.compactStuck = true
 			return fmt.Errorf("%w", errors.Join(ErrCompactionRequired, err))
 		}
 		a.sink.Emit(event.Event{
@@ -83,19 +72,6 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 			Detail: fmt.Sprintf("compaction failed under soft threshold: %v", err),
 		})
 		return nil
-	}
-	// Force must converge: a projection that cannot fit the window beside a
-	// usable output budget means compaction cannot make progress — pause so
-	// the force path does not re-fire on consecutive turns.
-	if forceCompact && outcome == CompactionInstalled {
-		if st := a.compactionState; projectionValid(st, msgs, version, cacheKey) {
-			if a.estimatedPromptTokens(modelVisibleFromProjection(st.Projection, msgs))+minOutputBudget > a.contextWindow {
-				a.compactStuck = true
-				a.consecutiveCompacts++
-				a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "Automatic context cleanup paused because the context window is too small.", Detail: fmt.Sprintf(
-					"context_window=%d cannot hold the projection after compaction; raise context_window or shrink tool output. Auto-compaction paused until the prompt drops.", a.contextWindow)})
-			}
-		}
 	}
 	// Force + Noop: refuse outside a tool loop; mid-turn is deferred.
 	if forceCompact && outcome == CompactionNoop {
@@ -177,14 +153,10 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	// Fail closed: known lineage requires an exact stored key (including
 	// rejecting blank keys on early sidecars written before this field).
 	if key := a.currentPromptCacheKey(); key != "" && st.PromptCacheKey != key {
-		slog.Info("agent: projection sidecar lineage mismatch — projection dropped",
-			"path", sessionPath, "stored_key", st.PromptCacheKey, "current_key", key)
 		a.compactionState = CompactionState{}
 		return
 	}
 	if st.Projection.CoveredPrefixHash == "" {
-		slog.Info("agent: projection sidecar lacks covered-prefix hash — projection dropped",
-			"path", sessionPath, "schema", st.SchemaVersion)
 		a.compactionState = CompactionState{}
 		return
 	}

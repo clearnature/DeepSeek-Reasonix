@@ -1,43 +1,44 @@
-<!-- gitnexus:start -->
-# GitNexus — Code Intelligence
+# Repository Guidelines
 
-This project is indexed by GitNexus as **DeepSeek-Reasonix** (31310 symbols, 124353 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+Reasonix is a Go-based AI coding agent: a transport-agnostic Go kernel under `internal/` with three frontends — the CLI/TUI (`cmd/reasonix`), an HTTP/SSE server (`internal/serve`), and a Wails desktop app (`desktop/`) — plus an SDK (`sdk/`) and benchmark harnesses (`benchmarks/`). Default branch: `main-v2`. Module: `reasonix` (Go 1.25+).
 
-> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
+## Architecture and Key Invariants
 
-## Always Do
+- One `control.Controller` implements behavior; frontends are thin. Add behavior to the controller, not a frontend.
+- Layering is enforced by `tools/repolint/layers.go`: only frontends and hosts may import `control`, and utility packages import nothing under `reasonix/`.
+- Cache-first: the system-prompt prefix (base prompt + tools + memory) must stay byte-stable across turns to keep the provider prefix cache warm. Never mutate it mid-session.
+- Durable project rules live in `REASONIX.md`, which is loaded into every session; keep it concise. Long package explanations belong in `doc.go`.
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "main-v2"})`.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
+## Build, Test, and Development Commands
 
-## Never Do
+- `make build` — build `bin/reasonix` and the plugin example
+- `make test` — run `go test ./...`
+- `make vet` / `make lint` — run `go vet` and the repo layer lint (`go run ./tools/repolint`)
+- `make lint-cross` — golangci-lint across OS/build-tag combinations
+- `make fmt` — apply `gofmt -w`
+- `make hooks` — install `.githooks` (pre-push runs `go vet`)
+- `make desktop-test` / `sdk-test` — test the `desktop/` and `sdk/go` modules
 
-- NEVER edit a function, class, or method without first running `impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
-- NEVER commit changes without running `detect_changes()` to check affected scope.
+For isolated development, run `REASONIX_HOME=/tmp/reasonix-dev go run ./cmd/reasonix` so no state touches a real install.
 
-## Resources
+## Coding Conventions
 
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/DeepSeek-Reasonix/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/DeepSeek-Reasonix/clusters` | All functional areas |
-| `gitnexus://repo/DeepSeek-Reasonix/processes` | All execution flows |
-| `gitnexus://repo/DeepSeek-Reasonix/process/{name}` | Step-by-step execution trace |
+- `gofmt` and `go vet` are enforced by CI; run both before pushing.
+- Wrap errors with `%w` (`fmt.Errorf("...: %w", err)`); library code never calls `os.Exit` or prints to stdout/stderr — only frontends decide exit codes and user-facing output.
+- Exported identifiers must have doc comments. Default comments: none — write one only when the why is non-obvious.
+- Prefer table-driven tests; performance features need an effect test at their final boundary (see the `internal/boot/effect_test.go` pattern).
 
-## CLI
+## Commit and Pull Request Guidelines
 
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+- Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(agent): ...`, `fix(cli): ...`, `test(event): ...`, `docs: ...`
+- Branch from `main-v2` and open PRs against `main-v2`; PRs must pass `go test ./...` and leave `gofmt -l .` clean.
+- Cache-sensitive changes (system prompt, memory prefix, skill index, tool schemas, compaction, MCP/tool registration) require `Cache-impact:`, `Cache-guard:`, and `System-prompt-review:` lines in the PR body.
 
-<!-- gitnexus:end -->
+## Definition of Done
+
+Verify before claiming completion: `make test`, `make lint`, and `gofmt -l .` all pass; for performance work, the boundary effect test demonstrates the actual behavior change.
+
+## Agent-Specific Instructions
+
+- The GitNexus code-intelligence workflow (impact analysis before edits, `detect_changes()` before commit) is preserved in `AGENTS.md.gitnexus.bak`.
+- Update `REASONIX.md` when durable project rules change; keep AGENTS.md a concise pointer.

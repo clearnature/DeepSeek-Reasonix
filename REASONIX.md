@@ -58,6 +58,7 @@ extraction, and that diff must be justified in the PR.
   lower-priority compatibility guidance. The current turn receives a tail note.
 
 ## Notes
+- 8031 和 # 8024 是什么工具，提供上下文的精度计算和价格成本核算的吗？
 
 ## Pre-push CI simulation
 
