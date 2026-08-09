@@ -557,3 +557,56 @@ func TestRecorderCompactionDoesNotForwardZeroReceipt(t *testing.T) {
 		t.Fatalf("frontend must receive the compaction notice, got %d events", len(inner.events))
 	}
 }
+
+func TestRecorderPersistsFastCompressTelemetry(t *testing.T) {
+	dir := t.TempDir()
+	r := NewRecorder(&spySink{}, dir, "desktop")
+	// A successful no-AI fast-compression pass (mode=prune).
+	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry",
+		Detail: "trigger=manual mode=prune cache=cold results=3 saved_chars=12000"})
+	// A refused pass: warm cache, no rewrite.
+	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry",
+		Detail: "trigger=manual mode=prune cache=warm results=0 saved_chars=0 status=refused"})
+	flushRecorder(t, r)
+
+	w := NewWriter(dir)
+	rows := w.QueryCompactions("desktop", time.Now().Add(-time.Hour), time.Now())
+	if len(rows) != 2 {
+		t.Fatalf("want 2 compaction rows, got %d", len(rows))
+	}
+	// Newest first: the refused pass landed after the successful one.
+	ok, refused := rows[1], rows[0]
+	if ok.Mode != "prune" || ok.Cache != "cold" || ok.Results != 3 || ok.SavedChars != 12000 {
+		t.Fatalf("success row: mode=%s cache=%s results=%d saved_chars=%d", ok.Mode, ok.Cache, ok.Results, ok.SavedChars)
+	}
+	if ok.Status != "" {
+		t.Fatalf("success row status must be empty, got %q", ok.Status)
+	}
+	if refused.Mode != "prune" || refused.Cache != "warm" || refused.Status != "refused" {
+		t.Fatalf("refused row: mode=%s cache=%s status=%q", refused.Mode, refused.Cache, refused.Status)
+	}
+	if refused.Results != 0 || refused.SavedChars != 0 {
+		t.Fatalf("refused row must not claim savings: results=%d saved_chars=%d", refused.Results, refused.SavedChars)
+	}
+}
+
+func TestRecorderParsesOverflowCacheToken(t *testing.T) {
+	dir := t.TempDir()
+	r := NewRecorder(&spySink{}, dir, "desktop")
+	// Overflow bypass: single-token cache label must survive parsing whole.
+	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry",
+		Detail: "trigger=manual mode=prune cache=warm_over_window results=2 saved_chars=9000"})
+	flushRecorder(t, r)
+
+	w := NewWriter(dir)
+	rows := w.QueryCompactions("desktop", time.Now().Add(-time.Hour), time.Now())
+	if len(rows) != 1 {
+		t.Fatalf("want 1 row, got %d", len(rows))
+	}
+	if rows[0].Cache != "warm_over_window" {
+		t.Fatalf("cache label = %q, want warm_over_window (single token)", rows[0].Cache)
+	}
+	if rows[0].Results != 2 || rows[0].SavedChars != 9000 {
+		t.Fatalf("row numbers: results=%d saved_chars=%d", rows[0].Results, rows[0].SavedChars)
+	}
+}

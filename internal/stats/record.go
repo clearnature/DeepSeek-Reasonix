@@ -69,8 +69,15 @@ type CompactionRecord struct {
 	MissTok   int    `json:"miss,omitempty"`
 	WriteTok  int    `json:"write,omitempty"`
 	Reqs      int    `json:"reqs,omitempty"`
-	RequestID string `json:"provider_request_id,omitempty"`
-	Error     string `json:"err_type,omitempty"`
+	// Results/SavedChars describe a no-AI fast compression pass (mode=prune):
+	// how many stale tool results were elided and roughly how many characters
+	// were saved. Summarize passes leave them zero. Status records the gate
+	// outcome (refused/noop) for passes that did not rewrite.
+	Results    int    `json:"results,omitempty"`
+	SavedChars int    `json:"saved_chars,omitempty"`
+	Status     string `json:"status,omitempty"`
+	RequestID  string `json:"provider_request_id,omitempty"`
+	Error      string `json:"err_type,omitempty"`
 }
 
 // Writer appends records to the daily stats file for a given stats dir.

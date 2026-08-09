@@ -187,6 +187,8 @@ func (r *Recorder) recordCompaction(e event.Event) {
 				Compaction: &rec,
 			})
 			return
+		case "status":
+			rec.Status = v
 		default:
 			setCompactionInt(&rec, k, v)
 		}
@@ -221,6 +223,10 @@ func setCompactionInt(rec *CompactionRecord, key, val string) {
 		rec.WriteTok = n
 	case "reqs":
 		rec.Reqs = n
+	case "results":
+		rec.Results = n
+	case "saved_chars":
+		rec.SavedChars = n
 	}
 }
 
