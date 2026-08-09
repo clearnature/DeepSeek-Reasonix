@@ -673,7 +673,7 @@ func (a *Agent) silentCompactionTelemetry(trigger string, canonical []provider.M
 		Trigger:      trigger,
 		CacheState:   a.CacheState(),
 		Mode:         CompactionModeSummarized,
-		SourceTokens: estimateMessagesTokens(provider.ModelMessages(canonical)),
+		SourceTokens: a.estimatedPromptTokens(canonical),
 	}
 	if err != nil {
 		tele.Status = CompactionStatusAborted

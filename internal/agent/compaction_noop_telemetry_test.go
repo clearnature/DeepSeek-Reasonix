@@ -58,3 +58,31 @@ func TestCompactionNoopEmitsTelemetry(t *testing.T) {
 		t.Fatalf("no status=noop telemetry emitted; notices: %v", sink.notices)
 	}
 }
+
+// TestCompactionTelemetrySourceTokensCalibrated pins the 2026-08-09 display
+// gap: telemetry src/proj must use the usage-calibrated estimate once a turn
+// has reported real tokens, so stats numbers track the provider's real counts
+// instead of the raw rune-based estimate (which counts reasoning that never
+// rides the wire and can run ~10x the real prompt).
+func TestCompactionTelemetrySourceTokensCalibrated(t *testing.T) {
+	canonical := []provider.Message{
+		{Role: provider.RoleUser, Content: strings.Repeat("the quick brown fox jumps over the lazy dog ", 200)},
+	}
+	raw := estimateMessagesTokens(provider.ModelMessages(canonical))
+	a := &Agent{}
+	// Simulate one completed turn: 10k chars sent, 2000 real prompt tokens
+	// (tpc=0.2, off the 0.25 fallback so calibration applies).
+	a.lastSentChars.Store(10000)
+	a.lastUsage.Store(&provider.Usage{PromptTokens: 2000})
+	calibrated := a.estimatedPromptTokens(canonical)
+	if calibrated >= raw {
+		t.Fatalf("calibrated %d must be below raw %d once usage exists", calibrated, raw)
+	}
+	tele := a.silentCompactionTelemetry("manual", canonical, nil)
+	if tele.SourceTokens != calibrated {
+		t.Fatalf("telemetry src=%d, want calibrated %d (raw would be %d)", tele.SourceTokens, calibrated, raw)
+	}
+	if tele.Status != CompactionStatusNoop {
+		t.Fatalf("status=%q, want noop", tele.Status)
+	}
+}

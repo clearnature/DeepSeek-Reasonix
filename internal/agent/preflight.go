@@ -49,7 +49,7 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 	pruned, pst := a.applyToolResultMaintenanceView(msgs, toolResultPrune)
 	if pst.Results > 0 {
 		if err := a.installPruneProjection(pruned, pst); err == nil {
-			projEst := estimateMessagesTokens(provider.ModelMessages(pruned))
+			projEst := a.estimatedPromptTokens(pruned)
 			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
 				"pruned %d stale tool results (~%d tokens est.) before request", pst.Results, est-projEst)})
 			if projEst < high {

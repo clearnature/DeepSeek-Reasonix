@@ -199,7 +199,7 @@ func (a *Agent) compressVisibleRange(
 	}
 
 	projection := buildVisibleCompressionProjection(snap.visible, plan, summary)
-	projectionTokens := estimateMessagesTokens(a.providerProjectionMessages(projection))
+	projectionTokens := a.estimatedPromptTokens(a.providerProjectionMessages(projection))
 	tele.ProjectionTokens = projectionTokens
 	result.Messages = len(plan.fold)
 	result.ProjectionTokens = projectionTokens
@@ -230,7 +230,7 @@ func (a *Agent) compressVisibleRange(
 }
 
 func (a *Agent) planVisibleCompression(snap explicitCompressionSnapshot, direction string, anchorIndex int, preview string) (visibleCompressionPlan, bool) {
-	sourceTokens := estimateMessagesTokens(snap.visible)
+	sourceTokens := a.estimatedPromptTokens(snap.visible)
 	plan := visibleCompressionPlan{result: tool.CompressResult{
 		Status:           "noop",
 		Direction:        direction,
@@ -462,7 +462,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		archived = path
 	}
 
-	sourceTokens := estimateMessagesTokens(provider.ModelMessages(canonical))
+	sourceTokens := a.estimatedPromptTokens(canonical)
 	res, err := a.foldToSummary(ctx, fold, instructions)
 	summary := res.Text
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
@@ -490,7 +490,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	projMsgs = append(projMsgs, msgs[start:]...)
 	projMsgs = provider.ModelMessages(projMsgs)
 
-	projTokens := estimateMessagesTokens(a.providerProjectionMessages(projMsgs))
+	projTokens := a.estimatedPromptTokens(a.providerProjectionMessages(projMsgs))
 	tele.ProjectionTokens = projTokens
 	tele.Status = CompactionStatusInstalled
 	emit(tele)
@@ -703,8 +703,8 @@ func (a *Agent) snipToProjection(ctx context.Context) error {
 func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats) error {
 	msgs, version := a.session.snapshotMessagesVersion()
 	view = provider.ModelMessages(view)
-	src := estimateMessagesTokens(provider.ModelMessages(msgs))
-	dst := estimateMessagesTokens(view)
+	src := a.estimatedPromptTokens(msgs)
+	dst := a.estimatedPromptTokens(view)
 	projVersion := a.compactionState.Projection.ProjectionVersion + 1
 	state := CompactionState{
 		SchemaVersion:     compactionStateSchemaCurrent,
