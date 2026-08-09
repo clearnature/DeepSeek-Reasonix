@@ -40,9 +40,11 @@ canonical transcript (Session.Messages，普通压缩永不改写)
 
 ## 三、运行时行为
 
-### Resume 只记录缓存状态
+### Resume 只记录缓存状态（极端超窗才压缩）
 
-恢复会话时，根据 provider TTL 和最后活动时间记录 `warm`、`cold` 或 `unknown`。Resume 路径不会调用 `Compact`、`SnapshotRewrite` 或 `PruneStaleToolResults`，也不会修改 canonical transcript。
+恢复会话时，根据 provider TTL 和最后活动时间记录 `warm`、`cold` 或 `unknown`。Resume 路径**默认不调用** `Compact`、`SnapshotRewrite` 或 `PruneStaleToolResults`，也不修改 canonical transcript——warm 前缀原样重放，缓存命中。
+
+唯一例外（`MaybeCompactOnResume`，本地保留、上游 #8057 未采纳）：model-visible 形状估算**已无任何输出余量**（`est ≥ window - minOutputBudget - reserve`）时无条件压缩一次——此时任何请求都会被 provider 拒绝，压缩是唯一出路。其余情况（含大 canonical 小投影）一律不压，宁可首轮抖动也不打穿 warm 缓存前缀。
 
 ### Preflight 惰性生成 projection
 

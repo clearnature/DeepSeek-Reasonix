@@ -151,36 +151,76 @@ canonical（只增不减）
 - **回归测试**：`TestFitFoldToWindowKeepsFoldBounded`（reasoning 45K × 40，minFold=1.14M > cap → fold 必须存活）。
 - **数据链证据**：官方 #8024 CompactionBench 显示 fold 输入超窗时提供者拒绝；本 bug 是估算超窗时我们自己的裁剪逻辑先把它裁没了。
 
-## 三、当前架构（阶段 8 后）
+### 阶段 10：上游 #8019-#8031（08-09 同步进 dev）
+
+上游 esengine 在同一时间线独立实现了折叠架构（与阶段 7-9b 平行），08-09 同步进 dev：
+
+| PR | 内容 | 与本地实现的关系 |
+|---|---|---|
+| #8019 | fold partition 不变量（每组恰落一组）| 补充 |
+| #8021 | **有界折叠**：`splitIntoSummarySpans` 输入截断/分片（fold 太大 → 分多片逐片摘要）| **替代**本地 fitFoldToWindow（机制不同：分片 vs 收缩） |
+| #8024 | CompactionBench（cost/fidelity 双模式基准）| 新工具 |
+| #8030 | 增量折叠（benchmark arm，**默认关闭**）：fold 上一投影而非 canonical 全量 | 与本地 d912be5ca 平行；上游做成可消融 arm |
+| #8031 | **carried digests verbatim**：已有 digest 原样携带，summarizer 只看新工作；分区增 `carried` 组 | 修复 #8030 的 18/71 探针丢失；**前缀从"重写"变"append"**（缓存纪律加分） |
+
+**#8031 关键指标**：71 探针 53→70 存活；fold 恒 1 call；投影前缀字节稳定（append 而非重写）。
+
+### 阶段 11：#8057 吸收 #8006 核心（08-09 合入上游）
+
+SivanCola 的 `fix/shared-window-output-budget` 明确是 **#8006（clearnature）的 consolidation**（Co-authored-by: clearnature）：
+
+- **采用并适配**：provider 共享窗口能力检测（`SharedWindowInputPolicyProvider`）、普通+summarizer 请求输出预算裁剪（`effectiveOutputBudget(req)`）、CJK cold-start 保守尺寸、同会话 usage 校准（`promptTokenCalibration` + `requestCalibrationShape`）+ 跨会话重置。
+- **审查但未采纳**：① 增量折叠改默认（保留 full-fold 默认）；② resume 时 provider 调用；③ pricing/cache 诊断（视为无关）。
+- 新增 `internal/agent/output_budget.go`（293 行）+ `internal/provider/*/output_budget.go`。
+- **#8004/#7972（HTTP 400）由上游正式关闭**。
+
+### 阶段 12：dev 统一到 #8057 结构 + 本地保留（08-10）
+
+dev 同步上游后，**预算/校准统一用 #8057 权威实现**：
+
+- 删本地旧实现：`budget.go` 的 `sharedWindowClip`/`effectiveOutputBudget(msgs)`/`tokPerChar`/`msgChars`（被 #8057 的 `output_budget.go` 吸收）。
+- **保留本地独有**（#8057 明确未采纳、上游没有）：
+  - `MaybeCompactOnResume`（resume gate：model-visible 形状估算，真超窗才压，不误伤 warm 缓存）
+  - `forceThreshold`（共享窗口 force 高水位钳制）
+  - `maybePredictOverflow`（record-only 溢出预判 notice）
+  - 静默退出遥测（`status=installed/noop/aborted` + 校准 src/proj）
+  - prune deferral（[high, force) 死窗修复）
+  - `/compress-fast`（no-AI 工具结果压缩命令族）
+- 校准机制：`tokPerChar(lastUsage)` → 上游 `promptTokenCalibration`（promptTokens/requestChars 配对，`calibratedPromptTokens` 校准，跨会话重置）。
+
+## 三、当前架构（阶段 12 后）
 
 ```
 canonical transcript（只增不减，永久事实源）
     |
     +-- ContextProjection（sidecar：Messages + CoveredCount + CoveredPrefixHash）
-    |     ├─ 全量折叠（首次/manual/overflow/超预算/边界 tool）
-    |     │    fold = canonical[head : len-tail]，head = pinnedPrefixLen
-    |     │    → 重建投影（A1 摘要合并）
-    |     └─ 增量折叠（投影有效 + covered 中间 + 有呼吸空间）
-    |          fold = canonical[covered : len-tail]  ← 有界
-    |          → 旧投影.Messages + [摘要] + kept + tail（旧字节不变）
+    |     ├─ 全量折叠（默认，上游 #8021 有界：splitIntoSummarySpans 分片）
+    |     │    fold = canonical[head : len-tail]（超窗 → 分片逐片摘要，永不 400）
+    |     └─ 增量折叠（ablation arm，#8030/#8031：carried digests verbatim）
+    |          旧 digest 原样携带 → 前缀 append 而非重写（缓存纪律）
     |
+    ├─ 输出预算裁剪：#8057 effectiveOutputBudget(req)（普通 + summarizer 请求）
+    │    est = calibratedPromptTokens(shape) → 输入 + 输出 ≤ window - reserve
     ├─ 触发：maybeCompact 每轮尾检查 usage ≥ high(0.8×window) 才压
-    ├─ 请求前：preflight force 防线（est ≥ force → 压缩/拒绝）
-    └─ resume：MaybeCompactOnResume（真实口径，真超窗才压）
+    │    prune 延迟仅在投影真降 < high 时 return（阶段 9/12 修复）
+    ├─ 请求前：preflight force 防线（forceThreshold 共享窗口钳制）
+    └─ resume：MaybeCompactOnResume（真实口径，真超窗才压；本地保留）
 ```
 
 **发送视图**：`projection.Messages + canonical[CoveredCount:]`（`modelVisibleFromProjection`）。
+**校准**：`requestCalibrationShape`（requestChars/compactChars/cjkRunes）→ `promptTokenCalibration`（promptTokens/requestChars 配对，同会话稳定，跨会话重置）。
 
 ## 四、估算口径总原则
 
 | 路径 | 估算 | 理由 |
 |---|---|---|
 | maybeCompact 触发 | `LatestPromptTokens`（#7930）| 真实单请求形状，重试累计会虚高 |
-| summarize fold 拒绝 | `estimateMessagesTokens` | 真实含 framing/reasoning/tool-call |
-| resume gate | `estimateMessagesTokens`（无 ×2）| 宁可低估不误压 warm 缓存 |
-| preflight force | `estimatedPromptTokens`（×2 保守）| 宁可保守不超窗 |
+| 输出预算裁剪 | `calibratedPromptTokens(requestCalibrationShape)`（#8057）| 同会话 usage 校准，CJK 保守 floor |
+| summarize fold 拒绝 | `effectiveOutputBudget(req)` + #8021 分片 | 输入+输出 ≤ 窗口，永不 400 |
+| resume gate | `estimateMessagesTokens`（无 ×2，本地保留）| 宁可低估不误压 warm 缓存 |
+| preflight force | `forceThreshold`（共享窗口钳制，本地保留）| 宁可保守不超窗 |
 
-**原则**：每个路径按「宁可低估不误压」或「宁可保守不超窗」分别选择口径。
+**原则**：每个路径按「宁可低估不误压」或「宁可保守不超窗」分别选择口径；校准统一由 `promptTokenCalibration`（#8057）提供，跨会话重置。
 
 ## 五、守卫测试契约（缓存纪律）
 
@@ -194,11 +234,11 @@ canonical transcript（只增不减，永久事实源）
 
 ## 六、残余风险与后续
 
-1. **CJK resume gate 低估**（已知）：去 ×2 后 CJK 会话真超窗 resume 可能不提前压——有兜底（preflight force 用 ×2 拒绝/压缩，请求路径 sharedWindowClip 防 400），代价是 resume 后首轮抖动。可接受。
+1. **CJK resume gate 低估**（已知）：resume gate 无 ×2 保守因子，CJK 会话真超窗 resume 可能不提前压——有兜底（preflight force 钳制 + #8057 effectiveOutputBudget 防 400），代价是 resume 后首轮抖动。可接受。
 2. **canonical 磁盘增长**：只增不减（历史完整性代价），归档目录（`reasonix/archive/`）可追溯。
-3. **上游同步**：main-v2 已含 C1/A1/B2（01528449a）但缺阶段 2-5/7-8 的修复——增量折叠方案可移植（diff 集中在 compact_projection.go/preflight.go/budget.go）。
+3. **本地独有功能未回上游**：#8057 明确未采纳（增量折叠默认/resume 调用/pricing-cache 诊断），本地保留：`MaybeCompactOnResume`/`forceThreshold`/`maybePredictOverflow`/遥测 status/prune deferral//compress-fast。如需贡献上游需另开 PR 单独论证。
 4. **响应侧缓存验证**（CCB 分析唯一实质差距）：DeepSeek `prompt_cache_hit_tokens` 已在 Usage，只差判定逻辑（>5% 且 ≥2000 tokens 记录不告警）——待真实会话验证 token 语义后实施。
-5. **阶段 9 边界**：prune 延迟改为"投影真降才 return"后，若投影 `projEst` 恰在 high 附近（估算误差 ±），可能高频"折叠→重建"——由 `TestCompactionHealthyWindowNeverLoops`（consecutive ≤ 1）守护，观测中。
+5. **#8030/#8031 增量 arm 默认关闭**：carried digests 保真（70/71）与前缀 append 是加分项，但上游保持 full-fold 默认——本地如需默认启用需在 ablation 层决策。
 
 ## 七、时间线
 
@@ -207,6 +247,8 @@ canonical transcript（只增不减，永久事实源）
 | 2026-08-04 | 用户定义核心定位：前缀字节稳定 = 成本优势之源 |
 | 2026-08-07 | C1/A1/B2 设计定案（重放门控/摘要合并/位置固定）|
 | 2026-08-08 | PR 7839（128K）→ 7913（动态预算）→ 36a06c341（summarize 裁剪）→ 4480758f8（有界拒绝）→ #7930（重试口径）→ d912be5ca（增量折叠）→ f90bf0ebc（对抗加固）|
+| 2026-08-09 | 上游 #8019-#8031 同步（partition/bounded fold/bench/incremental arm/carried digests）；#8057 合入吸收 #8006 核心（Co-authored-by: clearnature），#8004/#7972 关闭；#8006 关闭 |
+| 2026-08-10 | dev 统一到 #8057 结构（output_budget.go 权威实现 + calibration shape），本地保留 resume gate/overflow 预测/遥测 status/prune deferral//compress-fast |
 
 ---
 
