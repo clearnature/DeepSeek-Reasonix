@@ -696,6 +696,7 @@ func (a *Agent) silentCompactionTelemetry(trigger string, canonical []provider.M
 		CacheState:   a.CacheState(),
 		Mode:         CompactionModeSummarized,
 		SourceTokens: a.estimatedPromptTokens(canonical),
+		TokPerChar:   a.tokPerChar(),
 	}
 	if err != nil {
 		tele.Status = CompactionStatusAborted

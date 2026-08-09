@@ -104,23 +104,24 @@ type CompactionState struct {
 // CompactionTelemetry is the structured observability record for one
 // compaction attempt. Sensitive transcript content is intentionally omitted.
 type CompactionTelemetry struct {
-	Trigger           string `json:"trigger"`
-	CacheState        string `json:"cache_state"`
-	Mode              string `json:"mode"`
-	Status            string `json:"status,omitempty"` // installed | noop | aborted; "" on legacy paths
-	Native            bool   `json:"native"`
-	SourceTokens      int    `json:"source_tokens"`
-	FoldTokens        int    `json:"fold_tokens"` // summarizer input after any shortening
-	Spans             int    `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split
-	ProjectionTokens  int    `json:"projection_tokens"`
-	InputTokens       int    `json:"input_tokens"`
-	OutputTokens      int    `json:"output_tokens"`
-	CacheHitTokens    int    `json:"cache_hit_tokens"`
-	CacheMissTokens   int    `json:"cache_miss_tokens"`
-	CacheWriteTokens  int    `json:"cache_write_tokens"`
-	RequestCount      int    `json:"request_count"`
-	ProviderRequestID string `json:"provider_request_id,omitempty"`
-	Error             string `json:"error,omitempty"`
+	Trigger           string  `json:"trigger"`
+	CacheState        string  `json:"cache_state"`
+	Mode              string  `json:"mode"`
+	Status            string  `json:"status,omitempty"` // installed | noop | aborted; "" on legacy paths
+	TokPerChar        float64 `json:"tpc,omitempty"`    // usage-calibrated token/char at fold time; 0 until calibrated
+	Native            bool    `json:"native"`
+	SourceTokens      int     `json:"source_tokens"`
+	FoldTokens        int     `json:"fold_tokens"` // summarizer input after any shortening
+	Spans             int     `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split
+	ProjectionTokens  int     `json:"projection_tokens"`
+	InputTokens       int     `json:"input_tokens"`
+	OutputTokens      int     `json:"output_tokens"`
+	CacheHitTokens    int     `json:"cache_hit_tokens"`
+	CacheMissTokens   int     `json:"cache_miss_tokens"`
+	CacheWriteTokens  int     `json:"cache_write_tokens"`
+	RequestCount      int     `json:"request_count"`
+	ProviderRequestID string  `json:"provider_request_id,omitempty"`
+	Error             string  `json:"error,omitempty"`
 }
 
 // ContextStatePath returns the projection sidecar path for a session transcript.

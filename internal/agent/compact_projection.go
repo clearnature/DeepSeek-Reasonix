@@ -183,7 +183,7 @@ func (a *Agent) compressVisibleRange(
 
 	res, err := a.foldToSummary(ctx, prepared.fold, prepared.instructions)
 	summary := res.Text
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res, a.tokPerChar())
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -366,13 +366,14 @@ func (a *Agent) installVisibleCompression(snap explicitCompressionSnapshot, trig
 	return nil
 }
 
-func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary) CompactionTelemetry {
+func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary, tpc float64) CompactionTelemetry {
 	tele := CompactionTelemetry{
 		Trigger: trigger, CacheState: cacheState, Mode: res.Mode,
 		Native: res.Mode == CompactionModeNative, SourceTokens: sourceTokens,
 		ProviderRequestID: res.RequestID,
 		FoldTokens:        res.FoldTokens,
 		Spans:             res.Spans,
+		TokPerChar:        tpc,
 	}
 	usage := res.Usage
 	if usage == nil {
@@ -465,7 +466,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	sourceTokens := a.estimatedPromptTokens(canonical)
 	res, err := a.foldToSummary(ctx, fold, instructions)
 	summary := res.Text
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res, a.tokPerChar())
 	if err != nil {
 		tele.Error = err.Error()
 		emit(tele)
@@ -734,9 +735,9 @@ func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats) e
 // emitCompactionTelemetry records structured compaction observability without
 // logging sensitive transcript content.
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
-	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d",
+	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f",
 		t.Trigger, t.Mode, t.Status, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
-		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount)
+		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount, t.TokPerChar)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}
