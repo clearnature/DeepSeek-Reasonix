@@ -2,14 +2,14 @@
   "limits": {
     "banner": 47,
     "commented-code": 1,
-    "complexity": 2110,
-    "essay": 4248,
-    "file-size": 116099,
-    "function-size": 9318,
+    "complexity": 2116,
+    "essay": 4247,
+    "file-size": 111254,
+    "function-size": 9345,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "test-file-size": 69788
+    "test-file-size": 69903
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -173,9 +173,6 @@
     },
     "desktop/frontend/src/lib/useController.ts": {
       "file-size": 3774
-    },
-    "desktop/frontend/wailsjs/go/models.ts": {
-      "file-size": 4872
     },
     "desktop/heartbeat.go": {
       "essay": 18,
@@ -1078,15 +1075,15 @@
       "essay": 9
     },
     "internal/control/controller.go": {
-      "complexity": 14,
+      "complexity": 20,
       "essay": 171,
-      "file-size": 5398,
-      "function-size": 92,
+      "file-size": 5425,
+      "function-size": 119,
       "narrative": 4
     },
     "internal/control/controller_test.go": {
       "essay": 10,
-      "test-file-size": 4574
+      "test-file-size": 4689
     },
     "internal/control/errmsg.go": {
       "essay": 2
@@ -1824,9 +1821,6 @@
     },
     "internal/stats/record.go": {
       "essay": 7
-    },
-    "internal/stats/recorder.go": {
-      "essay": 1
     },
     "internal/store/remote.go": {
       "essay": 6
