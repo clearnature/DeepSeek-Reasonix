@@ -26,6 +26,55 @@ func pruneFixture(toolContent string) *Session {
 	}}
 }
 
+// TestPruneKeepsProjectionValid guards the cold-prune chain: pruning rewrote
+// the canonical transcript and dropped the covered-prefix hash, so model-visible
+// messages snapped back to the full window and forced a second auto-compaction.
+func TestPruneKeepsProjectionValid(t *testing.T) {
+	big := strings.Repeat("x", 5000)
+	sess := pruneFixture(big)
+	a := New(nil, tool.NewRegistry(), sess, Options{ContextWindow: 1000, RecentKeep: 2}, event.Discard)
+
+	msgs, version := sess.snapshotMessagesVersion()
+	// Simulate a just-installed full-coverage projection (post-summarize state).
+	st := CompactionState{
+		SchemaVersion:     compactionStateSchemaCurrent,
+		TranscriptVersion: version,
+		Projection: ContextProjection{
+			Messages:          append([]provider.Message(nil), msgs...),
+			TranscriptVersion: version,
+			ProjectionVersion: 1,
+			CoveredCount:      len(msgs),
+			CoveredPrefixHash: coveredPrefixHash(msgs, len(msgs)),
+		},
+		PromptCacheKey: a.currentPromptCacheKey(),
+	}
+	a.compactionState = st
+	if !projectionValid(a.compactionState, msgs, version, a.currentPromptCacheKey()) {
+		t.Fatal("precondition: projection must be valid before prune")
+	}
+
+	stPrune, err := a.PruneStaleToolResults()
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if stPrune.Results != 1 {
+		t.Fatalf("Results = %d, want 1", stPrune.Results)
+	}
+	msgs2, version2 := sess.snapshotMessagesVersion()
+	if !projectionValid(a.compactionState, msgs2, version2, a.currentPromptCacheKey()) {
+		t.Fatal("projection must stay valid after prune rewrote the canonical transcript")
+	}
+	// The model-visible view is the projection snapshot, not the full canonical:
+	// the projected copy of the tool result must still be the original content.
+	vis := a.modelVisibleMessages()
+	if len(vis) != len(msgs2) {
+		t.Fatalf("model-visible = %d messages, want %d", len(vis), len(msgs2))
+	}
+	if !strings.HasPrefix(vis[3].Content, big[:32]) {
+		t.Errorf("projected tool content regressed from the projection snapshot: %.40q", vis[3].Content)
+	}
+}
+
 func TestPruneStaleToolResults(t *testing.T) {
 	big := strings.Repeat("x", 5000)
 	sess := pruneFixture(big)
@@ -313,9 +362,8 @@ func TestPruneSkipsRecentTail(t *testing.T) {
 
 func TestPruneHonorsKeepErrors(t *testing.T) {
 	// KeepErrors must carry error/blocked tool results through pruning verbatim;
-	// eliding here rewrites Content to the [elided ...] marker, so compact()'s
-	// KeepErrors predicate sees only the placeholder and the failure is lost on
-	// the next fold.
+	// eliding rewrites Content to the marker, so compact() sees only a placeholder
+	// and the failure is lost on the next fold.
 	for _, prefix := range []string{"error:", "blocked:"} {
 		content := prefix + strings.Repeat(" detail", 200)
 		sess := pruneFixture(content)

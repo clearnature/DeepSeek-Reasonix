@@ -115,6 +115,7 @@ func (a *Agent) maintainStaleToolResults(mode toolResultMaintenanceMode) (PruneS
 		reason = "snip"
 	}
 	a.session.Rewrite(next, reason)
+	a.realignProjectionAfterRewrite()
 	return st, nil
 }
 

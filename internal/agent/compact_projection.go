@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -738,6 +739,32 @@ func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats, t
 		Results: st.Results, SavedChars: st.SavedChars, TokPerChar: a.tokPerChar(),
 	})
 	return err
+}
+
+// realignProjectionAfterRewrite keeps an installed projection valid after the
+// canonical transcript is rewritten in place (prune/snip content replacement,
+// not a lineage change). The replaced region was already folded into the
+// projection's summary, and maintenance never touches the protected recent
+// tail, so only the covered-prefix hash and transcript version drift.
+func (a *Agent) realignProjectionAfterRewrite() {
+	state := a.compactionState
+	if len(state.Projection.Messages) == 0 {
+		return
+	}
+	msgs, version := a.session.snapshotMessagesVersion()
+	n := state.Projection.CoveredCount
+	if n <= 0 || n > len(msgs) {
+		return
+	}
+	state.Projection.CoveredPrefixHash = coveredPrefixHash(msgs, n)
+	state.TranscriptVersion = version
+	state.Projection.TranscriptVersion = version
+	a.compactionState = state
+	// The in-memory state is authoritative for this process; persist best-effort
+	// so a restart loads the realigned hash instead of a stale sidecar.
+	if err := a.persistCompactionState(); err != nil {
+		slog.Warn("agent: persist realigned compaction state", "err", err)
+	}
 }
 
 // emitCompactionTelemetry records structured compaction observability without
