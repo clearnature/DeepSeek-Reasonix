@@ -48,6 +48,13 @@ const (
 	CompactionModeSnip       = "snip"
 )
 
+// Compaction telemetry status labels.
+const (
+	CompactionStatusInstalled = "installed"
+	CompactionStatusNoop      = "noop"
+	CompactionStatusAborted   = "aborted"
+)
+
 // ContextProjection is the model-visible view of a session; the canonical
 // transcript in Session.Messages is never replaced by this structure.
 // Lossy irreversible projection (Sovereign Projection/Binary.agda): canonical
@@ -100,6 +107,7 @@ type CompactionTelemetry struct {
 	Trigger           string `json:"trigger"`
 	CacheState        string `json:"cache_state"`
 	Mode              string `json:"mode"`
+	Status            string `json:"status,omitempty"` // installed | noop | aborted; "" on legacy paths
 	Native            bool   `json:"native"`
 	SourceTokens      int    `json:"source_tokens"`
 	ProjectionTokens  int    `json:"projection_tokens"`

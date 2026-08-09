@@ -735,3 +735,22 @@ func archiveMessages(dir string, msgs []provider.Message) (string, error) {
 	}
 	return path, nil
 }
+
+// silentCompactionTelemetry builds the telemetry record for a compaction pass
+// that folded nothing: the status distinguishes "nothing to fold" (noop) from
+// a pass aborted by an error, so every exit lands in the stats file.
+func (a *Agent) silentCompactionTelemetry(trigger string, canonical []provider.Message, err error) CompactionTelemetry {
+	tele := CompactionTelemetry{
+		Trigger:      trigger,
+		CacheState:   a.CacheState(),
+		Mode:         CompactionModeSummarized,
+		SourceTokens: estimateMessagesTokens(provider.ModelMessages(canonical)),
+	}
+	if err != nil {
+		tele.Status = CompactionStatusAborted
+		tele.Error = err.Error()
+	} else {
+		tele.Status = CompactionStatusNoop
+	}
+	return tele
+}

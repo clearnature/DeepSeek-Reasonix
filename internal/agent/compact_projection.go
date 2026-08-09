@@ -104,10 +104,8 @@ func compressionVisibleMessages(msgs []provider.Message) []provider.Message {
 	return out
 }
 
-// Older schema-v1 sidecars may have persisted a strict-role merge of the
-// summary and its following user turn. Split that legacy shape for range
-// planning; new sidecars keep the logical messages separate and coalesce only
-// on the provider request copy.
+// Legacy schema-v1 sidecars may persist a strict-role merge of summary+user
+// turn; split that shape for range planning, new sidecars stay separate.
 func splitLegacyCoalescedSummary(msg provider.Message) (provider.Message, provider.Message, bool) {
 	if !isCompactionSummary(msg) {
 		return provider.Message{}, provider.Message{}, false
@@ -392,16 +390,27 @@ func (a *Agent) compact(ctx context.Context, trigger, instructions string, force
 	return err
 }
 
-// compactToProjection summarizes the older middle of the session into a model-
-// visible projection. The canonical transcript is never rewritten. force
-// bypasses the fold-economics skip. CompactionNoop means no projection was
-// installed (nothing to fold); callers at the force threshold must treat that
-// as a hard failure rather than sending the oversized canonical prompt.
-func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force bool) (CompactionOutcome, error) {
+// compactToProjection summarizes the session's middle into a model-visible
+// projection; canonical is never rewritten. CompactionNoop means nothing to
+// fold; force-threshold callers must treat that as a hard failure.
+func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force bool) (outcome CompactionOutcome, err error) {
 	canonical, transcriptVersion := a.session.snapshotMessagesVersion()
-	// Fold against the current model-visible view when a projection is valid:
-	// an installed prune/snip projection already collapsed stale tool results.
-	// Coverage still maps to the canonical transcript below.
+	// Silent exits (Noop/aborted) must still land in the stats file: a fold
+	// that found nothing is the "compacted but nothing happened" case that
+	// was invisible (user-observed 2026-08-09). Success paths emit inside.
+	emitted := false
+	emit := func(t CompactionTelemetry) {
+		a.emitCompactionTelemetry(t)
+		emitted = true
+	}
+	defer func() {
+		if outcome != CompactionNoop || emitted {
+			return
+		}
+		emit(a.silentCompactionTelemetry(trigger, canonical, err))
+	}()
+	// Fold the model-visible view when a valid projection exists (a prune/snip
+	// projection already collapsed stale tool results); coverage maps to canonical.
 	msgs := canonical
 	if st := a.compactionState; projectionValid(st, canonical, transcriptVersion, a.currentPromptCacheKey()) {
 		if visible := modelVisibleFromProjection(st.Projection, canonical); len(visible) > 0 {
@@ -409,10 +418,12 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		}
 	}
 	// Incremental fold: with a valid projection, fold only the appended
-	// messages and append the digest — prior bytes keep hitting; otherwise a
-	// full re-fold (digest merge) is a rare prefix rewrite.
-	if outcome, err := a.tryIncrementalFold(ctx, trigger, instructions, force, canonical, transcriptVersion); err != nil || outcome != CompactionNoop {
-		return outcome, err
+	// messages; prior bytes keep hitting. Otherwise a full re-fold is rare.
+	if o, e := a.tryIncrementalFold(ctx, trigger, instructions, force, canonical, transcriptVersion); e != nil || o != CompactionNoop {
+		if e != nil {
+			emitted = true // compactIncremental emitted its own failure record
+		}
+		return o, e
 	}
 	head, start, kept, fold, ok := a.planFold(msgs, force)
 	if !ok {
@@ -430,7 +441,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		}
 	}
 
-	var err error
 	fold, instructions, err = a.interceptCompactionPrepare(ctx, fold, instructions)
 	if err != nil {
 		a.emitCompactionAborted(trigger)
@@ -456,7 +466,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, mode, usage, providerReqID)
 	if err != nil {
 		tele.Error = err.Error()
-		a.emitCompactionTelemetry(tele)
+		emit(tele)
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
 	}
@@ -464,7 +474,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	summary, err = a.interceptCompactionComplete(ctx, summary)
 	if err != nil {
 		tele.Error = err.Error()
-		a.emitCompactionTelemetry(tele)
+		emit(tele)
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
 	}
@@ -480,7 +490,8 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 
 	projTokens := estimateMessagesTokens(a.providerProjectionMessages(projMsgs))
 	tele.ProjectionTokens = projTokens
-	a.emitCompactionTelemetry(tele)
+	tele.Status = CompactionStatusInstalled
+	emit(tele)
 
 	projVersion := a.compactionState.Projection.ProjectionVersion + 1
 	st := a.buildCompactionState(projMsgs, canonical, transcriptVersion, summary, mode, usage, sourceTokens, projTokens, projVersion, trigger)
@@ -513,9 +524,7 @@ func (a *Agent) tryIncrementalFold(ctx context.Context, trigger, instructions st
 	if got := a.compactionState.Projection.CoveredCount; got <= base.CoveredCount {
 		return CompactionNoop, fmt.Errorf("incremental fold did not advance coverage (%d → %d)", base.CoveredCount, got)
 	}
-	// The incremental fold keeps prior bytes (prefix hit) but may leave the
-	// projection too close to the trigger; converge with one full re-fold (the
-	// recursive call takes the full path — the new projection covers all).
+	// Keep prior bytes (prefix hit) but converge if too close to the trigger.
 	_, _, high := a.compactThresholds()
 	if a.estimatedPromptTokens(a.compactionState.Projection.Messages) >= high-a.compactionTailBudget() {
 		return a.compactToProjection(ctx, trigger, instructions, force)
@@ -523,10 +532,8 @@ func (a *Agent) tryIncrementalFold(ctx context.Context, trigger, instructions st
 	return CompactionInstalled, nil
 }
 
-// incrementalFoldTarget picks the incremental path (append to the existing
-// projection) over a full re-fold: a valid projection with un-covered messages
-// under the projection budget, not a manual/overflow trigger, and no trailing
-// user run that appending would coalesce across.
+// incrementalFoldTarget picks append-to-projection over a full re-fold when
+// un-covered messages fit the budget and the trigger is not manual/overflow.
 func (a *Agent) incrementalFoldTarget(msgs []provider.Message, transcriptVersion uint64, trigger string) (baseProj ContextProjection, head, start int, ok bool) {
 	st := a.compactionState
 	if !projectionValid(st, msgs, transcriptVersion, a.currentPromptCacheKey()) {
@@ -549,10 +556,8 @@ func (a *Agent) incrementalFoldTarget(msgs []provider.Message, transcriptVersion
 	return st.Projection, head, start, true
 }
 
-// incrementalFoldRange returns the canonical range [head,start) a fold should
-// cover when a projection already covers the earlier history: only the messages
-// appended since that projection, aligned off any tool message so the fold never
-// begins with an orphan tool result. ok is false when there is nothing new.
+// incrementalFoldRange returns [head,start) of the canonical messages appended
+// since the covered projection, aligned off tool messages; ok=false if none.
 func (a *Agent) incrementalFoldRange(msgs []provider.Message, covered int) (head, start int, ok bool) {
 	head = covered
 	for head >= 0 && head < len(msgs) && msgs[head].Role == provider.RoleTool {
@@ -570,10 +575,9 @@ func (a *Agent) incrementalFoldRange(msgs []provider.Message, covered int) (head
 	return head, start, true
 }
 
-// projectionCompactBudget is the projection-size ceiling before a wholesale
-// re-fold (digest merge): below it the incremental path extends the projection,
-// at or above it only the full path applies. Half the window keeps the view
-// comfortably under the 80% fold trigger even with a fresh tail.
+// projectionCompactBudget is the projection-size ceiling before a full re-fold:
+// below it incremental extends, at/above only full applies. Half the window
+// keeps the view under the 80% fold trigger even with a fresh tail.
 func (a *Agent) projectionCompactBudget() int {
 	if a.contextWindow <= 0 {
 		return 0
@@ -612,19 +616,16 @@ func (a *Agent) buildCompactionState(projMsgs []provider.Message, msgs []provide
 	return st
 }
 
-// compactIncremental folds only the canonical messages appended since the last
-// projection, then appends the new digest to the existing projection messages.
-// The prior projection bytes are untouched (the server prefix keeps hitting);
-// only the newly added segment is re-shaped. Canonical history is never
-// rewritten; dropped originals are archived as in the full path.
+// compactIncremental folds only messages appended since the last projection
+// and appends the digest; prior bytes stay untouched (server prefix keeps
+// hitting). Canonical is never rewritten; dropped originals are archived.
 func (a *Agent) compactIncremental(ctx context.Context, trigger, instructions string, force bool, baseProj ContextProjection, msgs []provider.Message, transcriptVersion uint64, head, start int) (CompactionOutcome, error) {
 	region := msgs[head:start]
 	kept, fold := a.partitionFoldForProjectionIncremental(region)
 	if len(fold) == 0 {
 		return CompactionNoop, nil
 	}
-	// Same bound as the full path: a huge appended block must not make one
-	// summarize call blow past summaryTimeout or overflow the window.
+	// Same bound as the full path: one summarize call must stay in budget.
 	headTokens := estimateMessagesTokens(provider.ModelMessages(msgs[:head]))
 	tailTokens := estimateMessagesTokens(provider.ModelMessages(msgs[start:]))
 	fold, kept = a.fitFoldToWindow(fold, kept, headTokens, tailTokens)
@@ -721,6 +722,7 @@ func (a *Agent) compactIncremental(ctx context.Context, trigger, instructions st
 	// denominator for both compaction routes.
 	projTokens := estimateMessagesTokens(a.providerProjectionMessages(projMsgs))
 	tele.ProjectionTokens = projTokens
+	tele.Status = CompactionStatusInstalled
 	a.emitCompactionTelemetry(tele)
 
 	projVersion := baseProj.ProjectionVersion + 1
@@ -969,12 +971,10 @@ func (a *Agent) installPruneProjection(view []provider.Message, st PruneStats) e
 }
 
 // emitCompactionTelemetry records structured compaction observability without
-// logging sensitive transcript content. The slog record persists to the
-// session's log file (CLI binds the default logger to ~/.reasonix/logs), so a
-// later cache-miss window can be attributed to a specific compaction.
+// transcript content; the slog record persists to the session log file.
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
 	attrs := []any{
-		"trigger", t.Trigger, "mode", t.Mode, "cache", t.CacheState,
+		"trigger", t.Trigger, "mode", t.Mode, "status", t.Status, "cache", t.CacheState,
 		"src", t.SourceTokens, "proj", t.ProjectionTokens,
 		"in", t.InputTokens, "out", t.OutputTokens,
 		"hit", t.CacheHitTokens, "miss", t.CacheMissTokens,
@@ -988,8 +988,8 @@ func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
 	} else {
 		slog.Info("agent: compaction", attrs...)
 	}
-	detail := fmt.Sprintf("trigger=%s mode=%s cache=%s src=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d",
-		t.Trigger, t.Mode, t.CacheState, t.SourceTokens, t.ProjectionTokens,
+	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d",
+		t.Trigger, t.Mode, t.Status, t.CacheState, t.SourceTokens, t.ProjectionTokens,
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID

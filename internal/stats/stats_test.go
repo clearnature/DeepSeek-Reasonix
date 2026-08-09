@@ -610,3 +610,32 @@ func TestRecorderParsesOverflowCacheToken(t *testing.T) {
 		t.Fatalf("row numbers: results=%d saved_chars=%d", rows[0].Results, rows[0].SavedChars)
 	}
 }
+
+// TestRecorderPersistsCompactionNoop pins the telemetry blind spot fixed
+// 2026-08-09: a compaction that folds nothing (planFold empty / intercept
+// rejection) previously emitted no record, so /compact reported "compacted"
+// while the stats file showed nothing — the exact stall that took three days
+// to find. Every compaction pass must land one row, including status=noop.
+func TestRecorderPersistsCompactionNoop(t *testing.T) {
+	dir := t.TempDir()
+	inner := &spySink{}
+	r := NewRecorder(inner, dir, "desktop")
+	// A compaction that folds nothing must still land one row with
+	// status=noop — the 2026-08-09 blind spot where /compact reported
+	// "compacted" while the stats file showed nothing.
+	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry", Detail: "trigger=manual mode=summarized status=noop cache=warm src=2180242 proj=0 in=0 out=0 hit=0 miss=0 write=0 reqs=0"})
+	flushRecorder(t, r)
+
+	w := NewWriter(dir)
+	rows := w.QueryCompactions("desktop", time.Now().Add(-time.Hour), time.Now())
+	if len(rows) != 1 {
+		t.Fatalf("want 1 compaction row, got %d", len(rows))
+	}
+	rec := rows[0]
+	if rec.Status != "noop" {
+		t.Fatalf("status=%q, want noop", rec.Status)
+	}
+	if rec.Trigger != "manual" || rec.Mode != "summarized" || rec.SourceTok != 2180242 {
+		t.Fatalf("record fields wrong: %+v", rec.CompactionRecord)
+	}
+}
