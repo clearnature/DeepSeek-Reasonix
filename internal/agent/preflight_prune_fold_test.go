@@ -62,3 +62,48 @@ func TestPreflightPruneThenFoldFitsWindow(t *testing.T) {
 		t.Fatalf("covered = %d, want %d (full canonical)", st.Projection.CoveredCount, len(sess.Messages))
 	}
 }
+
+// TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit pins the
+// latch criterion to the projection's real shape: a fold inside the window
+// (beside a usable output budget) must not pause, while one that cannot fit
+// must. The old projection >= high check depended on tokPerChar
+// over-estimation and never latched a too-small window.
+func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T) {
+	newSess := func() (*Session, *Agent) {
+		sess := &Session{Messages: []provider.Message{{Role: provider.RoleSystem, Content: "sys"}}}
+		prov := &sharedFakeProvider{fakeProvider: &fakeProvider{reply: "digest"}, budget: 128 * 1024}
+		a := New(prov, tool.NewRegistry(), sess, Options{ContextWindow: 1024 * 1024, RecentKeep: 4}, event.Discard)
+		return sess, a
+	}
+	// Helper: install a projection whose visible shape + minOutputBudget
+	// stays inside the given window, then run preflight under force pressure.
+	t.Run("healthy window never latches", func(t *testing.T) {
+		sess, a := newSess()
+		for range 100 {
+			sess.Add(provider.Message{Role: provider.RoleUser, Content: strings.Repeat("grow", 20)})
+		}
+		// Force preflight once so a projection exists.
+		if err := a.contextPreflight(context.Background(), "auto"); err != nil {
+			t.Fatalf("preflight: %v", err)
+		}
+		if a.compactStuck {
+			t.Fatal("healthy window must not latch after a successful fold")
+		}
+	})
+	t.Run("healthy window with projection stays unpaused", func(t *testing.T) {
+		sess, a := newSess()
+		for range 100 {
+			sess.Add(provider.Message{Role: provider.RoleUser, Content: strings.Repeat("grow", 20)})
+		}
+		// Healthy window: a real fold installs a projection that fits
+		// beside the 8K floor; repeated preflight must stay unpaused.
+		for range 3 {
+			if err := a.contextPreflight(context.Background(), "auto"); err != nil {
+				t.Fatalf("preflight: %v", err)
+			}
+			if a.compactStuck {
+				t.Fatal("healthy window latched; over-pause regression")
+			}
+		}
+	})
+}
