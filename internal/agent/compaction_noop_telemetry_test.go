@@ -31,7 +31,7 @@ func TestCompactionNoopEmitsTelemetry(t *testing.T) {
 	a := &Agent{
 		prov:              cap,
 		contextWindow:     1_000_000,
-		outputBudget:      128 * 1024,
+		outputBudgetState: outputBudgetState{outputBudget: 128 * 1024},
 		compactRatio:      0.8,
 		compactForceRatio: 0.9,
 		sink:              sink,
@@ -71,9 +71,8 @@ func TestCompactionTelemetrySourceTokensCalibrated(t *testing.T) {
 	raw := estimateMessagesTokens(provider.ModelMessages(canonical))
 	a := &Agent{}
 	// Simulate one completed turn: 10k chars sent, 2000 real prompt tokens
-	// (tpc=0.2, off the 0.25 fallback so calibration applies).
-	a.lastSentChars.Store(10000)
-	a.lastUsage.Store(&provider.Usage{PromptTokens: 2000})
+	// (ratio 0.2, off the 0.05..2 guard so calibration applies).
+	a.setPromptTokenCalibration(2000, requestCalibrationShape{requestChars: 10000})
 	calibrated := a.estimatedPromptTokens(canonical)
 	if calibrated >= raw {
 		t.Fatalf("calibrated %d must be below raw %d once usage exists", calibrated, raw)

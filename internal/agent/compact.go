@@ -23,6 +23,7 @@ import (
 // fraction of the window, so a huge window still compacts rarely while a small
 // one still lands below the trigger (which is what stops the re-compaction loop).
 const (
+	fallbackTokPerChar         = 0.25  // ~4 chars/token before usage calibrates
 	defaultSoftCompactRatio    = 0.5   // report growing context here, but keep the cache-stable prefix intact
 	defaultToolResultSnipRatio = 0.6   // rewrite stale tool results cheaply before summary compaction
 	defaultCompactRatio        = 0.8   // trigger: prompt at this fraction of the window compacts
@@ -36,6 +37,8 @@ const (
 	maxCarriedDigestTokens     = 12000 // ceiling on digests carried verbatim across folds before one consolidating fold merges them
 	maxEarlyUserTurns          = 3     // small user turns hoisted verbatim ahead of the digest; position-fixed (the first N of the fold region, never "the latest N") so the projection prefix stays byte-stable
 )
+
+var errSummaryOutputTruncated = errors.New("summarizer output truncated")
 
 // summaryTag wraps the compaction summary so the model can distinguish it from
 // live user input and later strip or skip it when reasoning about the current turn.
@@ -503,6 +506,42 @@ func tailStart(msgs []provider.Message, head, budgetTokens int, tokPerChar float
 	return start
 }
 
+// tokPerChar derives a tokens-per-character ratio from the last turn's real
+// usage so per-message estimates track the provider's tokenizer without a local
+// one. Reasoning content is excluded from the char count to match the prompt
+// actually sent (the provider strips it). Falls back to ~4 chars/token before
+// any usage is known, and ignores absurd ratios.
+func (a *Agent) tokPerChar() float64 {
+	if cal := a.promptCalibration.Load(); cal != nil && cal.compactChars > 0 {
+		if r := float64(cal.promptTokens) / float64(cal.compactChars); r > 0.05 && r < 2 {
+			return r
+		}
+	}
+	return fallbackTokPerChar
+}
+
+// msgChars counts the characters that ride to the provider for one message —
+// content plus tool-call names and arguments, but not reasoning (stripped on
+// send).
+func msgChars(m provider.Message) int {
+	if m.LocalOnly {
+		return 0
+	}
+	n := len(m.Content)
+	for _, tc := range m.ToolCalls {
+		n += len(tc.Name) + len(tc.Arguments)
+	}
+	return n
+}
+
+func charsOfMessages(msgs []provider.Message) int {
+	n := 0
+	for _, m := range msgs {
+		n += msgChars(m)
+	}
+	return n
+}
+
 // summarize asks the executor's own provider (no tools) to distill the region
 // into a briefing. instructions is optional /compact focus + PreCompact text.
 // Named returns so defer can attach RequestCount and still return usage.
@@ -520,41 +559,21 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 			a.sink.Emit(event.Event{Kind: event.Usage, ModelRef: a.modelRef, Usage: usage, Pricing: a.pricing, UsageSource: event.UsageSourceCompaction})
 		}
 	}()
-	// The summarizer hits the provider's shared context window too (its input
-	// is the whole folded region), so clip the output budget the same way as
-	// normal requests — an unclipped default 128K made compaction itself fail
-	// with HTTP 400 near the window edge.
-	transcript := renderTranscript(region)
-	reqMsgs := []provider.Message{
-		{Role: provider.RoleSystem, Content: sys},
-		{Role: provider.RoleUser, Content: transcript},
-	}
-	maxTokens := 0
-	if sharesContextWindow(a.prov) {
-		budget := a.outputBudget
-		if a.maxOutputTokens > 0 {
-			budget = a.maxOutputTokens
-		}
-		if clipped, ok := a.sharedWindowClip(budget, a.estimatedPromptTokens(reqMsgs)); ok {
-			maxTokens = clipped
-		}
-		// Reject when the fold itself cannot fit beside a usable output budget:
-		// the request would 400 again, and retrying the same fold every turn
-		// just re-runs the failure. Estimate the real request shape (framing
-		// overhead included, no safety factor) so healthy folds near the window
-		// still pass — a transcript-only estimate would under-count reasoning
-		// content and tool-call arguments.
-		if a.contextWindow > minOutputBudget {
-			if est := estimateMessagesTokens(reqMsgs); est >= a.contextWindow-minOutputBudget {
-				return "", nil, ErrCompactionInputTooLarge
-			}
-		}
-	}
-	ch, err := a.prov.Stream(ctx, provider.Request{
-		Messages:    reqMsgs,
-		MaxTokens:   maxTokens,
+	defer trackPublishedHostStream(ctx, cancel)()
+	req := provider.Request{
+		Messages: []provider.Message{
+			{Role: provider.RoleSystem, Content: sys},
+			{Role: provider.RoleUser, Content: renderTranscript(region)},
+		},
+		MaxTokens:   a.maxOutputTokens,
 		Temperature: provider.OptionalTemperature(a.temperature),
-	})
+	}
+	if budget, clipped, budgetErr := a.effectiveOutputBudget(req); budgetErr != nil {
+		return "", usage, budgetErr
+	} else if clipped {
+		req.MaxTokens = budget
+	}
+	ch, err := a.prov.Stream(ctx, req)
 	if err != nil {
 		return "", usage, err
 	}
@@ -566,6 +585,9 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 			return "", usage, ctx.Err()
 		case chunk, ok := <-ch:
 			if !ok {
+				if usage != nil && usage.FinishReason == "length" {
+					return "", usage, fmt.Errorf("%w: provider reached the output token limit", errSummaryOutputTruncated)
+				}
 				s := strings.TrimSpace(b.String())
 				if s == "" {
 					return "", usage, fmt.Errorf("summarizer returned empty output")
@@ -588,7 +610,7 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 // Token and request counts from both attempts are merged into the returned Usage.
 func (a *Agent) summarizeWithRetry(ctx context.Context, fold []provider.Message, instructions string) (string, *provider.Usage, error) {
 	summary, usage, err := a.summarize(ctx, fold, instructions)
-	if err == nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	if err == nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, errSummaryOutputTruncated) {
 		return summary, usage, err
 	}
 	summary2, usage2, err2 := a.summarize(ctx, fold, instructions)

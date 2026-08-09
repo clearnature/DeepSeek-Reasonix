@@ -34,21 +34,15 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	// Shared-window vendors (DeepSeek) clip max_output_tokens so input +
-	// output stays inside context_window; otherwise the API rejects with 400.
-	// A nil/independent provider keeps its default (MaxTokens unchanged).
-	maxTokens := a.maxOutputTokens
-	if clipped, ok := a.effectiveOutputBudget(requestMessages); ok {
-		maxTokens = clipped
-	}
-	// 1a: Predict overflow before the request goes on the wire. When the
+	// Predict overflow before the request goes on the wire. When the
 	// estimated prompt alone leaves almost no room for output, surface a
 	// record-only notice — no compaction is triggered, only a diagnostic.
-	a.maybePredictOverflow(a.estimatedPromptTokens(requestMessages), maxTokens)
+	// (The effective-output clip itself is enforced after provider.request,
+	// on the extension-adjusted payload below.)
 	req := provider.Request{
 		Messages:       requestMessages,
 		Tools:          a.tools.Schemas(),
-		MaxTokens:      maxTokens,
+		MaxTokens:      a.maxOutputTokens,
 		Temperature:    provider.OptionalTemperature(a.temperature),
 		ResponseFormat: responseFormatFromRequest(ctx),
 		EffortOverride: a.governorOverride(),
@@ -59,7 +53,19 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	a.lastSentChars.Store(int64(charsOfMessages(req.Messages)))
+	// Enforce the shared-window invariant on the final extension-adjusted
+	// payload. This keeps prompt + output inside the provider context window
+	// without changing message bytes, tool order, or ordinary request defaults.
+	if budget, clipped, budgetErr := a.effectiveOutputBudget(req); budgetErr != nil {
+		return samplingRequest{}, budgetErr
+	} else if clipped {
+		req.MaxTokens = budget
+	}
+	shape := a.requestCalibrationShape(req)
+	a.activeReqShape.Store(&shape)
+	// Record-only overflow signal: after the clip, near-zero headroom means
+	// the next turn may overflow; never compacts, only diagnoses.
+	a.maybePredictOverflow(a.estimatedRequestTokens(req), req.MaxTokens)
 	return samplingRequest{req: freezeProviderRequest(req)}, nil
 }
 

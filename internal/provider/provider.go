@@ -1080,24 +1080,6 @@ func RequiresToolCallReasoning(p Provider) bool {
 	return ok && policy.RequiresToolCallReasoning()
 }
 
-// OutputBudgetProvider is optionally implemented by providers that know the
-// total output budget they will request (max_output_tokens / max_tokens).
-// The agent uses it so compaction force thresholds never exceed the provider's
-// real input allowance (context_window - output budget).
-type OutputBudgetProvider interface {
-	OutputBudget() int
-}
-
-// SharedWindowOutputProvider is optionally implemented by providers whose
-// max_output_tokens shares the model context window with the prompt input
-// (DeepSeek: input + max_output_tokens must stay under context_window).
-// Implementers return false when the window is NOT shared (e.g. the OpenAI and
-// Anthropic clients implement it to report false in non-DeepSeek modes); the
-// agent only reserves the output budget when SharesContextWindow is true.
-type SharedWindowOutputProvider interface {
-	SharesContextWindow() bool
-}
-
 // ReasoningRoundTripPolicy is optionally implemented by providers that require
 // every assistant message to preserve provider-issued reasoning in later
 // requests. This is broader than ToolCallReasoningPolicy, which covers only

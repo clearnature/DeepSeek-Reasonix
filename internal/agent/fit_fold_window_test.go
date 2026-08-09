@@ -31,7 +31,7 @@ func TestFitFoldToWindowKeepsFoldBounded(t *testing.T) {
 	a := &Agent{
 		prov:              &capturingBudgetProvider{sharedFakeProvider: sharedFakeProvider{fakeProvider: &fakeProvider{reply: "SUMMARY"}, budget: 128 * 1024}},
 		contextWindow:     1_000_000,
-		outputBudget:      128 * 1024,
+		outputBudgetState: outputBudgetState{outputBudget: 128 * 1024},
 		compactRatio:      0.8,
 		compactForceRatio: 0.9,
 		sink:              event.Discard,
