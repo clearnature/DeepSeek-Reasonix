@@ -5677,6 +5677,50 @@ func TestFastCompressCommandRefusedWhileCacheWarm(t *testing.T) {
 	}
 }
 
+func TestFastCompressCommandForceOverridesWarmGate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	big := strings.Repeat("x", 5000)
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "read"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "1", Name: "read_file", Arguments: "{}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "1", Name: "read_file", Content: big})
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "done"})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 100_000, RecentKeep: 1, ArchiveDir: dir}, event.Discard)
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: path,
+		Label:       "test",
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	// Same warm state that refuses the bare command: recent call, long TTL.
+	exec.RecordAPICallForTest(time.Now())
+	c.testCacheColdAfter = 24 * time.Hour
+
+	c.Submit("/compress-fast --force")
+	select {
+	case got := <-notices:
+		if strings.Contains(got, "refused") || strings.Contains(got, "failed") {
+			t.Fatalf("--force must override the warm gate, got %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no fast-compress notice within 5s")
+	}
+	// The stale tool result was elided despite the warm cache.
+	if rw := exec.Session().RewriteVersion(); rw == 0 {
+		t.Fatal("--force did not rewrite the session")
+	}
+	if !strings.Contains(sess.Snapshot()[3].Content, "[elided tool result — ") {
+		t.Error("stale tool result not elided under --force")
+	}
+}
+
 func TestFastCompressCommandBacksUpBeforeRewrite(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")

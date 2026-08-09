@@ -1372,6 +1372,16 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 				return
 			}
 			defer c.endRotation()
+			// --force (or -f) overrides the warm-cache gate: the user opts into
+			// punching the prefix-cache hole, e.g. before ending a session or
+			// switching topic where the next-turn hit has no value. Without it
+			// the gate below stays authoritative.
+			force := false
+			for _, tok := range strings.Fields(strings.TrimSpace(strings.TrimPrefix(trimmed, "/compress-fast"))) {
+				if tok == "--force" || tok == "-f" {
+					force = true
+				}
+			}
 			// Cache gate: rewriting tool results changes the wire prefix, so
 			// every byte from the first elided result onward misses the
 			// server-side cache. Only do that when the cache is already cold
@@ -1384,10 +1394,10 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 				warm = true
 			}
 			overflow := c.executor.PromptOverflow()
-			if warm && !overflow {
+			if warm && !overflow && !force {
 				c.emitFastCompressTelemetry("warm", 0, 0, "refused")
 				c.noticeDetail("fast compression refused",
-					fmt.Sprintf("provider cache still warm (last call %s ago, TTL %s); rewriting would punch a hole in every hit from the first elided result. Retry after idle, or use /compact (AI summarize) instead.", time.Since(c.executor.LastAPICallAt()).Round(time.Minute), c.cacheColdAfter().Round(time.Minute)))
+					fmt.Sprintf("provider cache still warm (last call %s ago, TTL %s); rewriting would punch a hole in every hit from the first elided result. Retry after idle, or use /compress-fast --force to override, or /compact (AI summarize) instead.", time.Since(c.executor.LastAPICallAt()).Round(time.Minute), c.cacheColdAfter().Round(time.Minute)))
 				return
 			}
 			// Backup the whole transcript before the rewrite so a prune
