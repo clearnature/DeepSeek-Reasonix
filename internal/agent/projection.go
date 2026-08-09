@@ -311,12 +311,8 @@ func projectionValid(st CompactionState, msgs []provider.Message, transcriptVers
 	if n <= 0 || n > len(msgs) {
 		return false
 	}
-	// Current lineage known: stored key must be present and equal.
-	if cacheKey != "" {
-		if st.PromptCacheKey == "" || st.PromptCacheKey != cacheKey {
-			return false
-		}
-	}
+	// Cache-line attribution only: content validity is the prefix hash below,
+	// so a model switch keeps visible messages on the projection.
 	// Prefix hash is required; legacy sidecars without it are rebuilt.
 	if st.Projection.CoveredPrefixHash == "" {
 		return false

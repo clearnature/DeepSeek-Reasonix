@@ -49,7 +49,12 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 	}
 }
 
-func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
+// TestProjectionValidIgnoresCacheKeyMismatch documents the model-switch rule:
+// a projection's summary is model-independent, so a model/lineage key change
+// must not invalidate it (content validity is the covered-prefix hash alone) —
+// otherwise model-visible snaps back to full canonical and the resume gate
+// folds a cached prefix on bulk never transmitted.
+func TestProjectionValidIgnoresCacheKeyMismatch(t *testing.T) {
 	msgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
 		{Role: provider.RoleUser, Content: "task"},
@@ -65,19 +70,10 @@ func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
 			TranscriptVersion: 1,
 		},
 	}
-	if projectionValid(st, msgs, 1, "ws|sess|model-b") {
-		t.Fatal("model/lineage key mismatch must invalidate projection")
+	if !projectionValid(st, msgs, 1, "ws|sess|model-b") {
+		t.Fatal("model/lineage key mismatch must not invalidate a content-valid projection")
 	}
-	if !projectionValid(st, msgs, 1, "ws|sess|model-a") {
-		t.Fatal("matching key should be valid")
-	}
-	// Fail closed: blank stored key is rejected when current key is known.
-	st.PromptCacheKey = ""
-	if projectionValid(st, msgs, 1, "ws|sess|model-a") {
-		t.Fatal("missing sidecar cache key must invalidate when lineage is known")
-	}
-	// Missing prefix hash is always rejected.
-	st.PromptCacheKey = "ws|sess|model-a"
+	// Missing prefix hash is always rejected: content validity is the gate.
 	st.Projection.CoveredPrefixHash = ""
 	if projectionValid(st, msgs, 1, "ws|sess|model-a") {
 		t.Fatal("missing CoveredPrefixHash must invalidate projection")
