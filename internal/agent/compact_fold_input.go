@@ -87,23 +87,29 @@ func (a *Agent) summaryInputBudget(instructions string) int {
 // before, an oversized one first gives up the bulk of its stale tool results,
 // and only a fold still too large is summarized in spans and merged.
 func (a *Agent) foldToSummary(ctx context.Context, fold []provider.Message, instructions string) (foldSummary, error) {
-	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: summaryInputTokens(fold)}
 	budget := a.summaryInputBudget(instructions)
+	// FoldTokens reports in the same calibrated/conservative gauge as
+	// SourceTokens (guardedSummaryInputTokens); the raw transcript count
+	// (1 rune/token CJK) ran ~1.7x above the provider's real count.
 	guardedTokens := a.guardedSummaryInputTokens(fold)
+	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: guardedTokens}
 	if budget <= 0 || guardedTokens <= budget {
 		return a.singleCallSummary(ctx, res, fold, instructions)
 	}
 
 	input := a.shortenFoldForSummary(fold)
-	res.FoldTokens = summaryInputTokens(input)
 	guardedTokens = a.guardedSummaryInputTokens(input)
+	res.FoldTokens = guardedTokens
 	if guardedTokens <= budget {
 		return a.singleCallSummary(ctx, res, input, instructions)
 	}
 
 	splitBudget := budget
-	if guardedTokens > res.FoldTokens && guardedTokens > 0 {
-		splitBudget = max(minSummarySpanTokens, budget*res.FoldTokens/guardedTokens)
+	// Compensate for the raw-vs-guarded gap so a CJK-heavy fold still
+	// shatters: the guard can be ~2x raw, and without this compensation
+	// splitIntoSummarySpans (raw-gauge) keeps one span that overflows.
+	if raw := summaryInputTokens(input); guardedTokens > raw && guardedTokens > 0 {
+		splitBudget = max(minSummarySpanTokens, budget*raw/guardedTokens)
 	}
 	spans := splitIntoSummarySpans(input, splitBudget)
 	res.Spans = len(spans)

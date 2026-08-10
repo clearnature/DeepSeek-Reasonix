@@ -259,6 +259,8 @@ func (a *Agent) explicitCompressionSnapshotCurrent(snap explicitCompressionSnaps
 }
 
 func (a *Agent) planVisibleCompression(snap explicitCompressionSnapshot, direction string, anchorIndex int, preview string) (visibleCompressionPlan, bool) {
+	// Calibrated gauge, aligned with compactToProjection's SourceTokens
+	// (upstream kept the raw estimateMessagesTokens here; unified direction).
 	sourceTokens := a.estimatedPromptTokens(snap.visible)
 	plan := visibleCompressionPlan{result: tool.CompressResult{
 		Status:           "noop",
