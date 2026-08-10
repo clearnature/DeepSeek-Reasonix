@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -102,6 +103,7 @@ func (ts *TeammateStore) Create(name, role string, writable ...bool) error {
 		ToolSet:  []string{},
 		Writable: len(writable) > 0 && writable[0],
 	}
+	slog.Info("team teammate created", "name", name, "role", role, "writable", ts.teammates[name].Writable)
 	return nil
 }
 
@@ -164,6 +166,7 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	if len(dependsOn) > 0 {
 		if reason := ts.pendingDependenciesLocked(dependsOn); reason != "" {
 			ts.mu.Unlock()
+			slog.Debug("team dependency gate refused", "teammate", name, "blocked_by", reason)
 			return "", fmt.Errorf("teammate %q blocked by unfinished dependency: %s", name, reason)
 		}
 	}
@@ -206,6 +209,8 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 		_ = ts.flushMailbox(name, jobs.SessionFromContext(ctx), jobID)
 		ts.recordTask(jobID, name, dependsOn)
 	}
+	slog.Info("team teammate assigned", "name", name, "job", jobID,
+		"fork_first", ref == "", "depends_on", dependsOn)
 	return jobID, nil
 }
 
@@ -311,6 +316,7 @@ func (ts *TeammateStore) Remove(name string) error {
 	if jobID != "" && ts.jm != nil {
 		ts.jm.Kill(jobID)
 	}
+	slog.Info("team teammate removed", "name", name, "killed_job", jobID)
 	return nil
 }
 
