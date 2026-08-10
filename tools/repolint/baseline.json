@@ -3,8 +3,8 @@
     "banner": 16,
     "commented-code": 0,
     "complexity": 2114,
-    "essay": 4233,
-    "file-size": 117151,
+    "essay": 4232,
+    "file-size": 117145,
     "function-size": 9268,
     "layering": 1,
     "marker": 0,
@@ -446,8 +446,8 @@
     },
     "internal/agent/agent.go": {
       "complexity": 37,
-      "essay": 101,
-      "file-size": 2523,
+      "essay": 100,
+      "file-size": 2517,
       "function-size": 102
     },
     "internal/agent/ask.go": {

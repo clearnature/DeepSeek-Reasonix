@@ -543,15 +543,10 @@ type Agent struct {
 	// tail verbatim (recentKeep is the message floor) and archiving the originals
 	// under archiveDir. compactStuck latches when compaction can't get the prompt
 	// under the window (consecutiveCompacts crosses the limit), so auto-compaction
-	// pauses instead of looping. softCompactNoticed gates the one-shot soft-ratio
-	// notice so it fires once per approach, not every turn.
+	// pauses instead of looping.
 	contextWindow          int
-	softCompactRatio       float64
-	toolResultSnipRatio    float64
 	compactRatio           float64
-	compactForceRatio      float64
 	autoBackgroundizeAfter time.Duration
-	softCompactNoticed     bool
 	recentKeep             int
 	archiveDir             string
 	keepPolicy             KeepPolicy
@@ -1340,7 +1335,6 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		capabilityAudit:           opts.CapabilityAudit,
 		contextWindow:             opts.ContextWindow,
 		compactRatio:              opts.CompactRatio,
-		compactForceRatio:         opts.CompactForceRatio,
 		autoBackgroundizeAfter:    opts.AutoBackgroundizeAfter,
 		recentKeep:                opts.RecentKeep,
 		archiveDir:                opts.ArchiveDir,

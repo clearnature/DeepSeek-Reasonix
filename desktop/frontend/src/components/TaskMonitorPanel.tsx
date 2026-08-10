@@ -16,6 +16,36 @@ import type { JobPanelView, TaskEvent, TaskSnapshot } from "../lib/types";
 
 // --- helpers ---
 
+type TaskTimerSnapshot = TaskSnapshot & { runtime_lease_until?: string };
+
+function isTerminalState(state: string): boolean {
+  return state === "succeeded" || state === "failed" || state === "cancelled" || state === "stale";
+}
+
+function elapsed(task: TaskTimerSnapshot, nowMs: number): string {
+  if (!task.created_at) return "—";
+  const startMs = new Date(task.created_at).getTime();
+  if (task.state === "queued") return "—";
+  const live = task.runtime_state === "alive" && !isTerminalState(task.state);
+  let endMs = live ? nowMs : new Date(task.updated_at).getTime();
+  if (task.state === "stale" && task.runtime_lease_until) {
+    const leaseEndMs = new Date(task.runtime_lease_until).getTime();
+    // Stale is inferred when an alive runtime lease expires. The observer does
+    // not rewrite updated_at, so the expired lease is the best bounded end time.
+    if (!isNaN(leaseEndMs) && leaseEndMs >= startMs && leaseEndMs <= nowMs) {
+      endMs = leaseEndMs;
+    }
+  }
+  const ms = endMs - startMs;
+  if (isNaN(ms) || ms < 0) return "—";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h`;
+}
+
 // The panel renders a job tail up to this many UTF-8 bytes and marks the rest
 // as truncated. The backend snapshot tail is already bounded at 4KiB; the 512B
 // render cap keeps a large detail list cheap without stealing the model's
@@ -59,18 +89,6 @@ function runtimeConfig(state: string | undefined, t: ReturnType<typeof useT>) {
 function safeStateClass(state: string): string {
   // Sanitize state for use in CSS class names — only allow word chars.
   return state.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-function elapsed(iso: string): string {
-  if (!iso) return "—";
-  const ms = Date.now() - new Date(iso).getTime();
-  if (isNaN(ms) || ms < 0) return "—";
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  return `${h}h`;
 }
 
 function shortID(id: string): string {
@@ -176,6 +194,7 @@ export function TaskMonitorPanel({
   const [actionTask, setActionTask] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [pendingAction, setPendingAction] = useState<{ task: TaskSnapshot; action: "stop" | "cancel" } | null>(null);
 
   // Per-task event state
@@ -312,6 +331,14 @@ export function TaskMonitorPanel({
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchTasks, fetchJobs, fetchEvents, fetchJobOutput]);
+
+  // Live tasks need a ticking clock; terminal and queued tasks stay frozen at
+  // their persisted end/update time.
+  useEffect(() => {
+    if (!tasks.some((task) => task.runtime_state === "alive" && !isTerminalState(task.state))) return;
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [tasks]);
 
   const toggleRow = (row: PanelRow) => {
     setExpanded((prev) => {
@@ -539,7 +566,7 @@ export function TaskMonitorPanel({
                         <XCircle size={12} className="taskmonitor__terminal" />
                       )}
                       <span className="taskmonitor__time">
-                        {isJobOnly ? "—" : elapsed(task!.updated_at)}
+                        {isJobOnly ? "—" : elapsed(task!, nowMs)}
                       </span>
                       {isOpen ? (
                         <ChevronDown size={12} />
