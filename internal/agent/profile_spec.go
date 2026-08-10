@@ -115,6 +115,12 @@ type ContextRequest struct {
 	// ContinueFrom / ForkFrom are transcript continuation refs (writer path).
 	ContinueFrom string
 	ForkFrom     string
+	// Fork inherits the current parent conversation prefix (父 system + 已提交
+	// 历史，captureForkPrefix) into a fresh background sub-agent, so its first
+	// request can reuse the parent's provider prompt cache. Mutually exclusive
+	// with ContinueFrom/ForkFrom and forces a fire-and-forget background run
+	// (result is never delivered back automatically; collect it with wait).
+	Fork bool
 	// Ephemeral forces a non-persisted transcript for entry points that promise
 	// no durable host side effects, such as read_only_task.
 	Ephemeral bool

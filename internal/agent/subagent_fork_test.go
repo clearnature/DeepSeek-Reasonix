@@ -1,0 +1,247 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"reasonix/internal/event"
+	"reasonix/internal/provider"
+	"reasonix/internal/tool"
+)
+
+// forkPrefixTestAgent 构造一个持有给定消息历史的父 Agent（NewSession 自动加
+// RoleSystem 首条）。
+func forkPrefixTestAgent(t *testing.T, msgs []provider.Message) *Agent {
+	t.Helper()
+	sess := NewSession("sys")
+	for _, m := range msgs {
+		sess.Add(m)
+	}
+	return New(&scriptedProvider{name: "p"}, tool.NewRegistry(), sess, Options{}, event.Discard)
+}
+
+func marshalMessages(t *testing.T, msgs []provider.Message) string {
+	t.Helper()
+	b, err := json.Marshal(msgs)
+	if err != nil {
+		t.Fatalf("marshal messages: %v", err)
+	}
+	return string(b)
+}
+
+func forkToolMsg(id, name, content string) provider.Message {
+	return provider.Message{Role: provider.RoleTool, ToolCallID: id, Name: name, Content: content}
+}
+
+func forkAssistantCalls(calls ...provider.ToolCall) provider.Message {
+	return provider.Message{Role: provider.RoleAssistant, ToolCalls: calls}
+}
+
+// TestCaptureForkPrefixByteIdentical 验证前缀与父已发送字节 byte-identical：
+// 父历史末尾是当前未完成的 assistant 轮次（task 工具调用已发出但结果未配对），
+// captureForkPrefix 必须精确剔除它，输出与父最后一次请求的完整消息逐字节一致
+// —— 这是子代理首请求命中父已建缓存的硬前提。
+func TestCaptureForkPrefixByteIdentical(t *testing.T) {
+	parent := forkPrefixTestAgent(t, []provider.Message{
+		{Role: provider.RoleUser, Content: "fix the widget"},
+		forkAssistantCalls(provider.ToolCall{ID: "c1", Name: "ls", Arguments: `{}`}),
+		forkToolMsg("c1", "ls", "ok"),
+		// 当前轮次：task 工具调用已发出，结果尚未追加 —— 未配对，必须剔除。
+		forkAssistantCalls(provider.ToolCall{ID: "c2", Name: "task", Arguments: `{"prompt":"x"}`}),
+	})
+
+	got := captureForkPrefix(parent, context.Background())
+
+	// 父已发送 = system + 完整配对的已提交轮次。
+	want := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "fix the widget"},
+		forkAssistantCalls(provider.ToolCall{ID: "c1", Name: "ls", Arguments: `{}`}),
+		forkToolMsg("c1", "ls", "ok"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("prefix length = %d, want %d\ngot:  %s\nwant: %s", len(got), len(want), marshalMessages(t, got), marshalMessages(t, want))
+	}
+	if got := marshalMessages(t, got); got != marshalMessages(t, want) {
+		t.Fatalf("prefix bytes differ from parent-sent bytes\n got: %s\nwant: %s", got, marshalMessages(t, want))
+	}
+	// 交叉验证：两者经 wire 过滤（ModelMessages+NormalizeMessages）后仍一致，
+	// 保证真实请求路径（T5 e2e）上缓存前缀不变。
+	if gotW := marshalMessages(t, provider.ModelMessages(provider.NormalizeMessages(got))); gotW != marshalMessages(t, provider.ModelMessages(provider.NormalizeMessages(want))) {
+		t.Fatalf("wire-filtered prefix bytes differ\n got: %s", gotW)
+	}
+}
+
+// TestTruncateUnfinishedTurn 表驱动验证截断正确性：LocalOnly 剔除、未配对
+// assistant 剔除、批量部分配对整轮剔除、配对完整/纯文本回复保留。
+func TestTruncateUnfinishedTurn(t *testing.T) {
+	c1 := provider.ToolCall{ID: "c1", Name: "ls", Arguments: `{}`}
+	c2 := provider.ToolCall{ID: "c2", Name: "task", Arguments: `{}`}
+	cases := []struct {
+		name string
+		in   []provider.Message
+		want []provider.Message
+	}{
+		{
+			name: "tail_unpaired_assistant_calls",
+			in: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				forkAssistantCalls(c1), forkToolMsg("c1", "ls", "ok"),
+				forkAssistantCalls(c2), // 未配对
+			},
+			want: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				forkAssistantCalls(c1), forkToolMsg("c1", "ls", "ok"),
+			},
+		},
+		{
+			name: "tail_local_only_stream",
+			in: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				forkAssistantCalls(c1), forkToolMsg("c1", "ls", "ok"),
+				{Role: provider.RoleAssistant, Content: "partial", LocalOnly: true}, // 流式输出未完成
+			},
+			want: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				forkAssistantCalls(c1), forkToolMsg("c1", "ls", "ok"),
+			},
+		},
+		{
+			name: "batch_partially_paired",
+			in: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{c1, c2}},
+				forkToolMsg("c1", "ls", "ok"), // c2 结果缺失 → 整轮未完成
+			},
+			want: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+			},
+		},
+		{
+			name: "batch_fully_paired",
+			in: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{c1, c2}},
+				forkToolMsg("c1", "ls", "ok"),
+				forkToolMsg("c2", "task", "done"),
+			},
+			want: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{c1, c2}},
+				forkToolMsg("c1", "ls", "ok"),
+				forkToolMsg("c2", "task", "done"),
+			},
+		},
+		{
+			name: "plain_text_assistant_kept",
+			in: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				{Role: provider.RoleAssistant, Content: "done"},
+			},
+			want: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				{Role: provider.RoleAssistant, Content: "done"},
+			},
+		},
+		{
+			name: "local_only_then_unpaired",
+			in: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				forkAssistantCalls(c1), forkToolMsg("c1", "ls", "ok"),
+				{Role: provider.RoleAssistant, LocalOnly: true, ToolCalls: []provider.ToolCall{c2}},
+				forkAssistantCalls(c2), // 未配对
+			},
+			want: []provider.Message{
+				{Role: provider.RoleUser, Content: "u"},
+				forkAssistantCalls(c1), forkToolMsg("c1", "ls", "ok"),
+			},
+		},
+		{
+			name: "empty_and_no_assistant_unchanged",
+			in:   []provider.Message{{Role: provider.RoleUser, Content: "u"}, forkToolMsg("c1", "ls", "ok")},
+			want: []provider.Message{{Role: provider.RoleUser, Content: "u"}, forkToolMsg("c1", "ls", "ok")},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncateUnfinishedTurn(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len = %d, want %d\ngot:  %s\nwant: %s", len(got), len(tc.want), marshalMessages(t, got), marshalMessages(t, tc.want))
+			}
+			if g, w := marshalMessages(t, got), marshalMessages(t, tc.want); g != w {
+				t.Fatalf("truncation mismatch\n got: %s\nwant: %s", g, w)
+			}
+		})
+	}
+}
+
+// TestCaptureForkPrefixParentSessionUntouched 验证父 Session 零改动：捕获前后
+// 父会话的序列化字节完全一致（红线：fork 捕获零发送、父零改动）。
+func TestCaptureForkPrefixParentSessionUntouched(t *testing.T) {
+	parent := forkPrefixTestAgent(t, []provider.Message{
+		{Role: provider.RoleUser, Content: "u", Images: []string{"data:image/png;base64,AAAA"}},
+		{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "c1", Name: "ls", Arguments: `{}`}},
+			MemoryCitations: []provider.MemoryCitation{{ID: "m1", Source: "mem"}}},
+		forkToolMsg("c1", "ls", "ok"),
+		{Role: provider.RoleAssistant, LocalOnly: true, Content: "partial"}, // 未完成轮次
+	})
+
+	before := marshalMessages(t, parent.session.Snapshot())
+	_ = captureForkPrefix(parent, context.Background())
+	after := marshalMessages(t, parent.session.Snapshot())
+	if before != after {
+		t.Fatalf("parent session mutated by captureForkPrefix\n before: %s\n after: %s", before, after)
+	}
+}
+
+// TestCloneForkMessagesDeepCopies 验证深拷贝：修改克隆结果的内嵌 slice 与指针
+// 目标不会回流到源消息（Snapshot 深拷贝的硬要求）。
+func TestCloneForkMessagesDeepCopies(t *testing.T) {
+	ec := 7
+	src := []provider.Message{
+		{Role: provider.RoleUser, Content: "u", Images: []string{"img1", "img2"},
+			ResponsesItems: []json.RawMessage{json.RawMessage(`{"k":1}`)}},
+		{Role: provider.RoleAssistant, Content: "a",
+			ToolCalls:        []provider.ToolCall{{ID: "c1", Name: "ls", Arguments: `{}`}},
+			DecisionReceipts: []*provider.DecisionReceipt{{ID: "d1", Kind: "approve", Outcome: "ok"}},
+			ToolExecution:    &provider.ToolExecution{Kind: "bash", ExitCode: &ec},
+			InterruptedTurn:  &provider.InterruptedTurnRecovery{Pending: true, InterruptedTools: []string{"ls"}},
+			MemoryCitations:  []provider.MemoryCitation{{ID: "m1", Source: "mem"}},
+		},
+	}
+	before := marshalMessages(t, src)
+
+	cloned := cloneForkMessages(src)
+	if len(cloned) != len(src) {
+		t.Fatalf("clone length = %d, want %d", len(cloned), len(src))
+	}
+	// 修改克隆的每一类内嵌可变字段。
+	cloned[0].Images[0] = "mutated"
+	cloned[0].ResponsesItems[0] = json.RawMessage(`{"k":2}`)
+	cloned[1].ToolCalls[0].Name = "mutated"
+	cloned[1].ToolCalls[0].Arguments = `{"x":1}`
+	cloned[1].DecisionReceipts[0].Outcome = "mutated"
+	cloned[1].ToolExecution.Kind = "mutated"
+	*cloned[1].ToolExecution.ExitCode = 999
+	cloned[1].InterruptedTurn.InterruptedTools[0] = "mutated"
+	cloned[1].MemoryCitations[0].ID = "mutated"
+
+	if after := marshalMessages(t, src); after != before {
+		t.Fatalf("clone write-back mutated source\n before: %s\n after: %s", before, after)
+	}
+}
+
+// TestForkSourceContext 验证 WithForkSource/ForkSourceFromContext 往返（T0-A
+// ctx 通道，仿 evidence.WithSessionMessages 的注入模式）。
+func TestForkSourceContext(t *testing.T) {
+	parent := forkPrefixTestAgent(t, nil)
+	ctx := WithForkSource(context.Background(), parent)
+	got, ok := ForkSourceFromContext(ctx)
+	if !ok || got != parent {
+		t.Fatalf("ForkSourceFromContext = (%v, %v), want parent=%v", got, ok, parent)
+	}
+	if _, ok := ForkSourceFromContext(context.Background()); ok {
+		t.Fatalf("ForkSourceFromContext on plain ctx unexpectedly ok")
+	}
+}

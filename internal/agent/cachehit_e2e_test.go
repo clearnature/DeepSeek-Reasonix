@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"reasonix/internal/event"
+	"reasonix/internal/jobs"
 	"reasonix/internal/provider"
 	"reasonix/internal/provider/openai"
 	"reasonix/internal/tool"
@@ -66,12 +67,13 @@ func (s *collectSink) Emit(e event.Event) {
 
 type mockDeepSeek struct {
 	t            *testing.T
-	prevMessages []json.RawMessage // last conversation request's messages
-	reqChars     []int             // total prompt chars per conversation request
-	hitChars     []int             // cached prefix chars per conversation request
-	withTools    bool              // advertise the echo tool (and emit tool calls)
-	reasoning    string            // chain-of-thought echoed every turn (round-tripped)
-	toolRounds   int               // remaining tool-call rounds before a final answer
+	prevMessages []json.RawMessage   // last conversation request's messages
+	reqChars     []int               // total prompt chars per conversation request
+	hitChars     []int               // cached prefix chars per conversation request
+	reqMsgs      [][]json.RawMessage // every conversation request's messages (P5 fork e2e)
+	withTools    bool                // advertise the echo tool (and emit tool calls)
+	reasoning    string              // chain-of-thought echoed every turn (round-tripped)
+	toolRounds   int                 // remaining tool-call rounds before a final answer
 }
 
 func (m *mockDeepSeek) handler(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +92,7 @@ func (m *mockDeepSeek) handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msgs := decodeMessages(body)
+	m.reqMsgs = append(m.reqMsgs, msgs)
 	common := commonPrefixMsgs(m.prevMessages, msgs)
 	hitChars := charsOf(msgs[:common])
 	totalChars := charsOf(msgs)
@@ -678,4 +681,170 @@ func writeSSE(w http.ResponseWriter, t *testing.T, chunks ...sseResp) {
 	}
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	f.Flush()
+}
+
+// TestForkChildFirstRequestReusesParentCachePrefix is the P5 fork cache e2e
+// (T5): a fork child must inherit the parent's committed history byte-for-byte
+// (T5-1), score a provider cache hit on its FIRST request (T5-2), and leave the
+// parent session and prefix shape untouched (T5-3).
+// Scenario: the parent really talks to the mock provider for two committed
+// turns, so the provider-side cache covers the whole parent history. The fork
+// is then spawned through the real TaskTool path (fire-and-forget silent
+// background job, same provider). The mock derives cache hits from the
+// byte-identical shared prefix, so the child's first request re-sending the
+// parent's last-request bytes MUST report usage.cache_hit_tokens > 0.
+func TestForkChildFirstRequestReusesParentCachePrefix(t *testing.T) {
+	mock := &mockDeepSeek{t: t, reasoning: longReasoning}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer srv.Close()
+
+	// The provider's cached prefix now covers the parent's full history, and
+	// the parent's last request carries turn-1's assistant response (the exact
+	// bytes a fork child must re-send).
+	parent, _ := newAgent(t, srv.URL, mock.tools(), 0 /*no compaction*/, 0)
+	for i, msg := range []string{
+		"turn one: establish a committed history",
+		"turn two: commit another round",
+	} {
+		if err := parent.Run(context.Background(), msg); err != nil {
+			t.Fatalf("parent run %d: %v", i+1, err)
+		}
+	}
+	if len(mock.reqMsgs) != 2 {
+		t.Fatalf("parent sent %d requests, want 2", len(mock.reqMsgs))
+	}
+
+	// 2. The inherited prefix is the parent's committed history — the same
+	//    bytes the parent last sent, plus the not-yet-sent assistant tail.
+	prefix := captureForkPrefix(parent, context.Background())
+	if len(prefix) != len(parent.session.Snapshot()) {
+		t.Fatalf("fork prefix len %d != parent session len %d", len(prefix), len(parent.session.Snapshot()))
+	}
+
+	// 3. Freeze the parent-untouched baselines (T5-3).
+	parentBefore := marshalMessages(t, parent.session.Snapshot())
+	schemas := parent.tools.Schemas()
+	shapeBefore := parent.capturePrefixShape(schemas)
+
+	// 4. Spawn the fork through the real task path: fire-and-forget silent
+	//    background job whose child uses the same provider (same server-side
+	//    cache as the parent).
+	subProv, err := openai.New(provider.Config{
+		Name:    "deepseek",
+		BaseURL: srv.URL,
+		Model:   "deepseek-reasoner",
+		APIKey:  "test",
+		Extra:   map[string]any{"api_key_env": "DEEPSEEK_API_KEY"},
+	})
+	if err != nil {
+		t.Fatalf("subagent provider New: %v", err)
+	}
+	task := NewTaskTool(subProv, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", systemPrompt, nil, 0, "", "", nil).
+		WithTranscripts(NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort")
+
+	childSink := &collectSink{}
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	fctx := withCallContext(context.Background(), "fork-call", childSink, nil, false)
+	fctx = WithForkSource(fctx, parent)
+	fctx = jobs.WithSession(fctx, "parent-session")
+	fctx = jobs.WithManager(fctx, jm)
+	fctx = WithParentSession(fctx, "parent-session")
+
+	out, err := task.Execute(fctx, []byte(`{"prompt":"investigate the committed history and report back","fork":true}`))
+	if err != nil {
+		t.Fatalf("fork Execute: %v", err)
+	}
+	if !strings.Contains(out, "Started background fork") {
+		t.Fatalf("fork output = %q, want 'Started background fork'", out)
+	}
+	jobID := extractJobID(out)
+	if jobID == "" {
+		t.Fatalf("no job id in fork output:\n%s", out)
+	}
+	res := jm.WaitForSession(context.Background(), "parent-session", []string{jobID}, 10)
+	if len(res) != 1 || res[0].Status != jobs.Done {
+		t.Fatalf("fork job result = %+v, want one done job", res)
+	}
+
+	// 5. The child's first request is the third request the mock saw.
+	if len(mock.reqMsgs) != 3 {
+		t.Fatalf("mock saw %d requests, want 3 (parent×2 + fork child first)", len(mock.reqMsgs))
+	}
+	parentLast := mock.reqMsgs[1]
+	childFirst := mock.reqMsgs[2]
+
+	// T5-1 byte-identical: the child's first request re-sends the parent's
+	// last-request bytes verbatim as its prefix — the parent's cache key.
+	if common := commonPrefixMsgs(parentLast, childFirst); common != len(parentLast) {
+		t.Fatalf("fork child first request shares only %d/%d messages with the parent's last request — prefix not byte-identical",
+			common, len(parentLast))
+	}
+	// …and it is exactly the inherited prefix plus exactly one new user message.
+	if len(childFirst) != len(prefix)+1 {
+		t.Fatalf("child first request has %d messages, want prefix %d + 1 user", len(childFirst), len(prefix))
+	}
+
+	// T5-2 cache hit: the mock derives hit chars from the byte-identical
+	// prefix, so the child's first request must report cache_hit_tokens > 0.
+	if mock.hitChars[2] <= 0 {
+		t.Fatalf("child first request cache hit = %d chars, want > 0", mock.hitChars[2])
+	}
+	if len(childSink.usages) == 0 {
+		t.Fatalf("no subagent usage was reported for the fork child")
+	}
+	if u := childSink.usages[0]; u.CacheHitTokens <= 0 {
+		t.Fatalf("child first usage = %+v, want CacheHitTokens > 0", u)
+	}
+
+	// T5-3 parent untouched: session bytes and prefix shape are stable.
+	if after := marshalMessages(t, parent.session.Snapshot()); after != parentBefore {
+		t.Fatalf("parent session mutated by fork\n before: %s\n after: %s", parentBefore, after)
+	}
+	if shapeAfter := parent.capturePrefixShape(schemas); shapeAfter != shapeBefore {
+		t.Fatalf("parent prefix shape changed by fork: %v -> %v", shapeBefore, shapeAfter)
+	}
+
+	t.Logf("==== fork cache reuse (T5) ====")
+	t.Logf("parent last request: %d msgs / %d chars", len(parentLast), mock.reqChars[1])
+	t.Logf("fork child first request: %d msgs / %d chars, cached prefix %d chars → cache_hit_tokens > 0",
+		len(childFirst), mock.reqChars[2], mock.hitChars[2])
+	t.Logf("parent session + prefix shape unchanged by the fork")
+}
+
+// TestIsFreshSubagentSessionForkLock locks the P5 discipline point: a fork
+// child's session is prefilled with the parent prefix, so
+// isFreshSubagentSession MUST return false and the subagentStartContext
+// prepend must never fire for it (an inserted block would break the prefix).
+func TestIsFreshSubagentSessionForkLock(t *testing.T) {
+	// Control: a plain fresh sub-agent session (system only) is fresh.
+	if !isFreshSubagentSession(NewSession(systemPrompt)) {
+		t.Fatal("plain fresh sub-agent session must be fresh")
+	}
+	// A fork session is NewSession("") + the parent prefix added one by one
+	// (the exact PrepareParentFork shape): system + history ⇒ not fresh.
+	prefix := captureForkPrefix(forkPrefixTestAgent(t, []provider.Message{
+		{Role: provider.RoleUser, Content: "committed turn"},
+		{Role: provider.RoleAssistant, Content: "answer"},
+	}), context.Background())
+	forkSess := NewSession("")
+	for _, m := range prefix {
+		forkSess.Add(m)
+	}
+	if isFreshSubagentSession(forkSess) {
+		t.Fatal("fork session (prefilled with the parent prefix) must NOT be fresh")
+	}
+	// The store path that actually builds fork children produces the same shape.
+	store := NewSubagentStore(t.TempDir())
+	run, err := store.PrepareParentFork(prefix, SubagentSpec{
+		ParentSession: "parent-session",
+		Registry:      tool.NewRegistry(),
+	})
+	if err != nil {
+		t.Fatalf("PrepareParentFork: %v", err)
+	}
+	defer run.Release()
+	if isFreshSubagentSession(run.Session) {
+		t.Fatal("PrepareParentFork session must NOT be fresh")
+	}
 }

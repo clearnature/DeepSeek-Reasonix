@@ -178,6 +178,14 @@ type Job struct {
 	// Notice) while this is set; ClaimForegroundResult clears it after the
 	// run-loop takes the result. Guarded by mu.
 	foregroundClaimPending bool
+
+	// silentCompletion marks a fire-and-forget job (P5 fork) started via
+	// StartSilentForSession: its terminal result is never delivered back
+	// automatically — recordCompletion suppresses the P1 completion envelope
+	// and the closing Notice exactly like foregroundClaimPending, but nobody
+	// claims the result either. The caller polls it with wait (bash_output /
+	// steer remain fully usable). Guarded by mu.
+	silentCompletion bool
 }
 
 // Manager is the session's background-job table. It is safe for concurrent use.
@@ -475,7 +483,25 @@ func (m *Manager) startInvalid(parentSession, kind, label string, validationErr 
 // StartForSession launches a job owned by parentSession. Session-scoped readers
 // only see jobs whose owner matches the active session.
 func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
-	return m.startForSession(parentSession, kind, label, run, false)
+	return m.startForSession(parentSession, kind, label, run, false, false)
+}
+
+// StartSilent launches a fire-and-forget job (P5 fork semantics): the terminal
+// result is never delivered back as a P1 completion envelope and no closing
+// Notice is emitted. wait / bash_output / steer remain fully usable — the
+// caller polls the result explicitly. The run func behaves exactly like Start.
+func (m *Manager) StartSilent(kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.StartSilentForSession("", kind, label, run)
+}
+
+// StartSilentForSession is StartSilent for a job owned by parentSession.
+// silent presets the job's silentCompletion flag: while it is set,
+// recordCompletion suppresses the P1 completion envelope and the closing
+// Notice (fire-and-forget — nobody claims the result; the caller polls it
+// with wait), while steer (SendMessageForSession), bash_output, and wait keep
+// working exactly as for a normal job.
+func (m *Manager) StartSilentForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.startForSession(parentSession, kind, label, run, false, true)
 }
 
 // StartForeground launches a foreground task job whose terminal result is
@@ -493,10 +519,10 @@ func (m *Manager) StartForeground(kind, label string, run func(ctx context.Conte
 // (the foreground run-loop already surfaced the result in its tool card), so
 // the run-loop must claim the result with ClaimForegroundResult after done.
 func (m *Manager) StartForegroundForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
-	return m.startForSession(parentSession, kind, label, run, true)
+	return m.startForSession(parentSession, kind, label, run, true, false)
 }
 
-func (m *Manager) startForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), foreground bool) *Job {
+func (m *Manager) startForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), foreground, silent bool) *Job {
 	parentSession = strings.TrimSpace(parentSession)
 	kind = strings.TrimSpace(kind)
 	if err := validatePathSegment(parentSession, "parentSession"); err != nil {
@@ -527,6 +553,7 @@ func (m *Manager) startForSession(parentSession, kind, label string, run func(ct
 		artifactComplete:       artifactErr == "",
 		artifactErr:            artifactErr,
 		foregroundClaimPending: foreground,
+		silentCompletion:       silent,
 	}
 	ctx = WithSession(ctx, parentSession)
 	ctx = context.WithValue(ctx, jobCtxKey{}, j)
@@ -923,7 +950,7 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	suppressEnvelope := false
 	if j := m.get(parentSession, id); j != nil {
 		j.mu.Lock()
-		suppressEnvelope = j.foregroundClaimPending
+		suppressEnvelope = j.foregroundClaimPending || j.silentCompletion
 		result = boundedResult(jobResultTextLocked(j))
 		envelope = renderResultEnvelope(j, st, result)
 		// Unconsumed steer messages die with the job; surface the count so the
@@ -938,9 +965,13 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 		// claims its terminal result via ClaimForegroundResult — it already
 		// surfaced in the run-loop's tool card — so the P1 completion envelope
 		// and the closing Notice are suppressed rather than double-delivered.
-		// P3 steer messages still die with the job (the run-loop is no longer
-		// draining them). The task lifecycle hook still fires so monitoring
-		// sees the terminal transition exactly like any other job.
+		// Silent job (StartSilentForSession, P5 fork): fire-and-forget — the
+		// result is never delivered back automatically and nobody claims it;
+		// the caller polls it with wait. Both share the same suppression so a
+		// fork's completion never surprises the parent turn. P3 steer messages
+		// still die with the job (no run-loop drains them past completion). The
+		// task lifecycle hook still fires so monitoring sees the terminal
+		// transition exactly like any other job.
 		if !nilutil.IsNil(m.taskRecorder) {
 			m.taskRecorder.RecordDone(id, st, err)
 		}

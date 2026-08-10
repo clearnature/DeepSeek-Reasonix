@@ -508,7 +508,8 @@ func (t *TaskTool) Schema() json.RawMessage {
   "run_in_background":{"type":"boolean","description":"Run the sub-agent asynchronously: returns a job id immediately and keeps working across turns. Collect its final answer with wait, and you'll be notified when it finishes. Use for long, independent sub-tasks you don't need to block on right now."},
   "model":{"type":"string","description":"Optional model override for the sub-agent (a configured provider/model name). Precedence: persistent profile config, this argument, profile frontmatter, global subagent default, parent model."},
   "effort":{"type":"string","description":"Optional reasoning effort for the sub-agent (e.g. high, max). Same precedence as model."},
-  "continue_from":{"type":"string","description":"Continue a prior compatible subagent transcript in the current conversation context. Pass only the 'sa_...' value from the prior result's 'Subagent reference: ...' line. If the ref belongs to an ancestor conversation, the framework continues a current-conversation copy."}
+  "continue_from":{"type":"string","description":"Continue a prior compatible subagent transcript in the current conversation context. Pass only the 'sa_...' value from the prior result's 'Subagent reference: ...' line. If the ref belongs to an ancestor conversation, the framework continues a current-conversation copy."},
+  "fork":{"type":"boolean","description":"Fork this conversation into a background sub-agent: the child inherits the parent system prompt and committed history as a read-only prefix, so its first request can reuse the parent's provider prompt cache. Mutually exclusive with continue_from and fork_from. Runs in the background fire-and-forget: the result is never delivered back automatically — collect it with wait."}
 },
 "required":["prompt"]
 }`)
@@ -620,7 +621,7 @@ func (r *ReadOnlyTaskTool) Execute(ctx context.Context, args json.RawMessage) (s
 	// Every entry point compiles to a spec and runs through RunProfileSpec, so a
 	// boundary added there cannot be missed by one caller. read_only_task keeps
 	// its own promise of no durable side effects through Ephemeral.
-	spec, err := r.task.buildTaskSpec(ctx, p.Prompt, p.Description, "", nil, p.Tools, p.MaxSteps, p.Model, p.Effort, "", "", false, true)
+	spec, err := r.task.buildTaskSpec(ctx, p.Prompt, p.Description, "", nil, p.Tools, p.MaxSteps, p.Model, p.Effort, "", "", false, false, true)
 	if err != nil {
 		return "", err
 	}
@@ -654,6 +655,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		Effort          string   `json:"effort"`
 		ContinueFrom    string   `json:"continue_from"`
 		ForkFrom        string   `json:"fork_from"`
+		Fork            bool     `json:"fork"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("invalid args: %w", err)
@@ -662,7 +664,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("prompt is required")
 	}
 
-	spec, err := t.buildTaskSpec(ctx, p.Prompt, p.Description, p.Profile, p.WritePaths, p.Tools, p.MaxSteps, p.Model, p.Effort, p.ContinueFrom, p.ForkFrom, p.RunInBackground, false)
+	spec, err := t.buildTaskSpec(ctx, p.Prompt, p.Description, p.Profile, p.WritePaths, p.Tools, p.MaxSteps, p.Model, p.Effort, p.ContinueFrom, p.ForkFrom, p.RunInBackground, p.Fork, false)
 	if err != nil {
 		return "", err
 	}
@@ -670,13 +672,18 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 }
 
 // buildTaskSpec resolves profile, tools, model/effort, and write claims for a
-// single task/fleet item. forceReadOnly forces the read-only registry.
-func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profile string, writePaths, tools []string, maxSteps int, model, effort, continueFrom, forkFrom string, background, forceReadOnly bool) (ProfileExecSpec, error) {
+// single task/fleet item. forceReadOnly forces the read-only registry. fork
+// inherits the parent conversation prefix into a fire-and-forget background
+// sub-agent and is mutually exclusive with continueFrom/forkFrom.
+func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profile string, writePaths, tools []string, maxSteps int, model, effort, continueFrom, forkFrom string, background, fork, forceReadOnly bool) (ProfileExecSpec, error) {
+	if fork && (strings.TrimSpace(continueFrom) != "" || strings.TrimSpace(forkFrom) != "") {
+		return ProfileExecSpec{}, fmt.Errorf("fork is mutually exclusive with continue_from and fork_from; pass only fork")
+	}
 	spec := ProfileExecSpec{
 		Task:    TaskSpec{Objective: prompt, Description: description},
 		Worker:  WorkerSpec{Kind: "task", Name: "task", SystemPrompt: t.sysPrompt},
 		Grant:   CapabilityGrant{CallTools: tools},
-		Context: ContextRequest{ContinueFrom: strings.TrimSpace(continueFrom), ForkFrom: strings.TrimSpace(forkFrom)},
+		Context: ContextRequest{ContinueFrom: strings.TrimSpace(continueFrom), ForkFrom: strings.TrimSpace(forkFrom), Fork: fork},
 		Sched:   SchedulerPolicy{MaxSteps: maxSteps, RunInBackground: background, Nested: SubagentDepth(ctx) > 0},
 	}
 	profile = strings.TrimSpace(profile)
@@ -756,6 +763,13 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	if t == nil {
 		return "", fmt.Errorf("task tool is not configured")
 	}
+	// P5 fork: the child inherits the parent prefix and always runs as a
+	// fire-and-forget background job — the parent turn must not block on it.
+	// Flipping RunInBackground here routes the whole run through the existing
+	// background job path (slot acquisition, checkpoint writer, save lifecycle).
+	if spec.Context.Fork {
+		spec.Sched.RunInBackground = true
+	}
 	// Per-child progress tracker: converts the child's reasoning/text/notice/
 	// retrying into reserved ToolProgress previews and guarantees exactly one
 	// terminal status (completed/cancelled/failed). The background job owns
@@ -821,7 +835,15 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	modelRef, effortRef := spec.Worker.Model, spec.Worker.Effort
 	usageModelRef := t.usageModelRef(modelRef, effortRef)
 	parentID, _, _, _ := CallContext(ctx)
-	run, err := t.prepareTranscriptRunWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Context.ContinueFrom, spec.Context.ForkFrom, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name)
+	var run *SubagentRun
+	if spec.Context.Fork {
+		// P5 fork branch: capture the parent prefix (T1) and prefill a fresh
+		// sub-agent session with it (PrepareParentFork), so the child's first
+		// request shares the parent's provider cache prefix.
+		run, err = t.prepareTranscriptForkWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name)
+	} else {
+		run, err = t.prepareTranscriptRunWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Context.ContinueFrom, spec.Context.ForkFrom, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -863,6 +885,11 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// beginRunTurn skips re-appending it (prefix-stable continuation). The
 	// handoff is the only caller that sets resume.
 	runSessionMode := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered, resume bool) (string, error) {
+		if spec.Context.Fork {
+			// T3 执行层只读 gate：fork 子代理 schema 全量保留（缓存前缀），但
+			// 每次执行都被 Gate 拦截——写工具拒绝、bash 只读命令放行。
+			runCtx = WithForkReadOnlyGate(runCtx, forkReadOnlyGate{})
+		}
 		if resume {
 			runCtx = WithResumeSession(runCtx)
 		}
@@ -926,7 +953,14 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		// Emit queued before the job goroutine can start so the status slot
 		// never regresses to a stale queued after running.
 		trk.queued()
-		job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
+		// P5 fork: fire-and-forget — the job completes silently (no P1
+		// completion envelope is auto-delivered), so the child runs through
+		// StartSilentForSession while wait/bash_output/steer stay fully usable.
+		startJob := jm.StartForSession
+		if spec.Context.Fork {
+			startJob = jm.StartSilentForSession
+		}
+		job := startJob(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
 			if writerRegistered {
 				defer mutationObserver.UnregisterWriter(recoveryTaskID)
 			}
@@ -970,7 +1004,13 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			queuedNote = " It may wait in the session queue until a concurrency/write slot is free."
 		}
 		if run != nil && run.Ref != "" {
+			if spec.Context.Fork {
+				return fmt.Sprintf("Started background fork %q (%s).%s\n%s\nIt runs across turns and inherits this conversation's committed history as its prompt-cache prefix. Fire-and-forget: it completes silently — you are NOT notified — so poll it with wait (or bash_output) when you want the result; steer is available via the steer message flow.", job.ID, label, queuedNote, FormatSubagentReference(run)), nil
+			}
 			return fmt.Sprintf("Started background task %q (%s).%s\n%s\nIt runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote, FormatSubagentReference(run)), nil
+		}
+		if spec.Context.Fork {
+			return fmt.Sprintf("Started background fork %q (%s).%s It runs across turns and inherits this conversation's committed history as its prompt-cache prefix. Fire-and-forget: it completes silently — you are NOT notified — so poll it with wait (or bash_output) when you want the result; steer is available via the steer message flow.", job.ID, label, queuedNote), nil
 		}
 		return fmt.Sprintf("Started background task %q (%s).%s It runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote), nil
 	}
@@ -1172,6 +1212,62 @@ func (t *TaskTool) prepareTranscriptRunWithPrompt(ctx context.Context, subReg *t
 		return t.transcripts.PrepareLegacyForkFrom(legacyForkFrom, spec)
 	}
 	return t.transcripts.PrepareFresh(spec)
+}
+
+// prepareTranscriptForkWithPrompt 准备 fork 子代理的转录运行（P5 fork 分支）：
+// 从工具执行上下文的父 Agent（WithForkSource 挂载，T0-A）取父会话前缀
+// （captureForkPrefix，T1），交给 transcripts.PrepareParentFork 预填进全新
+// SubagentRun 的 session。首请求 = 前缀 + 新 user 消息，与父已发送字节
+// byte-identical（命中父已建 provider 缓存的前提，plan §一.1/§五）。
+func (t *TaskTool) prepareTranscriptForkWithPrompt(ctx context.Context, subReg *tool.Registry, modelRef, effortRef, parentSession, parentID, systemPrompt, kind, name string) (*SubagentRun, error) {
+	parentSession = strings.TrimSpace(parentSession)
+	if t.transcripts == nil {
+		return nil, fmt.Errorf("subagent transcript store is required")
+	}
+	if systemPrompt == "" {
+		systemPrompt = t.sysPrompt
+	}
+	if kind == "" {
+		kind = "task"
+	}
+	if name == "" {
+		name = "task"
+	}
+	if parentSession == "" {
+		return nil, fmt.Errorf("subagent fork requires a persisted session; none is active in this run")
+	}
+	parent, ok := ForkSourceFromContext(ctx)
+	if !ok || parent == nil {
+		return nil, fmt.Errorf("fork requires a parent agent in the tool execution context")
+	}
+	// T3 递归 guard：fork-of-fork 只允许到 max_subagent_depth 上限。
+	if err := checkForkDepthGuard(ctx, t.maxDepth()); err != nil {
+		return nil, err
+	}
+	// 捕获只在内存中完成：零发送、父 Session 零改动（T1 红线）。
+	prefix := captureForkPrefix(parent, ctx)
+	if len(prefix) == 0 {
+		return nil, fmt.Errorf("fork prefix is empty; the parent conversation has no committed history to inherit")
+	}
+	// T3 大小 guard：父历史 ≤ 子上下文窗口 80%，否则拒绝（破前缀即丢缓存）。
+	if err := checkForkSizeGuard(t.contextWindow, prefix); err != nil {
+		return nil, err
+	}
+	identityModel, identityEffort := t.effectiveIdentity(modelRef, effortRef)
+	spec := SubagentSpec{
+		Kind:             kind,
+		Name:             name,
+		WorkspaceRoot:    t.workspaceRoot,
+		ParentSession:    parentSession,
+		ParentToolCallID: parentID,
+		SystemPrompt:     systemPrompt,
+		Registry:         subReg,
+		ToolContext:      childToolIdentityContext(ctx),
+		Model:            identityModel,
+		Effort:           identityEffort,
+		ResumedFrom:      "",
+	}
+	return t.transcripts.PrepareParentFork(prefix, spec)
 }
 
 func childToolIdentityContext(ctx context.Context) context.Context {
@@ -1944,6 +2040,13 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 	// Nested reasoning stays isolated; the parent consumes only final Content.
 	// Require it so a reasoning-only stop cannot fall back to older tool text.
 	opts.RequireVisibleFinal = true
+	// P5 fork (T3): the fork branch stamps the read-only execution gate on the
+	// run context; install it on the child's Options here — the only override
+	// point shared by both the writer and read-only child paths. Every other
+	// sub-agent keeps the gate its spawner already configured.
+	if g, ok := forkReadOnlyGateFromContext(ctx); ok && g != nil {
+		opts.Gate = g
+	}
 	sub := New(prov, reg, sess, opts, sink)
 	sub.SetPlanMode(planWorkflow)
 	if err := sub.Run(ctx, prompt); err != nil {

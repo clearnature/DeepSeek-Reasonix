@@ -1570,6 +1570,10 @@
             "description": "Optional reasoning effort for the sub-agent (e.g. high, max). Same precedence as model.",
             "type": "string"
           },
+          "fork": {
+            "description": "Fork this conversation into a background sub-agent: the child inherits the parent system prompt and committed history as a read-only prefix, so its first request can reuse the parent's provider prompt cache. Mutually exclusive with continue_from and fork_from. Runs in the background fire-and-forget: the result is never delivered back automatically — collect it with wait.",
+            "type": "boolean"
+          },
           "max_steps": {
             "description": "Optional cap on tool-call rounds. Defaults to half the parent's cap (min 5).",
             "minimum": 1,

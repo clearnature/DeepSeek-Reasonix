@@ -122,8 +122,14 @@ func TestTaskToolSchemaExposesOnlyContinueFromForPersistence(t *testing.T) {
 	if !strings.Contains(schema, `"continue_from"`) {
 		t.Fatalf("task schema = %s, want continue_from", schema)
 	}
-	if strings.Contains(schema, "fork_from") {
+	// fork_from (transcript persistence fork) must not surface; the P5 `fork`
+	// runtime param is a different, legitimate schema key (its description may
+	// mention fork_from, so match the JSON key form, not the bare word).
+	if strings.Contains(schema, `"fork_from"`) {
 		t.Fatalf("task schema = %s, want no fork_from", schema)
+	}
+	if !strings.Contains(schema, `"fork"`) {
+		t.Fatalf("task schema = %s, want P5 fork param", schema)
 	}
 }
 
