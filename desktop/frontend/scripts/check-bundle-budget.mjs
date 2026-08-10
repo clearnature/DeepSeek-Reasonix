@@ -72,7 +72,9 @@ for (const path of localeChunks) {
   // Task Monitor, Extension UI, Storage & paths, and shell execution cards
   // add their own labels. Reasoning display controls and status bar metrics add
   // the latest localized copy. Keep both dictionaries within narrow allowances.
-  const budget = name.startsWith("zh-TW-") ? 54.7 * 1024 : 53.9 * 1024;
+  // zh: P2 task-panel labels (summary.*/task.state.stalled/notice.backgroundJobStalled)
+  // pushed both Chinese dictionaries to 54.0/54.8 KiB; 54.1/54.9 leave cushions.
+  const budget = name.startsWith("zh-TW-") ? 54.9 * 1024 : 54.1 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
