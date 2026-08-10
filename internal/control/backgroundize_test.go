@@ -311,4 +311,6 @@ func TestBackgroundSlashRequestsMidTurn(t *testing.T) {
 	if sig := runner.captured(); sig == nil || !sig.Requested() {
 		t.Fatalf("signal after /background = %v, want requested", sig)
 	}
+	runner.releaseNow()
+	waitIdle(t, c)
 }

@@ -37651,6 +37651,12 @@ body > .mermaid-diagram--fullscreen {
 .taskmonitor__actions button,.taskmonitor__confirm button { padding:4px 10px; border:1px solid var(--border,#555); border-radius:4px; background:var(--surface,#222); color:inherit; cursor:pointer; }
 .taskmonitor__error { color:#ef4444; margin-top:6px; }
 .taskmonitor__message { color:#4ade80; margin-top:6px; }
+.taskmonitor__badge--stalled { font-weight:700; }
+.taskmonitor__kind-badge { font-size:10px; padding:1px 6px; border-radius:8px; font-weight:600; text-transform:uppercase; background:rgba(139,92,246,0.16); color:#a78bfa; }
+.taskmonitor__tail { min-width:0; }
+.taskmonitor__tail pre { margin:0; white-space:pre-wrap; word-break:break-word; font-family:monospace; font-size:11px; max-height:120px; overflow:auto; }
+.taskmonitor__tail--truncated { display:flex; flex-direction:column; gap:4px; }
+.taskmonitor__tail-trunc { font-size:10px; color:#d97706; font-weight:600; }
 
 /* Integrated terminal */
 :root {

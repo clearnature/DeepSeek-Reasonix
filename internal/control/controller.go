@@ -5644,6 +5644,18 @@ func (c *Controller) Jobs() []jobs.View {
 	return c.jobs.RunningForSession(c.parentSessionID())
 }
 
+// JobSnapshots returns a read-only snapshot of every background job owned by
+// this controller's session — running, terminal, tombstoned — for the task
+// panel (nil when background jobs are disabled). Each carries a bounded,
+// non-consuming tail, so polling never steals model output or mutation
+// evidence (P2 red line; jobs locks it with the snapshot tests).
+func (c *Controller) JobSnapshots() []jobs.JobSnapshot {
+	if c.jobs == nil {
+		return nil
+	}
+	return c.jobs.JobSnapshotsForSession(c.parentSessionID())
+}
+
 // KillJob cancels a running background job by ID.
 func (c *Controller) KillJob(id string) bool {
 	if c.jobs == nil {

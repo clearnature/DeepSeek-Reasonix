@@ -68,6 +68,22 @@ type View struct {
 	StartedAt int64  `json:"startedAt"` // unix milliseconds
 }
 
+// JobSnapshot is a read-only view of one background job for the task panel
+// (P2): identity, status, a bounded non-consuming tail, and panel hints
+// (stalled / interrupted). Never consumes readOffset/resultRead or touches
+// the evidence lease, so polling never steals output or evidence.
+type JobSnapshot struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	Session     string `json:"session"`
+	Status      string `json:"status"`
+	Tail        string `json:"tail"`        // bounded 4KiB rune-safe tail, "[truncated…]" when cut
+	Stalled     bool   `json:"stalled"`     // running but idle past the stalled warning (terminal beats stalled)
+	Interrupted bool   `json:"interrupted"` // terminal Interrupted (tombstone or repaired record)
+	Activity    int64  `json:"activity"`    // unix milliseconds of last activity
+}
+
 // Result is one job's terminal (or current) state returned by Wait.
 type Result struct {
 	ID     string
@@ -1298,6 +1314,44 @@ func (m *Manager) RunningForSession(parentSession string) []View {
 		// in flight; clients may render a local "stopping" state after they
 		// request cancellation.
 		out = append(out, View{ID: j.ID, Kind: j.Kind, Label: j.Label, Status: string(Running), StartedAt: j.startedAt})
+		j.mu.Unlock()
+	}
+	return out
+}
+
+// JobSnapshotsForSession returns a read-only snapshot of every job owned by
+// parentSession — running, terminal, and tombstoned — for the task panel.
+// Tail uses the non-consuming path (jobResultTextLocked + boundedResult): it
+// never advances readOffset/resultRead or touches the evidence lease. Empty
+// parentSession preserves the legacy unscoped behavior. Lock order: m.mu to
+// collect pointers, released before each j.mu snapshot — never nested.
+func (m *Manager) JobSnapshotsForSession(parentSession string) []JobSnapshot {
+	parentSession = strings.TrimSpace(parentSession)
+	m.mu.Lock()
+	targets := make([]*Job, 0, len(m.jobs))
+	for _, key := range m.order {
+		j := m.jobs[key]
+		if j == nil || !sessionMatches(parentSession, j.SessionID) {
+			continue
+		}
+		targets = append(targets, j)
+	}
+	m.mu.Unlock()
+
+	out := make([]JobSnapshot, 0, len(targets))
+	for _, j := range targets {
+		j.mu.Lock()
+		out = append(out, JobSnapshot{
+			ID:          j.ID,
+			Kind:        j.Kind,
+			Label:       j.Label,
+			Session:     j.SessionID,
+			Status:      string(j.status),
+			Tail:        boundedResult(jobResultTextLocked(j)),
+			Stalled:     j.status == Running && j.stalled, // terminal beats stalled
+			Interrupted: j.status == Interrupted,
+			Activity:    j.activityAt,
+		})
 		j.mu.Unlock()
 	}
 	return out
