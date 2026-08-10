@@ -14,7 +14,8 @@ func TestParseAcceptsSpecFormsAndRejectsUnknownModules(t *testing.T) {
 		{"planner,evidence", "no-evidence+no-planner"},
 		{"planner evidence", "no-evidence+no-planner"},
 		{" Evidence , Retrieval ", "no-evidence+no-retrieval"},
-		{"all", "no-evidence+no-planner+no-subagent+no-retrieval+no-compaction+no-full-fold"},
+		{"auto-background", "no-auto-background"},
+		{"all", "no-evidence+no-planner+no-subagent+no-retrieval+no-compaction+no-full-fold+no-auto-background"},
 	} {
 		set, err := Parse(tc.spec)
 		if err != nil {

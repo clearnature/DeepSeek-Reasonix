@@ -835,7 +835,15 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		turn := t.mutationObserver.OwnershipTurn()
 		mutationObserver = t.mutationObserver.CloneForSubagent(recoveryTaskID, turn, backgroundWriter)
 	}
-	runSession := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered bool) (string, error) {
+	// runSessionMode runs the sub-agent session. resume marks the
+	// foreground→background handoff's second leg: the in-memory session already
+	// carries the task prompt, so the run is marked WithResumeSession and
+	// beginRunTurn skips re-appending it (prefix-stable continuation). The
+	// handoff is the only caller that sets resume.
+	runSessionMode := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered, resume bool) (string, error) {
+		if resume {
+			runCtx = WithResumeSession(runCtx)
+		}
 		if mutationObserver != nil && backgroundWriter && !writerAlreadyRegistered {
 			turn := mutationObserver.OwnershipTurn()
 			if err := mutationObserver.RegisterWriter(recoveryTaskID, "background_subagent", turn); err != nil {
@@ -922,7 +930,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			}
 			defer releaseSlot()
 			trk.running()
-			answer, err := runSession(jobCtx, trk.wrap(), writerRegistered)
+			answer, err := runSessionMode(jobCtx, trk.wrap(), writerRegistered, false)
 			if err != nil {
 				return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
@@ -952,8 +960,28 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		return "", err
 	}
 	defer releaseSlot()
-	defer run.Release()
-	answer, err := runSession(ctx, trk.wrap(), false)
+	// On a backgroundize handoff the job goroutine is the single owner of the
+	// run handle (it defers run.Release inside its closure); the foreground
+	// must not release concurrently or the two goroutines would race on
+	// SubagentRun.release. backgroundHandoff is flipped by the handoff.
+	defer func() {
+		if !backgroundHandoff {
+			run.Release()
+		}
+	}()
+	answer, err := runSessionMode(ctx, trk.wrap(), false, false)
+	if errors.Is(err, errBackgroundizeRequested) {
+		// P4 handoff: the foreground run loop returned the sentinel at an
+		// iteration boundary with the committed session intact. Move the same
+		// in-memory run to a background job on this goroutine — the foreground
+		// run loop has fully returned, so StartForSession starts the job's
+		// resumed run strictly after the foreground stack unwound (no double
+		// writer on the session). The outer defers (releaseSlot, run.Release)
+		// still run as we return (releaseSlot frees the foreground slot so the
+		// job can acquire it; the run-handle defer is skipped once handoff
+		// flips, because the job goroutine is the sole owner of run.Release).
+		return t.backgroundizeForeground(ctx, spec, trk, run, &backgroundHandoff, subReg, modelRef, effortRef, acquireReq, recoveryTaskID, mutationObserver, runSessionMode)
+	}
 	if err != nil {
 		return "", errors.Join(err, t.transcripts.SaveFailed(run))
 	}
@@ -964,6 +992,102 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		return FormatSubagentRunResult(answer, run, false), nil
 	}
 	return GuardSubagentHostDecisionText(answer), nil
+}
+
+// backgroundizeForeground performs the foreground→background handoff at the
+// run loop's serialized point: the foreground run has fully returned, so this
+// goroutine registers the job (MarkRunning → StartForSession) and hands the
+// same in-memory Session to the job's resumed run (resume=true, which skips
+// re-appending the task prompt). handoff flips the outer RunProfileSpec defer
+// so the tracker is finished only by the job goroutine.
+func (t *TaskTool) backgroundizeForeground(ctx context.Context, spec ProfileExecSpec, trk *subagentProgressTracker, run *SubagentRun, handoff *bool, subReg *tool.Registry, modelRef, effortRef string, acquireReq AcquireRequest, recoveryTaskID string, mutationObserver *checkpoint.MutationObserver, runSessionMode func(context.Context, event.Sink, bool, bool) (string, error)) (string, error) {
+	jm, ok := jobs.FromContext(ctx)
+	if !ok {
+		trk.finish(ctx.Err(), fmt.Errorf("background execution is not available in this context"))
+		return "", fmt.Errorf("background execution is not available in this context")
+	}
+	label := firstNonEmpty(spec.Task.Description, spec.Worker.Name, "task")
+	if t.transcripts != nil && run != nil && run.Ref != "" {
+		if err := t.transcripts.MarkRunning(run); err != nil {
+			trk.finish(ctx.Err(), err)
+			return "", err
+		}
+	}
+	// The foreground run never registered a checkpoint writer (it was not a
+	// background writer); register now so the resumed background run is
+	// tracked exactly like a natively-backgrounded task.
+	writerRegistered := false
+	if mutationObserver != nil && !spec.Grant.ReadOnly {
+		turn := mutationObserver.OwnershipTurn()
+		if err := mutationObserver.RegisterWriter(recoveryTaskID, "background_subagent", turn); err != nil {
+			trk.finish(ctx.Err(), err)
+			return "", errors.Join(err, t.transcripts.SaveFailed(run))
+		}
+		writerRegistered = true
+	}
+	parentSession := spec.Context.parentSession(ctx)
+	backgroundEvidence := evidence.NewLedger()
+	slotReq := acquireReq
+	// Emit queued before the job goroutine can start so the status slot never
+	// regresses to a stale queued after running.
+	trk.queued()
+	job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
+		// Parent-cancel propagation: the resumed run derives from the parent
+		// turn's ctx so a cancel racing the handoff (or arriving right after)
+		// still stops the job — the sentinel branch must not short-circuit
+		// cancellation. jobCtx keeps Kill/Close propagation alive too.
+		runCtx, cancelRun := context.WithCancel(jobCtx)
+		defer cancelRun()
+		stopOnParent := context.AfterFunc(ctx, cancelRun)
+		defer stopOnParent()
+		// The handoff consumed the foreground signal; the resumed run must not
+		// re-checkpoint (it would immediately re-trigger the sentinel).
+		runCtx = WithoutBackgroundizeSignal(runCtx)
+		runCtx = WithParentSession(runCtx, parentSession)
+		runCtx = evidence.WithLedger(runCtx, backgroundEvidence)
+		if writerRegistered {
+			defer mutationObserver.UnregisterWriter(recoveryTaskID)
+		}
+		defer run.Release()
+		defer func() { jobs.PublishEvidence(runCtx, backgroundEvidence.Summary()) }()
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("internal error: panic: %v\n%s", r, debug.Stack())
+				result = FormatSubagentRunResult("", run, true)
+				err = errors.Join(panicErr, t.transcripts.SaveFailed(run))
+			}
+			// The job owns the terminal status: the parent tool call has
+			// already returned its job id by now.
+			trk.finish(runCtx.Err(), err)
+		}()
+		// Queue for a concurrency/write slot inside the job so the parent tool
+		// call returns a job id immediately.
+		releaseSlot, slotErr := t.acquireSlot(runCtx, slotReq)
+		if slotErr != nil {
+			return FormatSubagentRunResult("", run, true), errors.Join(slotErr, t.transcripts.SaveFailed(run))
+		}
+		defer releaseSlot()
+		trk.running()
+		answer, err := runSessionMode(runCtx, trk.wrap(), writerRegistered, true)
+		if err != nil {
+			return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
+		}
+		if err := t.transcripts.SaveCompleted(run); err != nil {
+			return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
+		}
+		return FormatSubagentRunResult(answer, run, false), nil
+	})
+	// Hand the tracker to the job goroutine: the outer RunProfileSpec defer
+	// must not finish (and close) it while the job still runs.
+	*handoff = true
+	queuedNote := ""
+	if t.scheduler != nil {
+		queuedNote = " It may wait in the session queue until a concurrency/write slot is free."
+	}
+	if run != nil && run.Ref != "" {
+		return fmt.Sprintf("Started background task %q (%s) — moved from the foreground.%s\n%s\nIt runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote, FormatSubagentReference(run)), nil
+	}
+	return fmt.Sprintf("Started background task %q (%s) — moved from the foreground.%s It runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote), nil
 }
 
 func (t *TaskTool) acquireSlot(ctx context.Context, req AcquireRequest) (func(), error) {
@@ -1801,6 +1925,13 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 	sub := New(prov, reg, sess, opts, sink)
 	sub.SetPlanMode(planWorkflow)
 	if err := sub.Run(ctx, prompt); err != nil {
+		if errors.Is(err, errBackgroundizeRequested) {
+			// P4: pass the sentinel through unwrapped so RunProfileSpec can
+			// recognize the foreground→background handoff. Wrapping it as a
+			// sub-agent failure here would fail the task instead of moving it
+			// to the background.
+			return "", err
+		}
 		// Still merge any partial child evidence so parent gates see real writes.
 		mergeChildEvidence(ctx, sub)
 		if answer, ok := salvageReadinessExhaustedAnswer(sub, sess, opts, err); ok {

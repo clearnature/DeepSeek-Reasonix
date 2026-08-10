@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"reasonix/internal/provider"
 )
@@ -407,7 +408,8 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	fmt.Fprintf(&b, "mcp_call_timeout_seconds = %d   # default MCP call safety cap; per-plugin/tool overrides may raise it\n\n", c.MCPCallTimeoutSeconds())
 
 	b.WriteString("[tools.background_jobs]\n")
-	fmt.Fprintf(&b, "stalled_warning_seconds = %d   # warn once per background job after this many quiet seconds; 0 disables\n\n", c.BackgroundJobStalledWarningSeconds())
+	fmt.Fprintf(&b, "stalled_warning_seconds = %d   # warn once per background job after this many quiet seconds; 0 disables\n", c.BackgroundJobStalledWarningSeconds())
+	fmt.Fprintf(&b, "foreground_backgroundize_seconds = %d   # auto-move a foreground task to the background after this many seconds; 0 disables (REASONIX_AUTO_BACKGROUND_MS overrides in ms)\n\n", int(c.ForegroundBackgroundize()/time.Second))
 
 	b.WriteString("[tools.shell]\n")
 	if c.Tools.Shell.Prefer != "" {
@@ -1096,11 +1098,19 @@ func RenderTOMLProjectDelta(c *Config) string {
 
 	// [tools.background_jobs]
 	if c.Tools.BackgroundJobs != d.Tools.BackgroundJobs {
+		wroteHeader := false
 		if c.Tools.BackgroundJobs.StalledWarningSeconds != nil && *c.Tools.BackgroundJobs.StalledWarningSeconds > 0 {
 			b.WriteString("[tools.background_jobs]\n")
+			wroteHeader = true
 			fmt.Fprintf(&b, "stalled_warning_seconds = %d\n", *c.Tools.BackgroundJobs.StalledWarningSeconds)
-			b.WriteString("\n")
 		}
+		if c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds != nil && *c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds != defaultForegroundBackgroundizeSeconds {
+			if !wroteHeader {
+				b.WriteString("[tools.background_jobs]\n")
+			}
+			fmt.Fprintf(&b, "foreground_backgroundize_seconds = %d\n", *c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds)
+		}
+		b.WriteString("\n")
 	}
 
 	// [tools.shell]

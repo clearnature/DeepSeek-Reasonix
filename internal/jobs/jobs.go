@@ -154,6 +154,14 @@ type Job struct {
 	// DrainPendingMessages. Guarded by mu like every other mutable field.
 	pendingMessages      []pendingMessage
 	pendingMessagesBytes int
+
+	// foregroundClaimPending marks a job started via StartForegroundForSession:
+	// its terminal result is claimed by the foreground run-loop through
+	// ClaimForegroundResult instead of being delivered as a P1 completion
+	// envelope. recordCompletion suppresses the envelope (and the closing
+	// Notice) while this is set; ClaimForegroundResult clears it after the
+	// run-loop takes the result. Guarded by mu.
+	foregroundClaimPending bool
 }
 
 // Manager is the session's background-job table. It is safe for concurrent use.
@@ -450,6 +458,28 @@ func (m *Manager) startInvalid(parentSession, kind, label string, validationErr 
 // StartForSession launches a job owned by parentSession. Session-scoped readers
 // only see jobs whose owner matches the active session.
 func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.startForSession(parentSession, kind, label, run, false)
+}
+
+// StartForeground launches a foreground task job whose terminal result is
+// claimed by the foreground run-loop (ClaimForegroundResult) instead of being
+// delivered as a P1 <background-job-result> envelope on the next turn. The run
+// func behaves exactly like Start: it streams to the job buffer and may
+// publish evidence via PublishEvidence.
+func (m *Manager) StartForeground(kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.StartForegroundForSession("", kind, label, run)
+}
+
+// StartForegroundForSession is StartForeground for a job owned by parentSession.
+// foreground presets the job's foregroundClaimPending flag: while it is set,
+// recordCompletion suppresses the P1 completion envelope and closing Notice
+// (the foreground run-loop already surfaced the result in its tool card), so
+// the run-loop must claim the result with ClaimForegroundResult after done.
+func (m *Manager) StartForegroundForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.startForSession(parentSession, kind, label, run, true)
+}
+
+func (m *Manager) startForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), foreground bool) *Job {
 	parentSession = strings.TrimSpace(parentSession)
 	kind = strings.TrimSpace(kind)
 	if err := validatePathSegment(parentSession, "parentSession"); err != nil {
@@ -465,20 +495,21 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 	startedAt := nowMs()
 	logPath, metaPath, file, artifactErr := m.openArtifactLocked(parentSession, id)
 	j := &Job{
-		ID:               id,
-		Kind:             kind,
-		Label:            label,
-		SessionID:        parentSession,
-		status:           Running,
-		startedAt:        startedAt,
-		activityAt:       startedAt,
-		cancel:           cancel,
-		done:             make(chan struct{}),
-		artifactPath:     logPath,
-		artifactMetaPath: metaPath,
-		artifactFile:     file,
-		artifactComplete: artifactErr == "",
-		artifactErr:      artifactErr,
+		ID:                     id,
+		Kind:                   kind,
+		Label:                  label,
+		SessionID:              parentSession,
+		status:                 Running,
+		startedAt:              startedAt,
+		activityAt:             startedAt,
+		cancel:                 cancel,
+		done:                   make(chan struct{}),
+		artifactPath:           logPath,
+		artifactMetaPath:       metaPath,
+		artifactFile:           file,
+		artifactComplete:       artifactErr == "",
+		artifactErr:            artifactErr,
+		foregroundClaimPending: foreground,
 	}
 	ctx = WithSession(ctx, parentSession)
 	ctx = context.WithValue(ctx, jobCtxKey{}, j)
@@ -872,8 +903,10 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	// re-acquires j under m.mu.
 	var result, envelope string
 	droppedMsgs := 0
+	suppressEnvelope := false
 	if j := m.get(parentSession, id); j != nil {
 		j.mu.Lock()
+		suppressEnvelope = j.foregroundClaimPending
 		result = boundedResult(jobResultTextLocked(j))
 		envelope = renderResultEnvelope(j, st, result)
 		// Unconsumed steer messages die with the job; surface the count so the
@@ -882,6 +915,19 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 		j.pendingMessages = nil
 		j.pendingMessagesBytes = 0
 		j.mu.Unlock()
+	}
+	if suppressEnvelope {
+		// Foreground job (StartForegroundForSession): the foreground run-loop
+		// claims its terminal result via ClaimForegroundResult — it already
+		// surfaced in the run-loop's tool card — so the P1 completion envelope
+		// and the closing Notice are suppressed rather than double-delivered.
+		// P3 steer messages still die with the job (the run-loop is no longer
+		// draining them). The task lifecycle hook still fires so monitoring
+		// sees the terminal transition exactly like any other job.
+		if !nilutil.IsNil(m.taskRecorder) {
+			m.taskRecorder.RecordDone(id, st, err)
+		}
+		return
 	}
 	shouldEmit := false
 	m.mu.Lock()
@@ -1424,6 +1470,57 @@ func (m *Manager) ResultSnapshotForSession(parentSession, id string, st Status) 
 	envelope := renderResultEnvelope(j, st, boundedResult(jobResultTextLocked(j)))
 	j.mu.Unlock()
 	return envelope, true
+}
+
+// ForegroundResult is the claimed terminal outcome of a foreground task job
+// (started via StartForegroundForSession).
+type ForegroundResult struct {
+	ID     string
+	Status Status
+	Result string // bounded snapshot, same source as wait/results surfaces
+
+	// Evidence is a lease-ready copy of the job's uncommitted mutation
+	// receipts, taken with the same TryLeaseEvidenceForSession gate the
+	// background collectBackgroundEvidence path uses: Ready is false until the
+	// job is terminal and its run goroutine has flushed PublishEvidence, and
+	// the copy is empty once the evidence has been committed. The foreground
+	// run-loop merges it into the parent turn ledger exactly like
+	// collectBackgroundEvidence does (planmode gate + NoteBackgroundLease +
+	// MergeChild), so a foreground task's mutations pass the same review gates
+	// as a background one.
+	Evidence evidence.ChildEvidenceSummary
+	Ready    bool
+}
+
+// ClaimForegroundResult claims the terminal result of a foreground job after
+// its run goroutine finishes. It returns the bounded result text and terminal
+// status, plus the same provisional evidence lease that collectBackgroundEvidence
+// takes, so the foreground run-loop can bridge the job's mutation receipts into
+// the parent turn ledger. It also clears foregroundClaimPending, so any later
+// completion bookkeeping for this job falls through to the normal path. ok is
+// false when the job is unknown (or the manager has shut down before the job
+// finished); the call blocks until the job reaches a terminal state.
+func (m *Manager) ClaimForegroundResult(parentSession, id string) (ForegroundResult, bool) {
+	parentSession = strings.TrimSpace(parentSession)
+	j := m.get(parentSession, id)
+	if j == nil {
+		return ForegroundResult{}, false
+	}
+	select {
+	case <-j.done:
+	case <-m.root.Done():
+		return ForegroundResult{}, false
+	}
+	// Same ready-gated, non-consuming lease the background collection path
+	// uses: done being closed means PublishEvidence already flushed, so the
+	// receipts below are final for this job until a CommitEvidenceForSession.
+	summary, ready := m.tryLeaseEvidenceForSession(parentSession, id)
+	j.mu.Lock()
+	st := j.status
+	result := boundedResult(jobResultTextLocked(j))
+	j.foregroundClaimPending = false
+	j.mu.Unlock()
+	return ForegroundResult{ID: j.ID, Status: st, Result: result, Evidence: summary, Ready: ready}, true
 }
 
 // SetActiveSession controls which session receives lifecycle notices for jobs

@@ -1825,6 +1825,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		WriteWorkspaceRoot:           root,
 		ProjectChecks:                projectChecks,
 		DeliveryProfile:              tokenDelivery,
+		AutoBackgroundizeAfter:       cfg.ForegroundBackgroundize(),
 		Ablation:                     opts.Ablation,
 		WorkspaceLease:               workspaceLease,
 		CapabilityLedger:             capLedger,
