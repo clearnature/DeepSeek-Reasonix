@@ -2335,6 +2335,7 @@ func defaultFullBootToolNames() []string {
 		"send_message",
 		"slash_command",
 		"task",
+		"team_message",
 		"todo_write",
 		"update_goal",
 		"wait",

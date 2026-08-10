@@ -1932,11 +1932,14 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		// Indirection: the cleanup variable gains the extension runtime set at
 		// the end of build (snapshot assembly runs after control.New), and the
 		// controller must observe the final chain at Close time.
-		Cleanup:               func() { cleanup() },
-		BalanceURL:            entry.BalanceURL,
-		BalanceKey:            entry.APIKey(),
-		BalanceClient:         balanceClient,
-		Jobs:                  jm,
+		Cleanup:       func() { cleanup() },
+		BalanceURL:    entry.BalanceURL,
+		BalanceKey:    entry.APIKey(),
+		BalanceClient: balanceClient,
+		Jobs:          jm,
+		// P6 team: wire the teammate registry so /team-* commands are live in
+		// production (they were test-only before — see the isolation audit).
+		Teammates:             agent.NewTeammateStore(taskTool, jm),
 		WorkspaceLease:        workspaceLease,
 		Registry:              reg,
 		PluginCtx:             ctx,

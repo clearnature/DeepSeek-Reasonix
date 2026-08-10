@@ -1573,7 +1573,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			}
 			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
 			return
-		case "/team-create", "/team-add", "/team-status", "/team-remove":
+		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
