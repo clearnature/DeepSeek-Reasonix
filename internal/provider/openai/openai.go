@@ -1322,6 +1322,16 @@ type streamResponse struct {
 	} `json:"error"`
 }
 
+// Close releases the client's idle HTTP connections (HTTP/2 keep-alive
+// goroutines) — used by long-running hosts and real-API tests that gate on
+// goleak. Idempotent; safe to call after New.
+func (c *client) Close() error {
+	if tr, ok := c.http.Transport.(interface{ CloseIdleConnections() }); ok {
+		tr.CloseIdleConnections()
+	}
+	return nil
+}
+
 // wireUsage covers DeepSeek's top-level cache fields, OpenAI/MiMo's nested
 // details, and Anthropic-style fallbacks returned by compatible gateways.
 type wireUsage struct {
