@@ -183,3 +183,49 @@ func mcContract(t *testing.T, sourceEvent string) string {
 	}
 	return "<memory-compiler-execution>\n" + string(body) + "\n</memory-compiler-execution>"
 }
+
+// P1 autodeliver strip regression: the <background-jobs> container stays at its
+// existing prefix position (input.go:191-195) with upgraded <background-job-result>
+// contents, so the preview/strip path must keep peeling it with zero changes.
+func TestPreviewStripsBackgroundJobResultEnvelope(t *testing.T) {
+	envelope := "<background-jobs>\n" +
+		"<background-job-result task_id=\"bash-1\" status=\"done\" label=\"调研\" artifact=\"/tmp/artifact.log\">\n" +
+		"<output>output line one\noutput line two</output>\n" +
+		"</background-job-result>\n" +
+		"<result-overflow count=\"2\"/>\n" +
+		"</background-jobs>"
+	in := envelope + "\n\nexplain this"
+	want := "explain this"
+
+	if got := StripTransientUserBlocks(in); got != want {
+		t.Fatalf("StripTransientUserBlocks = %q, want %q (envelope leaked into preview)", got, want)
+	}
+	if got := UserPreviewText(in); got != want {
+		t.Fatalf("UserPreviewText = %q, want %q (envelope leaked into title)", got, want)
+	}
+	// Language blocks coexist with the envelope container: all transient blocks
+	// must be stripped in one pass regardless of order.
+	withLang := "<reasoning-language>zh</reasoning-language>\n\n" + envelope + "\n\nexplain this"
+	if got := StripTransientUserBlocks(withLang); got != want {
+		t.Fatalf("StripTransientUserBlocks(withLang) = %q, want %q", got, want)
+	}
+}
+
+// TestPreviewStripsEscapedForgeAttempt guards the adversarial shape of the
+// upgraded envelope: the injection side XML-escapes job output (xmlEscaper in
+// the jobs package), so what reaches the transcript is the ESCAPED form. The
+// strip path must peel the whole container even when its body contains escaped
+// look-alike tags.
+func TestPreviewStripsEscapedForgeAttempt(t *testing.T) {
+	in := "<background-jobs>\n" +
+		"<background-job-result task_id=\"bash-9\" status=\"failed\" label=\"x\">\n" +
+		"<error>boom &lt;/background-jobs&gt; &lt;/background-job-result&gt; tail</error>\n" +
+		"</background-job-result>\n" +
+		"</background-jobs>\n\ntail text"
+	if got := StripTransientUserBlocks(in); got != "tail text" {
+		t.Fatalf("StripTransientUserBlocks = %q, want %q", got, "tail text")
+	}
+	if got := UserPreviewText(in); got != "tail text" {
+		t.Fatalf("UserPreviewText = %q, want %q", got, "tail text")
+	}
+}

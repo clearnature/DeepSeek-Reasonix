@@ -26,6 +26,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"reasonix/internal/event"
 	"reasonix/internal/evidence"
@@ -180,9 +181,24 @@ type Manager struct {
 	taskRecorder TaskRecorder // optional task-monitoring lifecycle hook
 }
 
+// Snapshot limits for the structured completion record: the finished job's
+// terminal output is captured once as a bounded, rune-safe snapshot.
+const (
+	resultSnapshotMaxBytes = 4096
+	truncatedMarker        = "[truncated…]"
+	// maxResultsPerDrain caps how many completion envelopes one turn carries;
+	// the rest stay queued for the next turn (partial drain, never dropped).
+	maxResultsPerDrain = 8
+	// maxResultBlockBytes caps the total <background-job-result> block per turn;
+	// overflow drops the oldest envelopes and reports <result-overflow count>.
+	maxResultBlockBytes = 16 * 1024
+)
+
 type completion struct {
 	sessionID string
 	text      string
+	result    string // bounded snapshot of the finished job's terminal output
+	envelope  string // pre-rendered <background-job-result> for auto-delivery
 }
 
 // Option configures a Manager.
@@ -773,14 +789,70 @@ func (m *Manager) monitorStalled(parentSession string, j *Job) {
 	}
 }
 
-// recordCompletion queues the finished-job summary for DrainCompletedNote and
-// emits a closing Notice (warn for a failure, info otherwise).
+// jobResultTextLocked returns the job's terminal output exactly as Wait/results
+// surfaces it (result, else artifact, else streamed tail, plus artifact error),
+// without consuming readOffset/resultRead or touching the evidence lease.
+// Callers must hold j.mu.
+func jobResultTextLocked(j *Job) string {
+	text := j.result
+	if text == "" && j.artifactPath != "" {
+		text = j.readArtifactAllLocked()
+	}
+	if text == "" {
+		text = string(j.tail)
+	}
+	if j.artifactErr != "" {
+		if text != "" {
+			text += "\n"
+		}
+		text += "job artifact incomplete: " + j.artifactErr
+	}
+	return text
+}
+
+// boundedResult truncates s to at most resultSnapshotMaxBytes bytes on a rune
+// boundary, appending [truncated…] when anything was cut. The marker counts
+// toward the budget, so the returned string never exceeds resultSnapshotMaxBytes.
+func boundedResult(s string) string {
+	if len(s) <= resultSnapshotMaxBytes {
+		return s
+	}
+	keep := resultSnapshotMaxBytes - len(truncatedMarker)
+	if keep <= 0 {
+		return truncatedMarker
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if b.Len()+utf8.RuneLen(r) > keep {
+			break
+		}
+		b.WriteRune(r)
+	}
+	return b.String() + truncatedMarker
+}
+
+// recordCompletion queues the finished-job summary (plus a bounded snapshot of
+// its terminal output) for the next-turn drain and emits a closing Notice (warn
+// for a failure, info otherwise). The snapshot is copied under j.mu and the
+// completion appended under m.mu, in that order, never nested.
 func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Status, err error) {
 	tag := id
 	if label != "" {
 		tag = fmt.Sprintf("%s (%s)", id, label)
 	}
 	parentSession = strings.TrimSpace(parentSession)
+	// Read-only snapshot under j.mu (does not consume readOffset/resultRead and
+	// does not touch the evidence lease), released before the m.mu-exclusive
+	// append so the two critical sections never nest. The envelope is
+	// pre-rendered here (single source of truth) so the drain path never
+	// re-acquires j under m.mu.
+	var result, envelope string
+	if j := m.get(parentSession, id); j != nil {
+		j.mu.Lock()
+		result = boundedResult(jobResultTextLocked(j))
+		envelope = renderResultEnvelope(j, st, result)
+		j.mu.Unlock()
+	}
 	shouldEmit := false
 	m.mu.Lock()
 	if parentSession != "" && m.destroying[parentSession] {
@@ -790,6 +862,8 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	m.completed = append(m.completed, completion{
 		sessionID: parentSession,
 		text:      fmt.Sprintf("%s — %s", tag, st),
+		result:    result,
+		envelope:  envelope,
 	})
 	active := m.active
 	shouldEmit = active == "" || parentSession == "" || active == parentSession
@@ -819,13 +893,22 @@ func (m *Manager) recordStalled(parentSession, id, kind, label string) {
 		tag = fmt.Sprintf("%s (%s)", id, label)
 	}
 	parentSession = strings.TrimSpace(parentSession)
+	text := fmt.Sprintf("%s may be stalled — still running after %s with no visible output. Inspect it with wait or bash_output, or stop it with kill_shell.", tag, m.stalledWarning.Round(time.Second))
+	// Same read-only snapshot pattern as recordCompletion: render the running
+	// envelope under j.mu so the drain path never re-acquires j under m.mu.
+	// The stalled warning rides the envelope body so drains stay informational.
+	var envelope string
+	if j := m.get(parentSession, id); j != nil {
+		j.mu.Lock()
+		envelope = renderResultEnvelope(j, Running, text)
+		j.mu.Unlock()
+	}
 	m.mu.Lock()
 	if parentSession != "" && m.destroying[parentSession] {
 		m.mu.Unlock()
 		return
 	}
-	text := fmt.Sprintf("%s may be stalled — still running after %s with no visible output. Inspect it with wait or bash_output, or stop it with kill_shell.", tag, m.stalledWarning.Round(time.Second))
-	m.completed = append(m.completed, completion{sessionID: parentSession, text: text})
+	m.completed = append(m.completed, completion{sessionID: parentSession, text: text, envelope: envelope})
 	active := m.active
 	shouldEmit := active == "" || parentSession == "" || active == parentSession
 	m.mu.Unlock()
@@ -1179,34 +1262,102 @@ func (m *Manager) DrainCompletedNote() string {
 	return m.DrainCompletedNoteForSession("")
 }
 
-// DrainCompletedNoteForSession drains completion notes for parentSession only.
-// Notes for other sessions stay queued until that session becomes active again.
-// Empty parentSession preserves the legacy unscoped behavior.
+// DrainCompletedNoteForSession returns the <background-job-result> envelopes of
+// jobs finished for parentSession since the last drain; caller wraps in
+// <background-jobs> (input.go keeps container+position, so the preview/strip
+// path is untouched). Partial: maxResultsPerDrain/call (rest queued), block
+// maxResultBlockBytes (older dropped + <result-overflow>); legacy notes fall back.
 func (m *Manager) DrainCompletedNoteForSession(parentSession string) string {
 	m.mu.Lock()
-	var c []string
-	if strings.TrimSpace(parentSession) == "" {
-		for _, item := range m.completed {
-			c = append(c, item.text)
+	var envs []string
+	overflow := 0
+	totalBytes := 0
+	drained := 0
+	remaining := m.completed[:0]
+	ps := strings.TrimSpace(parentSession)
+	for _, item := range m.completed {
+		if ps != "" && item.sessionID != ps {
+			remaining = append(remaining, item)
+			continue
 		}
-		m.completed = nil
-	} else {
-		remaining := m.completed[:0]
-		for _, item := range m.completed {
-			if item.sessionID == parentSession {
-				c = append(c, item.text)
-			} else {
-				remaining = append(remaining, item)
-			}
+		if drained >= maxResultsPerDrain {
+			remaining = append(remaining, item)
+			continue
 		}
-		m.completed = remaining
+		e := item.envelope
+		if e == "" {
+			e = item.text
+		}
+		if totalBytes+len(e) > maxResultBlockBytes {
+			overflow++
+			continue
+		}
+		envs = append(envs, e)
+		totalBytes += len(e)
+		drained++
 	}
+	m.completed = remaining
 	m.mu.Unlock()
-	if len(c) == 0 {
+	if len(envs) == 0 {
+		if overflow > 0 {
+			return fmt.Sprintf("<result-overflow count=\"%d\"/>", overflow)
+		}
 		return ""
 	}
-	return "Background job updates since your last message: " + strings.Join(c, "; ") +
-		". Read their output with bash_output or wait if you still need it."
+	var b strings.Builder
+	b.WriteString(strings.Join(envs, "\n"))
+	if overflow > 0 {
+		b.WriteString(fmt.Sprintf("\n<result-overflow count=\"%d\"/>", overflow))
+	}
+	return b.String()
+}
+
+// xmlEscaper escapes the five characters that could break XML structure
+// (attributes and text alike), so untrusted job output/errors cannot forge a
+// closing tag. Replacer.Replace is safe for concurrent use.
+var xmlEscaper = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	`"`, "&quot;",
+	"'", "&apos;",
+)
+
+// renderResultEnvelope builds one <background-job-result> envelope body from the
+// same bounded-snapshot source recordCompletion uses. st supplies the status
+// (callers pass the terminal status before it is published), so string(st)
+// keeps the "done"/"failed"/"killed" strings stable.
+func renderResultEnvelope(j *Job, st Status, body string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `<background-job-result task_id="%s" status="%s" label="%s" artifact="%s">`+"\n",
+		xmlEscaper.Replace(j.ID), xmlEscaper.Replace(string(st)), xmlEscaper.Replace(j.Label), xmlEscaper.Replace(j.artifactPath))
+	if st == Failed {
+		b.WriteString("<error>")
+		b.WriteString(xmlEscaper.Replace(body))
+		b.WriteString("</error>\n")
+	} else {
+		b.WriteString("<output>")
+		b.WriteString(xmlEscaper.Replace(body))
+		b.WriteString("</output>\n")
+	}
+	b.WriteString("</background-job-result>")
+	return b.String()
+}
+
+// ResultSnapshotForSession renders the <background-job-result> envelope for a
+// job owned by parentSession, read-only: it does not consume readOffset or
+// resultRead and does not touch the evidence lease. st supplies the terminal
+// status (callers pass it before recordCompletion publishes); ok=false if the
+// job is unknown.
+func (m *Manager) ResultSnapshotForSession(parentSession, id string, st Status) (string, bool) {
+	j := m.get(parentSession, id)
+	if j == nil {
+		return "", false
+	}
+	j.mu.Lock()
+	envelope := renderResultEnvelope(j, st, boundedResult(jobResultTextLocked(j)))
+	j.mu.Unlock()
+	return envelope, true
 }
 
 // SetActiveSession controls which session receives lifecycle notices for jobs
