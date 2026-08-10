@@ -12,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"reasonix/internal/event"
 	"reasonix/internal/jobs"
+	"reasonix/internal/tool/builtin"
 )
 
 // Teammate is one member of a P6 team: a persistent identity whose work is one
@@ -63,6 +65,9 @@ type TeammateStore struct {
 	// inboxRoot persists teammate mail on disk (P6.1 enhancement 2); empty
 	// disables persistence (mail stays ephemeral in the P3 job queue).
 	inboxRoot string
+	// sink delivers mailbox-wakeup notices to the leader (P6.2); nil keeps
+	// PostMail silent beyond the disk write.
+	sink event.Sink
 	// tasks is the dependency tree (jobID → task); completed gates live here.
 	tasks map[string]*TeamTask
 }
@@ -143,6 +148,14 @@ func (ts *TeammateStore) Status(name string) (Teammate, bool) {
 	return *tm, true
 }
 
+// SetSink wires mailbox-wakeup notices (P6.2). Must be called before mail is
+// posted for the notices to surface; assignments are unaffected.
+func (ts *TeammateStore) SetSink(sink event.Sink) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.sink = sink
+}
+
 // Assign dispatches one job to a teammate. The first assignment forks the
 // leader's prefix (non-silent: the result rides the P1 envelope back);
 // later ones continue the teammate's own transcript. Running teammates are
@@ -174,6 +187,9 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	ref, toolset := tm.Ref, append([]string(nil), tm.ToolSet...)
 	ts.mu.Unlock()
 
+	// P6.2 teammate direct-connect: stamp the mailbox so the teammate sub-agent
+	// can post mail to its peers via the team_message tool (builtin.Mailbox).
+	ctx = builtin.WithMailbox(ctx, ts)
 	spec := ProfileExecSpec{
 		Task:   TaskSpec{Objective: prompt, Description: "teammate: " + name},
 		Worker: WorkerSpec{Kind: "task", Name: "task", SystemPrompt: ts.task.sysPrompt},
@@ -299,6 +315,31 @@ func (ts *TeammateStore) Complete(name, jobID, ref string) {
 	}
 }
 
+// TeamStop stops a running teammate's job (task_stop, P6.2): kill the last
+// job and flip the member back to idle so it can take a new assignment. Idle
+// teammates are a no-op. The job's transcript survives for the next continue.
+func (ts *TeammateStore) TeamStop(name string) error {
+	ts.mu.Lock()
+	tm, ok := ts.teammates[name]
+	if !ok {
+		ts.mu.Unlock()
+		return fmt.Errorf("unknown teammate %q", name)
+	}
+	jobID := tm.LastJobID
+	if tm.State == TeammateIdle {
+		ts.mu.Unlock()
+		return nil
+	}
+	tm.State = TeammateIdle
+	ts.mu.Unlock()
+
+	if jobID != "" && ts.jm != nil {
+		ts.jm.KillForSession("", jobID)
+	}
+	slog.Info("team teammate stopped", "name", name, "job", jobID)
+	return nil
+}
+
 // Remove kills any running job and drops the member. The transcript is left
 // in place (session destroy cleans it via DeleteSubagentsByParent); a re-create
 // with the same name starts fresh.
@@ -338,14 +379,34 @@ func (ts *TeammateStore) PostMail(name, text string) error {
 		return fmt.Errorf("unknown teammate %q", name)
 	}
 	if root == "" {
-		return nil // ephemeral: the P3 queue is the mailbox while running
+		// Ephemeral: the P3 steer queue is the mailbox while running. Still
+		// notify so the leader knows the mail was accepted (wake-up signal).
+		ts.notifyMail(name)
+		return nil
 	}
 	dir := filepath.Join(root, sanitizeMailName(name), "inbox")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	payload, _ := json.Marshal(mailItem{Name: name, Text: text, At: time.Now().Unix()})
-	return os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.json", time.Now().UnixNano())), payload, 0o644)
+	if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.json", time.Now().UnixNano())), payload, 0o644); err != nil {
+		return err
+	}
+	ts.notifyMail(name)
+	return nil
+}
+
+// notifyMail emits the mailbox-wakeup notice (P6.2): the leader learns a
+// teammate received mail while idle, so it can decide to assign work that
+// flushes the inbox.
+func (ts *TeammateStore) notifyMail(name string) {
+	ts.mu.Lock()
+	sink := ts.sink
+	ts.mu.Unlock()
+	if sink != nil {
+		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
+			Text: "teammate " + name + " received mail — /team-add <name> <task> to flush it"})
+	}
 }
 
 // mailItem is one persisted inbox entry.

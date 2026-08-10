@@ -6454,5 +6454,12 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			return
 		}
 		c.notice(fmt.Sprintf("teammate %q removed", name))
+	case "/team-stop":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.TeamStop(name); err != nil {
+			c.notice("team-stop: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q stopped (idle — transcript kept)", name))
 	}
 }

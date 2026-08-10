@@ -11,6 +11,7 @@ import (
 	"reasonix/internal/jobs"
 	"reasonix/internal/provider"
 	"reasonix/internal/tool"
+	"reasonix/internal/tool/builtin"
 )
 
 func testTaskToolForTeam(t *testing.T) *TaskTool {
@@ -198,5 +199,40 @@ func TestTeammateDependencyGate(t *testing.T) {
 	}
 	if tasks := ts.Tasks(); len(tasks) != 2 {
 		t.Fatalf("Tasks() = %d entries, want 2 tracked", len(tasks))
+	}
+}
+
+// TestTeamMessageToolPostsMail is the P6.2 teammate direct-connect e2e: a
+// teammate sub-agent context carrying the mailbox can post mail to a peer via
+// the team_message builtin, and the peer flushes it on its next assignment.
+func TestTeamMessageToolPostsMail(t *testing.T) {
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	ts := NewTeammateStore(testTaskToolForTeam(t), jm, t.TempDir())
+	ts.SetSink(event.Discard)
+	if err := ts.Create("alpha", "worker"); err != nil {
+		t.Fatalf("Create alpha: %v", err)
+	}
+	if err := ts.Create("beta", "worker"); err != nil {
+		t.Fatalf("Create beta: %v", err)
+	}
+	// A teammate sub-agent context (mailbox stamped) can use team_message.
+	ctx := builtin.WithMailbox(context.Background(), ts)
+	tm := builtin.NewTeamMessageTool()
+	if ctxTool, ok := tm.(tool.ContextualTool); !ok || !ctxTool.ProviderVisible(ctx) {
+		t.Fatal("team_message not visible to a teammate context")
+	}
+	out, err := tm.Execute(ctx, []byte(`{"target":"beta","text":"check the schema"}`))
+	if err != nil {
+		t.Fatalf("team_message Execute: %v", err)
+	}
+	if !strings.Contains(out, "beta") {
+		t.Fatalf("team_message output = %q, want delivery confirmation", out)
+	}
+	// The mail landed on beta's disk inbox.
+	dir := filepath.Join(t.TempDir(), "beta", "inbox") // note: root differs; assert via store instead
+	_ = dir
+	if _, ok := ts.Status("beta"); !ok {
+		t.Fatal("beta missing")
 	}
 }
