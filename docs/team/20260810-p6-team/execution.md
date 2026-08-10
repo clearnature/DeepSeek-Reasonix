@@ -45,3 +45,31 @@ go vet + gofmt + repolint                  ✅（功能增长入 baseline）
 - team_message 工具（teammate→leader 运行中汇报）
 - teammate↔teammate 直连（当前 hub-and-spoke）
 - 持续运行 + task_stop/paused（Qwen）
+
+## 真实测试 + 快速排障指南（2026-08-10 落档）
+
+### 真实测试功能（发布前验证 P1-P6.1）
+
+| 功能 | 真实测试方法 | 验证点 |
+|------|-------------|--------|
+| P1 自动投递 | 后台跑 `task`（如 `sleep 3 && echo done`）→ 下一轮对话 | `<background-job-result>` 信封自动注入 |
+| P2 任务面板 | `task` 后台 → 桌面 TaskMonitorPanel | kind badge/tail/stalled 高亮/stop 按钮 |
+| P3 steer | `task` 后台 → `/task-message <job_id> 换个方向` | 子代理下一轮收到指挥 |
+| P4 后台化 | 前台 `task` 跑 >120s → 自动转后台 | `/background` 手动触发 + 自动阈值 |
+| P5 fork | `task` 带 fork 参数 → 观察下一轮 | stats 里 fork job 首请求 `cache_hit_tokens > 0` |
+| P6 team | `/team-create a worker` → `/team-add a 干活` | teammate job 启动 + 信封回 leader + `/team-status` idle |
+
+### 快速排障流程（bug 排查）
+
+```
+1. 看 stats：~/.reasonix/stats/YYYY-MM-DD.jsonl（usage/compaction/prefix_hash）
+2. 看日志：REASONIX_DEBUG=1 reasonix 2>&1 | grep -E 'fork|steer|mailbox|team'
+3. 查会话：~/.reasonix/projects/<workspace>/sessions/*.events.jsonl
+4. 定位后修 → 四验证（gofmt/vet/repolint/test）→ 提交
+```
+
+### 观测性工具
+
+- `REASONIX_DEBUG=1`：slog debug 级（fork 前缀字节、steer 注入、mailbox flush、teammate 生命周期）
+- teammate 生命周期日志（Info 常开）：created/assigned(job, fork_first, depends_on)/removed；依赖门拒绝走 Debug
+- stats usage 落盘：`cache_hit_tokens` + `prefix_hash`（fork 首请求命中验证的唯一通道）
