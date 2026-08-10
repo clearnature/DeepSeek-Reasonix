@@ -107,3 +107,33 @@ func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T)
 		}
 	})
 }
+
+// TestPreflightUsesObservedTokensBelowForce pins the dev-port fix: the
+// preflight force gate must prefer the last real usage observation over the
+// canonical calibrated estimate, which runs hot on CJK/tool-dense sessions
+// (975k estimated vs 602k actual on 2026-08-10) and can force a summarizer
+// pass at 60% of the window.
+func TestPreflightUsesObservedTokensBelowForce(t *testing.T) {
+	prov := &fakeProvider{reply: "summary"}
+	sess := &Session{Messages: []provider.Message{
+		{Role: provider.RoleUser, Content: strings.Repeat("中文内容", 400)},
+		{Role: provider.RoleUser, Content: strings.Repeat("tool detail ", 300)},
+	}}
+	a := New(prov, tool.NewRegistry(), sess, Options{
+		ContextWindow:       1000,
+		ToolResultSnipRatio: 0.6,
+		CompactRatio:        0.8,
+		CompactForceRatio:   0.9,
+		RecentKeep:          2,
+	}, event.Discard)
+	// Real observation sits far below the force threshold (900); without the
+	// observed-tokens handoff the CJK-heavy estimate crosses it and the
+	// summarizer is called.
+	a.lastUsage.Store(&provider.Usage{PromptTokens: 200, CompletionTokens: 10, TotalTokens: 210})
+	if err := a.contextPreflight(context.Background(), CompactionTriggerPressure); err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	if prov.got != nil {
+		t.Fatal("summarizer was called although observed input (200) is below the force threshold (900)")
+	}
+}
