@@ -4,14 +4,10 @@
 //
 // Design notes:
 //   - Only provider usage (including request-only failures) and turn
-//     completions (event.TurnDone) are recorded here. Turn markers power the
-//     panel's "completed turns" metric;
-//     they are deliberately not presented as distinct conversation sessions.
-//     Token usage was never persisted before this feature, so token numbers
-//     accumulate from the day the feature ships.
-//   - Files are append-only: each record is one JSON line appended with
-//     O_APPEND. A crash mid-line leaves at most one torn trailing line, which
-//     decodeRecords tolerates and skips.
+//     completions (event.TurnDone) are recorded; turn markers power the
+//     panel's "completed turns" metric and are not presented as sessions.
+//   - Files are append-only JSONL; a crash mid-line leaves at most one torn
+//     trailing line, which decodeRecords tolerates and skips.
 package stats
 
 import (
@@ -47,6 +43,11 @@ type record struct {
 	Total      int       `json:"total,omitempty"`
 	Requests   int       `json:"requests,omitempty"` // provider requests represented by this row
 	Turn       bool      `json:"turn,omitempty"`     // true for TurnDone marker rows
+	// PrefixHash fingerprints the sent request prefix (CacheDiagnostics),
+	// distinguishing a miss from a changed prefix vs server-side expiry.
+	PrefixHash    string   `json:"prefix_hash,omitempty"`
+	PrefixChanged bool     `json:"prefix_changed,omitempty"`
+	PrefixReasons []string `json:"prefix_reasons,omitempty"`
 	// Compaction records one context-compaction pass (agent compaction
 	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
 	Compaction *CompactionRecord `json:"compaction,omitempty"`
@@ -70,9 +71,8 @@ type CompactionRecord struct {
 	WriteTok  int    `json:"write,omitempty"`
 	Reqs      int    `json:"reqs,omitempty"`
 	// Results/SavedChars describe a no-AI fast compression pass (mode=prune):
-	// how many stale tool results were elided and roughly how many characters
-	// were saved. Summarize passes leave them zero. Status records the gate
-	// outcome (refused/noop) for passes that did not rewrite.
+	// elided tool results, saved chars; Status records the pass outcome
+	// (installed/noop/aborted/refused).
 	Results    int    `json:"results,omitempty"`
 	SavedChars int    `json:"saved_chars,omitempty"`
 	Status     string `json:"status,omitempty"`
@@ -218,10 +218,8 @@ func decodeRecords(r io.Reader) ([]record, error) {
 		}
 		var rec record
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
-			// Malformed lines (a crash mid-write or a manual edit) are skipped
-			// rather than failing the whole day's aggregation. This tolerates
-			// any number of bad lines; a fully corrupt file reads as an empty
-			// day, which is preferable to the panel erroring out.
+			// Malformed lines (crash mid-write or manual edit) are skipped
+			// rather than failing the whole day's aggregation.
 			continue
 		}
 		out = append(out, rec)
