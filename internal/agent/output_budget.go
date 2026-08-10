@@ -2,7 +2,9 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
+	"sync"
 	"sync/atomic"
 	"unicode/utf8"
 
@@ -16,6 +18,7 @@ type outputBudgetState struct {
 	outputBudget      int
 	activeReqShape    atomic.Pointer[requestCalibrationShape]
 	promptCalibration atomic.Pointer[promptTokenCalibration]
+	calibrationDiag   sync.Once // HACK(#8131) one-shot no-shape warning
 }
 
 type promptTokenCalibration struct {
@@ -71,7 +74,17 @@ func (a *Agent) setPromptTokenCalibrationFromUsage(usage *provider.Usage) {
 	if a == nil || usage == nil || usage.Estimated {
 		return
 	}
-	a.setPromptTokenCalibrationFromActive(usage.LatestPromptTokens())
+	if shape := a.activeReqShape.Load(); shape != nil {
+		a.setPromptTokenCalibration(usage.LatestPromptTokens(), *shape)
+		return
+	}
+	// HACK(#8131): the 2026-08-10 investigation — desktop rows stayed
+	// tpc=0.25 (fallback) all session; warn once when the first usage
+	// callback finds no active request shape, the likeliest break point.
+	a.calibrationDiag.Do(func() {
+		slog.Warn("calibration skipped: no active request shape", "model", a.modelRef,
+			"promptTokens", usage.LatestPromptTokens(), "usageEstimated", usage.Estimated)
+	})
 }
 
 func outputBudgetOf(p provider.Provider) int {

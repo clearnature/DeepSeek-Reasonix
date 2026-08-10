@@ -750,3 +750,39 @@ func TestForkCaptureProviderPreservesOutputBudgetCapabilities(t *testing.T) {
 		t.Fatalf("wrapped input policy = %+v, want %+v", got, prov.policy)
 	}
 }
+
+func TestCalibrationRejectedOnHugeShape(t *testing.T) {
+	a := &Agent{}
+	shape := requestCalibrationShape{requestChars: 15_000_000, compactChars: 12_000_000}
+	a.setPromptTokenCalibration(303_904, shape)
+	t.Logf("tokPerChar=%v (fallback=%v)", a.tokPerChar(), fallbackTokPerChar)
+	if r := a.tokPerChar(); r != fallbackTokPerChar {
+		t.Fatalf("expected fallback for huge shape, got %v", r)
+	}
+	// 正常小 shape 会话：30 万 tokens / 80 万 chars = 0.38 → 应校准
+	a2 := &Agent{}
+	a2.setPromptTokenCalibration(303_904, requestCalibrationShape{requestChars: 800_000, compactChars: 800_000})
+	t.Logf("normal tokPerChar=%v", a2.tokPerChar())
+	if r := a2.tokPerChar(); r == fallbackTokPerChar {
+		t.Fatal("expected calibrated ratio for normal shape")
+	}
+}
+
+// 完整链路：prepare 路径 Store shape → usage 回调 → 校准应自动建立
+func TestCalibrationChainEstablishesFromPreparedRequest(t *testing.T) {
+	msgs := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("x", 100_000)}}
+	a := &Agent{}
+	shape := a.requestCalibrationShape(provider.Request{Messages: msgs})
+	a.activeReqShape.Store(&shape)
+	a.storeLatestRequestUsage(&provider.Usage{PromptTokens: 50000, TotalTokens: 50000})
+	cal := a.promptCalibration.Load()
+	if cal == nil {
+		t.Fatalf("calibration not established (activeReqShape=%v)", a.activeReqShape.Load())
+	}
+	r := a.tokPerChar()
+	t.Logf("ratio=%v requestChars=%d promptTokens=%d", r, shape.requestChars, cal.promptTokens)
+	if r == fallbackTokPerChar {
+		t.Fatalf("expected calibrated ratio, got fallback %v", r)
+	}
+}
+
