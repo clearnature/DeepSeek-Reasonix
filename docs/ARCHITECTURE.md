@@ -211,6 +211,31 @@ type Coordinator struct { … }    // 双模型协作，coordinator.go:19/347
 - `Coordinator`：planner 与 executor 各持独立 Session，prefix 只追加不互混（cache 稳定）；
   确定性路由（不调 classifier）选择 executor-only / Light / Full / plan-for-approval / plan-only。
 
+#### Subagent 编排（多智能体委派）
+
+Reasonix 通过 `internal/agent/` 的 subagent 子系统把工作委派给隔离的子代理，四个入口
+共享同一套编排：`task`（单子代理，可后台/可写）、`fleet`（2-64 子代理 + `depends_on`
+依赖图）、`parallel_tasks`（并行只读研究）、`explore`（只读代码调查）。
+
+- **五概念分离**（`profile_boundary_test.go` 强制）：`profile` = 工人怎么思考（身份：
+  提示词/模型/effort/工具上限）；`TaskSpec` = 这次调用要什么；`CapabilityGrant` = 可触碰
+  什么（读写范围）；`ContextRequest` = 从什么上下文开始（默认零上下文冷启）；
+  `SchedulerPolicy` = 何时运行。profile 只承载身份天花板，绝不承载单次调用值。
+- **调度器**（`scheduler.go`）：会话级 slot 池（queued→running→done/failed），与后台
+  task/fleet 共享；writer 必须声明 `write_paths`，并发 writer 的重叠声明 preflight 拒绝
+  （整工作区声明与所有 writer 串行）；嵌套子代理容量不足立即失败不排队（防父占 slot 时
+  子阻塞）。
+- **委派准入**（`delegation_admission.go`）：`task/fleet/explore/research` 为昂贵委派
+  （实测同工作强制委派贵 2-4× token 与墙钟），本地修复轮调用需准入理由；**shadow-only**——
+  只记录 deny 不强制拦截。
+- **生命周期与隔离**（`subagent_identity/store/result/report/progress/cleanup`）：子代理的
+  工具调用与推理**永不进入父上下文**，只回最终答案；进度/报告/清理全生命周期持久化。
+- **缓存融合**（第一原则）：profile 名在调用时解析、**永不进入 tool schema 或父 system
+  prompt**（prompt-cache 稳定）；委派不污染稳定前缀。默认 `max_subagent_depth=2`
+  （父→子→孙），第二层不再获得递归委派工具。
+- 用户侧操作见 `docs/SUBAGENT_PROFILES.md`（profile 创建/使用）、`docs/TASK_CONTRACT.md`
+  （任务契约写法）。
+
 ### 3.6 配置（`internal/config`）
 
 - 优先级 `flag > ./reasonix.toml > ~/.reasonix/config.toml（或 %AppData%\reasonix）> 内置默认`。
