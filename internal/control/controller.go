@@ -1482,6 +1482,19 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 		case "/prometheus":
 			c.applyPrometheus(trimmed, display)
 			return
+		case "/task-message":
+			args := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
+			jobID, text, err := splitTaskMessage(args)
+			if err != nil {
+				c.notice(err.Error())
+				return
+			}
+			if err := c.SendTaskMessage(jobID, text); err != nil {
+				c.notice("task-message: " + err.Error())
+				return
+			}
+			c.notice(fmt.Sprintf("message queued for background job %s", jobID))
+			return
 		}
 		if c.managementNotice(trimmed) {
 			return
@@ -5532,6 +5545,34 @@ func (c *Controller) CancelJob(id string) bool {
 		return false
 	}
 	return c.jobs.KillForSession(c.parentSessionID(), id)
+}
+
+// SendTaskMessage queues a P3 steer message for a running background task job
+// owned by this controller's session. The job must exist and still be Running;
+// overflow is rejected (jobs.ErrPendingQueueFull), never silently dropped.
+// Background jobs must be enabled (Jobs option), else it fails closed.
+func (c *Controller) SendTaskMessage(id, text string) error {
+	if c.jobs == nil {
+		return fmt.Errorf("background jobs are disabled")
+	}
+	return c.jobs.SendMessageForSession(c.parentSessionID(), id, text)
+}
+
+// splitTaskMessage splits "/task-message" arguments into <job_id> and <text>.
+// The first whitespace-delimited field is the job id; everything after it is
+// the message text with internal spacing preserved.
+func splitTaskMessage(args string) (jobID, text string, err error) {
+	args = strings.TrimSpace(args)
+	idx := strings.IndexAny(args, " \t")
+	if idx < 0 {
+		return "", "", errors.New("usage: /task-message <job_id> <text>")
+	}
+	jobID = args[:idx]
+	text = strings.TrimSpace(args[idx:])
+	if jobID == "" || text == "" {
+		return "", "", errors.New("usage: /task-message <job_id> <text>")
+	}
+	return jobID, text, nil
 }
 
 // WorkspaceLeaseState reports only whether this controller owns or is waiting

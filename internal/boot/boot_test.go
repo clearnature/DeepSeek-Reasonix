@@ -2332,6 +2332,7 @@ func defaultFullBootToolNames() []string {
 		"review",
 		"run_skill",
 		"security_review",
+		"send_message",
 		"slash_command",
 		"task",
 		"todo_write",

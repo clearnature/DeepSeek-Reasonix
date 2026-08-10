@@ -15,6 +15,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -147,6 +148,12 @@ type Job struct {
 
 	evidence          evidence.ChildEvidenceSummary
 	evidenceCommitted bool
+
+	// pendingMessages is the P3 steer queue: messages the parent sent while the
+	// job was Running, drained one-per-turn by the background agent via
+	// DrainPendingMessages. Guarded by mu like every other mutable field.
+	pendingMessages      []pendingMessage
+	pendingMessagesBytes int
 }
 
 // Manager is the session's background-job table. It is safe for concurrent use.
@@ -192,7 +199,24 @@ const (
 	// maxResultBlockBytes caps the total <background-job-result> block per turn;
 	// overflow drops the oldest envelopes and reports <result-overflow count>.
 	maxResultBlockBytes = 16 * 1024
+
+	// Steer message queue bounds (P3). SendMessageForSession refuses once the
+	// job's pendingMessages hit either bound — rejection, never silent drop.
+	maxPendingMessages      = 16
+	maxPendingMessagesBytes = 8 * 1024
 )
+
+// ErrPendingQueueFull is the sentinel SendMessageForSession returns when the
+// job's pending-message queue is at capacity (16 messages or 8KB total). The
+// caller must surface the rejection to the sender rather than dropping the
+// steer silently.
+var ErrPendingQueueFull = errors.New("jobs: pending message queue full (16 msgs / 8KB)")
+
+// pendingMessage is one steer message queued for the background job's next
+// drain. All fields are guarded by Job.mu.
+type pendingMessage struct {
+	text string
+}
 
 type completion struct {
 	sessionID string
@@ -847,10 +871,16 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	// pre-rendered here (single source of truth) so the drain path never
 	// re-acquires j under m.mu.
 	var result, envelope string
+	droppedMsgs := 0
 	if j := m.get(parentSession, id); j != nil {
 		j.mu.Lock()
 		result = boundedResult(jobResultTextLocked(j))
 		envelope = renderResultEnvelope(j, st, result)
+		// Unconsumed steer messages die with the job; surface the count so the
+		// user knows the guidance never reached the finished agent.
+		droppedMsgs = len(j.pendingMessages)
+		j.pendingMessages = nil
+		j.pendingMessagesBytes = 0
 		j.mu.Unlock()
 	}
 	shouldEmit := false
@@ -858,6 +888,10 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	if parentSession != "" && m.destroying[parentSession] {
 		m.mu.Unlock()
 		return
+	}
+	if droppedMsgs > 0 {
+		detail := fmt.Sprintf("%d message(s) queued for %s were dropped on completion", droppedMsgs, id)
+		m.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "background " + kind + " finished: " + id, Detail: detail})
 	}
 	m.completed = append(m.completed, completion{
 		sessionID: parentSession,
@@ -939,6 +973,38 @@ func (m *Manager) findJobLocked(parentSession, id string) *Job {
 			return j
 		}
 	}
+	return nil
+}
+
+// SendMessageForSession queues a steer message for a Running job owned by
+// parentSession. Find under m.mu (released before enqueue), status+enqueue
+// under j.mu — never nested (same order as recordCompletion). Bounded queue:
+// overflow returns ErrPendingQueueFull (reject, never drop); terminal/unknown
+// jobs, non-task kinds, and empty text are rejected.
+func (m *Manager) SendMessageForSession(parentSession, id, text string) error {
+	text = strings.TrimSpace(text)
+	id = strings.TrimSpace(id)
+	if text == "" {
+		return fmt.Errorf("jobs: cannot send empty message to job %s", id)
+	}
+	j := m.get(parentSession, id)
+	if j == nil {
+		return fmt.Errorf("jobs: unknown job %s", id)
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.status != Running {
+		return fmt.Errorf("jobs: job %s is %s, not running", j.ID, j.status)
+	}
+	if j.Kind != "task" {
+		return fmt.Errorf("jobs: send_message is for task jobs, job %s is %q", j.ID, j.Kind)
+	}
+	if len(j.pendingMessages) >= maxPendingMessages ||
+		j.pendingMessagesBytes+len(text) > maxPendingMessagesBytes {
+		return ErrPendingQueueFull
+	}
+	j.pendingMessages = append(j.pendingMessages, pendingMessage{text: text})
+	j.pendingMessagesBytes += len(text)
 	return nil
 }
 
@@ -2107,6 +2173,27 @@ func PublishEvidence(ctx context.Context, summary evidence.ChildEvidenceSummary)
 	j.mu.Lock()
 	j.evidence.Receipts = append(j.evidence.Receipts, summary.Receipts...)
 	j.mu.Unlock()
+}
+
+// DrainPendingMessages pops exactly one pending steer message for the job
+// stamped on ctx — same jobCtxKey pattern as PublishEvidence. It is a pure
+// j.mu short critical section: FIFO, one message per call. ok is false when ctx
+// carries no job (foreground agent / parent / planner contexts are always
+// no-op) or when the queue is empty.
+func DrainPendingMessages(ctx context.Context) (text string, ok bool) {
+	j, _ := ctx.Value(jobCtxKey{}).(*Job)
+	if j == nil {
+		return "", false
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if len(j.pendingMessages) == 0 {
+		return "", false
+	}
+	msg := j.pendingMessages[0]
+	j.pendingMessages = j.pendingMessages[1:]
+	j.pendingMessagesBytes -= len(msg.text)
+	return msg.text, true
 }
 
 // LeaseEvidenceForSession returns a copy of a terminal job's evidence without

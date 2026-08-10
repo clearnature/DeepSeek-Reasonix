@@ -244,6 +244,13 @@ func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
 			// (unapplied path marks uncertain + pause via the notice sink).
 			a.RecordUnappliedSteer("(body load failed)", itemID)
 		}
+		// P3 background-job steer channel: DrainPendingMessages reads the job
+		// via jobCtxKey, stamped only onto background run closures (foreground
+		// no-op). One per turn; producers target Kind=="task" (fleet out).
+		if text, ok := jobs.DrainPendingMessages(ctx); ok {
+			a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(midTurnSteerMessage(text))})
+			a.sink.Emit(event.Event{Kind: event.Steer, Text: text})
+		}
 		schemas := a.tools.Schemas()
 		prefixShape := a.capturePrefixShape(schemas)
 		prevPrefixShape := a.lastPrefixShape
