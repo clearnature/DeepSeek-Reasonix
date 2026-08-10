@@ -5582,9 +5582,10 @@ func TestFastCompressCommandElidesStaleToolResults(t *testing.T) {
 	if strings.Contains(msgs[6].Content, "[elided") {
 		t.Error("recent tool result must stay verbatim in the protected tail")
 	}
-	// The stale result older than the tail is elided to a placeholder.
-	if !strings.Contains(msgs[3].Content, "[elided tool result — ") {
-		t.Errorf("stale tool result not elided: %.80q", msgs[3].Content)
+	// Post-#8112 semantics: /compress-fast installs a pruned projection
+	// view; the canonical transcript is never rewritten.
+	if strings.Contains(msgs[3].Content, "[elided tool result — ") {
+		t.Error("canonical transcript must stay verbatim; elision lands in the projection view")
 	}
 	// tool_call pairing preserved.
 	if len(msgs[2].ToolCalls) != 1 || msgs[2].ToolCalls[0].ID != "1" {
@@ -5712,12 +5713,13 @@ func TestFastCompressCommandForceOverridesWarmGate(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no fast-compress notice within 5s")
 	}
-	// The stale tool result was elided despite the warm cache.
-	if rw := exec.Session().RewriteVersion(); rw == 0 {
-		t.Fatal("--force did not rewrite the session")
+	// The warm gate is overridden, but post-#8112 the elision lands in a
+	// pruned projection view — the canonical transcript is never rewritten.
+	if rw := exec.Session().RewriteVersion(); rw != 0 {
+		t.Fatal("--force must not rewrite the canonical transcript")
 	}
-	if !strings.Contains(sess.Snapshot()[3].Content, "[elided tool result — ") {
-		t.Error("stale tool result not elided under --force")
+	if strings.Contains(sess.Snapshot()[3].Content, "[elided tool result — ") {
+		t.Error("canonical transcript must stay verbatim under --force")
 	}
 }
 
@@ -5771,8 +5773,10 @@ func TestFastCompressCommandBacksUpBeforeRewrite(t *testing.T) {
 	if !strings.Contains(string(raw), big[:64]) {
 		t.Error("backup does not contain the original tool output")
 	}
-	if rw := exec.Session().RewriteVersion(); rw == 0 {
-		t.Fatal("prune did not rewrite the session")
+	// Post-#8112: the prune lands in a projection view; the canonical
+	// transcript keeps its original bytes (rewrite version stays 0).
+	if rw := exec.Session().RewriteVersion(); rw != 0 {
+		t.Fatal("prune must not rewrite the canonical transcript")
 	}
 }
 

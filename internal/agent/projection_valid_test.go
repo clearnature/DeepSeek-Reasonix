@@ -188,12 +188,12 @@ func TestPreflightCompactsWhenProjectionExceedsHighWaterMark(t *testing.T) {
 			ProjectionTokens:  800,
 		},
 	}
-	if err := a.installProjection(st); err != nil {
+	if err := a.installProjectionIfCurrent(st, st.Projection.ProjectionVersion, st.Generation); err != nil {
 		t.Fatalf("installProjection: %v", err)
 	}
 	// Paused sessions are exempt (the stuck guard owns them); unpaused ones
 	// must re-fold rather than ride a stale projection.
-	if err := a.contextPreflight(context.Background(), CompactionTriggerPressure); err != nil {
+	if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 		t.Fatalf("preflight under pressure: %v", err)
 	}
 	if !hasCompactionSummary(visibleContext(a)) {
@@ -218,7 +218,7 @@ func TestForceThresholdNoopReturnsCompactionRequired(t *testing.T) {
 		RecentKeep:        2,
 	}, event.Discard)
 
-	err := a.contextPreflight(context.Background(), CompactionTriggerPressure)
+	_, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure})
 	if err == nil {
 		t.Fatal("expected ErrCompactionRequired when force threshold has no fold region")
 	}

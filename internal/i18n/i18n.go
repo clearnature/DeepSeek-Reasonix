@@ -223,11 +223,13 @@ type Messages struct {
 
 	// slash command + sub-command descriptions shown in the menu (CLI and desktop
 	// share these via i18n.M, so both frontends localize identically).
-	CmdNew              string // /new
-	CmdClear            string // /clear
-	CmdCls              string // /cls
-	CmdCompact          string // /compact
-	CmdCompressFast     string // /compress-fast
+	CmdNew          string // /new
+	CmdClear        string // /clear
+	CmdCls          string // /cls
+	CmdCompact      string // /compact
+	CmdCompressFast string // /compress-fast
+	CmdContext      string // /context
+
 	CmdRewind           string // /rewind
 	CmdTree             string // /tree
 	CmdBranch           string // /branch
@@ -474,6 +476,7 @@ type Messages struct {
 	CustomPromptBaseURL  string // "Enter Base URL"
 	CustomPromptKeyEnv   string // "Enter API Key env var name"
 	CustomPromptAPIKey   string // "Enter API Key"
+	CustomPromptWindow   string // "Enter context window in tokens"
 	CustomAddedFmt       string // "Added custom model: %s"
 
 	// Anthropic compatible provider

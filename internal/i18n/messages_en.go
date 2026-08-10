@@ -238,11 +238,13 @@ var English = Messages{
 	ShellExecTimeoutFmt: "shell command timed out (> %s)",
 	ShellModeHint:       "Enter runs shell · Esc cancels · click output to expand",
 
-	CmdNew:              "start new session; save transcript",
-	CmdClear:            "discard current context",
-	CmdCls:              "clear screen only (keep LLM context)",
-	CmdCompact:          "compact context",
-	CmdCompressFast:     "fast compress (no AI)",
+	CmdNew:          "start new session; save transcript",
+	CmdClear:        "discard current context",
+	CmdCls:          "clear screen only (keep LLM context)",
+	CmdCompact:      "compact context",
+	CmdCompressFast: "fast compress (no AI)",
+	CmdContext:      "show context window, thresholds, and last maintenance",
+
 	CmdRewind:           "rewind to an earlier turn",
 	CmdTree:             "show conversation branches",
 	CmdBranch:           "create a conversation branch",
@@ -441,6 +443,7 @@ var English = Messages{
 	CustomPromptBaseURL:  "Enter Base URL",
 	CustomPromptKeyEnv:   "API Key variable name (press Enter to use the default; not the model name)",
 	CustomPromptAPIKey:   "Enter API Key",
+	CustomPromptWindow:   "Context window in tokens (a value below the model's real window makes compaction fire early)",
 	CustomAddedFmt:       "Added custom model: %s",
 
 	// Anthropic compatible provider

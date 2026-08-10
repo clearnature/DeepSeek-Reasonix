@@ -46,7 +46,7 @@ func TestPreflightPruneThenFoldFitsWindow(t *testing.T) {
 		RecentKeep:    4,
 	}, event.Discard)
 
-	if err := a.contextPreflight(context.Background(), "auto"); err != nil {
+	if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 		t.Fatalf("preflight must succeed after prune + bounded fold: %v", err)
 	}
 	st := a.compactionState
@@ -83,7 +83,7 @@ func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T)
 			sess.Add(provider.Message{Role: provider.RoleUser, Content: strings.Repeat("grow", 20)})
 		}
 		// Force preflight once so a projection exists.
-		if err := a.contextPreflight(context.Background(), "auto"); err != nil {
+		if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 			t.Fatalf("preflight: %v", err)
 		}
 		if a.compactStuck {
@@ -98,7 +98,7 @@ func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T)
 		// Healthy window: a real fold installs a projection that fits
 		// beside the 8K floor; repeated preflight must stay unpaused.
 		for range 3 {
-			if err := a.contextPreflight(context.Background(), "auto"); err != nil {
+			if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 				t.Fatalf("preflight: %v", err)
 			}
 			if a.compactStuck {
@@ -126,11 +126,9 @@ func TestPreflightUsesObservedTokensBelowForce(t *testing.T) {
 		CompactForceRatio:   0.9,
 		RecentKeep:          2,
 	}, event.Discard)
-	// Real observation sits far below the force threshold (900); without the
-	// observed-tokens handoff the CJK-heavy estimate crosses it and the
-	// summarizer is called.
-	a.lastUsage.Store(&provider.Usage{PromptTokens: 200, CompletionTokens: 10, TotalTokens: 210})
-	if err := a.contextPreflight(context.Background(), CompactionTriggerPressure); err != nil {
+	// Observed input (200) sits far below force (900); without the handoff
+	// the CJK-heavy estimate crosses it and the summarizer is called.
+	if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure, ObservedInputTokens: 200}); err != nil {
 		t.Fatalf("preflight: %v", err)
 	}
 	if prov.got != nil {

@@ -239,11 +239,13 @@ var Chinese = Messages{
 	ShellExecTimeoutFmt: "Shell 命令超时（>%s）",
 	ShellModeHint:       "Enter 执行 Shell · Esc 取消 · 点击输出展开",
 
-	CmdNew:              "开启新会话并保存历史",
-	CmdClear:            "丢弃当前上下文",
-	CmdCls:              "清屏（保留 LLM 上下文）",
-	CmdCompact:          "压缩上下文",
-	CmdCompressFast:     "快速压缩（无 AI）",
+	CmdNew:          "开启新会话并保存历史",
+	CmdClear:        "丢弃当前上下文",
+	CmdCls:          "清屏（保留 LLM 上下文）",
+	CmdCompact:      "压缩上下文",
+	CmdCompressFast: "快速压缩（无 AI）",
+	CmdContext:      "查看上下文窗口、阈值与上次维护结果",
+
 	CmdRewind:           "回滚到更早的一轮",
 	CmdTree:             "查看对话分支树",
 	CmdBranch:           "创建对话分支",
@@ -442,6 +444,7 @@ var Chinese = Messages{
 	CustomPromptBaseURL:  "请输入 Base URL",
 	CustomPromptKeyEnv:   "API Key 变量名（直接回车使用默认值，不是模型名）",
 	CustomPromptAPIKey:   "请输入 API Key",
+	CustomPromptWindow:   "上下文窗口(tokens,填得比模型真实窗口小会导致过早压缩)",
 	CustomAddedFmt:       "已添加自定义模型: %s",
 
 	// Anthropic 兼容 provider
