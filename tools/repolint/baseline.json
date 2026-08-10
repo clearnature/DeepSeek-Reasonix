@@ -4,12 +4,12 @@
     "commented-code": 0,
     "complexity": 2114,
     "essay": 4233,
-    "file-size": 116895,
+    "file-size": 117151,
     "function-size": 9268,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
-    "test-file-size": 70463
+    "test-file-size": 70459
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -180,10 +180,10 @@
       "file-size": 3950
     },
     "desktop/frontend/wailsjs/go/main/App.d.ts": {
-      "file-size": 32
+      "file-size": 66
     },
     "desktop/frontend/wailsjs/go/models.ts": {
-      "file-size": 5188
+      "file-size": 5409
     },
     "desktop/heartbeat.go": {
       "essay": 20,
@@ -675,7 +675,7 @@
     },
     "internal/agent/teammate_store_test.go": {
       "banner": 1,
-      "test-file-size": 35
+      "test-file-size": 31
     },
     "internal/agent/testutil/mock_provider.go": {
       "essay": 10
@@ -1101,7 +1101,7 @@
     "internal/control/controller.go": {
       "complexity": 16,
       "essay": 175,
-      "file-size": 5665,
+      "file-size": 5666,
       "function-size": 104,
       "narrative": 4
     },

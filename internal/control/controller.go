@@ -5553,6 +5553,7 @@ func (c *Controller) ReleaseResources() {
 func (c *Controller) Close() {
 	if c.teammates != nil {
 		c.teammates.DestroyAll()
+		c.teammates.Close() // stop the auto-advance worker goroutine (P6)
 	}
 	c.close(true, closeJobsWithGrace)
 }
