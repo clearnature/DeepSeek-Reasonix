@@ -188,6 +188,34 @@ dev 同步上游后，**预算/校准统一用 #8057 权威实现**：
   - `/compress-fast`（no-AI 工具结果压缩命令族）
 - 校准机制：`tokPerChar(lastUsage)` → 上游 `promptTokenCalibration`（promptTokens/requestChars 配对，`calibratedPromptTokens` 校准，跨会话重置）。
 
+### 阶段 13：上游 #8109 架构分叉 + dev/上游 对比（08-10）
+
+上游 `d541409e2 → 623760f43`（#8109 context-maintenance 事务化 + #8114 subagent-spec-split + #8126 context-command）后，**维护架构与 dev 分叉扩大**：
+
+**上游 #8109 新增（dev 没有）**：
+- `ContextManager`（context_manager.go）：维护路径从 `applyToolResultMaintenanceView` 迁入，`tryToolMaintenance` 每次请求前执行（est < fold → snip；≥ fold → prune）
+- `compactionRunMu` 锁 + `installProjectionIfCurrent` 两阶段事务 + `Generation` 版本 + `LastReceipt` 幂等（`InputHash` 比对）——**投影-idempotent**（同样输入不重复维护，#7935 修复）
+- **prune 改投影视图**（不再 `session.Rewrite` canonical）——**#8111 Bug 2 根因从源头消除**（方案不同：我们 `realignProjectionAfterRewrite` 重算哈希 vs 上游改掉 Rewrite）
+
+**#8111 缺陷的解决状态**：
+- Bug 2（prune 投影失效连锁）→ ✅ 上游 #8109 从源头修复（dev 的 realign 方案适用面收窄到 `/compress-fast` force 路径，同步上游时评估去留）
+- Bug 1（模型切换误压）→ ❌ 上游未修（`projectionValid` 的 cacheKey gate 仍在 `623760f43`）；我们的 `bcbcecda7`（删 cacheKey gate）仍是唯一修复
+
+**dev vs 上游对比（623760f43 基线）**：
+
+| 维度 | 上游 main-v2 | dev/clearnature |
+|---|---|---|
+| 折叠机制（`splitIntoSummarySpans`/`carryPriorDigests`）| ✅ | ✅（已同步 #8031）|
+| 预算校准（`output_budget.go`/`effectiveOutputBudget`）| ✅ | ✅（已同步 #8057）|
+| 维护架构 | `ContextManager` 事务化 + `LastReceipt` 幂等 | `applyToolResultMaintenanceView` + `realignProjectionAfterRewrite` |
+| resume gate（`MaybeCompactOnResume`）| ❌ | ✅（#8057 未采纳项）|
+| 投影有效性 gate | ⚠️ cacheKey 硬条件（Bug 1 未修）| ✅ 只 gate `coveredPrefixHash` |
+| 压缩遥测（stats 落盘/status/tpc）| ❌（#8112 在途）| ✅ 全套 |
+| /compress-fast + warm 守卫（`cacheColdAfter`）| ❌ | ✅ |
+| 请求前维护 warm 门控 | ❌（#8118 未满足）| ⚠️ 部分（/compress-fast 有，自动路径无）|
+
+**dev 同步 33 commit 时的关键决策**：realign 方案去留（上游 prune 已不重写 canonical）；`MaybeCompactOnResume`/遥测/`/compress-fast` 是否保留本地独有；#8118 建议的 warm 守卫是否实现。
+
 ## 三、当前架构（阶段 12 后）
 
 ```
@@ -248,7 +276,7 @@ canonical transcript（只增不减，永久事实源）
 | 2026-08-07 | C1/A1/B2 设计定案（重放门控/摘要合并/位置固定）|
 | 2026-08-08 | PR 7839（128K）→ 7913（动态预算）→ 36a06c341（summarize 裁剪）→ 4480758f8（有界拒绝）→ #7930（重试口径）→ d912be5ca（增量折叠）→ f90bf0ebc（对抗加固）|
 | 2026-08-09 | 上游 #8019-#8031 同步（partition/bounded fold/bench/incremental arm/carried digests）；#8057 合入吸收 #8006 核心（Co-authored-by: clearnature），#8004/#7972 关闭；#8006 关闭 |
-| 2026-08-10 | dev 统一到 #8057 结构（output_budget.go 权威实现 + calibration shape），本地保留 resume gate/overflow 预测/遥测 status/prune deferral//compress-fast |
+| 2026-08-10 | dev 统一到 #8057 结构（output_budget.go 权威实现 + calibration shape），本地保留 resume gate/overflow 预测/遥测 status/prune deferral//compress-fast；#8111 报告两个上游缺陷（模型切换误压 + prune 投影失效连锁），同日修复（bcbcecda7/286e6a886）+ 遥测体系（#8112 在途）；上游 #8109 合入（context maintenance 事务化 + 投影幂等，#7935 修复；prune 改投影视图从源头消除 #8111 Bug 2）|
 
 ---
 
