@@ -502,7 +502,7 @@ func TestRecorderPersistsCompactionTelemetry(t *testing.T) {
 	// Compaction notices must reach the frontend unchanged.
 	detail := "trigger=manual mode=summarized cache=warm src=5108937 proj=0 in=0 out=0 hit=0 miss=0 write=0 reqs=2 provider_request_id=req-abc err_type=deepseek-responses: status 400: over window"
 	r.Emit(event.Event{Kind: event.Notice, Text: "compaction failed", Detail: detail})
-	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry", Detail: "trigger=auto mode=summarized cache=warm src=2666458 proj=297000 in=10 out=20 hit=30 miss=40 write=50 reqs=1 tpc=0.250"})
+	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry", Detail: "trigger=auto mode=summarized cache=warm src=2666458 proj=297000 in=10 out=20 hit=30 miss=40 write=50 reqs=1 tpc=0.250 reason=force"})
 	flushRecorder(t, r)
 
 	w := NewWriter(dir)
@@ -529,6 +529,9 @@ func TestRecorderPersistsCompactionTelemetry(t *testing.T) {
 	}
 	if auto.TokPerChar != 0.25 {
 		t.Fatalf("auto row tpc: %v, want 0.250 (calibrated factor must survive the stats round-trip)", auto.TokPerChar)
+	}
+	if auto.Reason != "force" {
+		t.Fatalf("auto row reason: %q, want force (fold admission must survive the stats round-trip)", auto.Reason)
 	}
 	if auto.InputTok != 10 || auto.OutTok != 20 || auto.HitTok != 30 || auto.MissTok != 40 || auto.WriteTok != 50 {
 		t.Fatalf("auto row tokens: in=%d out=%d hit=%d miss=%d write=%d", auto.InputTok, auto.OutTok, auto.HitTok, auto.MissTok, auto.WriteTok)

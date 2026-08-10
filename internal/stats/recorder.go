@@ -189,6 +189,8 @@ func (r *Recorder) recordCompaction(e event.Event) {
 			return
 		case "status":
 			rec.Status = v
+		case "reason":
+			rec.Reason = v
 		case "tpc":
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
 				rec.TokPerChar = f

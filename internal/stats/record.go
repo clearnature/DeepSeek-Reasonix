@@ -80,6 +80,7 @@ type CompactionRecord struct {
 	// TokPerChar is the usage-calibrated token/char factor at fold time
 	// (0 until a turn reports usage). It makes src/proj values verifiable:
 	// src ≈ chars × tpc. Fast-compress (prune) passes leave it zero.
+	Reason     string  `json:"reason,omitempty"` // fold admission: manual|overflow|force|fold
 	TokPerChar float64 `json:"tpc,omitempty"`
 	RequestID  string  `json:"provider_request_id,omitempty"`
 	Error      string  `json:"err_type,omitempty"`
