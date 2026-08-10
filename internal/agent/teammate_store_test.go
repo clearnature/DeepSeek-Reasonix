@@ -116,10 +116,6 @@ func TestTeammateAssignStartsBackgroundJobWithEnvelope(t *testing.T) {
 		t.Fatalf("alpha state after completion = %+v, want idle (lazy sync)", list)
 	}
 }
-
-// TestTeammatePostMailPersistsAndFlushes is the P6.1 enhancement 2 e2e: mail
-// posted while the teammate is idle lands on disk, and the next assignment
-// flushes it into the job's P3 steer queue before the first turn.
 func TestTeammatePostMailPersistsAndFlushes(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()

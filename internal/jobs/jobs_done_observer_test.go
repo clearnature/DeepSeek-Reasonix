@@ -2,7 +2,9 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -209,5 +211,56 @@ func TestJobDoneObserverSuppressedDuringDestroy(t *testing.T) {
 
 	if calls := cap.snapshot(); len(calls) != 0 {
 		t.Fatalf("observer calls = %v, want none (destroy window swallows silent completion)", calls)
+	}
+}
+
+// TestJobDoneObserverFiresOnFailed: a run that returns an error terminates the
+// job as Failed; the observer still fires exactly once, with the failed
+// status and the run's error visible on the result (J2).
+func TestJobDoneObserverFiresOnFailed(t *testing.T) {
+	cap := &doneObserverCapture{}
+	m := NewManager(event.Discard, WithJobDoneObserver(cap.observer))
+	defer m.Close()
+
+	j := m.Start("task", "demo", func(ctx context.Context, out io.Writer) (string, error) {
+		return "", errors.New("boom")
+	})
+	res := m.Wait(context.Background(), []string{j.ID}, 5)
+	if len(res) != 1 || res[0].Status != Failed {
+		t.Fatalf("wait = %+v, want one failed result", res)
+	}
+	if !strings.Contains(res[0].Output, "boom") {
+		t.Fatalf("job output = %q, want boom surfaced", res[0].Output)
+	}
+
+	calls := cap.snapshot()
+	if len(calls) != 1 || calls[0] != j.ID+"|failed" {
+		t.Fatalf("observer calls = %v, want [%s|failed]", calls, j.ID)
+	}
+}
+
+// TestJobDoneObserverFiresOnInvalidStart: a validation failure (parentSession
+// containing a path separator) registers an invalid job — Failed with the
+// validation error — and the observer fires for it exactly once (J4). The
+// startInvalid path calls recordCompletion synchronously, so the observer has
+// already run by the time Start returns.
+func TestJobDoneObserverFiresOnInvalidStart(t *testing.T) {
+	cap := &doneObserverCapture{}
+	m := NewManager(event.Discard, WithJobDoneObserver(cap.observer))
+	defer m.Close()
+
+	j := m.StartForSession("parent/session", "task", "demo", func(ctx context.Context, out io.Writer) (string, error) {
+		return "unreachable", nil
+	})
+	if j.status != Failed {
+		t.Fatalf("invalid job status = %s, want failed", j.status)
+	}
+	if j.artifactErr == "" {
+		t.Fatal("invalid job artifactErr = empty, want validation error")
+	}
+
+	calls := cap.snapshot()
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "invalid-") || !strings.HasSuffix(calls[0], "|failed") {
+		t.Fatalf("observer calls = %v, want exactly [invalid-N|failed]", calls)
 	}
 }
