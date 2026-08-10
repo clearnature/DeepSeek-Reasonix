@@ -683,8 +683,13 @@ func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profi
 		Task:    TaskSpec{Objective: prompt, Description: description},
 		Worker:  WorkerSpec{Kind: "task", Name: "task", SystemPrompt: t.sysPrompt},
 		Grant:   CapabilityGrant{CallTools: tools},
-		Context: ContextRequest{ContinueFrom: strings.TrimSpace(continueFrom), ForkFrom: strings.TrimSpace(forkFrom), Fork: fork},
+		Context: ContextRequest{ContinueFrom: strings.TrimSpace(continueFrom), ForkFrom: strings.TrimSpace(forkFrom), Fork: fork, Silent: true},
 		Sched:   SchedulerPolicy{MaxSteps: maxSteps, RunInBackground: background, Nested: SubagentDepth(ctx) > 0},
+	}
+	if fork {
+		// P5 fire-and-forget default: silent envelope. P6 teammates and any
+		// other non-silent fork callers flip Silent=false afterwards.
+		spec.Context.Silent = true
 	}
 	profile = strings.TrimSpace(profile)
 	readOnly := forceReadOnly
@@ -953,11 +958,12 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		// Emit queued before the job goroutine can start so the status slot
 		// never regresses to a stale queued after running.
 		trk.queued()
-		// P5 fork: fire-and-forget — the job completes silently (no P1
-		// completion envelope is auto-delivered), so the child runs through
-		// StartSilentForSession while wait/bash_output/steer stay fully usable.
+		// P5 fork default is fire-and-forget: the job completes silently (no
+		// P1 completion envelope), so it runs through StartSilentForSession
+		// while wait/bash_output/steer stay usable. P6 teammates clear Silent
+		// so their result rides the P1 envelope back to the leader.
 		startJob := jm.StartForSession
-		if spec.Context.Fork {
+		if spec.Context.Fork && spec.Context.Silent {
 			startJob = jm.StartSilentForSession
 		}
 		job := startJob(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {

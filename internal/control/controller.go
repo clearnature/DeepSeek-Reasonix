@@ -163,6 +163,8 @@ type Controller struct {
 	// tools spawn into it; Compose drains its completion notes into the next turn;
 	// Close cancels its still-running jobs.
 	jobs *jobs.Manager
+	// teammates is the P6 team registry; nil disables /team-* commands.
+	teammates *agent.TeammateStore
 	// foregroundBkg is the P4 foreground→backgroundize signal for the in-flight
 	// foreground turn, nil while no foreground turn is running. spawnGuardedTurn
 	// and RunTurn stamp a fresh signal into the turn context and record it here;
@@ -495,6 +497,8 @@ type Options struct {
 	BalanceClient *http.Client
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager
+	// Teammates is the P6 team registry (nil disables /team-* commands).
+	Teammates *agent.TeammateStore
 	// WorkspaceLease is the Delivery writer owner shared with the executor.
 	WorkspaceLease *workspacelease.Owner
 	// Registry is the executor's live tool set, and PluginCtx the session-scoped
@@ -639,6 +643,7 @@ func New(opts Options) *Controller {
 		balanceKey:                        opts.BalanceKey,
 		balanceClient:                     opts.BalanceClient,
 		jobs:                              opts.Jobs,
+		teammates:                         opts.Teammates,
 		workspaceLease:                    opts.WorkspaceLease,
 		mcp:                               newMcpManager(opts.Host, opts.Registry, pluginCtx),
 		mcpDefaultCallTimeout:             opts.MCPDefaultCallTimeout,
@@ -1567,6 +1572,9 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 				return
 			}
 			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
+			return
+		case "/team-create", "/team-add", "/team-status", "/team-remove":
+			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
 		if c.managementNotice(trimmed) {
@@ -5543,6 +5551,9 @@ func (c *Controller) ReleaseResources() {
 // Close stops plugin subprocesses and releases resources. A session that ever
 // started fires SessionEnd so a teardown hook runs.
 func (c *Controller) Close() {
+	if c.teammates != nil {
+		c.teammates.DestroyAll()
+	}
 	c.close(true, closeJobsWithGrace)
 }
 
@@ -6378,5 +6389,70 @@ func (c *Controller) emitPlanModeReadOnlyCommandTrustResult(r PlanModeReadOnlyCo
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(i18n.M.PlanModeReadOnlyCommandTrustSavedFmt, r.Path, prefix)})
 	case strings.TrimSpace(r.CoveredBy) != "":
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(i18n.M.PlanModeReadOnlyCommandTrustAlreadyFmt, r.Path, r.CoveredBy)})
+	}
+}
+
+// applyTeamCommand implements the P6 /team-* management verbs. /team-create
+// registers a teammate identity; /team-add dispatches one job to a teammate
+// (first run forks the leader prefix — cache hit on the child's first request —
+// later runs continue the teammate's own transcript); /team-status lists the
+// roster; /team-remove kills and drops a member. All are host commands: the
+// output rides Notices, never the provider surface.
+func (c *Controller) applyTeamCommand(cmd, trimmed string) {
+	if c.teammates == nil {
+		c.notice("team commands are disabled (no TeammateStore configured)")
+		return
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, cmd))
+	switch cmd {
+	case "/team-create":
+		name, role, _ := strings.Cut(rest, " ")
+		if err := c.teammates.Create(name, role); err != nil {
+			c.notice("team-create: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q created (role %q) — assign work with /team-add", name, role))
+	case "/team-add":
+		name, task, _ := strings.Cut(rest, " ")
+		if strings.TrimSpace(task) == "" {
+			c.notice("usage: /team-add <name> <task...>")
+			return
+		}
+		ctx := context.Background()
+		if c.executor != nil {
+			ctx = agent.WithForkSource(ctx, c.executor)
+		}
+		if c.jobs != nil {
+			ctx = jobs.WithManager(ctx, c.jobs)
+			ctx = jobs.WithSession(ctx, c.parentSessionID())
+		}
+		ctx = agent.WithParentSession(ctx, c.parentSessionID())
+		jobID, err := c.teammates.Assign(ctx, name, task)
+		if err != nil {
+			c.notice("team-add: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q assigned (job %s) — result arrives via <background-jobs>", name, jobID))
+	case "/team-status":
+		list := c.teammates.List()
+		if len(list) == 0 {
+			c.notice("no teammates — create one with /team-create <name> <role>")
+			return
+		}
+		var b strings.Builder
+		for _, tm := range list {
+			fmt.Fprintf(&b, "\n  %s  %s  %s", tm.Name, tm.State, tm.Role)
+			if tm.LastJobID != "" {
+				fmt.Fprintf(&b, "  job=%s", tm.LastJobID)
+			}
+		}
+		c.notice(fmt.Sprintf("team roster (%d):%s", len(list), b.String()))
+	case "/team-remove":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.Remove(name); err != nil {
+			c.notice("team-remove: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q removed", name))
 	}
 }

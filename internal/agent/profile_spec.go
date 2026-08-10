@@ -118,9 +118,12 @@ type ContextRequest struct {
 	// Fork inherits the current parent conversation prefix (父 system + 已提交
 	// 历史，captureForkPrefix) into a fresh background sub-agent, so its first
 	// request can reuse the parent's provider prompt cache. Mutually exclusive
-	// with ContinueFrom/ForkFrom and forces a fire-and-forget background run
-	// (result is never delivered back automatically; collect it with wait).
+	// with ContinueFrom/ForkFrom and forces a fire-and-forget background run.
 	Fork bool
+	// Silent suppresses the P1 completion envelope for a Fork job (default
+	// true — P5 fire-and-forget semantics). Teammates (P6) turn it off so the
+	// job's result rides the <background-jobs> container back to the leader.
+	Silent bool
 	// Ephemeral forces a non-persisted transcript for entry points that promise
 	// no durable host side effects, such as read_only_task.
 	Ephemeral bool
