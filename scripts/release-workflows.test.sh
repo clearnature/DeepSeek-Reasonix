@@ -117,6 +117,12 @@ grep -Fq 'name: Smoke-test Wails approval in WebView2' "$repo_root/.github/workf
 grep -Fq '../scripts/test-webview2-approval-smoke.ps1' "$repo_root/.github/workflows/ci.yml"
 grep -Fq 'wails build -clean -s -skipbindings -nopackage -platform windows/amd64 -webview2 embed' \
 	"$repo_root/.github/workflows/ci.yml"
+pages_workflow="$repo_root/.github/workflows/pages.yml"
+grep -Fq 'pages_enabled: ${{ steps.pages.outputs.enabled }}' "$pages_workflow"
+grep -Fq 'name: Detect whether Pages is enabled' "$pages_workflow"
+grep -Fq 'gh api -i "repos/${GITHUB_REPOSITORY}/pages"' "$pages_workflow"
+[ "$(grep -Fc "if: \${{ steps.pages.outputs.enabled == 'true' }}" "$pages_workflow")" = "2" ]
+grep -Fq "if: \${{ needs.build.outputs.pages_enabled == 'true' }}" "$pages_workflow"
 for retired_review_gate in \
 	"$repo_root/.github/workflows/cross-boundary-review.yml" \
 	"$repo_root/.github/workflows/cross-boundary-review-signal.yml" \
