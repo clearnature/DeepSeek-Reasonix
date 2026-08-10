@@ -218,6 +218,13 @@ type Manager struct {
 	teardownGrace  time.Duration
 
 	taskRecorder TaskRecorder // optional task-monitoring lifecycle hook
+
+	// jobDoneObservers are completion observers registered via
+	// WithJobDoneObserver / SetJobDoneObserver. The slice is guarded by mu: it
+	// is snapshotted under mu and each callback runs outside it, so a slow or
+	// panicking observer never holds the manager lock or breaks the job
+	// teardown pipeline.
+	jobDoneObservers []func(id string, st Status, err error)
 }
 
 // Snapshot limits for the structured completion record: the finished job's
@@ -314,6 +321,29 @@ func WithTaskRecorder(r TaskRecorder) Option {
 // construction. Controllers that assemble their job manager before the
 // recorder's dependencies (workspace root, session id) are known use this.
 func (m *Manager) SetTaskRecorder(r TaskRecorder) { m.taskRecorder = r }
+
+// WithJobDoneObserver registers a completion observer, called once per
+// terminal job (after the P1 envelope is queued, outside m.mu). It must not
+// call back into the Manager. Multiple observers all run.
+func WithJobDoneObserver(observer func(id string, st Status, err error)) Option {
+	return func(m *Manager) {
+		if observer != nil {
+			m.jobDoneObservers = append(m.jobDoneObservers, observer)
+		}
+	}
+}
+
+// SetJobDoneObserver installs (or clears, with nil) the observer after
+// construction. It replaces any observers registered via WithJobDoneObserver.
+func (m *Manager) SetJobDoneObserver(observer func(id string, st Status, err error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if observer == nil {
+		m.jobDoneObservers = nil
+		return
+	}
+	m.jobDoneObservers = []func(id string, st Status, err error){observer}
+}
 
 // TeardownGrace reports the manager's configured close/destroy wait window.
 func (m *Manager) TeardownGrace() time.Duration { return m.teardownGrace }
@@ -975,6 +1005,7 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 		if !nilutil.IsNil(m.taskRecorder) {
 			m.taskRecorder.RecordDone(id, st, err)
 		}
+		m.fireJobDoneObservers(id, st, err)
 		return
 	}
 	shouldEmit := false
@@ -1000,6 +1031,7 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	if !nilutil.IsNil(m.taskRecorder) {
 		m.taskRecorder.RecordDone(id, st, err)
 	}
+	m.fireJobDoneObservers(id, st, err)
 
 	level, text := event.LevelInfo, fmt.Sprintf("background %s finished: %s", kind, id)
 	detail := ""
@@ -1012,6 +1044,29 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	}
 	if shouldEmit {
 		m.sink.Emit(event.Event{Kind: event.Notice, Level: level, Text: text, Detail: detail})
+	}
+}
+
+// fireJobDoneObservers runs every registered completion observer exactly once
+// for a terminal job. The callback slice is snapshotted under m.mu (never
+// held while a callback runs) and each observer is invoked outside any lock
+// with the id/status/error recordCompletion received — handlers must not look
+// the job up again, since its status is still Running at this point. A
+// panicking observer is recovered per-callback so it can neither break the job
+// teardown pipeline nor prevent its siblings from running.
+func (m *Manager) fireJobDoneObservers(id string, st Status, err error) {
+	m.mu.Lock()
+	observers := make([]func(id string, st Status, err error), len(m.jobDoneObservers))
+	copy(observers, m.jobDoneObservers)
+	m.mu.Unlock()
+	for _, obs := range observers {
+		if obs == nil {
+			continue
+		}
+		func() {
+			defer func() { _ = recover() }()
+			obs(id, st, err)
+		}()
 	}
 }
 

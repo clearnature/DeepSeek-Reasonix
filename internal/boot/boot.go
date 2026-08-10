@@ -1907,6 +1907,16 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		}
 	}
 
+	// P6.2 production wiring: the teammate registry shares the controller's
+	// event sink so mailbox-wakeup notices reach the leader (previously only
+	// tests called SetSink — notifyMail was a silent no-op in prod).
+	// jm.SetJobDoneObserver(ts.OnJobDone) is intentionally deferred:
+	// TeammateStore.OnJobDone has not landed yet (E2), so wiring it now would
+	// not compile; add the line after E2 merges (NewTeammateStore already
+	// receives jm, so E2 may also register the observer inside the constructor).
+	teammates := agent.NewTeammateStore(taskTool, jm)
+	teammates.SetSink(sink)
+
 	ctrlOpts := control.Options{
 		Runner:                         runner,
 		Executor:                       executor,
@@ -1939,7 +1949,9 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		Jobs:          jm,
 		// P6 team: wire the teammate registry so /team-* commands are live in
 		// production (they were test-only before — see the isolation audit).
-		Teammates:             agent.NewTeammateStore(taskTool, jm),
+		// Constructed above so SetSink can be called; NewTeammateStore itself
+		// keeps its original signature.
+		Teammates:             teammates,
 		WorkspaceLease:        workspaceLease,
 		Registry:              reg,
 		PluginCtx:             ctx,

@@ -7,6 +7,7 @@ import (
 	"reasonix/internal/event"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"reasonix/internal/provider"
@@ -14,7 +15,9 @@ import (
 )
 
 // mockProvider replays preset chunks and records the last request it received.
+// Stream is safe for concurrent use (a real provider serves concurrent jobs).
 type mockProvider struct {
+	mu       sync.Mutex
 	name     string
 	chunks   []provider.Chunk
 	streams  [][]provider.Chunk
@@ -25,6 +28,7 @@ type mockProvider struct {
 func (m *mockProvider) Name() string { return m.name }
 
 func (m *mockProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+	m.mu.Lock()
 	m.lastReq = req
 	call := len(m.requests)
 	m.requests = append(m.requests, req)
@@ -35,6 +39,7 @@ func (m *mockProvider) Stream(ctx context.Context, req provider.Request) (<-chan
 		}
 		chunks = m.streams[call]
 	}
+	m.mu.Unlock()
 	ch := make(chan provider.Chunk, len(chunks))
 	for _, c := range chunks {
 		ch <- c
