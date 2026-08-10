@@ -891,9 +891,10 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// handoff is the only caller that sets resume.
 	runSessionMode := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered, resume bool) (string, error) {
 		if spec.Context.Fork {
-			// T3 执行层只读 gate：fork 子代理 schema 全量保留（缓存前缀），但
-			// 每次执行都被 Gate 拦截——写工具拒绝、bash 只读命令放行。
-			runCtx = WithForkReadOnlyGate(runCtx, forkReadOnlyGate{})
+			// P5/P6.1 execution gate: schema stays writer-capable (cache
+			// prefix), executions are gated — read-only by default; a
+			// writable teammate (P6.1 enhancement 1) opts out via the gate.
+			runCtx = WithForkReadOnlyGate(runCtx, forkReadOnlyGate{writable: spec.Context.Writable})
 		}
 		if resume {
 			runCtx = WithResumeSession(runCtx)

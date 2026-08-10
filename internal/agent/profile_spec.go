@@ -124,6 +124,9 @@ type ContextRequest struct {
 	// true — P5 fire-and-forget semantics). Teammates (P6) turn it off so the
 	// job's result rides the <background-jobs> container back to the leader.
 	Silent bool
+	// Writable opts a fork into a writable execution gate (P6.1 enhancement 1,
+	// used by writable teammates). Default false keeps the P5 read-only fork.
+	Writable bool
 	// Ephemeral forces a non-persisted transcript for entry points that promise
 	// no durable host side effects, such as read_only_task.
 	Ephemeral bool

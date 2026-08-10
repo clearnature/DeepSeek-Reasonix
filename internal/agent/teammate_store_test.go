@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -106,5 +108,95 @@ func TestTeammateAssignStartsBackgroundJobWithEnvelope(t *testing.T) {
 	}
 	if list := ts.List(); len(list) != 1 || list[0].State != TeammateIdle {
 		t.Fatalf("alpha state after completion = %+v, want idle (lazy sync)", list)
+	}
+}
+
+// TestTeammatePostMailPersistsAndFlushes is the P6.1 enhancement 2 e2e: mail
+// posted while the teammate is idle lands on disk, and the next assignment
+// flushes it into the job's P3 steer queue before the first turn.
+func TestTeammatePostMailPersistsAndFlushes(t *testing.T) {
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	root := t.TempDir()
+	ts := NewTeammateStore(testTaskToolForTeam(t), jm, root)
+	if err := ts.Create("alpha", "worker"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := ts.PostMail("alpha", "check the schema first"); err != nil {
+		t.Fatalf("PostMail: %v", err)
+	}
+	// Idle teammate: mail sits on disk (survives restart).
+	dir := filepath.Join(root, "alpha", "inbox")
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("inbox entries = %v err=%v, want 1 persisted mail", len(entries), err)
+	}
+	ctx := jobs.WithManager(context.Background(), jm)
+	ctx = jobs.WithSession(ctx, "leader-session")
+	ctx = WithParentSession(ctx, "leader-session")
+	ctx = WithForkSource(ctx, newAgentForForkSource())
+	jobID, err := ts.Assign(ctx, "alpha", "summarize the findings")
+	if err != nil {
+		t.Fatalf("Assign: %v", err)
+	}
+	// The mail was flushed into the job's steer queue (drainable once running).
+	if err := jm.SendMessageForSession("leader-session", jobID, "first steer"); err != nil {
+		t.Fatalf("steer into teammate job: %v", err)
+	}
+	// Mail file is consumed after flush.
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("inbox not drained, %d entries left", len(entries))
+	}
+	// Posting to an unknown teammate fails.
+	if err := ts.PostMail("ghost", "hi"); err == nil {
+		t.Fatal("PostMail unknown teammate accepted")
+	}
+}
+
+// newAgentForForkSource returns a minimal *Agent for WithForkSource (P5 fork
+// capture). captureForkPrefix only needs a session; nothing provider-bound.
+func newAgentForForkSource() *Agent {
+	return New(&mockProvider{name: "parent", chunks: []provider.Chunk{
+		{Type: provider.ChunkText, Text: "ok"},
+		{Type: provider.ChunkDone},
+	}}, tool.NewRegistry(), NewSession("sys"), Options{}, event.Discard)
+}
+
+// TestTeammateDependencyGate is the P6.1 enhancement 3 e2e: a dependent
+// assignment is refused while its prerequisite job runs, then accepted once the
+// prerequisite reaches a terminal state.
+func TestTeammateDependencyGate(t *testing.T) {
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	for _, n := range []string{"alpha", "beta"} {
+		if err := ts.Create(n, "worker"); err != nil {
+			t.Fatalf("Create %s: %v", n, err)
+		}
+	}
+	ctx := jobs.WithManager(context.Background(), jm)
+	ctx = jobs.WithSession(ctx, "leader-session")
+	ctx = WithParentSession(ctx, "leader-session")
+	ctx = WithForkSource(ctx, newAgentForForkSource())
+	first, err := ts.Assign(ctx, "alpha", "first step")
+	if err != nil {
+		t.Fatalf("first Assign: %v", err)
+	}
+	t.Logf("alpha first jobID=%s", first)
+	// beta depends on alpha's still-running first job → refused by the gate
+	// (beta is idle, so the running-teammate guard does not mask this).
+	if _, err := ts.Assign(ctx, "beta", "second step", first); err == nil ||
+		!strings.Contains(err.Error(), "blocked by unfinished dependency") {
+		t.Fatalf("dependent Assign while prerequisite running = %v, want blocked", err)
+	}
+	t.Log("gate refused while running — OK")
+	// Wait for the first job to finish, then beta's dependent assignment passes.
+	jm.WaitForSession(context.Background(), "leader-session", []string{first}, 5)
+	t.Log("first job finished — OK")
+	if _, err := ts.Assign(ctx, "beta", "second step", first); err != nil {
+		t.Fatalf("dependent Assign after prerequisite done: %v", err)
+	}
+	if tasks := ts.Tasks(); len(tasks) != 2 {
+		t.Fatalf("Tasks() = %d entries, want 2 tracked", len(tasks))
 	}
 }

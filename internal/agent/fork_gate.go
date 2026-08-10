@@ -15,16 +15,21 @@ import (
 // (plan §二 裁决：深度 guard（≤maxSubagentDepth）+ 大小 guard（父历史 ≤窗口 80%））。
 const forkHistoryWindowRatio = 0.8
 
-// forkReadOnlyGate is the P5 fork execution-layer gate (T3): the fork child
-// keeps the parent's full writer-capable schema (prompt-cache prefix identity,
-// plan §一.4 安全双轨的「前缀要求」) but executions are read-only — read-only
-// tools and permission-classified read-only bash pass; every other call is
-// rejected with a reason fed back to the model. The gate rides the run context
+// forkReadOnlyGate is the P6.1-parameterized fork execution gate. By default
+// the fork child is read-only (P5 discipline: schema stays writer-capable for
+// prefix identity, executions are gated). Teammates may opt into a writable
+// gate (P6.1 enhancement 1), in which case write tools and bash pass through
+// like a normal sub-agent. The gate rides the run context
 // (WithForkReadOnlyGate), mirroring WithForkSource, since TaskTool is shared
 // across concurrent runs.
-type forkReadOnlyGate struct{}
+type forkReadOnlyGate struct {
+	writable bool
+}
 
-func (forkReadOnlyGate) Check(_ context.Context, toolName string, args json.RawMessage, readOnly bool) (bool, string, error) {
+func (g forkReadOnlyGate) Check(_ context.Context, toolName string, args json.RawMessage, readOnly bool) (bool, string, error) {
+	if g.writable {
+		return true, "", nil
+	}
 	// Bash is schema-level writer-capable but a concrete invocation can be
 	// permission-classified as read-only. Allow exactly those; anything else
 	// bash-shaped falls through to the writer rejection below.
