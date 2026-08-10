@@ -41,6 +41,7 @@ func TestTeammateDoneIdleAllowsReassign(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -80,6 +81,7 @@ func TestTeammateDoneDependencyChainAutoAdvance(t *testing.T) {
 	defer jm.Close()
 	sub := &releaseBlockingProvider{name: "slow", release: make(chan struct{})}
 	ts := NewTeammateStore(newTaskToolWith(t, sub), jm)
+	defer ts.Close()
 	for _, n := range []string{"alpha", "beta"} {
 		if err := ts.Create(n, "worker"); err != nil {
 			t.Fatalf("Create %s: %v", n, err)
@@ -140,6 +142,7 @@ func TestTeammateDoneMailboxBacklogWakeup(t *testing.T) {
 	var notices []event.Event
 	sub := &releaseBlockingProvider{name: "slow", release: make(chan struct{})}
 	ts := NewTeammateStore(newTaskToolWith(t, sub), jm, t.TempDir())
+	defer ts.Close()
 	ts.SetSink(event.FuncSink(func(e event.Event) {
 		mu.Lock()
 		notices = append(notices, e)
@@ -193,6 +196,7 @@ func TestTeammateDoneConcurrentAssignCompletion(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	// Two teammates keep concurrent Assign below the background-task slot cap
 	// (maxConcurrentBackgroundTasks), so Assign never fails on the session
 	// limit while still exercising interleaved completion events under -race.

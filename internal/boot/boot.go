@@ -1909,12 +1909,15 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 
 	// P6.2 production wiring: the teammate registry shares the controller's
 	// event sink so mailbox-wakeup notices reach the leader (previously only
-	// tests called SetSink — notifyMail was a silent no-op in prod).
-	// jm.SetJobDoneObserver(ts.OnJobDone) is intentionally deferred:
-	// TeammateStore.OnJobDone has not landed yet (E2), so wiring it now would
-	// not compile; add the line after E2 merges (NewTeammateStore already
-	// receives jm, so E2 may also register the observer inside the constructor).
-	teammates := agent.NewTeammateStore(taskTool, jm)
+	// tests called SetSink — notifyMail was a silent no-op in prod). The
+	// completion observer is registered inside NewTeammateStore (it receives
+	// jm); teammate lifecycle (idle flip / dependency auto-advance / mailbox
+	// backlog wakeup) is driven by job completion events.
+	// P6 mailbox persistence root: teammate mail lands under the session dir
+	// (same lifetime as transcripts), so the mailbox backlog wake-up on job
+	// completion actually has an inbox to count.
+	inboxRoot := filepath.Join(sessionDir, "team-inbox")
+	teammates := agent.NewTeammateStore(taskTool, jm, inboxRoot)
 	teammates.SetSink(sink)
 
 	ctrlOpts := control.Options{

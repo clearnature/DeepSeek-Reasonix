@@ -31,6 +31,7 @@ func TestTeammateStoreCreateListRemove(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	if err := ts.Create("alpha", "researcher"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -58,6 +59,7 @@ func TestTeammateStoreAssignRejectsUnknownAndRunning(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	if _, err := ts.Assign(context.Background(), "ghost", "work"); err == nil ||
 		!strings.Contains(err.Error(), "unknown teammate") {
 		t.Fatalf("Assign unknown = %v, want unknown-teammate error", err)
@@ -82,6 +84,7 @@ func TestTeammateAssignStartsBackgroundJobWithEnvelope(t *testing.T) {
 	defer jm.Close()
 	task := testTaskToolForTeam(t)
 	ts := NewTeammateStore(task, jm)
+	defer ts.Close()
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -122,6 +125,7 @@ func TestTeammatePostMailPersistsAndFlushes(t *testing.T) {
 	defer jm.Close()
 	root := t.TempDir()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm, root)
+	defer ts.Close()
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -174,6 +178,7 @@ func TestTeammateDependencyGate(t *testing.T) {
 	defer jm.Close()
 	prov := &sequencingProvider{name: "sub", release: make(chan struct{}), blockAt: 2}
 	ts := NewTeammateStore(newTaskToolWith(t, prov), jm)
+	defer ts.Close()
 	for _, n := range []string{"alpha", "beta"} {
 		if err := ts.Create(n, "worker"); err != nil {
 			t.Fatalf("Create %s: %v", n, err)
@@ -224,11 +229,20 @@ func TestTeammateDependencyGate(t *testing.T) {
 		t.Fatalf("first job = %+v, want Done", res)
 	}
 	t.Log("first job finished — auto-advance fired")
+	// The auto-advance worker consumes the queued task asynchronously, so poll
+	// for beta's successor job (bounded) instead of reading Tasks() once.
 	var second string
-	for _, tk := range ts.Tasks() {
-		if tk.Owner == "beta" && tk.JobID != "" && tk.JobID != warmup {
-			second = tk.JobID
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, tk := range ts.Tasks() {
+			if tk.Owner == "beta" && tk.JobID != "" && tk.JobID != warmup {
+				second = tk.JobID
+			}
 		}
+		if second != "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if second == "" {
 		t.Fatal("auto-advance did not start beta's dependent job")
@@ -254,6 +268,7 @@ func TestTeamMessageToolPostsMail(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm, t.TempDir())
+	defer ts.Close()
 	ts.SetSink(event.Discard)
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create alpha: %v", err)
@@ -314,15 +329,26 @@ type releaseBlockingProvider struct {
 func (m *releaseBlockingProvider) Name() string { return m.name }
 
 func (m *releaseBlockingProvider) Stream(ctx context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
-	ch := make(chan provider.Chunk)
+	ch := make(chan provider.Chunk, 3)
 	go func() {
 		defer close(ch)
+		// Non-blocking sends: a provider that stops being read (job killed,
+		// run-loop gone) must drop chunks instead of leaking a goroutine.
 		select {
 		case <-ctx.Done():
-			ch <- provider.Chunk{Type: provider.ChunkError, Err: ctx.Err()}
+			select {
+			case ch <- provider.Chunk{Type: provider.ChunkError, Err: ctx.Err()}:
+			default:
+			}
 		case <-m.release:
-			ch <- provider.Chunk{Type: provider.ChunkText, Text: "done"}
-			ch <- provider.Chunk{Type: provider.ChunkDone}
+			select {
+			case ch <- provider.Chunk{Type: provider.ChunkText, Text: "done"}:
+			default:
+			}
+			select {
+			case ch <- provider.Chunk{Type: provider.ChunkDone}:
+			default:
+			}
 		}
 	}()
 	return ch, nil
@@ -373,6 +399,7 @@ func TestTeammateHandleJobDoneFiresIdle(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -416,6 +443,7 @@ func TestTeammateHandleJobDoneStaleJobNoop(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -454,6 +482,7 @@ func TestTeammateHandleJobDoneAutoAdvancesDependent(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	for _, n := range []string{"alpha", "beta"} {
 		if err := ts.Create(n, "worker"); err != nil {
 			t.Fatalf("Create %s: %v", n, err)
@@ -528,6 +557,7 @@ func TestTeammateHandleJobDoneOwnerRemovedKeepsTask(t *testing.T) {
 	defer jm.Close()
 	prov := &releaseBlockingProvider{name: "sub", release: make(chan struct{})}
 	ts := NewTeammateStore(newTaskToolWith(t, prov), jm)
+	defer ts.Close()
 	for _, n := range []string{"alpha", "beta"} {
 		if err := ts.Create(n, "worker"); err != nil {
 			t.Fatalf("Create %s: %v", n, err)
@@ -553,13 +583,22 @@ func TestTeammateHandleJobDoneOwnerRemovedKeepsTask(t *testing.T) {
 		t.Fatalf("first job = %+v, want Done", res)
 	}
 	// Auto-advance is skipped for the removed owner, but the task stays
-	// registered (blocked with a visible reason).
-	tasks := ts.Tasks()
+	// registered (blocked with a visible reason). The worker marks it blocked
+	// asynchronously, so poll briefly.
 	var kept *TeamTask
-	for i := range tasks {
-		if tasks[i].Owner == "beta" {
-			kept = &tasks[i]
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		kept = nil
+		for _, tk := range ts.Tasks() {
+			if tk.Owner == "beta" {
+				kk := tk
+				kept = &kk
+			}
 		}
+		if kept != nil && kept.Status == taskBlocked && strings.Contains(kept.BlockedReason, "removed") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if kept == nil {
 		t.Fatal("beta's waiting task was dropped, want it kept (blocked)")
@@ -581,6 +620,7 @@ func TestTeammateHandleJobDoneMailboxWakeup(t *testing.T) {
 	defer jm.Close()
 	prov := &releaseBlockingProvider{name: "sub", release: make(chan struct{})}
 	ts := NewTeammateStore(newTaskToolWith(t, prov), jm, t.TempDir())
+	defer ts.Close()
 	var mu sync.Mutex
 	var notices []event.Event
 	ts.SetSink(event.FuncSink(func(e event.Event) {
@@ -632,6 +672,7 @@ func TestTeammateRemoveClearsTasks(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -661,6 +702,7 @@ func TestTeammateHandleJobDoneIdempotent(t *testing.T) {
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
 	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	defer ts.Close()
 	if err := ts.Create("alpha", "worker"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -685,4 +727,109 @@ func TestTeammateHandleJobDoneIdempotent(t *testing.T) {
 			t.Fatalf("task status = %q, want immutable done snapshot", tk.Status)
 		}
 	}
+}
+
+// TestTeammateKilledDepDoesNotAutoAdvance pins the killed-advance ruling
+// (discipline review-2/6): a dependency that dies as Killed settles the gate
+// (the leader may re-issue manually) but never auto-starts the dependent task.
+func TestTeammateKilledDepDoesNotAutoAdvance(t *testing.T) {
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	sub := &releaseBlockingProvider{name: "slow", release: make(chan struct{})}
+	ts := NewTeammateStore(newTaskToolWith(t, sub), jm)
+	defer ts.Close()
+	for _, n := range []string{"alpha", "beta"} {
+		if err := ts.Create(n, "worker"); err != nil {
+			t.Fatalf("Create %s: %v", n, err)
+		}
+	}
+	ctx := teamAssignCtx(jm)
+
+	jobA, err := ts.Assign(ctx, "alpha", "first step")
+	if err != nil {
+		t.Fatalf("alpha Assign: %v", err)
+	}
+	// beta depends on the running jobA → registered pending.
+	if _, err := ts.Assign(ctx, "beta", "second step", jobA); err == nil {
+		t.Fatal("beta dependent Assign should be gated")
+	}
+	// Kill alpha's job: completion fires as Killed.
+	if !jm.KillForSession("leader-session", jobA) {
+		t.Fatalf("Kill %s failed", jobA)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if tm, ok := ts.Status("alpha"); ok && tm.State == TeammateIdle {
+			break // idle flip happened (event-driven)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// Give any (wrong) auto-advance a chance to run, then assert it did not.
+	time.Sleep(100 * time.Millisecond)
+	if tm, ok := ts.Status("beta"); !ok || tm.LastJobID != "" {
+		t.Fatalf("beta was auto-assigned after a Killed dependency: %+v", tm)
+	}
+	// The gate is settled though: Tasks() shows the dep terminal, beta pending.
+	found := false
+	for _, tk := range ts.Tasks() {
+		if tk.Owner == "beta" && tk.Status == taskPending {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("beta pending task missing after killed dep: %+v", ts.Tasks())
+	}
+}
+
+// TestTeammateBlockedAutoAdvanceRetries pins blocked recovery (discipline
+// review-6 attack 4): a task that fails to auto-advance transiently is marked
+// blocked, and the next completion event re-scans it — here the retry succeeds
+// once the owner is idle again.
+func TestTeammateBlockedAutoAdvanceRetries(t *testing.T) {
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	sub := &releaseBlockingProvider{name: "slow", release: make(chan struct{})}
+	ts := NewTeammateStore(newTaskToolWith(t, sub), jm)
+	defer ts.Close()
+	for _, n := range []string{"alpha", "beta"} {
+		if err := ts.Create(n, "worker"); err != nil {
+			t.Fatalf("Create %s: %v", n, err)
+		}
+	}
+	ctx := teamAssignCtx(jm)
+
+	jobA, err := ts.Assign(ctx, "alpha", "first step")
+	if err != nil {
+		t.Fatalf("alpha Assign: %v", err)
+	}
+	if _, err := ts.Assign(ctx, "beta", "second step", jobA); err == nil {
+		t.Fatal("beta dependent Assign should be gated")
+	}
+	// Make beta busy with its own job so the auto-advance fails with
+	// "teammate running" → task blocked.
+	jobB, err := ts.Assign(ctx, "beta", "busy step")
+	if err != nil {
+		t.Fatalf("beta busy Assign: %v", err)
+	}
+	close(sub.release) // release alpha's job → completion event → auto-advance tries beta (running) → blocked
+	if res := jm.WaitForSession(context.Background(), "leader-session", []string{jobA, jobB}, 5); len(res) != 2 {
+		t.Fatalf("jobs = %+v, want 2 done", res)
+	}
+	// beta is now idle after its own job; the completion event for jobB is the
+	// retry window — the blocked dependent should advance.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		found := false
+		for _, tk := range ts.Tasks() {
+			if tk.Owner == "beta" && tk.JobID != "" && tk.JobID != jobB {
+				found = true
+			}
+		}
+		if found {
+			return // dependent advanced on retry — pass
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// Report the blocked state for diagnosis instead of a bare failure.
+	t.Fatalf("blocked dependent never retried: %+v", ts.Tasks())
 }

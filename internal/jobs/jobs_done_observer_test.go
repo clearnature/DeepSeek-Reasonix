@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"reasonix/internal/event"
 )
@@ -164,5 +165,49 @@ func TestJobDoneObserverNotFiredAfterClose(t *testing.T) {
 	m.SetJobDoneObserver(func(id string, st Status, err error) { after++ })
 	if after != 0 {
 		t.Fatalf("observer installed after Close fired %d time(s), want 0", after)
+	}
+}
+
+// TestJobDoneObserverNotFiredForRunningJobKilledOnClose: a job still running
+// when the manager closes dies as Killed — its completion must NOT reach the
+// observer (ghost auto-advance guard, discipline review-1 D2). The old
+// TestJobDoneObserverNotFiredAfterClose only covered a pre-closed job.
+func TestJobDoneObserverNotFiredForRunningJobKilledOnClose(t *testing.T) {
+	cap := &doneObserverCapture{}
+	m := NewManager(event.Discard, WithJobDoneObserver(cap.observer))
+
+	started := make(chan struct{})
+	_ = m.Start("task", "ghost", func(ctx context.Context, out io.Writer) (string, error) {
+		close(started)
+		<-ctx.Done()
+		return "", ctx.Err()
+	})
+	<-started
+	m.Close()
+
+	if calls := cap.snapshot(); len(calls) != 0 {
+		t.Fatalf("observer fired %v for a job killed by Close, want none (ghost advance)", calls)
+	}
+}
+
+// TestJobDoneObserverSuppressedDuringDestroy: a session being destroyed
+// swallows its completion events on BOTH paths (normal + silent/suppressed),
+// so a silent job finishing inside the destroy window never fires the observer.
+func TestJobDoneObserverSuppressedDuringDestroy(t *testing.T) {
+	cap := &doneObserverCapture{}
+	m := NewManager(event.Discard, WithJobDoneObserver(cap.observer))
+
+	// Silent job completing inside the destroy window must not fire the
+	// observer (suppress path guard, discipline review-1).
+	j2 := m.StartSilentForSession("session-y", "task", "demo2", func(ctx context.Context, out io.Writer) (string, error) {
+		return "ok", nil
+	})
+	m.BeginDestroySession("session-y")
+	_ = j2
+	m.WaitTeardown(context.Background(), m.BeginDestroySession("session-y"), time.Second)
+	m.Close()
+
+	if calls := cap.snapshot(); len(calls) != 0 {
+		t.Fatalf("observer calls = %v, want none (destroy window swallows silent completion)", calls)
 	}
 }

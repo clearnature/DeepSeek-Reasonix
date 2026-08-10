@@ -1005,7 +1005,15 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 		if !nilutil.IsNil(m.taskRecorder) {
 			m.taskRecorder.RecordDone(id, st, err)
 		}
-		m.fireJobDoneObservers(id, st, err)
+		// Symmetric with the non-suppress path below: a session being
+		// destroyed swallows its completion events (the UI is gone), so the
+		// observer must not fire a ghost auto-advance into a closing session.
+		m.mu.Lock()
+		destroying := parentSession != "" && m.destroying[parentSession]
+		m.mu.Unlock()
+		if !destroying {
+			m.fireJobDoneObservers(id, st, err)
+		}
 		return
 	}
 	shouldEmit := false
@@ -1055,6 +1063,11 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 // panicking observer is recovered per-callback so it can neither break the job
 // teardown pipeline nor prevent its siblings from running.
 func (m *Manager) fireJobDoneObservers(id string, st Status, err error) {
+	select {
+	case <-m.root.Done():
+		return // manager closed: no completion events after Close
+	default:
+	}
 	m.mu.Lock()
 	observers := make([]func(id string, st Status, err error), len(m.jobDoneObservers))
 	copy(observers, m.jobDoneObservers)

@@ -90,6 +90,12 @@ type TeammateStore struct {
 	// (its rebuilt ctx carries no turn context). Set once, never the ctx object
 	// itself — only the *Agent the ctx pointed at (lifecycle-design 主题 5).
 	leader *Agent
+	// autoCh receives waiting task IDs to auto-advance; a single worker goroutine
+	// consumes it serially so assignments never run concurrently for one store
+	// and the completion handler never blocks on jobs I/O (discipline G1).
+	autoCh     chan string
+	doneCh     chan struct{}
+	workerOnce sync.Once
 }
 
 // NewTeammateStore wires a registry to the task tool that executes assignments.
@@ -107,10 +113,50 @@ func NewTeammateStore(task *TaskTool, jm *jobs.Manager, inboxRoot ...string) *Te
 	if len(inboxRoot) > 0 {
 		ts.inboxRoot = inboxRoot[0]
 	}
+	ts.autoCh = make(chan string, 16)
+	ts.doneCh = make(chan struct{})
+	go ts.autoWorker()
 	if jm != nil {
 		jm.SetJobDoneObserver(ts.HandleJobDone)
 	}
 	return ts
+}
+
+// Close stops the auto-advance worker. Safe to call multiple times; jobs stay
+// untouched (the manager owns them). Tests must defer Close to keep goleak clean.
+func (ts *TeammateStore) Close() {
+	ts.workerOnce.Do(func() { close(ts.doneCh) })
+}
+
+// autoWorker serially consumes ready-to-advance task IDs. Serial execution
+// keeps auto-assignments of the same owner ordered and never blocks the job
+// completion handler on fork/start I/O (discipline G1).
+func (ts *TeammateStore) autoWorker() {
+	for {
+		select {
+		case <-ts.doneCh:
+			return
+		case id := <-ts.autoCh:
+			ts.autoAssignByID(id)
+		}
+	}
+}
+
+// enqueueAuto non-blockingly hands a waiting task to the auto-advance worker.
+// A full queue marks the task blocked instead of blocking the completion
+// handler; the next completion event re-scans blocked candidates (recovery).
+func (ts *TeammateStore) enqueueAuto(id string) {
+	select {
+	case ts.autoCh <- id:
+	default:
+		ts.mu.Lock()
+		if cur := ts.tasks[id]; cur != nil && cur.JobID == "" && cur.Status == taskPending {
+			cur.Status = taskBlocked
+			cur.BlockedReason = "auto-advance queue full"
+		}
+		ts.mu.Unlock()
+		slog.Warn("team auto-advance queue full", "task", id)
+	}
 }
 
 // Create registers a teammate identity. Duplicate names are rejected.
@@ -449,17 +495,27 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 			break
 		}
 	}
-	// Auto-advance candidates: waiting tasks whose dependencies are all
-	// terminal (the status settled above is part of that picture).
-	var ready []*TeamTask
+	// Auto-advance candidates: only a clean Done advances dependent tasks
+	// (Failed/Killed/Interrupted settle the gate so the leader can re-issue
+	// manually, but never auto-start a successor — discipline review 2/6).
+	// Blocked candidates are re-scanned too: each completion event is a
+	// retry window for a task that failed transiently (queue full, owner
+	// briefly busy, slot limit).
+	var ready []string
 	for _, t := range ts.tasks {
-		if t == nil || t.JobID != "" || t.Status != taskPending {
+		if t == nil || t.JobID != "" {
+			continue
+		}
+		if t.Status != taskPending && t.Status != taskBlocked {
+			continue
+		}
+		if st != jobs.Done {
 			continue
 		}
 		if !ts.depsTerminalLocked(t.DependsOn) {
 			continue
 		}
-		ready = append(ready, t)
+		ready = append(ready, t.ID)
 	}
 	ts.mu.Unlock()
 
@@ -468,8 +524,8 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 			ts.notifyMailBacklog(flipped, n)
 		}
 	}
-	for _, t := range ready {
-		ts.autoAssign(t)
+	for _, id := range ready {
+		ts.enqueueAuto(id)
 	}
 }
 
@@ -514,12 +570,21 @@ func (ts *TeammateStore) assignContext(sessionID string) context.Context {
 // visible in Tasks() (no silent dropout). On success the started job's own
 // registration (recordTask inside Assign) becomes the single entry and the
 // placeholder is dropped — one registration per task, never a duplicate pair.
-func (ts *TeammateStore) autoAssign(t *TeamTask) {
+// autoAssignByID re-issues one waiting task as a real assignment. It never
+// preempts: if the owner is gone or busy, the task is marked blocked and stays
+// visible in Tasks() (no silent dropout). On success the started job's own
+// registration (recordTask inside Assign) becomes the single entry and the
+// placeholder is dropped — one registration per task, never a duplicate pair.
+func (ts *TeammateStore) autoAssignByID(id string) {
 	ts.mu.Lock()
-	cur := ts.tasks[t.ID]
-	if cur == nil || cur.JobID != "" || cur.Status != taskPending {
+	cur := ts.tasks[id]
+	if cur == nil || cur.JobID != "" {
 		ts.mu.Unlock()
 		return // already advanced or removed (idempotent)
+	}
+	if cur.Status != taskPending && cur.Status != taskBlocked {
+		ts.mu.Unlock()
+		return
 	}
 	owner, prompt, sessionID := cur.Owner, cur.Prompt, cur.SessionID
 	deps := append([]string(nil), cur.DependsOn...)
@@ -527,7 +592,7 @@ func (ts *TeammateStore) autoAssign(t *TeamTask) {
 		cur.Status = taskBlocked
 		cur.BlockedReason = "teammate removed"
 		ts.mu.Unlock()
-		slog.Warn("team auto-assign skipped", "task", t.ID, "owner", owner, "reason", "teammate removed")
+		slog.Warn("team auto-assign skipped", "task", id, "owner", owner, "reason", "teammate removed")
 		return
 	}
 	ts.mu.Unlock()
@@ -540,18 +605,18 @@ func (ts *TeammateStore) autoAssign(t *TeamTask) {
 			reason = err.Error()
 		}
 		ts.mu.Lock()
-		if cur := ts.tasks[t.ID]; cur != nil && cur.JobID == "" && cur.Status == taskPending {
+		if cur := ts.tasks[id]; cur != nil && cur.JobID == "" && (cur.Status == taskPending || cur.Status == taskBlocked) {
 			cur.Status = taskBlocked
 			cur.BlockedReason = reason
 		}
 		ts.mu.Unlock()
-		slog.Warn("team auto-assign failed", "task", t.ID, "owner", owner, "job", jobID, "err", err)
+		slog.Warn("team auto-assign failed", "task", id, "owner", owner, "job", jobID, "err", err)
 		return
 	}
 	ts.mu.Lock()
-	delete(ts.tasks, t.ID)
+	delete(ts.tasks, id)
 	ts.mu.Unlock()
-	slog.Info("team auto-assigned", "task", t.ID, "owner", owner, "job", jobID)
+	slog.Info("team auto-assigned", "task", id, "owner", owner, "job", jobID)
 }
 
 // Complete marks a teammate idle after its job reaches a terminal state. The
