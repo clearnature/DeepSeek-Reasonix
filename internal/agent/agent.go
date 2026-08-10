@@ -304,6 +304,13 @@ type Agent struct {
 	// lastUsage caches the latest provider telemetry for the CLI context gauge.
 	// The run loop writes it while a frontend reads it, so it is atomic.
 	lastUsage atomic.Pointer[provider.Usage]
+	// lastEstTokens is the admission estimate of the most recent request;
+	// usage rows carry it as est so the estimate-vs-actual gap is auditable
+	// without waiting for a compaction record.
+	lastEstTokens int
+	// lastFoldReason records why the latest fold was admitted (manual,
+	// overflow, force, or fold); compaction telemetry carries it as reason.
+	lastFoldReason string
 	outputBudgetState
 	// lastResponseHitTokens stores the previous turn's CacheHitTokens so the
 	// response-side cache-break detector can compare the current hit count

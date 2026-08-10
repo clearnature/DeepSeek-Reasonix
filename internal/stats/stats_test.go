@@ -654,6 +654,7 @@ func TestRecorderPersistsPrefixHash(t *testing.T) {
 	u.CacheDiagnostics = &event.CacheDiagnostics{
 		PrefixHash: "abc123", PrefixChanged: true, PrefixChangeReasons: []string{"log_rewrite"},
 	}
+	u.EstTokens = 1600
 	r.Emit(u)
 	flushRecorder(t, r)
 
@@ -669,5 +670,8 @@ func TestRecorderPersistsPrefixHash(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"prefix_reasons":["log_rewrite"]`) {
 		t.Fatalf("row missing prefix_reasons: %s", data)
+	}
+	if !strings.Contains(string(data), `"est":1600`) {
+		t.Fatalf("row missing est: %s", data)
 	}
 }

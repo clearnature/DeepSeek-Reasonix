@@ -185,6 +185,7 @@ func (a *Agent) compressVisibleRange(
 	res, err := a.foldToSummary(ctx, prepared.fold, prepared.instructions)
 	summary := res.Text
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res, a.tokPerChar())
+	tele.Reason = a.lastFoldReason
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -432,9 +433,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	if !force && !foldEconomics(fold) {
 		return CompactionNoop, nil
 	}
-
 	a.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
-
 	if a.hooks != nil {
 		if hookInstr := a.hooks.PreCompact(ctx, trigger); hookInstr != "" {
 			if instructions != "" {
@@ -443,7 +442,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 			instructions += hookInstr
 		}
 	}
-
 	fold, instructions, err = a.interceptCompactionPrepare(ctx, fold, instructions)
 	if err != nil {
 		a.emitCompactionAborted(trigger)
@@ -453,7 +451,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, nil
 	}
-
 	archived := ""
 	if a.archiveDir != "" {
 		path, aerr := archiveMessages(a.archiveDir, fold)
@@ -463,18 +460,17 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		}
 		archived = path
 	}
-
 	sourceTokens := a.estimatedPromptTokens(canonical)
 	res, err := a.foldToSummary(ctx, fold, instructions)
 	summary := res.Text
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res, a.tokPerChar())
+	tele.Reason = a.lastFoldReason
 	if err != nil {
 		tele.Error = err.Error()
 		emit(tele)
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
 	}
-
 	summary, err = a.interceptCompactionComplete(ctx, summary)
 	if err != nil {
 		tele.Error = err.Error()
@@ -482,7 +478,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
 	}
-
 	projMsgs := make([]provider.Message, 0, head+len(early)+len(carried)+1+len(kept)+len(msgs)-start)
 	projMsgs = append(projMsgs, msgs[:head]...)
 	projMsgs = append(projMsgs, early...)
@@ -491,12 +486,10 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	projMsgs = append(projMsgs, kept...)
 	projMsgs = append(projMsgs, msgs[start:]...)
 	projMsgs = provider.ModelMessages(projMsgs)
-
 	projTokens := a.estimatedPromptTokens(a.providerProjectionMessages(projMsgs))
 	tele.ProjectionTokens = projTokens
 	tele.Status = CompactionStatusInstalled
 	emit(tele)
-
 	projVersion := a.compactionState.Projection.ProjectionVersion + 1
 	st := CompactionState{
 		SchemaVersion:     compactionStateSchemaCurrent,
@@ -528,7 +521,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		return CompactionNoop, fmt.Errorf("persist projection: %w", err)
 	}
 	a.session.NoteContentRewrite("compact_" + trigger)
-
 	a.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(fold), Summary: summary, Archive: archived,
 	}})
@@ -770,9 +762,9 @@ func (a *Agent) realignProjectionAfterRewrite() {
 // emitCompactionTelemetry records structured compaction observability without
 // logging sensitive transcript content.
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
-	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f",
+	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f reason=%s",
 		t.Trigger, t.Mode, t.Status, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
-		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount, t.TokPerChar)
+		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount, t.TokPerChar, t.Reason)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}

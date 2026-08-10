@@ -136,7 +136,7 @@ func (r *Recorder) Emit(e event.Event) {
 	case e.Kind == event.Usage:
 		r.recordUsage(e)
 	case e.Kind == event.GuardianAssessment && e.Guardian.Usage != nil:
-		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, nil)
+		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, 0, nil)
 	case e.Kind == event.TurnDone:
 		r.RecordTurnCompletion()
 	case e.Kind == event.Notice && isCompactionTelemetry(e.Text):
@@ -296,10 +296,10 @@ func (r *Recorder) RecordDelegationAdmission(a event.DelegationAdmissionAudit) {
 }
 
 func (r *Recorder) recordUsage(e event.Event) {
-	r.recordProviderUsage(e.ModelRef, e.Usage, e.CacheDiagnostics)
+	r.recordProviderUsage(e.ModelRef, e.Usage, e.EstTokens, e.CacheDiagnostics)
 }
 
-func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, diag *event.CacheDiagnostics) {
+func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, est int, diag *event.CacheDiagnostics) {
 	if usage == nil || (usage.TotalTokens <= 0 && usage.RequestCount <= 0) {
 		return
 	}
@@ -314,6 +314,7 @@ func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, d
 		CacheMiss:  usage.CacheMissTokens,
 		Total:      usage.TotalTokens,
 		Requests:   usageRequestCount(usage),
+		Est:        est,
 	}
 	if diag != nil {
 		rec.PrefixHash = diag.PrefixHash

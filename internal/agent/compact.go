@@ -693,6 +693,7 @@ func archiveMessages(dir string, msgs []provider.Message) (string, error) {
 func (a *Agent) silentCompactionTelemetry(trigger string, canonical []provider.Message, err error) CompactionTelemetry {
 	tele := CompactionTelemetry{
 		Trigger:      trigger,
+		Reason:       a.lastFoldReason,
 		CacheState:   a.CacheState(),
 		Mode:         CompactionModeSummarized,
 		SourceTokens: a.estimatedPromptTokens(canonical),

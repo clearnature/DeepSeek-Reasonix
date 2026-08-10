@@ -34,6 +34,7 @@ func TestCompactionNoopEmitsTelemetry(t *testing.T) {
 		outputBudgetState: outputBudgetState{outputBudget: 128 * 1024},
 		compactRatio:      0.8,
 		compactForceRatio: 0.9,
+		lastFoldReason:    "manual",
 		sink:              sink,
 	}
 	// A session so small the fold region is empty: everything fits in head+tail.
@@ -56,6 +57,15 @@ func TestCompactionNoopEmitsTelemetry(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no status=noop telemetry emitted; notices: %v", sink.notices)
+	}
+	foundReason := false
+	for _, d := range sink.notices {
+		if strings.Contains(d, "reason=manual") {
+			foundReason = true
+		}
+	}
+	if !foundReason {
+		t.Fatalf("no reason=manual in telemetry; notices: %v", sink.notices)
 	}
 }
 

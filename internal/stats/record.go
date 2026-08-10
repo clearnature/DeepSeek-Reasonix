@@ -42,6 +42,7 @@ type record struct {
 	CacheMiss  int       `json:"cache_miss,omitempty"`
 	Total      int       `json:"total,omitempty"`
 	Requests   int       `json:"requests,omitempty"` // provider requests represented by this row
+	Est        int       `json:"est,omitempty"`      // admission estimate; est vs prompt exposes estimate drift
 	Turn       bool      `json:"turn,omitempty"`     // true for TurnDone marker rows
 	// PrefixHash fingerprints the sent request prefix (CacheDiagnostics),
 	// distinguishing a miss from a changed prefix vs server-side expiry.

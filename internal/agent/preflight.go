@@ -27,6 +27,15 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 	// transcripts, so the overflow guard uses the usage-calibrated value once
 	// a turn has reported real token counts.
 	est := a.estimatedPromptTokens(msgs)
+	// Prefer the last real usage observation: the calibrated estimate runs
+	// hot on CJK/tool-dense sessions (975k vs 602k actual, 2026-08-10) and
+	// can cross force with a canonical estimate at 60% of the window.
+	if u := a.lastUsage.Load(); u != nil {
+		if pt := u.LatestPromptTokens(); pt > 0 {
+			est = pt
+		}
+	}
+	a.lastEstTokens = est
 	_, _, high := a.compactThresholds()
 	force := max(a.forceThreshold(), high)
 
@@ -59,6 +68,18 @@ func (a *Agent) contextPreflight(ctx context.Context, trigger string) error {
 		}
 	}
 
+	reason := "fold"
+	switch {
+	case trigger == CompactionTriggerManual:
+		reason = "manual"
+	case trigger == CompactionTriggerOverflow:
+		reason = "overflow"
+	case est >= force:
+		reason = "force"
+	case est >= high:
+		reason = "fold"
+	}
+	a.lastFoldReason = reason
 	forceCompact := est >= force || trigger == CompactionTriggerManual || trigger == CompactionTriggerOverflow
 	outcome, err := a.compactToProjection(ctx, trigger, "", forceCompact)
 	if err != nil {
