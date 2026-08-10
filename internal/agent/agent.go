@@ -1138,8 +1138,8 @@ type Options struct {
 	CompactRatio  float64
 	// Deprecated compatibility inputs. New agents ignore these fields; automatic
 	// maintenance is controlled only by CompactRatio.
-	SoftCompactRatio       float64
-	ToolResultSnipRatio    float64
+	SoftCompactRatio    float64
+	ToolResultSnipRatio float64
 	// AutoBackgroundizeAfter auto-converts a long-running foreground task to a
 	// background job after this duration. Zero disables automatic handoff.
 	AutoBackgroundizeAfter time.Duration

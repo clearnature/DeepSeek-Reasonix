@@ -1,22 +1,15 @@
 {
   "limits": {
-    "banner": 15,
+    "banner": 16,
     "commented-code": 0,
-<<<<<<< HEAD
-    "complexity": 2101,
-    "essay": 4072,
-    "file-size": 110143,
-    "function-size": 9157,
-=======
-    "complexity": 2093,
-    "essay": 4153,
-    "file-size": 116886,
-    "function-size": 9203,
->>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
+    "complexity": 2114,
+    "essay": 4233,
+    "file-size": 116895,
+    "function-size": 9268,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
-    "test-file-size": 69921
+    "test-file-size": 70463
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -35,7 +28,7 @@
     "desktop/app.go": {
       "complexity": 63,
       "essay": 95,
-      "file-size": 11484,
+      "file-size": 11597,
       "function-size": 381
     },
     "desktop/app_autosave_test.go": {
@@ -91,7 +84,7 @@
       "essay": 2
     },
     "desktop/frontend/src/App.tsx": {
-      "file-size": 4736
+      "file-size": 4740
     },
     "desktop/frontend/src/__tests__/app-chrome-tabs.test.ts": {
       "test-file-size": 19
@@ -172,7 +165,7 @@
       "file-size": 415
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 4746
+      "file-size": 4752
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 225
@@ -181,10 +174,16 @@
       "file-size": 269
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1456
+      "file-size": 1480
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 3935
+      "file-size": 3950
+    },
+    "desktop/frontend/wailsjs/go/main/App.d.ts": {
+      "file-size": 32
+    },
+    "desktop/frontend/wailsjs/go/models.ts": {
+      "file-size": 5188
     },
     "desktop/heartbeat.go": {
       "essay": 20,
@@ -310,7 +309,7 @@
     },
     "desktop/subagents_app_test.go": {
       "essay": 2,
-      "test-file-size": 152
+      "test-file-size": 151
     },
     "desktop/tab_goal_restore_test.go": {
       "essay": 1
@@ -447,8 +446,8 @@
     },
     "internal/agent/agent.go": {
       "complexity": 37,
-      "essay": 97,
-      "file-size": 2508,
+      "essay": 101,
+      "file-size": 2523,
       "function-size": 102
     },
     "internal/agent/ask.go": {
@@ -462,6 +461,10 @@
     },
     "internal/agent/cache_shape_test.go": {
       "essay": 1
+    },
+    "internal/agent/cachehit_e2e_test.go": {
+      "essay": 5,
+      "test-file-size": 50
     },
     "internal/agent/capability_gate.go": {
       "essay": 7
@@ -481,7 +484,7 @@
     },
     "internal/agent/coordinator_test.go": {
       "essay": 3,
-      "test-file-size": 1025
+      "test-file-size": 1030
     },
     "internal/agent/delivery_hardening_test.go": {
       "essay": 5
@@ -503,10 +506,10 @@
       "function-size": 208
     },
     "internal/agent/execute_one.go": {
-      "complexity": 16,
+      "complexity": 10,
       "essay": 23,
-      "file-size": 155,
-      "function-size": 29
+      "file-size": 113,
+      "function-size": 12
     },
     "internal/agent/extensions.go": {
       "essay": 64
@@ -523,6 +526,12 @@
     "internal/agent/fleet.go": {
       "essay": 3,
       "function-size": 24
+    },
+    "internal/agent/fork_cache_real_test.go": {
+      "essay": 1
+    },
+    "internal/agent/fork_gate.go": {
+      "essay": 3
     },
     "internal/agent/listsessions_bench_test.go": {
       "essay": 4
@@ -556,7 +565,7 @@
       "essay": 3
     },
     "internal/agent/profile_spec.go": {
-      "essay": 4
+      "essay": 5
     },
     "internal/agent/reasoning_language.go": {
       "essay": 2
@@ -578,16 +587,10 @@
       "essay": 1
     },
     "internal/agent/run_loop.go": {
-<<<<<<< HEAD
       "complexity": 1,
-      "essay": 32,
-      "file-size": 179
-=======
-      "complexity": 9,
       "essay": 42,
-      "file-size": 400,
-      "function-size": 52
->>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
+      "file-size": 325,
+      "function-size": 5
     },
     "internal/agent/save.go": {
       "complexity": 49,
@@ -637,6 +640,9 @@
     "internal/agent/storm_test.go": {
       "essay": 1
     },
+    "internal/agent/subagent_fork.go": {
+      "essay": 4
+    },
     "internal/agent/subagent_progress.go": {
       "essay": 10
     },
@@ -644,28 +650,32 @@
       "test-file-size": 181
     },
     "internal/agent/subagent_store.go": {
-      "essay": 5,
-      "file-size": 149
+      "essay": 6,
+      "file-size": 180
     },
     "internal/agent/subagent_store_test.go": {
       "test-file-size": 250
     },
     "internal/agent/task.go": {
-<<<<<<< HEAD
-      "complexity": 25,
-      "essay": 53,
-      "file-size": 1266,
-      "function-size": 114
-=======
-      "complexity": 28,
-      "essay": 68,
-      "file-size": 1448,
-      "function-size": 142
->>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
+      "complexity": 35,
+      "essay": 69,
+      "file-size": 1529,
+      "function-size": 177
     },
     "internal/agent/task_test.go": {
       "essay": 4,
-      "test-file-size": 398
+      "test-file-size": 404
+    },
+    "internal/agent/teammate_done_e2e_test.go": {
+      "essay": 18
+    },
+    "internal/agent/teammate_store.go": {
+      "essay": 44,
+      "file-size": 48
+    },
+    "internal/agent/teammate_store_test.go": {
+      "banner": 1,
+      "test-file-size": 35
     },
     "internal/agent/testutil/mock_provider.go": {
       "essay": 10
@@ -690,19 +700,14 @@
     },
     "internal/boot/boot.go": {
       "complexity": 298,
-      "essay": 102,
-<<<<<<< HEAD
-      "file-size": 2238,
-      "function-size": 1866,
-=======
-      "file-size": 2228,
-      "function-size": 1856,
->>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
+      "essay": 109,
+      "file-size": 2258,
+      "function-size": 1886,
       "narrative": 3
     },
     "internal/boot/boot_test.go": {
       "essay": 10,
-      "test-file-size": 4510
+      "test-file-size": 4512
     },
     "internal/boot/extension_dispatch_test.go": {
       "essay": 3,
@@ -832,7 +837,7 @@
     "internal/cli/chat_tui.go": {
       "complexity": 326,
       "essay": 109,
-      "file-size": 4669,
+      "file-size": 4754,
       "function-size": 1280
     },
     "internal/cli/chat_tui_paste.go": {
@@ -840,7 +845,7 @@
     },
     "internal/cli/chat_tui_test.go": {
       "essay": 8,
-      "test-file-size": 3596
+      "test-file-size": 3720
     },
     "internal/cli/cli.go": {
       "complexity": 72,
@@ -997,8 +1002,8 @@
       "essay": 2
     },
     "internal/config/config.go": {
-      "essay": 54,
-      "file-size": 1503,
+      "essay": 58,
+      "file-size": 1549,
       "narrative": 2
     },
     "internal/config/credentials.go": {
@@ -1073,10 +1078,10 @@
       "file-size": 267
     },
     "internal/config/render.go": {
-      "complexity": 243,
+      "complexity": 246,
       "essay": 2,
-      "file-size": 989,
-      "function-size": 941
+      "file-size": 999,
+      "function-size": 950
     },
     "internal/config/render_test.go": {
       "test-file-size": 757
@@ -1087,19 +1092,22 @@
     "internal/control/approval.go": {
       "essay": 19
     },
+    "internal/control/backgroundize_test.go": {
+      "essay": 1
+    },
     "internal/control/checkpoint.go": {
       "essay": 9
     },
     "internal/control/controller.go": {
-      "complexity": 10,
-      "essay": 162,
-      "file-size": 5416,
-      "function-size": 75,
+      "complexity": 16,
+      "essay": 175,
+      "file-size": 5665,
+      "function-size": 104,
       "narrative": 4
     },
     "internal/control/controller_test.go": {
       "essay": 10,
-      "test-file-size": 4608
+      "test-file-size": 4662
     },
     "internal/control/errmsg.go": {
       "essay": 2
@@ -1431,15 +1439,9 @@
       "test-file-size": 238
     },
     "internal/jobs/jobs.go": {
-<<<<<<< HEAD
-      "essay": 42,
-      "file-size": 1271,
-      "function-size": 12
-=======
-      "essay": 59,
-      "file-size": 1661,
-      "function-size": 13
->>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
+      "essay": 71,
+      "file-size": 1760,
+      "function-size": 14
     },
     "internal/jobs/jobs_extra_test.go": {
       "essay": 1
@@ -1448,7 +1450,7 @@
       "essay": 4
     },
     "internal/jobs/jobs_test.go": {
-      "test-file-size": 12
+      "test-file-size": 279
     },
     "internal/memory/doc.go": {
       "essay": 1
@@ -1572,7 +1574,7 @@
     "internal/provider/openai/openai.go": {
       "complexity": 67,
       "essay": 41,
-      "file-size": 543,
+      "file-size": 553,
       "function-size": 263
     },
     "internal/provider/openai/openai_test.go": {
