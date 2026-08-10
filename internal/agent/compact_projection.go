@@ -488,8 +488,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	tele.Status = CompactionStatusInstalled
 	emit(tele)
 
-	a.emitCompactionTelemetry(tele)
-
 	viewOutputHash := providerVisibleFingerprint(provider.ModelMessages(projMsgs))
 	st, err := a.commitSummaryProjection(summaryProjectionCommit{
 		canonical: canonical, fold: fold, projected: projMsgs, result: res,
