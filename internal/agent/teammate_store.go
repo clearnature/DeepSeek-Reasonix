@@ -365,8 +365,9 @@ func (ts *TeammateStore) recordPendingTaskLocked(owner, prompt, sessionID string
 // pendingDependenciesLocked returns a non-empty reason naming the first
 // dependency that is still running (or unknown), or "" when all are terminal.
 // The dependency-tree snapshot (recordTask initial / HandleJobDone terminal)
-// is the primary source; the manager is only consulted as a fallback for deps
-// that were never registered. Caller must hold ts.mu.
+// is the sole source — never consult the manager (a consuming read that would
+// also see the stale Running status while a completion event is in flight).
+// Caller must hold ts.mu.
 func (ts *TeammateStore) pendingDependenciesLocked(dependsOn []string) string {
 	// tasks snapshot is the source of truth: recordTask writes Running at
 	// start, HandleJobDone writes the terminal state at completion. Never
@@ -470,9 +471,9 @@ func isTerminalStatus(st jobs.Status) bool {
 //
 // Lock order: this handler runs from a jobs-layer lock-free point, takes
 // ts.mu only for the atomic settle (never ts.jm.* inside), then does the
-// mailbox IO and the auto-assign outside the lock. The synchronous Assign
-// inside the callback is safe per arbitration 3's lock-order analysis
-// (startForSession re-enters jm locks as an independent critical section).
+// mailbox IO and the auto-advance enqueue outside the lock. The actual
+// auto-assign runs on the store's single worker goroutine (autoWorker), so
+// the callback never blocks on fork/start I/O (discipline G1).
 func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 	if !isTerminalStatus(st) {
 		return // terminal filter: Running and unknown statuses are ignored
