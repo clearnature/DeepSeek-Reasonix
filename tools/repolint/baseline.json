@@ -2,10 +2,17 @@
   "limits": {
     "banner": 15,
     "commented-code": 0,
+<<<<<<< HEAD
     "complexity": 2101,
     "essay": 4072,
     "file-size": 110143,
     "function-size": 9157,
+=======
+    "complexity": 2093,
+    "essay": 4153,
+    "file-size": 116886,
+    "function-size": 9203,
+>>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
     "layering": 1,
     "marker": 0,
     "narrative": 64,
@@ -571,9 +578,16 @@
       "essay": 1
     },
     "internal/agent/run_loop.go": {
+<<<<<<< HEAD
       "complexity": 1,
       "essay": 32,
       "file-size": 179
+=======
+      "complexity": 9,
+      "essay": 42,
+      "file-size": 400,
+      "function-size": 52
+>>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
     },
     "internal/agent/save.go": {
       "complexity": 49,
@@ -637,10 +651,17 @@
       "test-file-size": 250
     },
     "internal/agent/task.go": {
+<<<<<<< HEAD
       "complexity": 25,
       "essay": 53,
       "file-size": 1266,
       "function-size": 114
+=======
+      "complexity": 28,
+      "essay": 68,
+      "file-size": 1448,
+      "function-size": 142
+>>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
     },
     "internal/agent/task_test.go": {
       "essay": 4,
@@ -670,8 +691,13 @@
     "internal/boot/boot.go": {
       "complexity": 298,
       "essay": 102,
+<<<<<<< HEAD
       "file-size": 2238,
       "function-size": 1866,
+=======
+      "file-size": 2228,
+      "function-size": 1856,
+>>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
       "narrative": 3
     },
     "internal/boot/boot_test.go": {
@@ -1405,9 +1431,15 @@
       "test-file-size": 238
     },
     "internal/jobs/jobs.go": {
+<<<<<<< HEAD
       "essay": 42,
       "file-size": 1271,
       "function-size": 12
+=======
+      "essay": 59,
+      "file-size": 1661,
+      "function-size": 13
+>>>>>>> 1238636c7 (fix(agent): P4 review - detach background job from parent turn + gate sentinel to foreground tasks only)
     },
     "internal/jobs/jobs_extra_test.go": {
       "essay": 1

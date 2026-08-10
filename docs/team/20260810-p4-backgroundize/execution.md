@@ -49,3 +49,16 @@ go vet + gofmt + repolint                                ✅（banner 清零，�
 - 自动阈值激进性（首轮采样超时立即后台化）为已知接受项，增强项「至少 2 轮」未纳入
 - UI 接线（TUI/desktop 按钮）后续；ACP session_backgroundize 可选
 - 下一事务：P2（任务管理面板）或 P5（fork）
+
+## 七、fable5 独立审查（2026-08-10 追加）——2 个严重缺陷修复
+
+独立审查子代理对 P1-P4 全 diff 审核，评分 6.5/10，发现 2 个 blocking 缺陷（均在 P4）：
+
+1. **P4 后台任务被父 turn 生命周期绑架**（task.go 原 `AfterFunc(ctx, cancelRun)`）：turn 正常结束即杀后台任务，与「runs across turns」矛盾。
+   → 修复：job runCtx 只基于 jobCtx（kill/close 传播），detach 父 turn；测试改为 `TestBackgroundizeSurvivesParentTurnCancel`（父结束存活 + kill 生效）。
+2. **P4 sentinel 在主 agent 无捕获者**（run_loop 返回 errBackgroundizeRequested，仅 task.go 两处捕获）：默认 120s 阈值下主 agent 长对话 turn 直接报错。
+   → 修复：`WithForegroundTask` 标记只注入前台 task 子代理，`backgroundizeRequested` 非前台 task 恒 false；子代理继承阈值（TaskToolOptions.AutoBackgroundizeAfter）；补 `TestBackgroundizeCheckpointNoopOnMainAgent`。
+
+警告修复：stalled 活动复位（jobWriter.Write 清 stalled）；desktop 错误文案。
+
+验证：agent -race 全绿（含新测试）、jobs/control/boot 全绿、repolint clean。

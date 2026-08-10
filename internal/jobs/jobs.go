@@ -389,6 +389,7 @@ func (w jobWriter) Write(p []byte) (int, error) {
 	w.j.mu.Lock()
 	defer w.j.mu.Unlock()
 	w.j.activityAt = nowMs()
+	w.j.stalled = false // resumed activity clears the stalled marker (P2 review)
 	w.j.tail = appendTail(w.j.tail, p, defaultTailBytes)
 	if w.j.artifactFile != nil {
 		if _, err := w.j.artifactFile.Write(p); err != nil {

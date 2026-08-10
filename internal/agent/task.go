@@ -28,6 +28,23 @@ import (
 	"reasonix/internal/workspacelease"
 )
 
+// foregroundTaskKey marks a context as running a foreground (sync) task
+// sub-agent — the only context where backgroundize signals and the automatic
+// threshold are honored (main agent/background/planner never set it, so they
+// never return the handoff sentinel only RunProfileSpec captures).
+type foregroundTaskKey struct{}
+
+// WithForegroundTask stamps a context as a foreground task sub-agent.
+func WithForegroundTask(ctx context.Context) context.Context {
+	return context.WithValue(ctx, foregroundTaskKey{}, true)
+}
+
+// foregroundTaskFromContext reports whether the run loop may hand off.
+func foregroundTaskFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(foregroundTaskKey{}).(bool)
+	return v
+}
+
 // withSubagentSessionTemp installs a fresh session-private temporary directory
 // Manager for one sub-agent run. The returned release must be deferred by the
 // caller so the directory is retired when the run ends (including background
@@ -264,6 +281,7 @@ type TaskTool struct {
 	identityProfile               func(modelRef, effort string) (string, string)
 	maxSubagentDepth              int
 	deliveryProfile               bool
+	autoBackgroundizeAfter        time.Duration
 	ablation                      ablation.Set
 	workspaceLease                *workspacelease.Owner
 	// scheduler is the session-scoped concurrency + write-claim controller.
@@ -311,6 +329,9 @@ type TaskToolOptions struct {
 	SubagentModel                         string
 	SubagentEffort                        string
 	ResolveProvider                       func(string, string) (provider.Provider, *provider.Pricing, int, error)
+	// AutoBackgroundizeAfter is inherited by foreground task sub-agents so the
+	// P4 auto-handoff threshold applies to them, not just the parent.
+	AutoBackgroundizeAfter time.Duration
 }
 
 // NewTaskToolWithOptions is the internal standard constructor for TaskTool.
@@ -323,22 +344,23 @@ func NewTaskToolWithOptions(opts TaskToolOptions) *TaskTool {
 		sysPrompt = DefaultTaskSystemPrompt
 	}
 	return &TaskTool{
-		prov:             opts.Provider,
-		pricing:          opts.Pricing,
-		parentReg:        opts.ParentRegistry,
-		maxSteps:         opts.MaxSteps,
-		contextWindow:    opts.ContextWindow,
-		recentKeep:       opts.RecentKeep,
-		compactRatio:     opts.CompactRatio,
-		temperature:      opts.Temperature,
-		archiveDir:       opts.ArchiveDir,
-		keepPolicy:       opts.KeepPolicy,
-		sysPrompt:        sysPrompt,
-		gate:             opts.Gate,
-		subagentModel:    opts.SubagentModel,
-		subagentEffort:   opts.SubagentEffort,
-		resolveProvider:  opts.ResolveProvider,
-		maxSubagentDepth: DefaultMaxSubagentDepth,
+		prov:                   opts.Provider,
+		pricing:                opts.Pricing,
+		parentReg:              opts.ParentRegistry,
+		maxSteps:               opts.MaxSteps,
+		contextWindow:          opts.ContextWindow,
+		recentKeep:             opts.RecentKeep,
+		compactRatio:           opts.CompactRatio,
+		temperature:            opts.Temperature,
+		archiveDir:             opts.ArchiveDir,
+		keepPolicy:             opts.KeepPolicy,
+		sysPrompt:              sysPrompt,
+		gate:                   opts.Gate,
+		subagentModel:          opts.SubagentModel,
+		subagentEffort:         opts.SubagentEffort,
+		resolveProvider:        opts.ResolveProvider,
+		autoBackgroundizeAfter: opts.AutoBackgroundizeAfter,
+		maxSubagentDepth:       DefaultMaxSubagentDepth,
 	}
 }
 
@@ -969,7 +991,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			run.Release()
 		}
 	}()
-	answer, err := runSessionMode(ctx, trk.wrap(), false, false)
+	answer, err := runSessionMode(WithForegroundTask(ctx), trk.wrap(), false, false)
 	if errors.Is(err, errBackgroundizeRequested) {
 		// P4 handoff: the foreground run loop returned the sentinel at an
 		// iteration boundary with the committed session intact. Move the same
@@ -1032,14 +1054,13 @@ func (t *TaskTool) backgroundizeForeground(ctx context.Context, spec ProfileExec
 	// regresses to a stale queued after running.
 	trk.queued()
 	job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
-		// Parent-cancel propagation: the resumed run derives from the parent
-		// turn's ctx so a cancel racing the handoff (or arriving right after)
-		// still stops the job — the sentinel branch must not short-circuit
-		// cancellation. jobCtx keeps Kill/Close propagation alive too.
+		// The resumed run derives from jobCtx only: the background job must
+		// outlive the parent turn (the model already confirmed "started
+		// background task"), so a normal turn end must not cancel it. Kill or
+		// Close on the job (kill_shell, the P2 panel stop) still propagate
+		// through jobCtx.
 		runCtx, cancelRun := context.WithCancel(jobCtx)
 		defer cancelRun()
-		stopOnParent := context.AfterFunc(ctx, cancelRun)
-		defer stopOnParent()
 		// The handoff consumed the foreground signal; the resumed run must not
 		// re-checkpoint (it would immediately re-trigger the sentinel).
 		runCtx = WithoutBackgroundizeSignal(runCtx)
@@ -1736,27 +1757,28 @@ func (t *TaskTool) runReadOnlySubSession(ctx context.Context, prompt string, sub
 // must stay uniform across those paths — add new fields here, not at call sites.
 func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *provider.Pricing, ctxWin, childDepth int, recoveryTaskID string, mutationObserver *checkpoint.MutationObserver) Options {
 	opts := Options{
-		MaxSteps:          maxSteps,
-		Temperature:       t.temperature,
-		Pricing:           pricing,
-		UsageSource:       event.UsageSourceSubagent,
-		Gate:              t.gate,
-		ContextWindow:     ctxWin,
-		RecentKeep:        t.recentKeep,
-		CompactRatio:      t.compactRatio,
-		ArchiveDir:        t.archiveDir,
-		KeepPolicy:        t.keepPolicy,
-		ResponseLanguage:  ResponseLanguageFromContext(ctx),
-		ReasoningLanguage: ReasoningLanguageFromContext(ctx),
-		SubagentDepth:     childDepth,
-		MaxSubagentDepth:  t.maxDepth(),
-		DeliveryProfile:   t.deliveryProfile,
-		Ablation:          t.ablation,
-		WorkspaceLease:    t.workspaceLease,
-		RecoveryGate:      t.recoveryGate,
-		RecoveryAgentID:   "subagent",
-		RecoveryTaskID:    recoveryTaskID,
-		MutationObserver:  mutationObserver,
+		MaxSteps:               maxSteps,
+		Temperature:            t.temperature,
+		Pricing:                pricing,
+		UsageSource:            event.UsageSourceSubagent,
+		Gate:                   t.gate,
+		ContextWindow:          ctxWin,
+		RecentKeep:             t.recentKeep,
+		CompactRatio:           t.compactRatio,
+		ArchiveDir:             t.archiveDir,
+		KeepPolicy:             t.keepPolicy,
+		ResponseLanguage:       ResponseLanguageFromContext(ctx),
+		ReasoningLanguage:      ReasoningLanguageFromContext(ctx),
+		SubagentDepth:          childDepth,
+		MaxSubagentDepth:       t.maxDepth(),
+		DeliveryProfile:        t.deliveryProfile,
+		AutoBackgroundizeAfter: t.autoBackgroundizeAfter,
+		Ablation:               t.ablation,
+		WorkspaceLease:         t.workspaceLease,
+		RecoveryGate:           t.recoveryGate,
+		RecoveryAgentID:        "subagent",
+		RecoveryTaskID:         recoveryTaskID,
+		MutationObserver:       mutationObserver,
 	}
 	return opts
 }

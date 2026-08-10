@@ -444,6 +444,12 @@ func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
 // consumed the signal) never re-checkpoints, or the resumed job would
 // immediately return the sentinel again and fail instead of continuing.
 func (a *Agent) backgroundizeRequested(ctx context.Context) bool {
+	// Only a foreground (sync) task sub-agent may hand off; everyone else
+	// (main agent, background jobs, planner) ignores signal + auto threshold,
+	// or a long ordinary turn would fail on the un-captured sentinel.
+	if !foregroundTaskFromContext(ctx) {
+		return false
+	}
 	if ResumeSessionFromContext(ctx) {
 		return false
 	}

@@ -12080,7 +12080,7 @@ func filterTasksBySession(tasks []taskmonitor.TaskSnapshot, sessionID string) []
 func (a *App) jobPanelTargetForTab(tabID string) (control.SessionAPI, error) {
 	tabID = strings.TrimSpace(tabID)
 	if tabID == "" {
-		return nil, fmt.Errorf("task monitor tab id is required")
+		return nil, fmt.Errorf("job panel tab id is required")
 	}
 
 	a.mu.RLock()

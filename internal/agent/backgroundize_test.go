@@ -69,7 +69,7 @@ func TestBackgroundizeCheckpointReturnsSentinelBeforeSampling(t *testing.T) {
 	ag := New(sub, tool.NewRegistry(), sess, Options{}, event.Discard)
 	sig := NewBackgroundizeSignal()
 	sig.Request()
-	err := ag.Run(WithBackgroundizeSignal(context.Background(), sig), "foreground task")
+	err := ag.Run(WithForegroundTask(WithBackgroundizeSignal(context.Background(), sig)), "foreground task")
 	if !errors.Is(err, errBackgroundizeRequested) {
 		t.Fatalf("Run err = %v, want errBackgroundizeRequested", err)
 	}
@@ -93,6 +93,27 @@ func TestBackgroundizeCheckpointNoopWithoutSignal(t *testing.T) {
 	}
 	if n := len(sub.requests); n != 1 {
 		t.Fatalf("provider called %d times, want 1", n)
+	}
+}
+
+// TestBackgroundizeCheckpointNoopOnMainAgent: the main agent (no foreground
+// task marker) must never return the handoff sentinel, even when the automatic
+// threshold is exceeded — a long ordinary turn must complete, not fail with
+// "backgroundize requested" (P4 review, blocking defect).
+func TestBackgroundizeCheckpointNoopOnMainAgent(t *testing.T) {
+	sub := &mockProvider{name: "sub", chunks: []provider.Chunk{
+		{Type: provider.ChunkText, Text: "done"},
+		{Type: provider.ChunkDone},
+	}}
+	ag := New(sub, tool.NewRegistry(), NewSession("sys"),
+		Options{AutoBackgroundizeAfter: time.Millisecond}, event.Discard)
+	// Backdate the active-turn clock so the auto threshold is long exceeded.
+	ag.activeTurnCreatedAt.Store(time.Now().Add(-time.Hour).UnixMilli())
+	if err := ag.Run(context.Background(), "long ordinary turn"); err != nil {
+		t.Fatalf("main agent Run with exceeded threshold: %v", err)
+	}
+	if n := len(sub.requests); n != 1 {
+		t.Fatalf("provider called %d times, want 1 (no handoff attempt)", n)
 	}
 }
 
@@ -314,10 +335,11 @@ func (p *cancelProbeProvider) Stream(ctx context.Context, _ provider.Request) (<
 	return nil, ctx.Err()
 }
 
-// TestBackgroundizeParentCancelPropagatesToHandoffJob: after the foreground
-// task hands off to a background job, cancelling the parent turn must stop the
-// resumed run — the sentinel branch must not short-circuit cancellation.
-func TestBackgroundizeParentCancelPropagatesToHandoffJob(t *testing.T) {
+// TestBackgroundizeSurvivesParentTurnCancel: after the foreground task hands
+// off to a background job, ending (cancelling) the parent turn must NOT stop
+// the resumed run — the background job outlives its originating turn. Only a
+// job-level kill (kill_shell / P2 panel stop) terminates it.
+func TestBackgroundizeSurvivesParentTurnCancel(t *testing.T) {
 	prov := &cancelProbeProvider{started: make(chan struct{})}
 	sig := NewBackgroundizeSignal()
 	reg := tool.NewRegistry()
@@ -345,13 +367,18 @@ func TestBackgroundizeParentCancelPropagatesToHandoffJob(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("resumed job never reached the provider")
 	}
-	// Cancel the parent turn mid-resume: the job must stop, not keep running.
+	// End the parent turn: the background job must keep running, not die.
 	cancel()
-	res := jm.WaitForSession(context.Background(), "parent-session", []string{jobID}, 5)
-	if len(res) != 1 {
-		t.Fatalf("handoff job result = %+v, want one terminal job", res)
+	time.Sleep(50 * time.Millisecond)
+	if _, st, ok := jm.Output(jobID); !ok || st != jobs.Running {
+		t.Fatalf("job after parent cancel = status %q ok=%v, want still running", st, ok)
 	}
-	if res[0].Status == jobs.Done {
-		t.Fatalf("job finished Done despite the parent turn being cancelled; the cancel was short-circuited")
+	// A job-level kill still terminates it (kill_shell / P2 panel stop path).
+	if !jm.KillForSession("parent-session", jobID) {
+		t.Fatalf("KillForSession(%s) = false, want true", jobID)
+	}
+	res := jm.WaitForSession(context.Background(), "parent-session", []string{jobID}, 5)
+	if len(res) != 1 || res[0].Status != jobs.Killed {
+		t.Fatalf("handoff job result = %+v, want one Killed job", res)
 	}
 }
