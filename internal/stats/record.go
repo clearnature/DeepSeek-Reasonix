@@ -61,12 +61,12 @@ type record struct {
 // retrieval behavior (hit vs paid call, stale serves, blocked) is diagnosable
 // from the stats file alone.
 type RetrievalRecord struct {
-	Query      string `json:"query,omitempty"`
-	Mode       string `json:"mode,omitempty"` // hit | miss | stale | blocked | error
-	APIUsed    bool   `json:"api_used,omitempty"`
-	Tier       string `json:"tier,omitempty"`
-	Ms         int64  `json:"ms,omitempty"`
-	Chars      int    `json:"chars,omitempty"`
+	Query   string `json:"query,omitempty"`
+	Mode    string `json:"mode,omitempty"` // hit | miss | stale | blocked | error
+	APIUsed bool   `json:"api_used,omitempty"`
+	Tier    string `json:"tier,omitempty"`
+	Ms      int64  `json:"ms,omitempty"`
+	Chars   int    `json:"chars,omitempty"`
 }
 
 // CompactionRecord is the structured form of the agent's compaction telemetry
