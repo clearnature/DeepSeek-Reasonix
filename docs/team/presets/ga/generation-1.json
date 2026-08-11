@@ -1,0 +1,37 @@
+{
+  "generation": 1,
+  "next": "generation 2: p0 (writable+worktree), p1 (worktree), p3 (mutation: writable+worktree+effort-high)",
+  "population": [
+    {
+      "Name": "p0",
+      "Genes": {
+        "worktree": "true",
+        "writable": "true"
+      },
+      "Output": true,
+      "Ms": 46139
+    },
+    {
+      "Name": "p1",
+      "Genes": {
+        "worktree": "true",
+        "writable": "false"
+      },
+      "Output": true,
+      "Ms": 46139
+    },
+    {
+      "Name": "p2",
+      "Genes": {
+        "worktree": "false",
+        "writable": "false"
+      },
+      "Output": false,
+      "Ms": 46139
+    }
+  ],
+  "selection": {
+    "eliminated": "p2",
+    "elite": "p0,p1"
+  }
+}
