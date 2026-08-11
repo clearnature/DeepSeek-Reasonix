@@ -302,7 +302,7 @@ func TestMidnightHammer_Dim2_L1CacheHit(t *testing.T) {
 	// 第 19 轮：并发存取安全
 	t.Run("R19_并发存取", func(t *testing.T) {
 		qs := make([]string, 10)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			qs[i] = fmt.Sprintf("并发测试_%d", i)
 			SaveKnowledge(&KnowledgeEntry{Query: qs[i], AnswerSummary: fmt.Sprintf("ans-%d", i)})
 		}
@@ -312,7 +312,7 @@ func TestMidnightHammer_Dim2_L1CacheHit(t *testing.T) {
 			}
 		}()
 		done := make(chan bool, 10)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			go func(id int) {
 				_, hit := LoadKnowledge(fmt.Sprintf("并发测试_%d", id))
 				if !hit {
@@ -321,7 +321,7 @@ func TestMidnightHammer_Dim2_L1CacheHit(t *testing.T) {
 				done <- true
 			}(i)
 		}
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			<-done
 		}
 	})
@@ -479,7 +479,7 @@ func TestMidnightHammer_Dim4_EventTracking(t *testing.T) {
 	t.Run("R32_多次增量置信度上升", func(t *testing.T) {
 		now := time.Now()
 		e := &KnowledgeEntry{TimeSensitive: true}
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			advanceEvent(e, now, []string{fmt.Sprintf("确认%d: 情报一致", i+1)}, nil)
 		}
 		if e.UpdateCount != 5 {
@@ -512,7 +512,7 @@ func TestMidnightHammer_Dim4_EventTracking(t *testing.T) {
 	t.Run("R34_置信度上限0.95", func(t *testing.T) {
 		now := time.Now()
 		e := &KnowledgeEntry{TimeSensitive: true}
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			advanceEvent(e, now, []string{"持续确认"}, nil)
 		}
 		if e.Confidence > maxConfidence {
@@ -524,7 +524,7 @@ func TestMidnightHammer_Dim4_EventTracking(t *testing.T) {
 	t.Run("R35_置信度下限0", func(t *testing.T) {
 		now := time.Now()
 		e := &KnowledgeEntry{TimeSensitive: true}
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			advanceEvent(e, now, []string{"否认所有指控"}, nil)
 		}
 		if e.Confidence < 0 {
@@ -561,7 +561,7 @@ func TestMidnightHammer_Dim4_EventTracking(t *testing.T) {
 	t.Run("R38_事件关联幂等", func(t *testing.T) {
 		a := &KnowledgeEntry{Query: "测试A"}
 		b := &KnowledgeEntry{Query: "测试B"}
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			LinkRelatedEvent(a, b)
 		}
 		if len(a.EventChain) != 1 {
@@ -1332,7 +1332,7 @@ func TestMidnightHammer_Dim10_EdgeCasesAndStress(t *testing.T) {
 	// 第 95 轮：大批量存取（100条）
 	t.Run("R95_大批量存取", func(t *testing.T) {
 		qs := make([]string, 100)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			qs[i] = fmt.Sprintf("午夜之锤_批量测试_%04d", i)
 			SaveKnowledge(&KnowledgeEntry{Query: qs[i], AnswerSummary: fmt.Sprintf("ans-%d", i)})
 		}

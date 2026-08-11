@@ -78,7 +78,7 @@ func chatCompletionsBench(systemPrompt string, turns int) {
 		"Explain the time complexity.",
 	}
 
-	for i := 0; i < turns; i++ {
+	for i := range turns {
 		messages = append(messages, map[string]any{"role": "user", "content": questions[i]})
 
 		body := map[string]any{
@@ -118,7 +118,7 @@ func responsesAPIBench(systemPrompt string, turns int) {
 
 	var prevResponseID string
 
-	for i := 0; i < turns; i++ {
+	for i := range turns {
 		body := map[string]any{
 			"model":             model,
 			"input":             questions[i],
@@ -147,7 +147,7 @@ func responsesAPIBench(systemPrompt string, turns int) {
 }
 
 func streamChatCompletions(jsonBody []byte) (ttft time.Duration, promptTokens, cachedTokens, outputTokens int, text string, err error) {
-	req, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(jsonBody))
 	if err != nil {
 		return
 	}
@@ -162,7 +162,7 @@ func streamChatCompletions(jsonBody []byte) (ttft time.Duration, promptTokens, c
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		trunc := string(b)
 		if len(trunc) > 300 {
@@ -219,7 +219,7 @@ func streamChatCompletions(jsonBody []byte) (ttft time.Duration, promptTokens, c
 }
 
 func streamResponses(jsonBody []byte) (ttft time.Duration, inputTokens, cachedTokens, outputTokens int, responseID string, err error) {
-	req, err := http.NewRequest("POST", baseURL+"/responses", bytes.NewReader(jsonBody))
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/responses", bytes.NewReader(jsonBody))
 	if err != nil {
 		return
 	}
@@ -234,7 +234,7 @@ func streamResponses(jsonBody []byte) (ttft time.Duration, inputTokens, cachedTo
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		trunc := string(b)
 		if len(trunc) > 300 {
@@ -251,10 +251,10 @@ func streamResponses(jsonBody []byte) (ttft time.Duration, inputTokens, cachedTo
 		line := scanner.Text()
 		// Responses API uses "data:{...}" (no space); be lenient.
 		var data string
-		if strings.HasPrefix(line, "data: ") {
-			data = strings.TrimPrefix(line, "data: ")
-		} else if strings.HasPrefix(line, "data:") {
-			data = strings.TrimPrefix(line, "data:")
+		if after, ok := strings.CutPrefix(line, "data: "); ok {
+			data = after
+		} else if after, ok := strings.CutPrefix(line, "data:"); ok {
+			data = after
 		} else {
 			continue
 		}

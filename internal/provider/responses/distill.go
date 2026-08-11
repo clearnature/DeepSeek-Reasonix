@@ -93,8 +93,8 @@ func extractMarkdownSources(text string) []Source {
 			continue
 		}
 		// - 标题：https://...
-		if strings.HasPrefix(trimmed, "- ") {
-			body := strings.TrimPrefix(trimmed, "- ")
+		if after, ok := strings.CutPrefix(trimmed, "- "); ok {
+			body := after
 			// find first http(s):// URL
 			urlStart := -1
 			for i := 0; i+7 <= len(body); i++ {
@@ -120,7 +120,7 @@ func extractMarkdownSources(text string) []Source {
 // extractMarkdownFacts parses "**N. 事实**：..." or numbered list items.
 func extractMarkdownFacts(text string) []string {
 	var out []string
-	for _, ln := range strings.Split(text, "\n") {
+	for ln := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(ln)
 		// **N. 标题**：内容  or  N. 内容
 		if strings.HasPrefix(trimmed, "**") && strings.Contains(trimmed, "**：") {

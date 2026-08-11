@@ -25,13 +25,13 @@ func TestPreflightPruneThenFoldFitsWindow(t *testing.T) {
 	}}
 	// ~2.6M tokens of stale tool results (older) + ~1.4M of turns: canonical
 	// ends far over the 1M window.
-	for i := 0; i < 120; i++ {
+	for range 120 {
 		sess.Messages = append(sess.Messages,
 			provider.Message{Role: provider.RoleUser, Content: strings.Repeat("题", 3000)},  // 3K
 			provider.Message{Role: provider.RoleTool, Content: strings.Repeat("果", 22000)}, // stale 22K
 		)
 	}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		sess.Messages = append(sess.Messages,
 			provider.Message{Role: provider.RoleUser, Content: strings.Repeat("新", 4000)},
 			provider.Message{Role: provider.RoleAssistant, Content: strings.Repeat("答", 6000)},

@@ -2,6 +2,7 @@ package responses
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -93,7 +94,7 @@ func MergeFrames(topic string, frames []*InfoFrame) FrameView {
 		v.Domains = append(v.Domains, d)
 	}
 	sort.Strings(v.Languages)
-	sort.Slice(v.Domains, func(i, j int) bool { return v.Domains[i] < v.Domains[j] })
+	slices.Sort(v.Domains)
 	sort.Slice(v.AllSources, func(i, j int) bool {
 		return v.AllSources[i].Credibility > v.AllSources[j].Credibility
 	})

@@ -41,7 +41,7 @@ func TestTeammateConcurrencyBurst(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		name := fmt.Sprintf("dev%d", i)
 		if err := ts.Create(name, "coder"); err != nil {
 			t.Fatalf("Create %s: %v", name, err)
@@ -51,7 +51,7 @@ func TestTeammateConcurrencyBurst(t *testing.T) {
 		}
 	}
 	// Assign all 10 in parallel (the burst).
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

@@ -1591,7 +1591,7 @@ func (m *Manager) DrainCompletedNoteForSession(parentSession string) string {
 	var b strings.Builder
 	b.WriteString(strings.Join(envs, "\n"))
 	if overflow > 0 {
-		b.WriteString(fmt.Sprintf("\n<result-overflow count=\"%d\"/>", overflow))
+		fmt.Fprintf(&b, "\n<result-overflow count=\"%d\"/>", overflow)
 	}
 	return b.String()
 }

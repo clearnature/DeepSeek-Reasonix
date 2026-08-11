@@ -1034,7 +1034,7 @@ func TestDrainPartialKeepsRestForNextTurn(t *testing.T) {
 	m := NewManager(event.Discard)
 	defer m.Close()
 	var ids []string
-	for i := 0; i < maxResultsPerDrain+2; i++ {
+	for range maxResultsPerDrain + 2 {
 		j := m.Start("task", "", func(_ context.Context, _ io.Writer) (string, error) {
 			return "result", nil
 		})
@@ -1059,7 +1059,7 @@ func TestDrainBlockOverflowDropsOldest(t *testing.T) {
 	m := NewManager(event.Discard)
 	defer m.Close()
 	m.mu.Lock()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		m.completed = append(m.completed, completion{
 			sessionID: "s",
 			text:      fmt.Sprintf("note-%d", i),

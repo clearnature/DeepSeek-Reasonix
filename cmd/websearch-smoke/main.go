@@ -88,13 +88,13 @@ func ask(ctx context.Context, key, query string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("stream: %w", err)
 	}
-	text := ""
+	var text strings.Builder
 	tokens := 0
 	seenWeb := false
 	for c := range ch {
 		switch c.Type {
 		case provider.ChunkText:
-			text += c.Text
+			text.WriteString(c.Text)
 		case provider.ChunkUsage:
 			if c.Usage != nil {
 				tokens = c.Usage.TotalTokens
@@ -102,13 +102,13 @@ func ask(ctx context.Context, key, query string) (int, error) {
 		}
 	}
 	_ = seenWeb // web_search_call 事件被 readStream 静默吸收，无需计数
-	if text == "" {
+	if text.String() == "" {
 		return tokens, fmt.Errorf("no output text for %q", query)
 	}
 	// Persist distilled knowledge (summary = raw text; the smoke test does
 	// not need the JSON extraction to succeed).
 	responses.SaveKnowledge(&responses.KnowledgeEntry{
-		Query: query, AnswerSummary: text, TotalTokens: tokens,
+		Query: query, AnswerSummary: text.String(), TotalTokens: tokens,
 	})
 	return tokens, nil
 }
@@ -214,12 +214,12 @@ func realFetch(key string) responses.FetchFunc {
 		if err != nil {
 			return nil, err
 		}
-		text := ""
+		var text strings.Builder
 		tokens := 0
 		for c := range ch {
 			switch c.Type {
 			case provider.ChunkText:
-				text += c.Text
+				text.WriteString(c.Text)
 			case provider.ChunkUsage:
 				if c.Usage != nil {
 					tokens = c.Usage.TotalTokens
@@ -228,12 +228,12 @@ func realFetch(key string) responses.FetchFunc {
 		}
 		entry := &responses.KnowledgeEntry{
 			Query:         query,
-			AnswerSummary: text,
+			AnswerSummary: text.String(),
 			TotalTokens:   tokens,
 			Tier:          string(tier),
 		}
 		// Try to extract structured JSON (answer_summary/key_facts/sources).
-		if v, ok := responses.ExtractJSONFromOutput(text); ok {
+		if v, ok := responses.ExtractJSONFromOutput(text.String()); ok {
 			if obj, ok := v.(map[string]any); ok {
 				if s, ok := obj["answer_summary"].(string); ok && s != "" {
 					entry.AnswerSummary = s
@@ -268,14 +268,14 @@ func realFetch(key string) responses.FetchFunc {
 		// ("## 关键事实 / ## 来源") instead of JSON. Fall back to markdown
 		// extraction so sources/facts still land in the cache.
 		if len(entry.Sources) == 0 {
-			entry.Sources = extractMarkdownSources(text)
+			entry.Sources = extractMarkdownSources(text.String())
 		}
 		// 仍为空 → 正文内联来源（全文 URL + 已知机构名）
 		if len(entry.Sources) == 0 {
-			entry.Sources = extractInlineSources(text)
+			entry.Sources = extractInlineSources(text.String())
 		}
 		if len(entry.KeyFacts) == 0 {
-			entry.KeyFacts = extractMarkdownFacts(text)
+			entry.KeyFacts = extractMarkdownFacts(text.String())
 		}
 		return entry, nil
 	}
@@ -361,8 +361,8 @@ func extractMarkdownSources(text string) []responses.Source {
 			continue
 		}
 		// - 标题：https://...
-		if strings.HasPrefix(trimmed, "- ") {
-			body := strings.TrimPrefix(trimmed, "- ")
+		if after, ok := strings.CutPrefix(trimmed, "- "); ok {
+			body := after
 			// find first http(s):// URL
 			urlStart := -1
 			for i := 0; i+7 <= len(body); i++ {
@@ -388,7 +388,7 @@ func extractMarkdownSources(text string) []responses.Source {
 // extractMarkdownFacts parses "**N. 事实**：..." or numbered list items.
 func extractMarkdownFacts(text string) []string {
 	var out []string
-	for _, ln := range strings.Split(text, "\n") {
+	for ln := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(ln)
 		// **N. 标题**：内容  or  N. 内容
 		if strings.HasPrefix(trimmed, "**") && strings.Contains(trimmed, "**：") {
@@ -456,13 +456,6 @@ func runExpert() {
 		len(report.Sections), len(report.AllSources), report.AvgConfidence)
 	fmt.Println("  --- 报告预览 ---")
 	fmt.Println(truncate(report.Render(), 400))
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // runWarEventStream exercises P4 信息流模型（情报模式）：美伊冲突的完整

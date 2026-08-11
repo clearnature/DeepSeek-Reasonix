@@ -21,7 +21,7 @@ func TestFitFoldToWindowKeepsFoldBounded(t *testing.T) {
 	}
 	// ReasoningContent inflates the estimate (818K in the real session); each
 	// part stays under maxCompactFoldTokens so the first loop stops mid-fold.
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		id := string(rune('a' + i))
 		msgs = append(msgs,
 			provider.Message{Role: provider.RoleAssistant, Content: "", ReasoningContent: strings.Repeat("r", 45_000), ToolCalls: []provider.ToolCall{{ID: id, Name: "read_file", Arguments: "{}"}}},

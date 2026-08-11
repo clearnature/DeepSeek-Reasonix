@@ -39,7 +39,7 @@ func TestTeammateRaceGrantAssignInterleave(t *testing.T) {
 	}}, tool.NewRegistry(), NewSession("sys"), Options{}, event.Discard)
 	ctx = WithForkSource(ctx, parent)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if err := ts.Create(fmt.Sprintf("dev%d", i), "coder"); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
@@ -47,7 +47,7 @@ func TestTeammateRaceGrantAssignInterleave(t *testing.T) {
 
 	// Interleave: one goroutine flips worktree grants while others assign.
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

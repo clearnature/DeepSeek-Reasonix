@@ -71,16 +71,6 @@ var _ provider.Provider = (*sharedFakeProvider)(nil)
 var _ provider.OutputBudgetProvider = (*sharedFakeProvider)(nil)
 var _ provider.SharedWindowOutputProvider = (*sharedFakeProvider)(nil)
 
-// bigTokenString returns a string that estimates to roughly n tokens under
-// estimateTextTokens (CJK-heavy: ~1 rune per token).
-func bigTokenString(n int) string {
-	const rune = "字"
-	b := make([]byte, 0, n*3)
-	for len(b)/3 < n {
-		b = append(b, rune...)
-	}
-	return string(b)
-}
 
 func newSessionWithMsgs(msgs []provider.Message) *Session {
 	s := NewSession("")
@@ -96,7 +86,7 @@ func newSessionWithMsgs(msgs []provider.Message) *Session {
 // resume compaction. Content validity is the covered-prefix hash alone.
 func TestProjectionValidAcrossModelChange(t *testing.T) {
 	sess := NewSession("sys")
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		sess.Add(provider.Message{Role: provider.RoleUser, Content: "user " + strings.Repeat("x", 200)})
 		sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "assistant " + strings.Repeat("y", 400)})
 	}
@@ -160,7 +150,7 @@ func TestMaybeCompactOnResumeUnsharedWindowNoop(t *testing.T) {
 func TestMaybeCompactOnResumeOversizedPromptCompacts(t *testing.T) {
 	fp := &fakeProvider{reply: "GOAL: fit inside window"}
 	sess := NewSession("sys")
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		sess.Add(provider.Message{Role: provider.RoleUser, Content: "user turn " + strings.Repeat("x", 200)})
 		sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "assistant " + strings.Repeat("y", 400)})
 	}
@@ -192,7 +182,7 @@ func TestMaybeCompactOnResumeColdLargePromptUntouched(t *testing.T) {
 	// prefix on every resume. Only an input-overflow (would-400) prompt compacts.
 	fp := &fakeProvider{reply: "GOAL: cold replay avoided"}
 	sess := NewSession("sys")
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		sess.Add(provider.Message{Role: provider.RoleUser, Content: "user turn " + strings.Repeat("x", 200)})
 		sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "assistant " + strings.Repeat("y", 400)})
 	}

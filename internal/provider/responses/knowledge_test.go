@@ -285,7 +285,7 @@ func TestCapacityEvictsLRU(t *testing.T) {
 	MaxKnowledgeEntries = 5
 	defer func() { MaxKnowledgeEntries = oldCap }()
 
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		SaveKnowledge(&KnowledgeEntry{
 			Query:         fmt.Sprintf("话题%02d是什么", i),
 			AnswerSummary: fmt.Sprintf("话题%02d 的回答", i),
@@ -293,7 +293,7 @@ func TestCapacityEvictsLRU(t *testing.T) {
 		})
 	}
 	// 前 3 个最旧的应被淘汰（8 - 5 = 3）
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, ok := LoadKnowledge(fmt.Sprintf("话题%02d是什么", i)); ok {
 			t.Fatalf("entry %d must be evicted (LRU)", i)
 		}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -165,15 +164,3 @@ func sanitizeWorktreeName(name string) string {
 	return out
 }
 
-// worktreeAvailable reports whether git worktree support is usable in the
-// workspace (git present and the root is a git repository).
-func worktreeAvailable(ctx context.Context, workspaceRoot string) bool {
-	cmd := gitcmd.Command(ctx, workspaceRoot, "rev-parse", "--is-inside-work-tree")
-	if err := cmd.Run(); err != nil {
-		return false
-	}
-	if _, err := exec.LookPath("git"); err != nil {
-		return false
-	}
-	return true
-}

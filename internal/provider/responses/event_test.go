@@ -38,7 +38,7 @@ func TestAdvanceEventConfidenceRisesAndConflictPenalizes(t *testing.T) {
 func TestAdvanceEventClampsConfidence(t *testing.T) {
 	now := time.Now()
 	e := &KnowledgeEntry{}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		advanceEvent(e, now, []string{"持续更新"}, nil)
 	}
 	if e.Confidence > maxConfidence {

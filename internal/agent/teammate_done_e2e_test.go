@@ -213,7 +213,7 @@ func TestTeammateDoneConcurrentAssignCompletion(t *testing.T) {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				id, err := ts.Assign(ctx, name, fmt.Sprintf("task %d", i))
 				if err != nil {
 					t.Errorf("%s Assign round %d: %v", name, i, err)

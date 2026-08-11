@@ -96,7 +96,7 @@ func TestSendMessageForSessionRejectsByteLimit(t *testing.T) {
 	})
 	// Leave one slot free so the rejection below is provably the byte bound,
 	// not the count bound.
-	for i := 0; i < maxPendingMessages-1; i++ {
+	for i := range maxPendingMessages - 1 {
 		if err := m.SendMessageForSession("session-a", j.ID, "m"); err != nil {
 			t.Fatalf("small message %d: SendMessageForSession returned error: %v", i, err)
 		}
@@ -144,12 +144,12 @@ func TestDrainPendingMessagesOnePerCall(t *testing.T) {
 		return "done", nil
 	})
 	jctx := context.WithValue(context.Background(), jobCtxKey{}, j)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := m.SendMessageForSession("session-a", j.ID, "m"+string(rune('0'+i))); err != nil {
 			t.Fatalf("send %d: %v", i, err)
 		}
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		want := "m" + string(rune('0'+i))
 		text, ok := DrainPendingMessages(jctx)
 		if !ok {

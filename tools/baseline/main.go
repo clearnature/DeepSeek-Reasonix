@@ -188,7 +188,7 @@ func main() {
 	samples := make([]Sample, 0, *n)
 	errCount := 0
 
-	for i := 0; i < *n; i++ {
+	for i := range *n {
 		prompt := prompts[i%len(prompts)]
 		s := collectOne(prov, prompt, i, *timeout)
 		if s.Error != "" {

@@ -28,8 +28,8 @@ func sanitizeFresh(e *KnowledgeEntry, minCredibility float64) bool {
 // purgeStaleLabel removes the "信息截至…" marker before a refresh merge so a
 // refreshed entry doesn't accumulate stale labels from prior rounds.
 func purgeStaleLabel(s string) string {
-	if i := strings.Index(s, "\n\n⚠️ 信息截至 "); i >= 0 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "\n\n⚠️ 信息截至 "); ok {
+		return before
 	}
 	return s
 }

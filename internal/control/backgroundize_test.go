@@ -158,7 +158,7 @@ func TestBackgroundizeIdempotent(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("turn did not start")
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := c.Backgroundize(); err != nil {
 			t.Fatalf("Backgroundize() #%d = %v, want nil", i+1, err)
 		}

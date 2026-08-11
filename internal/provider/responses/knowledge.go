@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -637,10 +638,8 @@ func topicsOverlap(a, b string) bool {
 		return true // 缓存无领域标签：无法判断主题，保守命中
 	}
 	for _, wa := range wordsA {
-		for _, wb := range wordsB {
-			if wa == wb {
-				return true
-			}
+		if slices.Contains(wordsB, wa) {
+			return true
 		}
 	}
 	return false
@@ -681,10 +680,8 @@ func placesOverlap(a, b string) bool {
 		return true // 至少一方无地名：不拦截
 	}
 	for _, x := range pa {
-		for _, y := range pb {
-			if x == y {
-				return true
-			}
+		if slices.Contains(pb, x) {
+			return true
 		}
 	}
 	return false

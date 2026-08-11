@@ -1,6 +1,7 @@
 package responses
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -102,10 +103,8 @@ func appendUnique(list []string, s string) []string {
 	if s == "" {
 		return list
 	}
-	for _, existing := range list {
-		if existing == s {
-			return list
-		}
+	if slices.Contains(list, s) {
+		return list
 	}
 	return append(list, s)
 }

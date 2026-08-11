@@ -973,7 +973,7 @@ func extractJSONFromOutput(text string) (any, bool) {
 		}
 		text = strings.TrimSpace(text)
 	}
-	for i := 0; i < len(text); i++ {
+	for i := range len(text) {
 		if text[i] != '{' && text[i] != '[' {
 			continue
 		}

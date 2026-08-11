@@ -1521,7 +1521,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			// switching topic where the next-turn hit has no value. Without it
 			// the gate below stays authoritative.
 			force := false
-			for _, tok := range strings.Fields(strings.TrimSpace(strings.TrimPrefix(trimmed, "/compress-fast"))) {
+			for tok := range strings.FieldsSeq(strings.TrimSpace(strings.TrimPrefix(trimmed, "/compress-fast"))) {
 				if tok == "--force" || tok == "-f" {
 					force = true
 				}
@@ -6776,7 +6776,7 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			role = fields[2]
 		}
 		created := 0
-		for i := 0; i < n; i++ {
+		for i := range n {
 			name := fmt.Sprintf("%s%d", fields[1], i)
 			if err := c.teammates.Create(name, role); err != nil {
 				c.notice("team-spawn: " + err.Error())
@@ -6826,7 +6826,7 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 		if i := strings.Index(task, " depends:"); i >= 0 {
 			deps := task[i+len(" depends:"):]
 			task = strings.TrimSpace(task[:i])
-			for _, d := range strings.Split(deps, ",") {
+			for d := range strings.SplitSeq(deps, ",") {
 				if d = strings.TrimSpace(d); d != "" {
 					dependsOn = append(dependsOn, d)
 				}

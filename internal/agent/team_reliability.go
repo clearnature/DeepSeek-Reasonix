@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -97,12 +98,8 @@ func (ts *TeammateStore) saveSnapshot() {
 		for _, tm := range ts.teammates {
 			snap.Teammates = append(snap.Teammates, *tm)
 		}
-		for k, v := range ts.grants {
-			snap.Grants[k] = v
-		}
-		for k, v := range ts.approvals {
-			snap.Approvals[k] = v
-		}
+		maps.Copy(snap.Grants, ts.grants)
+		maps.Copy(snap.Approvals, ts.approvals)
 		ts.mu.Unlock()
 
 		payload, err := json.Marshal(snap)

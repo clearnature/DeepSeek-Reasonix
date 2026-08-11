@@ -641,11 +641,11 @@ func teammateJobID(out string) string {
 // tracked item (arbitration 7).
 func teammateRef(out string) string {
 	const marker = "Subagent reference: "
-	i := strings.Index(out, marker)
-	if i < 0 {
+	_, after, ok := strings.Cut(out, marker)
+	if !ok {
 		return ""
 	}
-	rest := out[i+len(marker):]
+	rest := after
 	if end := strings.IndexByte(rest, '\n'); end >= 0 {
 		rest = rest[:end]
 	}

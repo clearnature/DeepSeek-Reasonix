@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -69,9 +70,9 @@ func main() {
 	fmt.Println("=== [1/3] researcher 研究中 ===")
 
 	lastRoster := func() string {
-		for i := len(sink.msgs) - 1; i >= 0; i-- {
-			if strings.HasPrefix(sink.msgs[i], "team roster") {
-				return sink.msgs[i]
+		for _, v := range slices.Backward(sink.msgs) {
+			if strings.HasPrefix(v, "team roster") {
+				return v
 			}
 		}
 		return ""
@@ -118,7 +119,9 @@ func main() {
 }
 
 func verifyAndCopy(ws string) {
-	os.MkdirAll(outDir, 0o755)
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		fmt.Printf("WARN mkdir %s: %v\n", outDir, err)
+	}
 	srcs := []struct{ name, path string }{
 		{"res", filepath.Join(ws, ".reasonix", "worktrees", "res", "findings.md")},
 		{"val", filepath.Join(ws, ".reasonix", "worktrees", "val", "validation.md")},
@@ -129,7 +132,9 @@ func verifyAndCopy(ws string) {
 		if fi, err := os.Stat(s.path); err == nil {
 			dst := filepath.Join(outDir, filepath.Base(s.path))
 			data, _ := os.ReadFile(s.path)
-			os.WriteFile(dst, data, 0o644)
+			if err := os.WriteFile(dst, data, 0o644); err != nil {
+				fmt.Printf("WARN write %s: %v\n", dst, err)
+			}
 			fmt.Printf("OK %s -> %s (%d bytes)\n", s.name, dst, fi.Size())
 		} else {
 			fmt.Printf("MISS %s: %v\n", s.name, err)
