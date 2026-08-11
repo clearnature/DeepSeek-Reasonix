@@ -16,6 +16,7 @@
 | `task-classifier.md` | — | 任务分类器 + 复杂度→资源映射（系统文档） |
 | `ga-iteration.md` | — | 遗传算法迭代框架（系统文档） |
 | `metrics.md` | — | 衡量标准体系（系统文档） |
+| `metacognition.md` | — | **元认知体系：4320 模式规范**（T⁶ 3 进制编码，智能体预置分类学） |
 
 ## 预置 frontmatter 契约
 
