@@ -69,6 +69,7 @@ var acceptsDefaultSnip = map[string]bool{
 	"multi_edit":    true,
 	"notebook_edit": true,
 	"send_message":  true,
+	"team_message":  true,
 	"todo_write":    true,
 	"update_goal":   true,
 	"wait":          true,
