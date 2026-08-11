@@ -1662,7 +1662,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			}
 			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
 			return
-		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-approve", "/team-broadcast", "/team-ask":
+		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-approve", "/team-broadcast", "/team-ask", "/team-spawn":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
@@ -6616,8 +6616,40 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			return
 		}
 		c.notice(fmt.Sprintf("plan %q %s — verdict sent to teammate", fields[0], fields[1]))
-	case "/team-ask":
-		// Syntax: /team-ask <name> <tool...> — require leader approval for
+	case "/team-spawn":
+		// Syntax: /team-spawn <n> <prefix> [role] — bulk-create n teammates
+		// (P13/D2): each gets a name <prefix>0..<prefix>n-1 and worktree
+		// write mode, ready for parallel /team-add bursts. n is clamped to
+		// 1..32 (scheduler ceiling); 60-concurrency is a roadmap target.
+		fields := strings.Fields(rest)
+		if len(fields) < 2 {
+			c.notice("usage: /team-spawn <n> <prefix> [role]")
+			return
+		}
+		n, err := strconv.Atoi(fields[0])
+		if err != nil || n < 1 {
+			c.notice("team-spawn: n must be a positive integer")
+			return
+		}
+		if n > 32 {
+			n = 32
+		}
+		role := "coder"
+		if len(fields) >= 3 {
+			role = fields[2]
+		}
+		created := 0
+		for i := 0; i < n; i++ {
+			name := fmt.Sprintf("%s%d", fields[1], i)
+			if err := c.teammates.Create(name, role); err != nil {
+				c.notice("team-spawn: " + err.Error())
+				break
+			}
+			_ = c.teammates.GrantWorktree(name)
+			created++
+		}
+		c.notice(fmt.Sprintf("team-spawn: created %d teammate(s) (%s0..%s%d) in worktree mode — assign with /team-add", created, fields[1], fields[1], created-1))
+	case "/team-ask": // Syntax: /team-ask <name> <tool...> — require leader approval for
 		// the named tools when the teammate calls them (P11 AskGate). The
 		// call auto-submits a "tool" approval request instead of executing.
 		fields := strings.Fields(rest)

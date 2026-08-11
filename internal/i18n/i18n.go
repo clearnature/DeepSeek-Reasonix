@@ -230,92 +230,93 @@ type Messages struct {
 	CmdCompressFast string // /compress-fast
 	CmdContext      string // /context
 
-	CmdRewind           string // /rewind
-	CmdTree             string // /tree
-	CmdBranch           string // /branch
-	CmdSwitchBranch     string // /switch
-	CmdResume           string // /resume
-	CmdRename           string // /rename
-	CmdModel            string // /model
-	CmdStatus           string // /status
-	CmdTeamCreate       string // /team-create
-	CmdTeamAdd          string // /team-add
-	CmdTeamStatus       string // /team-status
-	CmdTeamRemove       string // /team-remove
-	CmdTeamStop         string // /team-stop
-	CmdTeamGrant        string // /team-grant
-	CmdTeamRevoke       string // /team-revoke
-	CmdTeamApprove      string // /team-approve
-	CmdTeamAsk          string // /team-ask
-	TeamPanelTitle      string // team panel header
-	TeamMembers         string // roster count label (%d members)
-	TeamEmpty           string // no team configured
-	TeamName            string // roster column: name
-	TeamRole            string // roster column: role
-	TeamState           string // roster column: state
-	TeamPosture         string // roster column: write posture
-	TeamJob             string // roster column: job
-	TeamWorktree        string // posture: worktree-isolated
-	TeamWritable        string // posture: writable
-	TeamToken           string // posture: write token
-	TeamReadonly        string // posture: read-only
+	CmdRewind            string // /rewind
+	CmdTree              string // /tree
+	CmdBranch            string // /branch
+	CmdSwitchBranch      string // /switch
+	CmdResume            string // /resume
+	CmdRename            string // /rename
+	CmdModel             string // /model
+	CmdStatus            string // /status
+	CmdTeamCreate        string // /team-create
+	CmdTeamAdd           string // /team-add
+	CmdTeamStatus        string // /team-status
+	CmdTeamRemove        string // /team-remove
+	CmdTeamStop          string // /team-stop
+	CmdTeamGrant         string // /team-grant
+	CmdTeamRevoke        string // /team-revoke
+	CmdTeamApprove       string // /team-approve
+	CmdTeamAsk           string // /team-ask
+	CmdTeamSpawn         string // /team-spawn
+	TeamPanelTitle       string // team panel header
+	TeamMembers          string // roster count label (%d members)
+	TeamEmpty            string // no team configured
+	TeamName             string // roster column: name
+	TeamRole             string // roster column: role
+	TeamState            string // roster column: state
+	TeamPosture          string // roster column: write posture
+	TeamJob              string // roster column: job
+	TeamWorktree         string // posture: worktree-isolated
+	TeamWritable         string // posture: writable
+	TeamToken            string // posture: write token
+	TeamReadonly         string // posture: read-only
 	TeamPendingApprovals string // approvals heading
-	TeamApproveHint     string // /team-approve hint
-	CmdTeamBroadcast    string // /team-broadcast
-	CmdWorkMode         string // /work-mode
-	CmdDocs             string // /docs
-	CmdMemory           string // /memory
-	CmdMigrate          string // /migrate
-	CmdGoal             string // /goal
-	CmdRemember         string // /remember
-	CmdForget           string // /forget
-	CmdMcp              string // /mcp
-	CmdRemote           string // /remote
-	CmdHooks            string // /hooks
-	CmdPlugins          string // /plugins
-	CmdPasteImage       string // /paste-image
-	CmdOutputStyle      string // /output-style
-	CmdTheme            string // /theme
-	CmdLanguage         string // /language
-	CmdCurrency         string // /currency
-	CmdSkill            string // /skills
-	CmdVerbose          string // /verbose
-	CmdReloadCmd        string // /reload-cmd
-	CmdReload           string // /reload
-	CmdDiffFold         string // /diff-fold
-	CmdSandbox          string // /sandbox
-	CmdEffort           string // /effort
-	CmdMouse            string // /mouse
-	CmdReasonLang       string // /reasoning-language
-	CmdHelp             string // /help
-	CmdWeb              string // /web
-	CmdTodo             string // /todo
-	CmdQuit             string // /quit (also accepts /exit as hidden alias)
-	CmdCopy             string // /copy
-	CmdExport           string // /export
-	SlashCopyDone       string // "/copy" succeeded
-	SlashCopyEmpty      string // no assistant response to copy
-	SlashCopyListHeader string // header shown before the numbered list
-	SlashExportDoneFmt  string // "/export" succeeded, %s = file path
-	SlashExportEmpty    string // no messages to export
-	ArgSkillShow        string // /skills show
-	ArgSkillNew         string // /skills new
-	ArgSkillPaths       string // /skills paths
-	ArgMcpAdd           string // /mcp add
-	ArgMcpRemove        string // /mcp remove
-	ArgMcpConnected     string // /mcp remove <server> tag
-	ArgHooksList        string // /hooks list
-	ArgModelCurrent     string // /model <ref> active tag
-	ArgEffortAuto       string // /effort auto
-	ArgEffortLow        string // /effort low
-	ArgEffortMedium     string // /effort medium
-	ArgEffortHigh       string // /effort high
-	ArgEffortXHigh      string // /effort xhigh
-	ArgEffortMax        string // /effort max
-	ArgThemeCurrent     string // /theme <style> active tag
-	ArgLanguageAuto     string // /language auto
-	ArgLanguageEn       string // /language en
-	ArgLanguageZh       string // /language zh
+	TeamApproveHint      string // /team-approve hint
+	CmdTeamBroadcast     string // /team-broadcast
+	CmdWorkMode          string // /work-mode
+	CmdDocs              string // /docs
+	CmdMemory            string // /memory
+	CmdMigrate           string // /migrate
+	CmdGoal              string // /goal
+	CmdRemember          string // /remember
+	CmdForget            string // /forget
+	CmdMcp               string // /mcp
+	CmdRemote            string // /remote
+	CmdHooks             string // /hooks
+	CmdPlugins           string // /plugins
+	CmdPasteImage        string // /paste-image
+	CmdOutputStyle       string // /output-style
+	CmdTheme             string // /theme
+	CmdLanguage          string // /language
+	CmdCurrency          string // /currency
+	CmdSkill             string // /skills
+	CmdVerbose           string // /verbose
+	CmdReloadCmd         string // /reload-cmd
+	CmdReload            string // /reload
+	CmdDiffFold          string // /diff-fold
+	CmdSandbox           string // /sandbox
+	CmdEffort            string // /effort
+	CmdMouse             string // /mouse
+	CmdReasonLang        string // /reasoning-language
+	CmdHelp              string // /help
+	CmdWeb               string // /web
+	CmdTodo              string // /todo
+	CmdQuit              string // /quit (also accepts /exit as hidden alias)
+	CmdCopy              string // /copy
+	CmdExport            string // /export
+	SlashCopyDone        string // "/copy" succeeded
+	SlashCopyEmpty       string // no assistant response to copy
+	SlashCopyListHeader  string // header shown before the numbered list
+	SlashExportDoneFmt   string // "/export" succeeded, %s = file path
+	SlashExportEmpty     string // no messages to export
+	ArgSkillShow         string // /skills show
+	ArgSkillNew          string // /skills new
+	ArgSkillPaths        string // /skills paths
+	ArgMcpAdd            string // /mcp add
+	ArgMcpRemove         string // /mcp remove
+	ArgMcpConnected      string // /mcp remove <server> tag
+	ArgHooksList         string // /hooks list
+	ArgModelCurrent      string // /model <ref> active tag
+	ArgEffortAuto        string // /effort auto
+	ArgEffortLow         string // /effort low
+	ArgEffortMedium      string // /effort medium
+	ArgEffortHigh        string // /effort high
+	ArgEffortXHigh       string // /effort xhigh
+	ArgEffortMax         string // /effort max
+	ArgThemeCurrent      string // /theme <style> active tag
+	ArgLanguageAuto      string // /language auto
+	ArgLanguageEn        string // /language en
+	ArgLanguageZh        string // /language zh
 
 	// management listing notices (the Submit path: desktop / HTTP frontends)
 	ListModelsHeaderFmt string // "models (active: %s)"

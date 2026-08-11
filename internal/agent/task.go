@@ -116,8 +116,10 @@ const subagentToolBoundarySummary = "Recursive agent/skill tools are exposed onl
 
 // maxConcurrentBackgroundTasks is the legacy writer-background fallback used
 // only when a TaskTool has no session scheduler (tests). Production boots
-// inject MaxParallelWriters via SubagentScheduler.
-const maxConcurrentBackgroundTasks = DefaultMaxParallelWriters
+// inject MaxParallelWriters via SubagentScheduler. The cap mirrors the
+// scheduler's absolute ceiling so a no-scheduler burst (P13 team concurrency
+// tests, custom assemblies) is not artificially limited to 3.
+const maxConcurrentBackgroundTasks = MaxSubagentConcurrencyLimit
 
 // AlwaysHiddenSubagentTools returns the tool names excluded from every
 // subagent's registry regardless of an explicit allowlist or delegation
