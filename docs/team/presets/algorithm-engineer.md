@@ -4,6 +4,7 @@ description: 算法工程师——算法设计/复杂度分析/正确性/优化�
 role: algorithm-engineer
 tools: [bash, read_file, write_file, grep]
 effort: high
+coords: [0,2,2,0,0,0]
 writable: false
 worktree: true
 prompt: |-

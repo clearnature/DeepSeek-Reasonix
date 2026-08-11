@@ -4,6 +4,7 @@ description: 数据分析师——数据清洗/统计/可视化/结论，团队�
 role: data-analyst
 tools: [bash, read_file, grep, glob]
 effort: medium
+coords: [1,1,1,0,0,1]
 writable: false
 worktree: false
 prompt: |-

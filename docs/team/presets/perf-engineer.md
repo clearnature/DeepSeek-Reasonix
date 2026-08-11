@@ -4,6 +4,7 @@ description: 性能工程师——基准/profile/瓶颈定位/优化建议，10 
 role: perf-engineer
 tools: [bash, read_file, grep, glob]
 effort: high
+coords: [0,1,2,0,0,1]
 writable: false
 worktree: true
 prompt: |-

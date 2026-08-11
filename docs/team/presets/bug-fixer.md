@@ -4,6 +4,7 @@ description: Bug 修复专家——定位/复现/修复/验证（技能转化示
 role: bug-fixer
 tools: [bash, read_file, grep, glob, edit_file]
 effort: high
+coords: [0,1,1,1,0,0]
 writable: true
 worktree: true
 prompt: |-

@@ -4,6 +4,7 @@ description: 并发守护——race 审计/锁序纪律/TOCTOU/并发改动审�
 role: concurrency-guard
 tools: [bash, read_file, grep, glob]
 effort: high
+coords: [0,1,2,0,2,1]
 writable: false
 worktree: false
 prompt: |-

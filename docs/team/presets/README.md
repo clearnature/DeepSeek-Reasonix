@@ -3,6 +3,7 @@
 > 临时可复用的智能体配置——**不内置系统智能体**，用完解散（/team-remove）。
 > 格式：YAML frontmatter + Markdown body（**与 runAs:subagent SKILL.md 同构——复用现有 Profile/Skill 体系，不引入独立数据库**，devil's advocate 修正）。
 > 加载：`/team-create <name>@<preset>`（预置引用）。docs/team/presets/*.md 是人读定义文档，同一 frontmatter 可转 .reasonix/skills/ 机读（单一真源）。
+> **元认知坐标**：每个预置 frontmatter 含 `coords: [v₀..v₅]`（4320 模式定位，太玄经 81 首×9 赞编码），见 metacognition.md。
 
 ## 目录
 
@@ -13,6 +14,8 @@
 | `algorithm-engineer.md` | `algo` | 算法工程师：设计/复杂度分析/优化 |
 | `concurrency-guard.md` | `guard` | 并发守护：race 审计/锁序/TOCTOU |
 | `bug-fixer.md` | `fixer` | Bug 修复专家（技能转化示例） |
+| `creator.md` | `creator` | 创造者（创作域/创造智能——覆盖未服务坐标区） |
+| `coordinator.md` | `coordinator` | 协调者（关系/依赖图协作拓扑） |
 | `task-classifier.md` | — | 任务分类器 + 复杂度→资源映射（系统文档） |
 | `ga-iteration.md` | — | 遗传算法迭代框架（系统文档） |
 | `metrics.md` | — | 衡量标准体系（系统文档） |
