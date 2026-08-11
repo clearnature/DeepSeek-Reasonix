@@ -1316,6 +1316,9 @@ type AgentConfig struct {
 	// of keeping error tool results.
 	Keep       []string `toml:"keep"`
 	RecentKeep int      `toml:"recent_keep"`
+	// TeamStallAbortSeconds is the P10 stalled-teammate abort threshold
+	// (seconds); 0 disables abort (jobs-layer warning only).
+	TeamStallAbortSeconds int `toml:"team_stall_abort_seconds"`
 	// ColdResumePrune elides stale tool results when a session reopens past the
 	// provider cache window. nil = default enabled.
 	ColdResumePrune *bool `toml:"cold_resume_prune"`

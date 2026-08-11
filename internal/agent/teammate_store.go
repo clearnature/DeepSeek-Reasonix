@@ -103,6 +103,18 @@ type TeammateStore struct {
 	// workspaceRoot is the git workspace teammates branch from (D1 worktree
 	// isolation); empty disables worktree mode (ephemeral/test stores).
 	workspaceRoot string
+	// stallAbort is the P10 stalled-teammate abort threshold: a running
+	// teammate whose job is stalled past this (jobs stall warning) is killed
+	// and returned to idle. Zero disables abort (warning only).
+	stallAbort time.Duration
+	// session is the leader session teammates' jobs run under, captured at
+	// first Assign (jobs.WithSession) and used by the stall worker to query
+	// job snapshots (P10).
+	session string
+	// snapshotPath persists the team state (P10 crash recovery): teammates,
+	// grants, approvals, tasks — written atomically on mutation, loaded on
+	// store construction. Empty disables persistence.
+	snapshotPath string
 	// leader is the first fork source observed from an Assign context. It is
 	// the minimal template auto-advance needs to fork a first-round teammate
 	// (its rebuilt ctx carries no turn context). Set once, never the ctx object
@@ -136,10 +148,27 @@ func NewTeammateStore(task *TaskTool, jm *jobs.Manager, inboxRoot ...string) *Te
 	ts.autoCh = make(chan string, 16)
 	ts.doneCh = make(chan struct{})
 	go ts.autoWorker()
+	go ts.stallWorker()
+	ts.loadSnapshot()
 	if jm != nil {
 		jm.SetJobDoneObserver(ts.HandleJobDone)
 	}
 	return ts
+}
+
+// stallWorker periodically checks running teammates for stalls (P10) and
+// aborts those past the threshold. Stops on doneCh close (Close).
+func (ts *TeammateStore) stallWorker() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			ts.checkStalled()
+		case <-ts.doneCh:
+			return
+		}
+	}
 }
 
 // Close stops the auto-advance worker. Safe to call multiple times; jobs stay
@@ -201,6 +230,7 @@ func (ts *TeammateStore) Create(name, role string, writable ...bool) error {
 		Writable: len(writable) > 0 && writable[0],
 	}
 	slog.Info("team teammate created", "name", name, "role", role, "writable", ts.teammates[name].Writable)
+	ts.saveSnapshot()
 	return nil
 }
 
@@ -274,6 +304,7 @@ func (ts *TeammateStore) Grant(name string, paths WritePathSet) error {
 		return fmt.Errorf("teammate %q not found", name)
 	}
 	ts.grants[name] = paths
+	ts.saveSnapshot()
 	return nil
 }
 
@@ -292,6 +323,7 @@ func (ts *TeammateStore) GrantWorktree(name string) error {
 		return fmt.Errorf("worktree mode needs a workspace root (SetWorkspaceRoot)")
 	}
 	tm.Worktree = true
+	ts.saveSnapshot()
 	return nil
 }
 
@@ -304,6 +336,7 @@ func (ts *TeammateStore) Revoke(name string) error {
 		return fmt.Errorf("teammate %q not found", name)
 	}
 	delete(ts.grants, name)
+	ts.saveSnapshot()
 	return nil
 }
 
@@ -338,6 +371,12 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	if ts.leader == nil {
 		if parent, ok := ForkSourceFromContext(ctx); ok {
 			ts.leader = parent
+		}
+	}
+	// Capture the leader session for the P10 stall worker.
+	if ts.session == "" {
+		if s := jobs.SessionFromContext(ctx); s != "" {
+			ts.session = s
 		}
 	}
 	// P6.1 completion gate checked before claiming the running slot, so a

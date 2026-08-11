@@ -71,6 +71,7 @@ func (ts *TeammateStore) RequestApproval(from, requestID, plan string) error {
 	ts.mu.Lock()
 	ts.approvals[requestID] = req
 	ts.mu.Unlock()
+	ts.saveSnapshot()
 	return nil
 }
 
@@ -118,5 +119,6 @@ func (ts *TeammateStore) Approve(requestID string, decision bool, session string
 	if jm != nil && hasTM && tm.LastJobID != "" {
 		_ = jm.SendMessageForSession(session, tm.LastJobID, text)
 	}
+	ts.saveSnapshot()
 	return nil
 }

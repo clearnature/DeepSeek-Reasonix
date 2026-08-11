@@ -1932,6 +1932,9 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	inboxRoot := filepath.Join(sessionDir, "team-inbox")
 	teammates := agent.NewTeammateStore(taskTool, jm, inboxRoot)
 	teammates.SetWorkspaceRoot(opts.WorkspaceRoot)
+	// P10: stalled-teammate abort (0 = warning only) + crash snapshot.
+	teammates.SetStallAbort(time.Duration(cfg.Agent.TeamStallAbortSeconds) * time.Second)
+	teammates.SetSnapshotPath(filepath.Join(sessionDir, "team-state.json"))
 	teammates.SetSink(sink)
 
 	ctrlOpts := control.Options{

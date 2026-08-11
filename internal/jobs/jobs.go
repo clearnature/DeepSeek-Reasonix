@@ -1268,6 +1268,24 @@ func (j *Job) readArtifactAllLocked() string {
 	return string(b)
 }
 
+// MarkStalledForTest flips a job's stalled flag directly (mirrors the
+// monitor path without the timer), so stall consumers can be tested
+// deterministically.
+func (m *Manager) MarkStalledForTest(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, key := range m.order {
+		j := m.jobs[key]
+		if j == nil || j.ID != id {
+			continue
+		}
+		j.mu.Lock()
+		j.stalled = true
+		j.mu.Unlock()
+		return
+	}
+}
+
 // Kill cancels a running job. Returns false when the id is unknown or the job has
 // already finished.
 func (m *Manager) Kill(id string) bool {
