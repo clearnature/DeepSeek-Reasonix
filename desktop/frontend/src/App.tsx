@@ -1237,6 +1237,12 @@ export default function App() {
       if (e.kind === "turn_done") {
         setDockRefreshKey((v) => v + 1);
       }
+      // /compress-fast elides tool results without an API call: no turn_done
+      // arrives, but the model-visible context shrank — refresh the dock so
+      // the context gauge reflects the smaller projection.
+      if (e.kind === "compaction_done") {
+        setDockRefreshKey((v) => v + 1);
+      }
       if (shouldPlayAttentionChimeForEvent(e, attentionChimeEvents.current)) {
         playAttentionChime();
       }

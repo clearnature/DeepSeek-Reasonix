@@ -1462,6 +1462,12 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			c.emitFastCompressTelemetry(fastCompressCacheLabel(warm, overflow), stats.Results, stats.SavedChars, "")
 			c.noticeDetail("fast-compressed",
 				fmt.Sprintf("elided %d stale tool results, saved ~%d chars", stats.Results, stats.SavedChars))
+			// Signal the frontend: the model-visible context shrank (projection
+			// rewritten), so the context gauge must refresh even though no API
+			// call/turn_done happened.
+			c.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
+				Trigger: "manual", Messages: stats.Results, Summary: "",
+			}})
 			if err := c.SnapshotRewrite(); err != nil {
 				slog.Warn("controller: snapshot after fast compression", "err", err)
 			}

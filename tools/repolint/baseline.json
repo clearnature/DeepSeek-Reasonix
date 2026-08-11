@@ -4,8 +4,8 @@
     "commented-code": 1,
     "complexity": 2128,
     "essay": 4184,
-    "file-size": 110554,
-    "function-size": 9278,
+    "file-size": 110566,
+    "function-size": 9284,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -88,7 +88,7 @@
       "essay": 2
     },
     "desktop/frontend/src/App.tsx": {
-      "file-size": 4736
+      "file-size": 4742
     },
     "desktop/frontend/src/__tests__/app-chrome-tabs.test.ts": {
       "test-file-size": 19
@@ -1091,8 +1091,8 @@
     "internal/control/controller.go": {
       "complexity": 25,
       "essay": 167,
-      "file-size": 5518,
-      "function-size": 138,
+      "file-size": 5524,
+      "function-size": 144,
       "narrative": 4
     },
     "internal/control/controller_test.go": {

@@ -92,15 +92,12 @@ func (a *Agent) applyToolResultMaintenanceView(msgs []provider.Message, mode too
 // installElidedProjection CAS-installs the elided view as the new projection
 // under the current compaction lineage (no summarizer involved).
 func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) error {
-	a.compactionMu.Lock()
-	defer a.compactionMu.Unlock()
-	state := a.compactionState
+	// Collect read-only data before taking the lock: modelVisibleMessages
+	// re-enters compactionMu, so it cannot run inside the locked section.
 	canonical, version := a.session.snapshotMessagesVersion()
-	if len(canonical) == 0 || version == 0 {
+	if len(canonical) == 0 {
 		return nil
 	}
-	projVersion := state.Projection.ProjectionVersion + 1
-	now := time.Now().UTC()
 	src := a.estimatedPromptTokens(a.modelVisibleMessages())
 	dst := a.estimatedPromptTokens(provider.ModelMessages(next))
 	outputHash := providerVisibleFingerprint(provider.ModelMessages(next))
@@ -108,6 +105,12 @@ func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) 
 	if st.Mode == toolResultPrune {
 		action = "prune"
 	}
+
+	a.compactionMu.Lock()
+	defer a.compactionMu.Unlock()
+	state := a.compactionState
+	projVersion := state.Projection.ProjectionVersion + 1
+	now := time.Now().UTC()
 	state.Projection = ContextProjection{
 		Messages:          provider.ModelMessages(next),
 		TranscriptVersion: version,
