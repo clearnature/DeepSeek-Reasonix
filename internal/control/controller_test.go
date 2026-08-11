@@ -5406,3 +5406,305 @@ func TestCacheColdAfterFailureFallsBackTo24h(t *testing.T) {
 		t.Fatalf("ResolveModel failure must fall back to 24h, got %v", got)
 	}
 }
+func TestFastCompressCommandElidesStaleToolResults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	big := strings.Repeat("x", 5000)
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "read the file"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "", ToolCalls: []provider.ToolCall{{ID: "1", Name: "read_file", Arguments: "{\"file_path\":\"/tmp/a\"}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "1", Name: "read_file", Content: big})
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "also check"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "", ToolCalls: []provider.ToolCall{{ID: "2", Name: "read_file", Arguments: "{\"file_path\":\"/tmp/b\"}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "2", Name: "read_file", Content: strings.Repeat("y", 3000)})
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "done"})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 1000, RecentKeep: 1, ArchiveDir: dir}, event.Discard)
+
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: path,
+		Label:       "test",
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	c.Submit("/compress-fast")
+
+	var got string
+	select {
+	case got = <-notices:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no fast-compress notice within 5s")
+	}
+	if got == "fast compression failed: " || strings.Contains(got, "failed") {
+		t.Fatalf("fast compression failed: %s", got)
+	}
+	msgs := sess.Snapshot()
+	if len(msgs) != 8 {
+		t.Fatalf("message count changed: %d, want 8 (never drop messages)", len(msgs))
+	}
+	// The protected recent tail (last 1) keeps the newest tool result.
+	if strings.Contains(msgs[6].Content, "[elided") {
+		t.Error("recent tool result must stay verbatim in the protected tail")
+	}
+	// Post-#8112 semantics: /compress-fast installs a pruned projection
+	// view; the canonical transcript is never rewritten.
+	if strings.Contains(msgs[3].Content, "[elided tool result — ") {
+		t.Error("canonical transcript must stay verbatim; elision lands in the projection view")
+	}
+	// tool_call pairing preserved.
+	if len(msgs[2].ToolCalls) != 1 || msgs[2].ToolCalls[0].ID != "1" {
+		t.Error("assistant tool_call pairing touched")
+	}
+	if msgs[3].ToolCallID != "1" || msgs[3].Name != "read_file" || msgs[3].Role != provider.RoleTool {
+		t.Error("tool result identity fields touched")
+	}
+}
+
+func TestFastCompressCommandNoopWithoutStaleResults(t *testing.T) {
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "hello"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "hi"})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 1000}, event.Discard)
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor: exec,
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	c.Submit("/compress-fast")
+	if got := waitForNotice(t, notices, "no stale tool results to compress"); got == "" {
+		t.Fatal("no noop notice within 5s")
+	}
+}
+
+func TestFastCompressCommandRefusedWhileTurnRunning(t *testing.T) {
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "hi"})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 1000}, event.Discard)
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor: exec,
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	c.mu.Lock()
+	c.running = true
+	c.mu.Unlock()
+
+	c.Submit("/compress-fast")
+	select {
+	case got := <-notices:
+		if !strings.Contains(got, "failed") {
+			t.Fatalf("running turn must refuse fast compression, got %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no refusal notice within 5s")
+	}
+	// The session must be untouched: no rewrite happened behind a running turn.
+	if rw := exec.Session().RewriteVersion(); rw != 0 {
+		t.Fatalf("rewrite behind running turn: version %d", rw)
+	}
+}
+
+func TestFastCompressCommandRefusedWhileCacheWarm(t *testing.T) {
+	big := strings.Repeat("x", 5000)
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "read"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "1", Name: "read_file", Arguments: "{}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "1", Name: "read_file", Content: big})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 100_000, RecentKeep: 1}, event.Discard)
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor: exec,
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	// Warm cache: last API call is recent, TTL is long -> refuse.
+	exec.RecordAPICallForTest(time.Now())
+	c.testCacheColdAfter = 24 * time.Hour
+
+	c.Submit("/compress-fast")
+	if got := waitForNotice(t, notices, "refused"); got == "" {
+		t.Fatal("warm cache must refuse fast compression")
+	}
+	// Nothing rewritten: no backup, no rewrite version bump.
+	if rw := exec.Session().RewriteVersion(); rw != 0 {
+		t.Fatalf("rewrite behind warm cache: version %d", rw)
+	}
+}
+
+func TestFastCompressCommandForceOverridesWarmGate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	big := strings.Repeat("x", 5000)
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "read"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "1", Name: "read_file", Arguments: "{}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "1", Name: "read_file", Content: big})
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "done"})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 100_000, RecentKeep: 1, ArchiveDir: dir}, event.Discard)
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: path,
+		Label:       "test",
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	// Same warm state that refuses the bare command: recent call, long TTL.
+	exec.RecordAPICallForTest(time.Now())
+	c.testCacheColdAfter = 24 * time.Hour
+
+	c.Submit("/compress-fast --force")
+	select {
+	case got := <-notices:
+		if strings.Contains(got, "refused") || strings.Contains(got, "failed") {
+			t.Fatalf("--force must override the warm gate, got %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no fast-compress notice within 5s")
+	}
+	// The warm gate is overridden, but post-#8112 the elision lands in a
+	// pruned projection view — the canonical transcript is never rewritten.
+	if rw := exec.Session().RewriteVersion(); rw != 0 {
+		t.Fatal("--force must not rewrite the canonical transcript")
+	}
+	if strings.Contains(sess.Snapshot()[3].Content, "[elided tool result — ") {
+		t.Error("canonical transcript must stay verbatim under --force")
+	}
+}
+
+func TestFastCompressCommandBacksUpBeforeRewrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	big := strings.Repeat("x", 5000)
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "read"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "1", Name: "read_file", Arguments: "{}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "1", Name: "read_file", Content: big})
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "also"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "2", Name: "read_file", Arguments: "{}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "2", Name: "read_file", Content: strings.Repeat("y", 3000)})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 1000, RecentKeep: 1, ArchiveDir: dir}, event.Discard)
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: path,
+		Label:       "test",
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	// Persist a baseline transcript so the backup has content to copy.
+	if err := c.SnapshotRewrite(); err != nil {
+		t.Fatalf("baseline snapshot: %v", err)
+	}
+	c.testCacheColdAfter = -1 // force cold so the gate passes
+
+	c.Submit("/compress-fast")
+	select {
+	case got := <-notices:
+		if strings.Contains(got, "failed") || strings.Contains(got, "no stale") {
+			t.Fatalf("unexpected notice: %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no fast-compress notice within 5s")
+	}
+	if _, err := os.Stat(path + ".bak"); err != nil {
+		t.Fatalf("backup not created: %v", err)
+	}
+	// The backup must contain the original (unpruned) tool output.
+	raw, err := os.ReadFile(path + ".bak")
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if !strings.Contains(string(raw), big[:64]) {
+		t.Error("backup does not contain the original tool output")
+	}
+	// Post-#8112: the prune lands in a projection view; the canonical
+	// transcript keeps its original bytes (rewrite version stays 0).
+	if rw := exec.Session().RewriteVersion(); rw != 0 {
+		t.Fatal("prune must not rewrite the canonical transcript")
+	}
+}
+
+// waitForNotice reads notices until one contains want, or times out. Commands
+// emit both a telemetry notice and a user-facing one, so single reads can see
+// the wrong message first.
+func waitForNotice(t *testing.T, ch <-chan string, want string) string {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case got := <-ch:
+			if strings.Contains(got, want) {
+				return got
+			}
+		case <-deadline:
+			return ""
+		}
+	}
+}
+
+func TestFastCompressCommandAllowsOverflowDespiteWarmCache(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	// Two tool results, small window: transcript is over the high-water mark
+	// even before prune, so the warm-cache refusal must yield (a 400 would
+	// cost more than a cache miss).
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: strings.Repeat("grow ", 200)})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "1", Name: "read_file", Arguments: "{}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "1", Name: "read_file", Content: strings.Repeat("x", 5000)})
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "more"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "2", Name: "read_file", Arguments: "{}"}}})
+	sess.Add(provider.Message{Role: provider.RoleTool, ToolCallID: "2", Name: "read_file", Content: strings.Repeat("y", 5000)})
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 800, RecentKeep: 1, ArchiveDir: dir}, event.Discard)
+	notices := make(chan string, 8)
+	c := New(Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: path,
+		Label:       "test",
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	exec.RecordAPICallForTest(time.Now())
+	c.testCacheColdAfter = 24 * time.Hour // warm cache
+	if !exec.PromptOverflow() {
+		t.Fatal("fixture must be over the window for this test to be meaningful")
+	}
+
+	c.Submit("/compress-fast")
+	// Telemetry notice is emitted before the user-facing one.
+	if got := waitForNotice(t, notices, "compaction telemetry"); got == "" {
+		t.Fatal("no telemetry notice")
+	}
+	if got := waitForNotice(t, notices, "fast-compressed"); got == "" {
+		t.Fatal("over-window session must compress despite warm cache")
+	}
+}

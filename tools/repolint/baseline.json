@@ -3,13 +3,13 @@
     "banner": 47,
     "commented-code": 1,
     "complexity": 2128,
-    "essay": 4184,
+    "essay": 4178,
     "file-size": 110566,
     "function-size": 9284,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "test-file-size": 70875
+    "test-file-size": 71177
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -1097,7 +1097,7 @@
     },
     "internal/control/controller_test.go": {
       "essay": 10,
-      "test-file-size": 4608
+      "test-file-size": 4910
     },
     "internal/control/errmsg.go": {
       "essay": 2
@@ -1835,10 +1835,7 @@
       "essay": 2
     },
     "internal/stats/record.go": {
-      "essay": 7
-    },
-    "internal/stats/recorder.go": {
-      "essay": 1
+      "essay": 2
     },
     "internal/store/remote.go": {
       "essay": 6
