@@ -1244,9 +1244,24 @@ func TestBuildRequestUsesProviderSpecificOutputBudget(t *testing.T) {
 		return p.(*client)
 	}
 
+	// Official DeepSeek defaults effort to high when unset, so the automatic
+	// ladder lands on the 64K high-reasoning tier — not 128K.
 	deepseek := newClient(t, "https://api.deepseek.com", "deepseek-v4-flash", 0).buildRequest(provider.Request{})
-	if deepseek.MaxTokens != 131072 || deepseek.MaxCompletionTokens != 0 {
-		t.Fatalf("DeepSeek output budget = max_tokens %d, max_completion_tokens %d", deepseek.MaxTokens, deepseek.MaxCompletionTokens)
+	if deepseek.MaxTokens != provider.DefaultHighReasoningOutputTokens || deepseek.MaxCompletionTokens != 0 {
+		t.Fatalf("DeepSeek auto budget = max_tokens %d, max_completion_tokens %d, want high-reasoning %d",
+			deepseek.MaxTokens, deepseek.MaxCompletionTokens, provider.DefaultHighReasoningOutputTokens)
+	}
+
+	lowEffort, err := New(provider.Config{
+		Name: "test", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash",
+		Extra: map[string]any{"effort": "low", "max_output_tokens": 0},
+	})
+	if err != nil {
+		t.Fatalf("New low-effort DeepSeek: %v", err)
+	}
+	lowReq := lowEffort.(*client).buildRequest(provider.Request{})
+	if lowReq.MaxTokens != provider.DefaultReasoningOutputTokens {
+		t.Fatalf("low-effort auto budget = %d, want ordinary reasoning %d", lowReq.MaxTokens, provider.DefaultReasoningOutputTokens)
 	}
 
 	thinkingDisabledProvider, err := New(provider.Config{
@@ -1257,8 +1272,8 @@ func TestBuildRequestUsesProviderSpecificOutputBudget(t *testing.T) {
 		t.Fatalf("New thinking-disabled DeepSeek: %v", err)
 	}
 	thinkingDisabled := thinkingDisabledProvider.(*client).buildRequest(provider.Request{})
-	if thinkingDisabled.MaxTokens != 0 || thinkingDisabled.MaxCompletionTokens != 0 {
-		t.Fatalf("thinking-disabled DeepSeek received an automatic output budget: %+v", thinkingDisabled)
+	if thinkingDisabled.MaxTokens != provider.DefaultOrdinaryOutputTokens {
+		t.Fatalf("thinking-disabled DeepSeek auto budget = %d, want ordinary %d", thinkingDisabled.MaxTokens, provider.DefaultOrdinaryOutputTokens)
 	}
 	effortDisabledProvider, err := New(provider.Config{
 		Name: "test", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro",
@@ -1268,8 +1283,8 @@ func TestBuildRequestUsesProviderSpecificOutputBudget(t *testing.T) {
 		t.Fatalf("New effort-disabled DeepSeek: %v", err)
 	}
 	effortDisabled := effortDisabledProvider.(*client).buildRequest(provider.Request{})
-	if effortDisabled.MaxTokens != 0 || effortDisabled.Thinking == nil || effortDisabled.Thinking.Type != "disabled" {
-		t.Fatalf("effort-disabled DeepSeek request = %+v, want thinking disabled without an automatic budget", effortDisabled)
+	if effortDisabled.MaxTokens != provider.DefaultOrdinaryOutputTokens || effortDisabled.Thinking == nil || effortDisabled.Thinking.Type != "disabled" {
+		t.Fatalf("effort-disabled DeepSeek request = %+v, want thinking disabled with ordinary %d budget", effortDisabled, provider.DefaultOrdinaryOutputTokens)
 	}
 
 	explicitDisabledProvider, err := New(provider.Config{
@@ -2353,49 +2368,5 @@ func TestNormaliseUsageAnthropicStyleFallback(t *testing.T) {
 				t.Fatalf("normaliseUsage() = %+v, want %+v", got, tc.want)
 			}
 		})
-	}
-}
-
-// TestVendorEffortEscapesHonorSupportedEfforts（#4099/#3561 残余）：binary
-// vendor（minimax/zhipu/longcat）与 ollamaCloud 分支——用户声明
-// supported_efforts 时尊重声明词汇（#7273 模式补全），未声明仍内置校验。
-func TestVendorEffortEscapesHonorSupportedEfforts(t *testing.T) {
-	cases := []struct {
-		name    string
-		baseURL string
-		efforts []string
-		ok      []string
-		bad     []string
-	}{
-		{"minimax", "https://api.minimaxi.com/v1", []string{"adaptive", "disabled", "high"}, []string{"high", "adaptive"}, []string{"medium"}},
-		{"zhipu", "https://open.bigmodel.cn/api/paas/v4", []string{"enabled", "disabled", "high"}, []string{"high", "disabled"}, []string{"medium"}},
-		{"longcat", "https://api.longcat.chat/v1", []string{"enabled", "disabled", "max"}, []string{"max", "enabled"}, []string{"medium"}},
-		{"ollamaCloud", "https://ollama.com/v1", []string{"none", "low", "medium", "high", "max"}, []string{"max", "low"}, []string{"xhigh"}},
-	}
-	for _, tc := range cases {
-		for _, lvl := range tc.ok {
-			cfg := provider.Config{Name: tc.name, BaseURL: tc.baseURL, Model: "m", APIKey: "k",
-				Extra: map[string]any{"effort": lvl, "supported_efforts": tc.efforts}}
-			if _, err := New(cfg); err != nil {
-				t.Fatalf("%s: declared effort %q must pass with supported_efforts %v: %v", tc.name, lvl, tc.efforts, err)
-			}
-		}
-		for _, lvl := range tc.bad {
-			cfg := provider.Config{Name: tc.name, BaseURL: tc.baseURL, Model: "m", APIKey: "k",
-				Extra: map[string]any{"effort": lvl, "supported_efforts": tc.efforts}}
-			if _, err := New(cfg); err == nil {
-				t.Fatalf("%s: undeclared effort %q must be rejected with supported_efforts %v", tc.name, lvl, tc.efforts)
-			}
-		}
-		// 未声明：内置校验保持（binary 词汇打回深度词）。
-		// ollamaCloud 内置接受全部词汇（xhigh→max 映射）——无拒绝用例，跳过。
-		if tc.name == "ollamaCloud" {
-			continue
-		}
-		cfg := provider.Config{Name: tc.name, BaseURL: tc.baseURL, Model: "m", APIKey: "k",
-			Extra: map[string]any{"effort": "high"}}
-		if _, err := New(cfg); err == nil {
-			t.Fatalf("%s: without supported_efforts, %q must still be rejected", tc.name, "high")
-		}
 	}
 }

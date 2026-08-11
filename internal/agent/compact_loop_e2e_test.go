@@ -141,6 +141,45 @@ func consecutiveCompactingTurns(perTurn []int) int {
 	return worst
 }
 
+// TestCompactionStopsWhenProtectedContentExceedsWindow covers the user report
+// where a single tool result alone exhausts a tiny window. Automatic maintenance
+// no longer prunes mid-session tool bodies: it attempts one summary, records a
+// generation-scoped block when the candidate cannot land, and must not loop.
+func TestCompactionPausesWhenWindowTooSmall(t *testing.T) {
+	mock := &loopMock{t: t}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handler))
+	defer srv.Close()
+	reg := tool.NewRegistry()
+	reg.Add(fatTool{blob: strings.Repeat("LARGE FILE CONTENTS. ", 350)})
+	a, _ := newAgent(t, srv.URL, reg, 1600, 4)
+	started := 0
+	blocked := 0
+	a.sink = event.FuncSink(func(e event.Event) {
+		if e.Kind == event.CompactionStarted {
+			started++
+		}
+		if e.Kind == event.ContextMaintenanceEvent && e.Maintenance != nil &&
+			(e.Maintenance.Status == "blocked" || e.Maintenance.Status == "failed") {
+			blocked++
+		}
+	})
+	// First turn may fail with a typed overflow/blocked error once protected
+	// content cannot form a safe checkpoint. It must not start many summaries.
+	_ = a.Run(context.Background(), "turn 0: keep going")
+	_ = a.Run(context.Background(), "turn 1: keep going")
+	if started > 2 {
+		t.Fatalf("summary transactions started = %d, want ≤2 (no multi-span / retry loop)", started)
+	}
+	if blocked == 0 && a.currentProjectionVersion() == 0 {
+		// Either a durable block or a successful install is fine; looping is not.
+		t.Logf("started=%d blocked=%d version=%d", started, blocked, a.currentProjectionVersion())
+	}
+}
+
+// TestCompactionHealthyWindowNeverLoops is the companion: when growth comes from
+// assistant text (which pruning never touches), compaction still fires as the
+// session grows but reclaims enough headroom that it never fires on consecutive
+// turns and never trips the stuck guard.
 func TestCompactionHealthyWindowNeverLoops(t *testing.T) {
 	perTurn, paused, _ := compactionsPerTurn(t, 40000, "small tool output", strings.Repeat("analysis paragraph. ", 600), 20)
 
@@ -161,12 +200,11 @@ func TestCompactionHealthyWindowNeverLoops(t *testing.T) {
 	}
 }
 
-// TestPruneKeepsToolHeavySessionBounded: when growth comes from tool results,
-// projection-only pruning is the primary pressure valve. Occasional force-ratio
-// summary folds may still fire when the recent tail alone is huge, but they must
-// stay rare and must never trip the stuck guard. 20 turns of ~3k-token blobs
-// would otherwise cross 0.8×40000 around turn 11 without maintenance.
-func TestPruneKeepsToolHeavySessionBounded(t *testing.T) {
+// TestSummaryKeepsToolHeavySessionBounded: automatic maintenance no longer
+// prunes mid-session tool bodies. Growth from large tool results crosses
+// compact_ratio once, installs one content-driven summary checkpoint, and must
+// not loop or trip the stuck guard. Prune projections must not reappear.
+func TestSummaryKeepsToolHeavySessionBounded(t *testing.T) {
 	perTurn, paused, prunes := compactionsPerTurn(t, 40000, strings.Repeat("file line. ", 1100), "", 20)
 
 	total := 0
@@ -175,13 +213,25 @@ func TestPruneKeepsToolHeavySessionBounded(t *testing.T) {
 	}
 	t.Logf("compactions per turn: %v (total %d), paused=%v, prunes=%d", perTurn, total, paused, prunes)
 
+	if total == 0 {
+		t.Errorf("expected at least one summary fold over a tool-heavy session past compact_ratio")
+	}
 	if total > 3 {
-		t.Errorf("compaction fired %d times; pruning should keep folds rare on a tool-heavy session", total)
+		t.Errorf("compaction fired %d times; a single content-driven summary should leave breathing room", total)
 	}
 	if paused {
-		t.Errorf("auto-compaction paused; pruning should have prevented the stuck loop entirely")
+		t.Errorf("auto-compaction paused; successful summary should have prevented the stuck loop")
 	}
-	if prunes == 0 {
-		t.Errorf("expected at least one prune pass over a tool-heavy session")
+	if prunes != 0 {
+		t.Errorf("prune projections must not be installed (got %d)", prunes)
 	}
+	if c := consecutiveCompactingTurns(perTurn); c > 1 {
+		t.Errorf("compaction fired on %d consecutive turns; content-driven summary should reclaim headroom", c)
+	}
+}
+
+// Keep the old name as an alias so external references still resolve during the
+// rename window; the body asserts the new no-prune contract.
+func TestPruneKeepsToolHeavySessionBounded(t *testing.T) {
+	TestSummaryKeepsToolHeavySessionBounded(t)
 }

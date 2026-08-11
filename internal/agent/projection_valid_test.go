@@ -49,11 +49,6 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 	}
 }
 
-// TestProjectionValidIgnoresCacheKeyMismatch documents the model-switch rule:
-// a projection's summary is model-independent, so a model/lineage key change
-// must not invalidate it (content validity is the covered-prefix hash alone) —
-// otherwise model-visible snaps back to full canonical and the resume gate
-// folds a cached prefix on bulk never transmitted.
 func TestProjectionValidIgnoresCacheKeyMismatch(t *testing.T) {
 	msgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
@@ -70,10 +65,23 @@ func TestProjectionValidIgnoresCacheKeyMismatch(t *testing.T) {
 			TranscriptVersion: 1,
 		},
 	}
+	// Content validity is the prefix hash; the cache-line key is attribution
+	// only, so a model switch keeps the projection visible (regression:
+	// switching the working model must not drop to canonical and misfire
+	// the resume gate).
 	if !projectionValid(st, msgs, 1, "ws|sess|model-b") {
-		t.Fatal("model/lineage key mismatch must not invalidate a content-valid projection")
+		t.Fatal("model/lineage key mismatch must NOT invalidate a content-valid projection")
 	}
-	// Missing prefix hash is always rejected: content validity is the gate.
+	if !projectionValid(st, msgs, 1, "ws|sess|model-a") {
+		t.Fatal("matching key should be valid")
+	}
+	// A blank stored key stays valid when the content hash matches.
+	st.PromptCacheKey = ""
+	if !projectionValid(st, msgs, 1, "ws|sess|model-a") {
+		t.Fatal("missing sidecar cache key must not invalidate when content matches")
+	}
+	// Missing prefix hash is always rejected.
+	st.PromptCacheKey = "ws|sess|model-a"
 	st.Projection.CoveredPrefixHash = ""
 	if projectionValid(st, msgs, 1, "ws|sess|model-a") {
 		t.Fatal("missing CoveredPrefixHash must invalidate projection")
@@ -156,51 +164,6 @@ func TestLoadProjectionSidecarDropsForeignCacheKey(t *testing.T) {
 	}
 }
 
-// TestPreflightCompactsWhenProjectionExceedsHighWaterMark verifies the force
-// guard is not silently disabled by a valid projection: an existing projection
-// whose visible size still clears the high-water mark must be re-folded, not
-// waved through on the old "projection < canonical" tautology.
-func TestPreflightCompactsWhenProjectionExceedsHighWaterMark(t *testing.T) {
-	msgs := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: strings.Repeat("big turn ", 500)},
-		{Role: provider.RoleAssistant, Content: "done"},
-	}
-	// Window 100 with compactRatio 0.5 → high = 50. The projection below is
-	// itself above 50 tokens, so it must not pass preflight on size alone.
-	a := New(&fakeProvider{reply: "s"}, tool.NewRegistry(), &Session{Messages: msgs}, Options{
-		ContextWindow:     100,
-		CompactRatio:      0.5,
-		CompactForceRatio: 0.6,
-		RecentKeep:        2,
-	}, event.Discard)
-	st := CompactionState{
-		TranscriptVersion: 3,
-		PromptCacheKey:    a.currentPromptCacheKey(),
-		Projection: ContextProjection{
-			Messages: []provider.Message{
-				{Role: provider.RoleSystem, Content: "sys"},
-				{Role: provider.RoleUser, Content: strings.Repeat("proj ", 200)},
-			},
-			TranscriptVersion: 3,
-			CoveredCount:      2,
-			CoveredPrefixHash: coveredPrefixHash(msgs, 2),
-			ProjectionTokens:  800,
-		},
-	}
-	if err := a.installProjectionIfCurrent(st, st.Projection.ProjectionVersion, st.Generation); err != nil {
-		t.Fatalf("installProjection: %v", err)
-	}
-	// Paused sessions are exempt (the stuck guard owns them); unpaused ones
-	// must re-fold rather than ride a stale projection.
-	if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
-		t.Fatalf("preflight under pressure: %v", err)
-	}
-	if !hasCompactionSummary(visibleContext(a)) {
-		t.Fatal("preflight should have re-folded a projection above the high-water mark")
-	}
-}
-
 func TestForceThresholdNoopReturnsCompactionRequired(t *testing.T) {
 	// Huge tool result is entirely in the recent tail → no fold region, but
 	// estimate exceeds force; preflight must refuse (not mid-turn).
@@ -227,7 +190,7 @@ func TestForceThresholdNoopReturnsCompactionRequired(t *testing.T) {
 	}
 }
 
-func TestSummarizeWithRetryMergesUsage(t *testing.T) {
+func TestSummarizeOnceDoesNotRetry(t *testing.T) {
 	fp := &retryUsageProvider{
 		failOnce: errors.New("transient"),
 		reply:    "digest body",
@@ -235,24 +198,14 @@ func TestSummarizeWithRetryMergesUsage(t *testing.T) {
 		usage2:   &provider.Usage{PromptTokens: 11, CompletionTokens: 3, TotalTokens: 14, RequestCount: 1},
 	}
 	a := New(fp, tool.NewRegistry(), NewSession("sys"), Options{}, event.Discard)
-	summary, usage, err := a.summarizeWithRetry(context.Background(), []provider.Message{
+	_, _, err := a.summarizeOnce(context.Background(), []provider.Message{
 		{Role: provider.RoleUser, Content: "fold me"},
 	}, "")
-	if err != nil {
-		t.Fatalf("summarizeWithRetry: %v", err)
+	if err == nil {
+		t.Fatal("expected first-attempt failure to surface without retry")
 	}
-	if summary != "digest body" {
-		t.Fatalf("summary = %q", summary)
-	}
-	if usage == nil {
-		t.Fatal("usage is nil")
-	}
-	// Both attempts contribute billable tokens and request count.
-	if usage.PromptTokens < 21 || usage.CompletionTokens < 5 {
-		t.Fatalf("merged usage under-counted: %+v", usage)
-	}
-	if usage.RequestCount < 2 {
-		t.Fatalf("RequestCount = %d, want >= 2 (both attempts)", usage.RequestCount)
+	if fp.calls != 1 {
+		t.Fatalf("provider calls = %d, want exactly 1", fp.calls)
 	}
 }
 

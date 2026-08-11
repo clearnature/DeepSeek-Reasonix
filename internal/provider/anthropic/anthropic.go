@@ -25,7 +25,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,7 +43,7 @@ import (
 // mid-stream) sends no RST, so scanner.Scan() would block forever. Generous on
 // purpose; live streams emit far more often. Stored per-client (client.idleTimeout)
 // so a test can shorten it without a shared global that races other watchdogs.
-const defaultStreamIdleTimeout = 300 * time.Second // slow CPU-hosted models can reason for minutes between SSE chunks
+const defaultStreamIdleTimeout = 120 * time.Second
 
 const (
 	// anthropicVersion is the required API version header value.
@@ -52,14 +51,10 @@ const (
 	// defaultBaseURL is the first-party endpoint; config may override it (e.g. a
 	// gateway). Bedrock/Vertex use a different request shape and are out of scope.
 	defaultBaseURL = "https://api.anthropic.com"
-	// defaultMaxTokens is the conservative output ceiling used when neither the
-	// provider config nor the request supplies one. Anthropic requires max_tokens,
-	// but support is model-specific, so native Anthropic and unknown compatible
-	// gateways must not inherit a universal 128K request.
-	defaultMaxTokens = provider.DefaultReasoningOutputTokens
-	// deepSeekDefaultMaxTokens is safe only for the official DeepSeek Anthropic-
-	// compatible endpoint, whose reasoning models support the higher ceiling.
-	deepSeekDefaultMaxTokens = provider.DefaultHighOutputTokens
+	// defaultMaxTokens is the mandatory Anthropic fallback when neither config
+	// nor request supplies max_tokens. Ordinary turns use 16K; reasoning-capable
+	// paths raise via AutoOutputBudget. 128K is never automatic.
+	defaultMaxTokens = provider.DefaultOrdinaryOutputTokens
 )
 
 func init() {
@@ -111,11 +106,21 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	authHeader, _ := cfg.Extra["auth_header"].(bool)
 	maxOutputTokens, _ := cfg.Extra["max_output_tokens"].(int)
 	if maxOutputTokens <= 0 {
-		// Messages requires max_tokens, so an optional-budget disable request
-		// falls back to the provider's stable mandatory default.
-		maxOutputTokens = defaultMaxTokens
+		// Messages requires max_tokens. 0 = automatic; negative also falls back
+		// because the wire field is mandatory.
+		reasoningOn := officialDeepSeek &&
+			!strings.EqualFold(thinking, "disabled") &&
+			!strings.EqualFold(effort, "disabled") &&
+			!strings.EqualFold(effort, "off") &&
+			!strings.EqualFold(effort, "none")
 		if officialDeepSeek {
-			maxOutputTokens = deepSeekDefaultMaxTokens
+			maxOutputTokens = provider.AutoOutputBudget(reasoningOn, effort)
+		} else {
+			// Native Anthropic and unknown gateways: conservative ordinary default.
+			maxOutputTokens = defaultMaxTokens
+			if strings.EqualFold(thinking, "adaptive") || strings.EqualFold(thinking, "enabled") {
+				maxOutputTokens = provider.AutoOutputBudget(true, effort)
+			}
 		}
 	}
 	httpClient, err := newHTTPClient(cfg)
@@ -135,7 +140,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		effort:           effort,
 		vision:           vision,
 		mimo:             provider.IsMiMoEndpoint(root),
-		dashscope:        provider.IsDashScopeEndpoint(root),
 		webSearch:        webSearch,
 		headers:          cleanCustomHeaders(headers),
 		authHeader:       authHeader,
@@ -163,7 +167,6 @@ type client struct {
 	effort           string // output_config.effort: low|medium|high|xhigh|max; "" = provider default
 	vision           bool   // model accepts image input — embed attached images as base64 image blocks
 	mimo             bool   // true for MiMo — upgrades legacy tuple schemas to Draft 2020-12
-	dashscope        bool   // true for DashScope — opts into server-side session cache via header
 	webSearch        bool   // enable server-side web_search tool (DeepSeek Anthropic API)
 	headers          map[string]string
 	authHeader       bool // send Authorization: Bearer instead of Anthropic's x-api-key header
@@ -174,8 +177,6 @@ type client struct {
 }
 
 func (c *client) Name() string { return c.name }
-
-// SharesContextWindow reports whether max_tokens competes with the prompt
 
 func (c *client) deepSeekThinkingEnabled() bool {
 	return c != nil && c.deepseek && c.thinking != "disabled" && c.effort != "disabled"
@@ -302,25 +303,12 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 			httpReq.Header.Set("x-api-key", c.apiKey)
 		}
 		httpReq.Header.Set("anthropic-version", anthropicVersion)
-		if c.dashscope {
-			// DashScope's server-side session cache is opt-in via this header.
-			// It applies regardless of wire protocol (OpenAI or Anthropic), so
-			// the Anthropic client must set it too or prefix-cache hits crater.
-			httpReq.Header.Set("x-dashscope-session-cache", "enable")
-		}
-		if req.ContextEditing != nil && req.ContextEditing.Mode == "native" && c.nativeAnthropic {
-			httpReq.Header.Set("anthropic-beta", anthropicContextManagementBeta)
-		}
 		applyCustomHeaders(httpReq.Header, c.headers)
 		return httpReq, nil
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
 	if err != nil {
-		annotated := provider.AnnotateToolSchemaError(err, req.Tools)
-		if req.ContextEditing != nil && req.ContextEditing.Mode == "native" && c.nativeAnthropic && nativeContextEditingUnsupported(annotated) {
-			return nil, errors.Join(provider.ErrNativeContextEditingUnsupported, annotated)
-		}
-		return nil, annotated
+		return nil, provider.AnnotateToolSchemaError(err, req.Tools)
 	}
 	c.authed.Store(true)
 
@@ -459,7 +447,6 @@ func (c *client) buildRequest(_ context.Context, req provider.Request) anthReque
 		Tools:     tools,
 		Stream:    true,
 	}
-	applyNativeContextEditing(&r, req, c.nativeAnthropic)
 	// Extended thinking is provider-specific. DeepSeek defaults to enabled and
 	// accepts output_config.effort alongside its binary toggle. Anthropic proper
 	// uses type=adaptive plus display/output_config. LongCat-style compatible
@@ -553,7 +540,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	tools := map[int]*provider.ToolCall{} // tool_use blocks, keyed by content index
 	argBuckets := map[int]int{}           // last emitted 2KB progress bucket per block
 	var inTok, outTok, cacheCreate, cacheRead int
-	var contextEdits contextEditUsage
 	var stopReason string
 	haveUsage := false
 	mergeUsage := func(usage *wireUsage) {
@@ -674,7 +660,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 				stopReason = ev.Delta.StopReason
 			}
 			mergeUsage(ev.Usage)
-			contextEdits.observe(ev.ContextManagement)
 		case "message_stop":
 			// Anthropic's terminal event. Tool blocks may already have closed;
 			// without this, the attempt stays speculative and is not committed.
@@ -732,7 +717,6 @@ finalize:
 			CacheWriteBilledTokens: cacheWriteBilledTokens,
 			FinishReason:           mapStopReason(stopReason),
 		}
-		contextEdits.apply(usage)
 		provider.ApplyRequestAttemptCount(ctx, usage)
 		if !send(provider.Chunk{Type: provider.ChunkUsage, Usage: usage}) {
 			return
@@ -817,16 +801,15 @@ type cacheControl struct {
 }
 
 type anthRequest struct {
-	Model             string             `json:"model"`
-	MaxTokens         int                `json:"max_tokens"`
-	System            []textBlock        `json:"system,omitempty"`
-	Messages          []anthMessage      `json:"messages"`
-	Tools             []anthTool         `json:"tools,omitempty"`
-	Temperature       *float64           `json:"temperature,omitempty"`
-	Thinking          *thinkingConfig    `json:"thinking,omitempty"`
-	OutputConfig      *outputConfig      `json:"output_config,omitempty"`
-	Stream            bool               `json:"stream"`
-	ContextManagement *contextManagement `json:"context_management,omitempty"`
+	Model        string          `json:"model"`
+	MaxTokens    int             `json:"max_tokens"`
+	System       []textBlock     `json:"system,omitempty"`
+	Messages     []anthMessage   `json:"messages"`
+	Tools        []anthTool      `json:"tools,omitempty"`
+	Temperature  *float64        `json:"temperature,omitempty"`
+	Thinking     *thinkingConfig `json:"thinking,omitempty"`
+	OutputConfig *outputConfig   `json:"output_config,omitempty"`
+	Stream       bool            `json:"stream"`
 }
 
 type thinkingConfig struct {
@@ -920,9 +903,8 @@ type streamEvent struct {
 		StopReason       string          `json:"stop_reason"`  // message_delta
 		WebSearchResults json.RawMessage `json:"results"`      // web_search_tool_result_delta
 	} `json:"delta"`
-	Usage             *wireUsage                 `json:"usage"` // message_delta (cumulative output_tokens)
-	ContextManagement *responseContextManagement `json:"context_management"`
-	Error             *struct {
+	Usage *wireUsage `json:"usage"` // message_delta (cumulative output_tokens)
+	Error *struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error"`

@@ -16,30 +16,6 @@ const minOutputBudget = 8 * 1024
 // shared-window providers it never exceeds window - output budget - reserve,
 // so a request below it cannot be rejected for exceeding the model context
 // length; independent-ceiling providers keep the plain ratio mark.
-func (a *Agent) forceThreshold() int {
-	force := int(float64(a.contextWindow) * a.compactForceRatio)
-	if sharesContextWindow(a.prov) {
-		budget := a.outputBudget
-		if a.maxOutputTokens > 0 {
-			budget = a.maxOutputTokens
-		}
-		// Only shrink the force mark when a real shared window exists (window
-		// larger than the output budget + reserve); tiny windows go negative
-		// and would force a fold every turn.
-		if budget > 0 && a.contextWindow > budget+minOutputBudget {
-			budgetAware := a.contextWindow - budget - minOutputBudget
-			if budgetAware < force {
-				force = budgetAware
-			}
-		}
-	}
-	return force
-}
-
-// MaybeCompactOnResume folds a resumed session only when the model-visible
-// prompt already leaves no room for output. Everything else keeps the warm
-// cached prefix (deferred-compaction policy); the canonical transcript is
-// never rewritten.
 func (a *Agent) MaybeCompactOnResume(ctx context.Context) {
 	if a == nil || a.session == nil || a.contextWindow <= 0 {
 		return

@@ -47,9 +47,11 @@ type Message struct {
 	// Content is the provider-visible conversation content. Keeping this legacy
 	// field provider-visible preserves replay for older CLI/Desktop releases.
 	Content string `json:"content,omitempty"`
-	// RawContent is the user-authored form of a user turn, when it differs from
-	// Content because the host added transient context. Older releases ignore
-	// this field and still replay the provider-visible Content safely.
+	// RawContent holds the full original when it differs from Content:
+	// for user turns, the user-authored text before host-injected context;
+	// for tool turns, the complete tool result when first-visible Content was
+	// bounded. ModelMessages always clears it so provider serialization, prompt
+	// cache hashes, and projection hashes never include it.
 	RawContent string `json:"raw_content,omitempty"`
 	// ProviderContent is a transitional field written by early Context Engine v2
 	// builds. Loaders migrate it into Content/RawContent before normal use.
@@ -253,25 +255,16 @@ type Request struct {
 	// entirely — the common path must stay byte-stable for prompt caching.
 	ResponseFormat *ResponseFormat `json:"ResponseFormat,omitempty"`
 	EffortOverride string          `json:"EffortOverride,omitempty"` // per-call reasoning-depth override; adapters apply it only when the endpoint's effort vocabulary accepts it
-	// ContextEditing is an explicit provider capability request. Providers that
-	// do not support native editing ignore it; local compaction remains the
-	// default when it is nil.
-	ContextEditing *ContextEditingPolicy `json:"ContextEditing,omitempty"`
 }
 
 // ResponseFormat asks a provider to constrain its output shape.
 type ResponseFormat struct {
-	// Type is the structured format: "json_object" constrains the reply to
-	// JSON; "json_schema" additionally carries Name/Schema so the model
-	// emits a schema-conforming object (DeepSeek Responses web_search
-	// knowledge-extraction uses this). Empty Type means unset.
+	// Type is the structured format: "json_object" is the only shape the
+	// Responses endpoints currently define (MiMo/DashScope/OpenAI).
 	Type string `json:"type"`
-	// Name is required for json_schema ("knowledge_extract" etc.).
+	// Name is the schema name for json_schema formats.
 	Name string `json:"name,omitempty"`
-	// Schema is the JSON Schema object for json_schema output. The model is
-	// guided (not strictly guaranteed) to comply, so callers must tolerate
-	// markdown-wrapped JSON. RawMessage keeps the remote-protocol generator
-	// happy (map[string]any would hit "unsupported wire type interface {}").
+	// Schema carries the JSON Schema for json_schema formats.
 	Schema json.RawMessage `json:"schema,omitempty"`
 }
 
@@ -285,19 +278,26 @@ func JSONSchemaFormat(name string, schema map[string]any) *ResponseFormat {
 	return &ResponseFormat{Type: "json_schema", Name: name, Schema: raw}
 }
 
-// DefaultReasoningOutputTokens is the conservative provider-side budget used
-// for official reasoning APIs whose documented contract safely accepts 32K.
-// Unknown compatible gateways must opt in through configuration instead of
-// inheriting this value merely because they implement an OpenAI-shaped wire.
-const DefaultReasoningOutputTokens = 32 * 1024
+// Auto ladder for max_output_tokens=0. Bounds completion only; never compact_ratio.
+const (
+	DefaultOrdinaryOutputTokens      = 16 * 1024  // non-reasoning
+	DefaultReasoningOutputTokens     = 32 * 1024  // ordinary reasoning
+	DefaultHighReasoningOutputTokens = 64 * 1024  // high/max effort
+	DefaultHighOutputTokens          = 128 * 1024 // explicit only; never auto
+)
 
-// DefaultHighOutputTokens is the raised output budget for reasoning APIs whose
-// documented contract safely accepts 128K-class ceilings (DeepSeek Responses
-// API allows up to 384K; MiMo allows up to 131072). Long reasoning turns
-// truncate under 32K, forcing many small write→test→fix iterations; a 128K
-// budget lets the model finish in one pass. Kept in one place so the three
-// protocols (Responses / Chat Completions / Anthropic) cannot drift apart.
-const DefaultHighOutputTokens = 128 * 1024
+// AutoOutputBudget maps max_output_tokens=0 to 16K/32K/64K by reasoning effort.
+func AutoOutputBudget(reasoningEnabled bool, effort string) int {
+	if !reasoningEnabled {
+		return DefaultOrdinaryOutputTokens
+	}
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "high", "max":
+		return DefaultHighReasoningOutputTokens
+	default:
+		return DefaultReasoningOutputTokens
+	}
+}
 
 // TemperaturePtr wraps v in a pointer so callers that explicitly want a
 // specific temperature, including 0 for deterministic output, can distinguish
@@ -798,10 +798,6 @@ type Usage struct {
 	ContextReasoningTokens  int
 	ContextCacheHitTokens   int
 	ContextCacheMissTokens  int
-	// Native context-editing observations from the latest committed request.
-	ContextEditingType            string
-	ContextEditingClearedToolUses int
-	ContextEditingClearedTokens   int
 }
 
 // ContextFillTokens returns the latest-attempt context fill (prompt+completion)
@@ -827,30 +823,6 @@ func (u *Usage) LatestPromptTokens() int {
 		return u.ContextPromptTokens
 	}
 	return u.PromptTokens
-}
-
-// ResponsesUsage normalises a Responses API usage block (OpenAI Responses
-// format: input_tokens / output_tokens / input_tokens_details.cached_tokens /
-// output_tokens_details.reasoning_tokens) into the shared Usage shape, deriving
-// cache-miss as input − cached when the server omits it.
-func ResponsesUsage(input, output, total, cached, reasoning int) *Usage {
-	if total == 0 && (input != 0 || output != 0) {
-		total = input + output
-	}
-	miss := 0
-	if cached > 0 && input > cached {
-		miss = input - cached
-	} else if cached == 0 {
-		miss = input
-	}
-	return &Usage{
-		PromptTokens:     input,
-		CompletionTokens: output,
-		TotalTokens:      total,
-		CacheHitTokens:   cached,
-		CacheMissTokens:  miss,
-		ReasoningTokens:  reasoning,
-	}
 }
 
 // Pricing is a provider's per-1M-token rates, used to estimate spend. Currency
@@ -961,9 +933,8 @@ type Chunk struct {
 	// ReasoningID/ReasoningStatus ride the final ChunkReasoning of a turn
 	// (empty Text): the provider-issued reasoning item id/status captured
 	// from the SSE stream, so the Agent can persist them into the session
-	// and the next turn's input reasoning item round-trips them (OpenAI
-	// Responses schema marks Reasoning.id required).
-
+	// and the next turn's input reasoning item round-trips them (review
+	// #7234 — OpenAI Responses schema marks Reasoning.id required).
 	ReasoningID     string          // ChunkReasoning: provider-issued reasoning item id
 	ReasoningStatus string          // ChunkReasoning: final reasoning item status ("completed")
 	ToolCall        *ToolCall       // ChunkToolCallStart (ID+Name only), ChunkToolCallArgsDelta (ID+Name), ChunkToolCall (complete)

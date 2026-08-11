@@ -24,18 +24,13 @@ func (s *noticeCaptureSink) Emit(e event.Event) {
 // with zero records, so /compact reported "compacted" while stats showed
 // nothing. The deferred emit must land one status=noop row per silent exit.
 func TestCompactionNoopEmitsTelemetry(t *testing.T) {
-	cap := &capturingBudgetProvider{}
-	cap.fakeProvider = &fakeProvider{reply: "SUMMARY"}
-	cap.budget = 128 * 1024
 	sink := &noticeCaptureSink{}
 	a := &Agent{
-		prov:              cap,
-		contextWindow:     1_000_000,
-		outputBudgetState: outputBudgetState{outputBudget: 128 * 1024},
-		compactRatio:      0.8,
-		compactForceRatio: 0.9,
-		lastFoldReason:    "manual",
-		sink:              sink,
+		prov:           &fakeProvider{reply: "SUMMARY"},
+		contextWindow:  1_000_000,
+		compactRatio:   0.8,
+		lastFoldReason: "manual",
+		sink:           sink,
 	}
 	// A session so small the fold region is empty: everything fits in head+tail.
 	a.session = &Session{Messages: []provider.Message{
@@ -67,6 +62,8 @@ func TestCompactionNoopEmitsTelemetry(t *testing.T) {
 	if !foundReason {
 		t.Fatalf("no reason=manual in telemetry; notices: %v", sink.notices)
 	}
+	// The fold admission reason rides through to the row (set by foldContext;
+	// the manual path here leaves the last admission label untouched).
 }
 
 // TestCompactionTelemetrySourceTokensCalibrated pins the 2026-08-09 display
@@ -81,7 +78,7 @@ func TestCompactionTelemetrySourceTokensCalibrated(t *testing.T) {
 	raw := estimateMessagesTokens(provider.ModelMessages(canonical))
 	a := &Agent{}
 	// Simulate one completed turn: 10k chars sent, 2000 real prompt tokens
-	// (ratio 0.2, off the 0.05..2 guard so calibration applies).
+	// (tpc=0.2, off the 0.25 fallback so calibration applies).
 	a.setPromptTokenCalibration(2000, requestCalibrationShape{requestChars: 10000})
 	calibrated := a.estimatedPromptTokens(canonical)
 	if calibrated >= raw {

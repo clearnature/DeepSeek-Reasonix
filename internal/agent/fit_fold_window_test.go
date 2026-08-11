@@ -33,7 +33,6 @@ func TestFitFoldToWindowKeepsFoldBounded(t *testing.T) {
 		contextWindow:     1_000_000,
 		outputBudgetState: outputBudgetState{outputBudget: 128 * 1024},
 		compactRatio:      0.8,
-		compactForceRatio: 0.9,
 		sink:              event.Discard,
 	}
 	a.session = &Session{Messages: msgs}

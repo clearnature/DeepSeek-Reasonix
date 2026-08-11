@@ -47,7 +47,7 @@ import (
 // live streams emit tokens/keepalives far more often. Stored per-client
 // (client.idleTimeout) so a test can shorten it without a shared global that
 // would race other streams' watchdogs.
-const defaultStreamIdleTimeout = 300 * time.Second // slow CPU-hosted models can reason for minutes between SSE chunks
+const defaultStreamIdleTimeout = 120 * time.Second
 
 // maxPrefixContinuations keeps automatic recovery bounded. A second length
 // finish is surfaced through the existing truncation notice instead of opening
@@ -156,14 +156,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// NormalizeEffort remaps them to "adaptive" already, so anything
 		// reaching here is expected to be one of: "", "adaptive", "disabled".
 		effort = strings.ToLower(strings.TrimSpace(effort))
-		if hasExplicitEfforts {
-			// 用户声明 supported_efforts 定义端点完整词汇表（#7273 模式）——
-			// 尊重声明，跳过内置 binary 校验（第三方代理可能转译深度词汇）。
-			if !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
-			}
-			break
-		}
 		switch effort {
 		case "": // auto — leave empty so the wire emits thinking.type=adaptive
 		case "adaptive", "disabled":
@@ -175,12 +167,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// (enabled|disabled) and silently ignores reasoning_effort, so /effort
 		// mirrors that binary knob. The config effort layer normalises depth
 		// levels onto one of these; "" means auto == the GLM default (thinking on).
-		if hasExplicitEfforts {
-			if !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
-			}
-			break
-		}
 		switch effort {
 		case "", "enabled", "disabled":
 		default:
@@ -190,12 +176,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// LongCat exposes a binary thinking knob on its OpenAI-compatible endpoint:
 		// thinking.type=enabled|disabled. It documents reasoning text via
 		// reasoning_content, but not the generic reasoning_effort scale.
-		if hasExplicitEfforts {
-			if !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
-			}
-			break
-		}
 		switch effort {
 		case "", "enabled", "disabled":
 		default:
@@ -206,12 +186,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// legacy/off aliases intentionally omit the field, which lets the model
 		// run without thinking. Local Ollama is not auto-detected because its
 		// model/version support varies.
-		if hasExplicitEfforts {
-			if !supportsEffort(supportedEfforts, effort) {
-				return nil, fmt.Errorf("openai: provider %q: effort %q is not listed in supported_efforts: %v", name, effort, supportedEfforts)
-			}
-			break
-		}
 		switch effort {
 		case "", "none", "disabled", "off":
 			effort = ""
@@ -245,11 +219,14 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		thinkingType: thinkingType, effort: effort, deepseek: deepseek, flash: deepseekV4Flash,
 		minimax: minimax, zhipu: zhipu, longcat: longcat, ollamaCloud: ollamaCloud,
 		explicit: hasExplicitEfforts, supported: supportedEfforts})
-	// The automatic cap protects DeepSeek reasoning, not ordinary long-form
-	// output. Preserve an explicit user budget in either mode, but leave a
-	// thinking-disabled request uncapped unless the user configured one.
-	if maxOutputTokens == 0 && officialDeepSeek && thinkingType != "disabled" {
-		maxOutputTokens = provider.DefaultHighOutputTokens // DeepSeek supports up to 384K; 128K is a safe default for reasoning
+	// max_output_tokens=0 means automatic (not unlimited). DeepSeek reasoning
+	// uses 32K / high-max 64K; thinking-disabled stays ordinary 16K. 128K is
+	// never automatic — users must set it explicitly after length truncations.
+	// This budget never participates in compact_ratio.
+	autoMaxOutput := maxOutputTokens == 0 && officialDeepSeek
+	if autoMaxOutput {
+		reasoningOn := thinkingType != "disabled" && effort != "disabled" && effort != "off" && effort != "none"
+		maxOutputTokens = provider.AutoOutputBudget(reasoningOn, effort)
 	}
 	httpClient, err := newHTTPClient(cfg)
 	if err != nil {
@@ -276,6 +253,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		vision:          vision,
 		visionDetail:    visionDetail,
 		maxOutputTokens: maxOutputTokens,
+		autoMaxOutput:   autoMaxOutput,
 		effort:          effort,
 		requestEfforts:  requestEfforts,
 		http:            httpClient,
@@ -289,7 +267,7 @@ func newHTTPClient(cfg provider.Config) (*http.Client, error) {
 		DialTimeout:           30 * time.Second,
 		KeepAlive:             30 * time.Second,
 		TLSHandshakeTimeout:   15 * time.Second,
-		ResponseHeaderTimeout: 300 * time.Second, // models can think (or CPU-prefill) for a while before the first token
+		ResponseHeaderTimeout: 120 * time.Second, // models can think for a while before the first token
 	})
 }
 
@@ -314,7 +292,8 @@ type client struct {
 	thinkingType    string        // explicit `thinking` config override (enabled|disabled); "" = no override
 	vision          bool          // model accepts image input — embed attached images as image_url parts
 	visionDetail    string        // image_url detail hint (low|high); "" = auto/omit
-	maxOutputTokens int           // configured/default total output budget; <=0 omits the optional field
+	maxOutputTokens int           // resolved total output budget; <=0 omits the optional field
+	autoMaxOutput   bool          // true when max_output_tokens=0 (automatic ladder)
 	effort          string        // reasoning_effort for OpenAI; thinking.type for MiniMax; "" = auto/provider default
 	requestEfforts  []string      // depth levels a per-request EffortOverride may take; empty = overrides ignored
 	idleTimeout     time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
@@ -790,11 +769,6 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		if c.mimo {
 			parameters = provider.NormalizeLegacyTupleItemsForDraft202012(parameters)
 		}
-		if t.Type != "" && t.Type != "function" {
-			// Server-side built-in tools (web_search) are only honored by
-			// Responses endpoints; skip them on the Chat Completions wire.
-			continue
-		}
 		tools = append(tools, chatTool{
 			Type:     "function",
 			Function: chatFunction{Name: t.Name, Description: t.Description, Parameters: parameters},
@@ -803,7 +777,15 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 
 	maxOutputTokens := req.MaxTokens
 	if maxOutputTokens == 0 {
-		maxOutputTokens = c.maxOutputTokens
+		if c.autoMaxOutput && c.deepseek {
+			// Re-resolve so per-request EffortOverride (high/max) can raise 32K→64K.
+			effort := c.requestEffort(req)
+			reasoningOn := c.thinkingType != "disabled" &&
+				effort != "disabled" && effort != "off" && effort != "none"
+			maxOutputTokens = provider.AutoOutputBudget(reasoningOn, effort)
+		} else {
+			maxOutputTokens = c.maxOutputTokens
+		}
 	}
 	if maxOutputTokens < 0 {
 		maxOutputTokens = 0

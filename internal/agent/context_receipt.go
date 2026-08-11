@@ -20,55 +20,27 @@ func (a *Agent) contextMaintenanceInputHash(visible []provider.Message) string {
 }
 
 func (a *Agent) contextMaintenanceBlocked(inputHash string) (bool, string) {
-	if a == nil || inputHash == "" {
+	if a == nil {
 		return false, ""
 	}
 	a.compactionMu.Lock()
 	defer a.compactionMu.Unlock()
-	if a.compactionState.BlockedInputHash != inputHash {
+	r := a.compactionState.LastReceipt
+	if r == nil {
+		// Legacy sidecars may only have BlockedInputHash without a receipt.
+		if a.compactionState.BlockedInputHash != "" &&
+			(inputHash == "" || a.compactionState.BlockedInputHash == inputHash) {
+			return true, a.compactionState.BlockedReason
+		}
 		return false, ""
 	}
-	return true, a.compactionState.BlockedReason
-}
-
-func (a *Agent) observeNativeContextEditing(u *provider.Usage) {
-	if a == nil || u == nil || a.effectiveContextEditing() != "native" ||
-		u.ContextEditingType == "" || u.ContextEditingClearedTokens <= 0 {
-		return
+	if r.Status != "blocked" && r.Status != "failed" {
+		return false, ""
 	}
-	inputHash := a.contextMaintenanceInputHash(a.modelVisibleMessages())
-	operationID := fmt.Sprintf("native-tool-clear-%s-%d-%d", inputHash, u.ContextEditingClearedToolUses, u.ContextEditingClearedTokens)
-	a.compactionMu.Lock()
-	state := a.compactionState
-	if state.LastReceipt != nil && state.LastReceipt.OperationID == operationID {
-		a.compactionMu.Unlock()
-		return
-	}
-	now := time.Now().UTC()
-	resultTokens := u.LatestPromptTokens()
-	receipt := &ContextMaintenanceReceipt{
-		OperationID: operationID, Status: "applied", Action: "native_tool_clear",
-		Trigger: CompactionTriggerPressure, SourceProjection: state.Projection.ProjectionVersion,
-		ProjectionVersion: state.Projection.ProjectionVersion, InputHash: inputHash,
-		InputTokens: resultTokens + u.ContextEditingClearedTokens, ResultTokens: resultTokens,
-		SavedTokens: u.ContextEditingClearedTokens, AffectedToolResults: u.ContextEditingClearedToolUses,
-		CacheBreak: true, CreatedAt: now,
-	}
-	previous := state
-	state.SchemaVersion = compactionStateSchemaCurrent
-	state.Generation++
-	state.LastTrigger = CompactionTriggerPressure
-	state.LastMode = CompactionModeNative
-	state.LastReceipt = receipt
-	state.UpdatedAt = now
-	a.compactionState = state
-	if err := a.persistCompactionStateLocked(); err != nil {
-		a.compactionState = previous
-		a.compactionMu.Unlock()
-		return
-	}
-	a.compactionMu.Unlock()
-	a.emitContextMaintenance(receipt)
+	// Generation-scoped: once this generation fails, automatic maintenance
+	// does not pay for another summary until a successful install, manual
+	// compress, or lineage change advances the generation.
+	return true, firstNonEmpty(a.compactionState.BlockedReason, r.Reason)
 }
 
 func (a *Agent) emitContextMaintenance(r *ContextMaintenanceReceipt) {
@@ -83,8 +55,15 @@ func (a *Agent) emitContextMaintenance(r *ContextMaintenanceReceipt) {
 	}})
 }
 
-// recordContextMaintenanceBlocked persists one failed visible-view fingerprint.
+// recordContextMaintenanceBlocked persists a generation-scoped blocked receipt.
 func (a *Agent) recordContextMaintenanceBlocked(inputHash, trigger, action, reason string) {
+	a.recordContextMaintenanceOutcome(inputHash, trigger, action, "blocked", reason)
+}
+
+// recordContextMaintenanceOutcome records blocked or failed for the current
+// generation. Automatic Prepare will not re-enter summary until the generation
+// advances (successful install, manual compress, or lineage change).
+func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, status, reason string) {
 	if a == nil || a.session == nil {
 		return
 	}
@@ -95,14 +74,19 @@ func (a *Agent) recordContextMaintenanceBlocked(inputHash, trigger, action, reas
 		trigger = CompactionTriggerPressure
 	}
 	if action == "" {
-		action = "noop"
+		action = "summary"
+	}
+	if status != "failed" {
+		status = "blocked"
 	}
 	_, transcriptVersion := a.session.snapshotMessagesVersion()
 	promptCacheKey := a.currentPromptCacheKey()
 	a.compactionMu.Lock()
 	state := a.compactionState
 	previous := state
-	if state.BlockedInputHash == inputHash && state.LastReceipt != nil && state.LastReceipt.Status == "blocked" {
+	if state.LastReceipt != nil &&
+		(state.LastReceipt.Status == "blocked" || state.LastReceipt.Status == "failed") &&
+		state.LastReceipt.Action == action {
 		a.compactionMu.Unlock()
 		return
 	}
@@ -110,11 +94,18 @@ func (a *Agent) recordContextMaintenanceBlocked(inputHash, trigger, action, reas
 	state.SchemaVersion = compactionStateSchemaCurrent
 	state.TranscriptVersion = transcriptVersion
 	state.PromptCacheKey = promptCacheKey
+	// Do not advance projection version on failure; generation still advances so
+	// CAS losers and concurrent writers cannot overwrite a newer success.
 	state.Generation++
-	state.BlockedInputHash = inputHash
-	state.BlockedReason = reason
+	// LastReceipt carries the blocked signal; clear legacy top-level mirrors.
+	state.BlockedInputHash = ""
+	state.BlockedReason = ""
+	state.LastTrigger = ""
+	state.LastMode = ""
+	state.LastSourceTokens = 0
+	state.LastResultTokens = 0
 	state.LastReceipt = &ContextMaintenanceReceipt{
-		OperationID: fmt.Sprintf("blocked-%s", inputHash), Status: "blocked", Action: action,
+		OperationID: fmt.Sprintf("%s-%s-%d", status, action, state.Generation), Status: status, Action: action,
 		Trigger: trigger, SourceProjection: state.Projection.ProjectionVersion,
 		ProjectionVersion: state.Projection.ProjectionVersion, InputHash: inputHash,
 		BlockedInputHash: inputHash, Reason: reason, CreatedAt: now,
@@ -128,4 +119,28 @@ func (a *Agent) recordContextMaintenanceBlocked(inputHash, trigger, action, reas
 	}
 	a.compactionMu.Unlock()
 	a.emitContextMaintenance(state.LastReceipt)
+}
+
+func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
+	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f reason=%s",
+		t.Trigger, t.Mode, t.Status, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
+		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount, t.TokPerChar, t.Reason)
+	if t.ProviderRequestID != "" {
+		detail += " provider_request_id=" + t.ProviderRequestID
+	}
+	level := event.LevelInfo
+	text := "compaction telemetry"
+	if t.Error != "" {
+		// Errors must reach the stats file too: the Recorder persists the
+		// "compaction failed" notice as a row with err_type, so a failed pass
+		// is diagnosable from stats alone.
+		level = event.LevelWarn
+		text = "compaction failed"
+		detail += " err_type=" + t.Error
+	}
+	a.sink.Emit(event.Event{Kind: event.Notice, Level: level, Text: text, Detail: detail})
+}
+
+func (a *Agent) emitCompactionAborted(trigger string) {
+	a.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{Trigger: trigger}})
 }
