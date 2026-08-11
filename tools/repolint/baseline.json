@@ -4,8 +4,8 @@
     "commented-code": 1,
     "complexity": 2169,
     "essay": 4381,
-    "file-size": 112781,
-    "function-size": 9521,
+    "file-size": 112796,
+    "function-size": 9536,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -690,8 +690,8 @@
     },
     "internal/agent/teammate_store.go": {
       "essay": 61,
-      "file-size": 404,
-      "function-size": 5
+      "file-size": 419,
+      "function-size": 20
     },
     "internal/agent/teammate_store_test.go": {
       "banner": 1,
