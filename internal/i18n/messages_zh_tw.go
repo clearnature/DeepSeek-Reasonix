@@ -247,6 +247,8 @@ var ChineseTraditional = Messages{
 	CmdTeamStatus:       "檢視團隊狀態",
 	CmdTeamRemove:       "移除團隊成員",
 	CmdTeamStop:         "停止團隊成員",
+	CmdTeamGrant:        "授予團隊成員寫入權杖",
+	CmdTeamRevoke:       "撤銷團隊成員寫入權杖",
 	CmdWorkMode:         "切換工作模式",
 	CmdDocs:             "搜尋與目前版本匹配的內建文件",
 	CmdMemory:           "檢視指令、記憶與復原狀態",

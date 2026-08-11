@@ -1662,7 +1662,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			}
 			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
 			return
-		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop":
+		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
@@ -6547,6 +6547,32 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			return
 		}
 		c.notice(fmt.Sprintf("teammate %q created (role %q) — assign work with /team-add", name, role))
+	case "/team-grant":
+		// Syntax: /team-grant <name> <path...> — issue a D1 write token: the
+		// teammate becomes a restricted writer confined to the granted paths
+		// (precise write claims, no whole-workspace serialization).
+		fields := strings.Fields(rest)
+		if len(fields) < 2 {
+			c.notice("usage: /team-grant <name> <path...>")
+			return
+		}
+		ws, err := agent.NormalizeWritePaths(c.workspaceRoot, fields[1:])
+		if err != nil {
+			c.notice("team-grant: " + err.Error())
+			return
+		}
+		if err := c.teammates.Grant(fields[0], ws); err != nil {
+			c.notice("team-grant: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q granted write token over %d path(s) — now a restricted writer", fields[0], len(ws.Paths)))
+	case "/team-revoke":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.Revoke(name); err != nil {
+			c.notice("team-revoke: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q write token revoked — back to read-only", name))
 	case "/team-add":
 		name, task, _ := strings.Cut(rest, " ")
 		if strings.TrimSpace(task) == "" {

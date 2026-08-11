@@ -259,6 +259,8 @@ var Chinese = Messages{
 	CmdTeamStatus:       "查看团队状态",
 	CmdTeamRemove:       "移除团队成员",
 	CmdTeamStop:         "停止团队成员",
+	CmdTeamGrant:        "授予团队成员写令牌",
+	CmdTeamRevoke:       "撤销团队成员写令牌",
 	CmdWorkMode:         "切换工作模式",
 	CmdDocs:             "搜索与当前版本匹配的内置文档",
 	CmdMemory:           "查看指令、记忆与恢复状态",

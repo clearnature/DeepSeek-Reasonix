@@ -85,6 +85,12 @@ type TeammateStore struct {
 	sink event.Sink
 	// tasks is the dependency tree (jobID → task); completed gates live here.
 	tasks map[string]*TeamTask
+	// grants maps teammate name → granted workspace write paths (D1 token
+	// mechanism, MiMo grant-table analog). A granted teammate becomes a
+	// restricted writer: Assign injects WritePathSet{Paths} so its fork runs
+	// with precise path claims (no whole-workspace serialization) and tools
+	// bound to the granted paths. Empty slice = no token (read-only default).
+	grants map[string]WritePathSet
 	// leader is the first fork source observed from an Assign context. It is
 	// the minimal template auto-advance needs to fork a first-round teammate
 	// (its rebuilt ctx carries no turn context). Set once, never the ctx object
@@ -107,6 +113,7 @@ func NewTeammateStore(task *TaskTool, jm *jobs.Manager, inboxRoot ...string) *Te
 	ts := &TeammateStore{
 		teammates: make(map[string]*Teammate),
 		tasks:     make(map[string]*TeamTask),
+		grants:    make(map[string]WritePathSet),
 		task:      task,
 		jm:        jm,
 	}
@@ -231,6 +238,42 @@ func (ts *TeammateStore) SetSink(sink event.Sink) {
 	ts.sink = sink
 }
 
+// Grant issues a write token to a teammate: the granted workspace paths
+// become the teammate's restricted write scope (D1). A granted teammate is
+// no longer read-only — its fork runs with WritePathSet{Paths} so tools are
+// bound to the granted paths and the claim is precise (parallel-safe, no
+// whole-workspace serialization). paths must be pre-normalized (absolute,
+// within workspace).
+func (ts *TeammateStore) Grant(name string, paths WritePathSet) error {
+	name = strings.TrimSpace(name)
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if _, ok := ts.teammates[name]; !ok {
+		return fmt.Errorf("teammate %q not found", name)
+	}
+	ts.grants[name] = paths
+	return nil
+}
+
+// Revoke removes a teammate's write token, falling back to read-only.
+func (ts *TeammateStore) Revoke(name string) error {
+	name = strings.TrimSpace(name)
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if _, ok := ts.teammates[name]; !ok {
+		return fmt.Errorf("teammate %q not found", name)
+	}
+	delete(ts.grants, name)
+	return nil
+}
+
+// grantedPaths returns the teammate's token paths (nil when not granted).
+func (ts *TeammateStore) grantedPaths(name string) WritePathSet {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return ts.grants[name]
+}
+
 // Assign dispatches one job to a teammate. The first assignment forks the
 // leader's prefix (non-silent: the result rides the P1 envelope back);
 // later ones continue the teammate's own transcript. Running teammates are
@@ -277,10 +320,19 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	// P6.2 teammate direct-connect: stamp the mailbox so the teammate sub-agent
 	// can post mail to its peers via the team_message tool (builtin.Mailbox).
 	ctx = builtin.WithMailbox(ctx, ts)
+	// D1 token: a granted teammate becomes a restricted writer — inject the
+	// token paths as precise write claims so tools bind to them and the fork
+	// avoids the whole-workspace claim (writer serialization). ReadOnly stays
+	// false only via the token; ungranted read-only teammates stay read-only.
+	grant := CapabilityGrant{CallTools: toolset}
+	if paths := ts.grantedPaths(name); !paths.Empty() {
+		grant.WritePaths = paths
+		grant.ReadOnly = false
+	}
 	spec := ProfileExecSpec{
 		Task:   TaskSpec{Objective: prompt, Description: "teammate: " + name},
 		Worker: WorkerSpec{Kind: "task", Name: "task", SystemPrompt: ts.task.sysPrompt},
-		Grant:  CapabilityGrant{CallTools: toolset},
+		Grant:  grant,
 		Sched:  SchedulerPolicy{MaxSteps: 0, RunInBackground: true, Nested: SubagentDepth(ctx) > 0},
 	}
 	if ref == "" {
