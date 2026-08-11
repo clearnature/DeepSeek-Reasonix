@@ -387,13 +387,18 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 		Grant:  grant,
 		Sched:  SchedulerPolicy{MaxSteps: 0, RunInBackground: true, Nested: SubagentDepth(ctx) > 0},
 	}
+	// D1 token/worktree: a granted teammate must pass the fork write gate
+	// (Context.Writable) so WritePathSet binding (not the gate) is what
+	// confines its writes to the granted paths — otherwise the read-only
+	// gate blocks every writer regardless of the token.
+	canWrite := tm.Writable || !paths.Empty()
 	if ref == "" {
 		// First assignment: fork the leader prefix, non-silent (envelope back).
 		// Writable teammates get a writable execution gate (P6.1).
-		spec.Context = ContextRequest{Fork: true, Silent: false, Writable: tm.Writable}
+		spec.Context = ContextRequest{Fork: true, Silent: false, Writable: canWrite}
 	} else {
 		// Later assignments: continue the same transcript (prefix-stable).
-		spec.Context = ContextRequest{ContinueFrom: ref, Writable: tm.Writable}
+		spec.Context = ContextRequest{ContinueFrom: ref, Writable: canWrite}
 	}
 	out, err := ts.task.RunProfileSpec(ctx, spec)
 	if err != nil {
