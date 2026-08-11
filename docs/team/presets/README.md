@@ -1,8 +1,8 @@
 # Reasonix Team 智能体预置库（docs/team/presets/）
 
 > 临时可复用的智能体配置——**不内置系统智能体**，用完解散（/team-remove）。
-> 格式：YAML frontmatter + Markdown body（复用 Skill 文件惯例，零新解析）。
-> 加载：`/team-create <name>@<preset>`（预置引用，详见集成设计）。
+> 格式：YAML frontmatter + Markdown body（**与 runAs:subagent SKILL.md 同构——复用现有 Profile/Skill 体系，不引入独立数据库**，devil's advocate 修正）。
+> 加载：`/team-create <name>@<preset>`（预置引用）。docs/team/presets/*.md 是人读定义文档，同一 frontmatter 可转 .reasonix/skills/ 机读（单一真源）。
 
 ## 目录
 
