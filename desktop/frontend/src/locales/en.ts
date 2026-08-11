@@ -3236,6 +3236,21 @@ export const en = {
   "mock.changedFile2Prompt": "Record project context",
   "mock.changedFile1Path": "docs/dev-standard.md",
   "mock.changedFile2Path": ".reasonix/project.md",
+
+  "team.panelTitle": "Team",
+  "team.members": "members",
+  "team.empty": "No team yet — /team-create",
+  "team.name": "Name",
+  "team.role": "Role",
+  "team.state": "State",
+  "team.posture": "Write",
+  "team.job": "Job",
+  "team.worktree": "worktree",
+  "team.writable": "writable",
+  "team.token": "token",
+  "team.readonly": "read-only",
+  "team.pendingApprovals": "Pending approvals",
+  "team.approveHint": "Approve with /team-approve <id> allow|deny",
 };
 
 export type DictKey = keyof typeof en;

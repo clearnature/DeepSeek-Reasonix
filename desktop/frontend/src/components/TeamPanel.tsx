@@ -29,12 +29,10 @@ export interface TeamPanelView {
 export function TeamPanel({ tabID }: { tabID: string }) {
   const t = useT();
   const [view, setView] = useState<TeamPanelView | null>(null);
-  const [polling, setPolling] = useState(true);
   const timerRef = useRef<number | null>(null);
 
   const fetchView = useCallback(async () => {
     if (typeof (app as any).TeamPanelViewForTab !== "function") {
-      setPolling(false);
       return;
     }
     try {
@@ -59,9 +57,9 @@ export function TeamPanel({ tabID }: { tabID: string }) {
   return (
     <div className="teampanel" role="region" aria-label="Team panel">
       <div className="teampanel-header">
-        <strong>{t("team.panelTitle", "团队")}</strong>
+        <strong>{t("team.panelTitle")}</strong>
         <span className="teampanel-meta">
-          {roster.length > 0 ? `${roster.length} ${t("team.members", "成员")}` : t("team.empty", "未创建团队")}
+          {roster.length > 0 ? `${roster.length} ${t("team.members")}` : t("team.empty")}
         </span>
       </div>
 
@@ -69,11 +67,11 @@ export function TeamPanel({ tabID }: { tabID: string }) {
         <table className="teampanel-roster">
           <thead>
             <tr>
-              <th>{t("team.name", "名字")}</th>
-              <th>{t("team.role", "角色")}</th>
-              <th>{t("team.state", "状态")}</th>
-              <th>{t("team.posture", "写权限")}</th>
-              <th>{t("team.job", "任务")}</th>
+              <th>{t("team.name")}</th>
+              <th>{t("team.role")}</th>
+              <th>{t("team.state")}</th>
+              <th>{t("team.posture")}</th>
+              <th>{t("team.job")}</th>
             </tr>
           </thead>
           <tbody>
@@ -86,12 +84,12 @@ export function TeamPanel({ tabID }: { tabID: string }) {
                 </td>
                 <td>
                   {m.worktree
-                    ? t("team.worktree", "worktree")
+                    ? t("team.worktree")
                     : m.writable
-                      ? t("team.writable", "可写")
+                      ? t("team.writable")
                       : m.token
-                        ? t("team.token", "令牌")
-                        : t("team.readonly", "只读")}
+                        ? t("team.token")
+                        : t("team.readonly")}
                 </td>
                 <td>{m.job_id || "—"}</td>
               </tr>
@@ -103,7 +101,7 @@ export function TeamPanel({ tabID }: { tabID: string }) {
       {approvals.length > 0 && (
         <div className="teampanel-approvals">
           <div className="teampanel-subhead">
-            {t("team.pendingApprovals", "待审批")} ({approvals.length})
+            {t("team.pendingApprovals")} ({approvals.length})
           </div>
           {approvals.map((a) => (
             <div key={a.request_id} className="teampanel-approval">
@@ -114,7 +112,7 @@ export function TeamPanel({ tabID }: { tabID: string }) {
             </div>
           ))}
           <p className="teampanel-hint">
-            {t("team.approveHint", "用 /team-approve <id> allow|deny 审批")}
+            {t("team.approveHint")}
           </p>
         </div>
       )}

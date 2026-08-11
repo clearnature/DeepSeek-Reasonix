@@ -247,6 +247,20 @@ type Messages struct {
 	CmdTeamRevoke       string // /team-revoke
 	CmdTeamApprove      string // /team-approve
 	CmdTeamAsk          string // /team-ask
+	TeamPanelTitle      string // team panel header
+	TeamMembers         string // roster count label (%d members)
+	TeamEmpty           string // no team configured
+	TeamName            string // roster column: name
+	TeamRole            string // roster column: role
+	TeamState           string // roster column: state
+	TeamPosture         string // roster column: write posture
+	TeamJob             string // roster column: job
+	TeamWorktree        string // posture: worktree-isolated
+	TeamWritable        string // posture: writable
+	TeamToken           string // posture: write token
+	TeamReadonly        string // posture: read-only
+	TeamPendingApprovals string // approvals heading
+	TeamApproveHint     string // /team-approve hint
 	CmdTeamBroadcast    string // /team-broadcast
 	CmdWorkMode         string // /work-mode
 	CmdDocs             string // /docs
