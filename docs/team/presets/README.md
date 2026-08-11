@@ -19,6 +19,9 @@
 | `data-scientist.md` | `datascientist` | 数据科学家（数据域/创造智能） |
 | `architect.md` | `architect` | 系统架构师（代码域/创造智能） |
 | `critic.md` | `critic` | 批评家（创作域/推理智能） |
+| `coder.md` | `coder` | 编码执行者（代码域/执行智能） |
+| `data-cleaner.md` | `datacleaner` | 数据整理员（数据域/执行智能） |
+| `copywriter.md` | `copywriter` | 文案执行（创作域/执行智能） |
 | `task-classifier.md` | — | 任务分类器 + 复杂度→资源映射（系统文档） |
 | `ga-iteration.md` | — | 遗传算法迭代框架（系统文档） |
 | `metrics.md` | — | 衡量标准体系（系统文档） |
