@@ -1320,7 +1320,7 @@ func (t *TaskTool) effectiveEffortIdentity(effort string) string {
 // buildSubReg returns the sub-agent's tool set: the named whitelist (minus
 // unavailable sub-agent tools), or every parent tool except those tools.
 func (t *TaskTool) buildSubReg(names []string, childDepth int) *tool.Registry {
-	return SubagentToolRegistryForDepthWithRuntime(t.parentReg, names, childDepth, t.maxDepth(), t.capabilityRuntime)
+	return wrapAskGates(SubagentToolRegistryForDepthWithRuntime(t.parentReg, names, childDepth, t.maxDepth(), t.capabilityRuntime))
 }
 
 func (t *TaskTool) maxDepth() int {

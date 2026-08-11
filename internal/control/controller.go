@@ -1662,7 +1662,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			}
 			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
 			return
-		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-approve", "/team-broadcast":
+		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-approve", "/team-broadcast", "/team-ask":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
@@ -6598,6 +6598,20 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			return
 		}
 		c.notice(fmt.Sprintf("plan %q %s — verdict sent to teammate", fields[0], fields[1]))
+	case "/team-ask":
+		// Syntax: /team-ask <name> <tool...> — require leader approval for
+		// the named tools when the teammate calls them (P11 AskGate). The
+		// call auto-submits a "tool" approval request instead of executing.
+		fields := strings.Fields(rest)
+		if len(fields) < 2 {
+			c.notice("usage: /team-ask <name> <tool...>")
+			return
+		}
+		if err := c.teammates.SetAskTools(fields[0], fields[1:]); err != nil {
+			c.notice("team-ask: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q tools now require leader approval: %s", fields[0], strings.Join(fields[1:], ", ")))
 	case "/team-add":
 		name, task, _ := strings.Cut(rest, " ")
 		if strings.TrimSpace(task) == "" {

@@ -24,6 +24,13 @@ type Mailbox interface {
 	// sees it as a <plan-approval-request> envelope and answers with
 	// /team-approve, whose verdict rides the P3 steer queue back.
 	RequestApproval(from, requestID, plan string) error
+	// AskRequiredForTool reports whether a tool call from the named teammate
+	// must go through leader approval (P11). AskGate consults it before
+	// executing a wrapped tool.
+	AskRequiredForTool(from, tool string) bool
+	// AskForTool auto-submits a tool call for leader approval (P11); the
+	// verdict comes back on the P3 steer queue like plan approvals.
+	AskForTool(from, tool, args string) error
 }
 
 type mailboxKey struct{}
@@ -117,4 +124,11 @@ func (teamMessage) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("team_message: %w", err)
 	}
 	return fmt.Sprintf("mail delivered to teammate %q (flushes on its next assignment)", in.Target), nil
+}
+
+// MailboxIdentityFromContext returns the sending teammate's name stamped by
+// WithMailboxIdentity ("" outside teammate forks).
+func MailboxIdentityFromContext(ctx context.Context) string {
+	s, _ := ctx.Value(mailboxIdentityKey{}).(string)
+	return s
 }

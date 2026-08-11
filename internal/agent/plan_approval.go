@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -26,19 +27,64 @@ type ApprovalRequest = approvalReq
 type approvalReq struct {
 	RequestID string
 	Teammate  string
-	Plan      string
-	At        int64
+	// Kind is "plan" (P9 plan_approval_request) or "tool" (P11 tool ask —
+	// AskGate auto-submits a tool call for leader approval).
+	Kind string
+	Plan string // plan body (kind=plan) or "tool <name> <args>" (kind=tool)
+	At   int64
 }
 
-// RequestApproval records a teammate's plan for the leader (P9). The request
-// is persisted under the leader's approvals inbox so it survives restarts;
-// a duplicate request_id is rejected (no replay).
-func (ts *TeammateStore) RequestApproval(from, requestID, plan string) error {
+// SetAskTools marks tools whose calls from the named teammate require leader
+// approval (P11). AskGate wraps those tools in the teammate's fork.
+func (ts *TeammateStore) SetAskTools(name string, tools []string) error {
+	name = strings.TrimSpace(name)
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if _, ok := ts.teammates[name]; !ok {
+		return fmt.Errorf("teammate %q not found", name)
+	}
+	ts.askTools[name] = tools
+	return nil
+}
+
+// askToolsFor returns the tools that require leader approval for a teammate.
+func (ts *TeammateStore) askToolsFor(name string) []string {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return ts.askTools[name]
+}
+
+// AskRequiredForTool reports whether a tool call from the named teammate
+// requires leader approval (P11).
+func (ts *TeammateStore) AskRequiredForTool(from, tool string) bool {
+	tools := ts.askToolsFor(from)
+	return slices.Contains(tools, tool)
+}
+
+// AskForTool auto-submits a tool call for leader approval (P11): the request
+// rides the same approvals channel as plan approvals, so the leader sees it
+// as a <plan-approval-request kind="tool"> envelope and answers with
+// /team-approve; the verdict comes back on the P3 steer queue.
+func (ts *TeammateStore) AskForTool(from, tool, args string) error {
+	from = strings.TrimSpace(from)
+	tool = strings.TrimSpace(tool)
+	if from == "" || tool == "" {
+		return fmt.Errorf("tool ask needs a teammate and tool name")
+	}
+	// A deterministic request id per tool call keeps replays visible; the
+	// leader sees the tool and arguments in the body.
+	id := fmt.Sprintf("tool-%s-%d", sanitizeMailName(tool), time.Now().UnixNano())
+	return ts.RequestApprovalWithKind(from, id, "tool", "tool "+tool+" "+strings.TrimSpace(args))
+}
+
+// RequestApprovalWithKind is the shared P9/P11 request path: kind is "plan"
+// or "tool".
+func (ts *TeammateStore) RequestApprovalWithKind(from, requestID, kind, body string) error {
 	from = strings.TrimSpace(from)
 	requestID = strings.TrimSpace(requestID)
-	plan = strings.TrimSpace(plan)
-	if from == "" || requestID == "" || plan == "" {
-		return fmt.Errorf("approval request needs a teammate, request_id, and plan")
+	body = strings.TrimSpace(body)
+	if from == "" || requestID == "" || body == "" {
+		return fmt.Errorf("approval request needs a teammate, request_id, and body")
 	}
 	ts.mu.Lock()
 	if _, ok := ts.teammates[from]; !ok {
@@ -55,11 +101,10 @@ func (ts *TeammateStore) RequestApproval(from, requestID, plan string) error {
 	req := &approvalReq{
 		RequestID: requestID,
 		Teammate:  from,
-		Plan:      plan,
+		Kind:      kind,
+		Plan:      body,
 		At:        time.Now().Unix(),
 	}
-	// Persist under <inboxRoot>/leader/approvals/<id>.json so a restart keeps
-	// the pending request visible to the leader.
 	if root != "" {
 		dir := filepath.Join(root, "leader", "approvals")
 		if err := os.MkdirAll(dir, 0o755); err == nil {
@@ -73,6 +118,13 @@ func (ts *TeammateStore) RequestApproval(from, requestID, plan string) error {
 	ts.mu.Unlock()
 	ts.saveSnapshot()
 	return nil
+}
+
+// RequestApproval records a teammate's plan for the leader (P9). The request
+// is persisted under the leader's approvals inbox so it survives restarts;
+// a duplicate request_id is rejected (no replay).
+func (ts *TeammateStore) RequestApproval(from, requestID, plan string) error {
+	return ts.RequestApprovalWithKind(from, requestID, "plan", plan)
 }
 
 // PendingApprovals returns the pending plan-approval requests for the

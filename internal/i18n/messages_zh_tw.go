@@ -250,6 +250,7 @@ var ChineseTraditional = Messages{
 	CmdTeamGrant:        "授予團隊成員寫入權杖",
 	CmdTeamRevoke:       "撤銷團隊成員寫入權杖",
 	CmdTeamApprove:      "批准或拒絕團隊成員計畫",
+	CmdTeamAsk:          "要求團隊成員的工具需 leader 審批",
 	CmdTeamBroadcast:    "向所有團隊成員廣播訊息",
 	CmdWorkMode:         "切換工作模式",
 	CmdDocs:             "搜尋與目前版本匹配的內建文件",

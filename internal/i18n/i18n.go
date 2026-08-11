@@ -246,6 +246,7 @@ type Messages struct {
 	CmdTeamGrant        string // /team-grant
 	CmdTeamRevoke       string // /team-revoke
 	CmdTeamApprove      string // /team-approve
+	CmdTeamAsk          string // /team-ask
 	CmdTeamBroadcast    string // /team-broadcast
 	CmdWorkMode         string // /work-mode
 	CmdDocs             string // /docs

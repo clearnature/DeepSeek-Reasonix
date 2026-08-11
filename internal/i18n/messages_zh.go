@@ -262,6 +262,7 @@ var Chinese = Messages{
 	CmdTeamGrant:        "授予团队成员写令牌",
 	CmdTeamRevoke:       "撤销团队成员写令牌",
 	CmdTeamApprove:      "批准或拒绝团队成员计划",
+	CmdTeamAsk:          "要求团队成员的工具有 leader 审批",
 	CmdTeamBroadcast:    "向所有团队成员广播消息",
 	CmdWorkMode:         "切换工作模式",
 	CmdDocs:             "搜索与当前版本匹配的内置文档",
