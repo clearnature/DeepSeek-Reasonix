@@ -10,8 +10,11 @@ import (
 	"reasonix/internal/tool"
 )
 
-// Automatic prune/snip projections are gone. These APIs remain as no-ops so
-// older call sites do not panic, but they never rewrite the model view.
+// Automatic prune/snip projections are gone from the auto path; the manual
+// rescue command /compress-fast (PruneStaleToolResults) elides stale tool
+// results into placeholders without a summarizer call. SnipStaleToolResults
+// stays a no-op (auto snip is gone). The canonical transcript is untouched;
+// only the projection view changes.
 func TestPruneAndSnipAreNoOps(t *testing.T) {
 	sess := &Session{Messages: []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
@@ -25,18 +28,15 @@ func TestPruneAndSnipAreNoOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Results != 0 {
-		t.Fatalf("prune results = %d, want 0", st.Results)
+	if st.Results != 1 {
+		t.Fatalf("prune results = %d, want 1 (stale tool result elided)", st.Results)
 	}
 	st, err = a.SnipStaleToolResults()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if st.Results != 0 {
-		t.Fatalf("snip results = %d, want 0", st.Results)
-	}
-	if got := a.currentProjectionVersion(); got != 0 {
-		t.Fatalf("projection version = %d, want 0", got)
+		t.Fatalf("snip results = %d, want 0 (auto snip is gone)", st.Results)
 	}
 	for _, m := range sess.Snapshot() {
 		if m.Role == provider.RoleTool && m.Content != strings.Repeat("x", 8000) {

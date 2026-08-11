@@ -1403,6 +1403,69 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 				}
 			}
 		}()
+	case trimmed == "/compress-fast" || strings.HasPrefix(trimmed, "/compress-fast "):
+		// No-AI fast compression (qwen-code analog): elide stale tool results
+		// to short placeholders without a summarizer call; never drops a
+		// message and keeps tool_call/result pairing intact.
+		go func() {
+			// The rotation gate keeps a running turn from racing the session
+			// rewrite (prune reads then replaces the whole log, TOCTOU).
+			if err := c.beginRotation(); err != nil {
+				c.notice("fast compression failed: " + err.Error())
+				return
+			}
+			defer c.endRotation()
+			// --force (or -f) overrides the warm-cache gate: the user opts into
+			// punching the prefix-cache hole, e.g. before ending a session or
+			// switching topic where the next-turn hit has no value. Without it
+			// the gate below stays authoritative.
+			force := false
+			for _, tok := range strings.Fields(strings.TrimSpace(strings.TrimPrefix(trimmed, "/compress-fast"))) {
+				if tok == "--force" || tok == "-f" {
+					force = true
+				}
+			}
+			// Cache gate: rewriting tool results changes the wire prefix, so
+			// every byte from the first elided result onward misses the
+			// server-side cache. Only do that when the cache is already cold
+			// (idle past the vendor TTL) — unless the transcript is already
+			// past the compact trigger, where a projection rewrite is
+			// imminent anyway; a cache miss then beats re-folding the same
+			// region twice.
+			warm := false
+			if last := c.executor.LastAPICallAt(); !last.IsZero() && time.Since(last) < c.cacheColdAfter() {
+				warm = true
+			}
+			overflow := c.executor.PromptOverflow()
+			if warm && !overflow && !force {
+				c.emitFastCompressTelemetry("warm", 0, 0, "refused")
+				c.noticeDetail("fast compression refused",
+					fmt.Sprintf("provider cache still warm (last call %s ago, TTL %s); rewriting would punch a hole in every hit from the first elided result. Retry after idle, or use /compress-fast --force to override, or /compact (AI summarize) instead.", time.Since(c.executor.LastAPICallAt()).Round(time.Minute), c.cacheColdAfter().Round(time.Minute)))
+				return
+			}
+			// Backup the whole transcript before the rewrite so a prune
+			// regression can be reverted (Codex compress-fast .bak analog).
+			if err := c.backupSessionBeforeRewrite(); err != nil {
+				c.notice("fast compression failed: backup: " + err.Error())
+				return
+			}
+			stats, err := c.executor.PruneStaleToolResults()
+			if err != nil {
+				c.notice("fast compression failed: " + err.Error())
+				return
+			}
+			if stats.Results == 0 {
+				c.emitFastCompressTelemetry(fastCompressCacheLabel(warm, overflow), 0, 0, "noop")
+				c.notice("no stale tool results to compress")
+				return
+			}
+			c.emitFastCompressTelemetry(fastCompressCacheLabel(warm, overflow), stats.Results, stats.SavedChars, "")
+			c.noticeDetail("fast-compressed",
+				fmt.Sprintf("elided %d stale tool results, saved ~%d chars", stats.Results, stats.SavedChars))
+			if err := c.SnapshotRewrite(); err != nil {
+				slog.Warn("controller: snapshot after fast compression", "err", err)
+			}
+		}()
 	case trimmed == "/context":
 		c.noticeDetail(c.ContextReport())
 	case trimmed == "/new":
@@ -6212,5 +6275,44 @@ func (c *Controller) emitPlanModeReadOnlyCommandTrustResult(r PlanModeReadOnlyCo
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(i18n.M.PlanModeReadOnlyCommandTrustSavedFmt, r.Path, prefix)})
 	case strings.TrimSpace(r.CoveredBy) != "":
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(i18n.M.PlanModeReadOnlyCommandTrustAlreadyFmt, r.Path, r.CoveredBy)})
+	}
+}
+
+func (c *Controller) backupSessionBeforeRewrite() error {
+	path := c.SessionPath()
+	if path == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	bak := path + ".bak"
+	if err := os.WriteFile(bak, raw, 0o600); err != nil {
+		return err
+	}
+	slog.Info("controller: backed up session before fast compression", "path", path, "backup", bak)
+	return nil
+}
+
+func (c *Controller) emitFastCompressTelemetry(cache string, results, savedChars int, status string) {
+	detail := fmt.Sprintf("trigger=manual mode=prune cache=%s results=%d saved_chars=%d", cache, results, savedChars)
+	if status != "" {
+		detail += " status=" + status
+	}
+	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "compaction telemetry", Detail: detail})
+}
+
+func fastCompressCacheLabel(warm, overflow bool) string {
+	switch {
+	case warm && overflow:
+		return "warm_over_window"
+	case warm:
+		return "warm"
+	default:
+		return "cold"
 	}
 }

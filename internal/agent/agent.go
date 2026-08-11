@@ -304,6 +304,10 @@ type Agent struct {
 	// lastUsage caches the latest provider telemetry for per-turn readouts.
 	// The run loop writes it while a frontend reads it, so it is atomic.
 	lastUsage atomic.Pointer[provider.Usage]
+	// lastAPICallAt records when the last provider API call completed; used by
+	// the /compress-fast cache gate (vendor TTL expiry). Atomic because the
+	// command goroutine reads it while the run loop writes it.
+	lastAPICallAt atomic.Int64
 	// lastEstTokens is the admission estimate of the most recent request;
 	// usage rows carry it as est so the estimate-vs-actual gap is auditable
 	// without waiting for a compaction record.
@@ -858,6 +862,40 @@ func (a *Agent) SetSession(s *Session) {
 // gauge alongside the prompt; ContextManager.Prepare owns cache-breaking
 // maintenance decisions.
 func (a *Agent) LastUsage() *provider.Usage { return a.lastUsage.Load() }
+
+// LastAPICallAt returns when the last provider API call completed; the
+// /compress-fast cache gate uses it to decide whether the server-side cache
+// is still warm (idle shorter than the vendor TTL).
+func (a *Agent) LastAPICallAt() time.Time {
+	if a == nil {
+		return time.Time{}
+	}
+	return time.Unix(0, a.lastAPICallAt.Load())
+}
+
+// RecordAPICallForTest stamps lastAPICallAt as if a provider call completed at
+// the given time. Test-only hook so controller cache-gate tests can simulate
+// a warm server-side cache without a live provider.
+func (a *Agent) RecordAPICallForTest(at time.Time) {
+	if a != nil {
+		a.lastAPICallAt.Store(at.UnixNano())
+	}
+}
+
+// PromptOverflow reports whether the canonical transcript already sits at or
+// above the compact trigger — used by the /compress-fast cache gate to allow
+// a rewrite even while the cache is warm (a projection rewrite is imminent
+// anyway, so a cache miss now beats re-folding the same region twice).
+func (a *Agent) PromptOverflow() bool {
+	if a == nil || a.contextWindow <= 0 {
+		return false
+	}
+	high := a.compactTrigger()
+	if high <= 0 {
+		return false
+	}
+	return a.estimatedPromptTokens(a.session.Snapshot()) >= high
+}
 
 // SessionCache returns the cumulative cache hit/miss prompt tokens across every
 // API call this session — the basis for the status line's aggregate hit-rate.
