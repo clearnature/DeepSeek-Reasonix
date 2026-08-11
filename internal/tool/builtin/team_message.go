@@ -15,13 +15,25 @@ import (
 // context under mailboxKey by the agent's teammate sub-agent builder.
 type Mailbox interface {
 	PostMail(name, text string) error
+	// PostMailToLeader routes a message from a teammate into the leader's
+	// inbox (P8). from names the sending teammate; the leader's next turn
+	// drains the inbox as a <team-messages> envelope.
+	PostMailToLeader(from, text string) error
 }
 
 type mailboxKey struct{}
+type mailboxIdentityKey struct{}
 
 // WithMailbox attaches a teammate mailbox to a context.
 func WithMailbox(ctx context.Context, m Mailbox) context.Context {
 	return context.WithValue(ctx, mailboxKey{}, m)
+}
+
+// WithMailboxIdentity records the sending teammate's name so the
+// team_message tool can stamp mail from="<name>" without trusting model
+// text (P8). The leader's own contexts carry no identity.
+func WithMailboxIdentity(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, mailboxIdentityKey{}, name)
 }
 
 // MailboxFromContext returns the attached mailbox, if any.
@@ -57,12 +69,13 @@ func (teamMessage) ReadOnly() bool { return false }
 func (teamMessage) SkipEmit() bool { return false }
 
 func (teamMessage) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"target":{"type":"string","description":"Teammate name to deliver the mail to."},"text":{"type":"string","description":"Message body for the teammate."}},"required":["target","text"]}`)
+	return json.RawMessage(`{"type":"object","properties":{"target":{"type":"string","description":"Teammate name to deliver the mail to, or the reserved target \"leader\" to route it to the leader's inbox (P8)."},"text":{"type":"string","description":"Message body for the teammate."}},"required":["target","text"]}`)
 }
 
 func (teamMessage) Description() string {
 	return "Deliver mail to another teammate's inbox (teammate-to-teammate). " +
-		"The recipient flushes it into its next assignment's steer queue."
+		"The recipient flushes it into its next assignment's steer queue. " +
+		"Target \"leader\" is reserved (P8): it routes the mail to the leader's inbox."
 }
 
 func (teamMessage) Execute(ctx context.Context, args json.RawMessage) (string, error) {
@@ -81,6 +94,19 @@ func (teamMessage) Execute(ctx context.Context, args json.RawMessage) (string, e
 	m, ok := MailboxFromContext(ctx)
 	if !ok || m == nil {
 		return "", fmt.Errorf("team_message: no teammate mailbox in this context")
+	}
+	// P8: target "leader" routes to the leader's inbox. The sender identity
+	// comes from the fork context (WithMailboxIdentity), never from model
+	// text, so the envelope's from= is trustworthy.
+	if in.Target == "leader" {
+		sender, _ := ctx.Value(mailboxIdentityKey{}).(string)
+		if sender == "" {
+			return "", fmt.Errorf("team_message: leader routing needs a teammate identity (not available in this context)")
+		}
+		if err := m.PostMailToLeader(sender, in.Text); err != nil {
+			return "", fmt.Errorf("team_message: %w", err)
+		}
+		return fmt.Sprintf("mail delivered to leader (from %q)", sender), nil
 	}
 	if err := m.PostMail(in.Target, in.Text); err != nil {
 		return "", fmt.Errorf("team_message: %w", err)

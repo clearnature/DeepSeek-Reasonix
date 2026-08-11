@@ -45,6 +45,7 @@ func builtinSlashSpecs() []builtinSlashSpec {
 		{name: "/team-stop", insert: "/team-stop ", hint: i18n.M.CmdTeamStop, showInHelp: true},
 		{name: "/team-grant", insert: "/team-grant ", hint: i18n.M.CmdTeamGrant, showInHelp: true},
 		{name: "/team-revoke", insert: "/team-revoke ", hint: i18n.M.CmdTeamRevoke, showInHelp: true},
+		{name: "/team-broadcast", insert: "/team-broadcast ", hint: i18n.M.CmdTeamBroadcast, showInHelp: true},
 		{name: "/work-mode", aliases: []string{"/profile"}, insert: "/work-mode ", hint: i18n.M.CmdWorkMode, descend: true, showInHelp: true},
 		{name: "/provider", insert: "/provider", hint: i18n.M.CmdProvider, descend: true, showInHelp: true},
 		{name: "/skills", aliases: []string{"/skill"}, insert: "/skills", hint: i18n.M.CmdSkill, showInHelp: true},

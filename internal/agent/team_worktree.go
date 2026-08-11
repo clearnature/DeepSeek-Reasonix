@@ -73,6 +73,40 @@ func removeTeammateWorktree(ctx context.Context, workspaceRoot, name string) err
 	return nil
 }
 
+// cleanupTeammateWorktreeIfNeeded implements CCB cleanupWorktreeIfNeeded:
+// after a teammate's task completes, the dedicated worktree is auto-removed
+// (worktree + branch) iff the teammate left it untouched — clean status and
+// no commits ahead of the workspace. If the worktree diverged (dirty files
+// or new commits) it is kept and the caller reports its path for manual
+// review/merge. Fail-closed: any git error (including change-detection
+// failures) is treated as "has changes" — the worktree is never removed by
+// accident; only a confirmed-clean worktree gets deleted.
+func cleanupTeammateWorktreeIfNeeded(ctx context.Context, workspaceRoot, name string) (kept bool, err error) {
+	path := teammateWorktreePath(workspaceRoot, name)
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return false, nil // nothing to clean
+	}
+	// Baseline is the workspace's current HEAD: a worktree whose branch is an
+	// ancestor of it and whose status is clean carried no new work. Fail-closed
+	// if the baseline cannot be resolved — keep, never delete.
+	head := gitcmd.Command(ctx, workspaceRoot, "rev-parse", "HEAD")
+	headOut, err := head.Output()
+	if err != nil {
+		return true, fmt.Errorf("resolve baseline HEAD for %q: %w", name, err)
+	}
+	changed, err := worktreeHasChanges(ctx, path, strings.TrimSpace(string(headOut)))
+	if err != nil {
+		return true, err // fail-closed: detection error keeps the worktree
+	}
+	if changed {
+		return true, nil // diverged — keep for manual merge
+	}
+	if err := removeTeammateWorktree(ctx, workspaceRoot, name); err != nil {
+		return true, err // removal failed — the worktree still exists
+	}
+	return false, nil
+}
+
 // worktreeHasChanges reports whether the teammate's worktree diverged from
 // the commit it was created at (CCB hasWorktreeChanges: dirty status OR new
 // commits, fail-closed on git errors).

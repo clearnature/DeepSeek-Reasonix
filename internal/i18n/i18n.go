@@ -245,6 +245,7 @@ type Messages struct {
 	CmdTeamStop         string // /team-stop
 	CmdTeamGrant        string // /team-grant
 	CmdTeamRevoke       string // /team-revoke
+	CmdTeamBroadcast    string // /team-broadcast
 	CmdWorkMode         string // /work-mode
 	CmdDocs             string // /docs
 	CmdMemory           string // /memory

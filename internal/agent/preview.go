@@ -21,6 +21,7 @@ var TransientUserBlockTags = []string{
 	"reasoning-language",
 	"memory-update",
 	"background-jobs",
+	"team-messages",
 	"active-goal",
 	"autoresearch-runtime",
 	"hook-context",

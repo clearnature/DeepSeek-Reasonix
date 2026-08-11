@@ -354,6 +354,9 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	// P6.2 teammate direct-connect: stamp the mailbox so the teammate sub-agent
 	// can post mail to its peers via the team_message tool (builtin.Mailbox).
 	ctx = builtin.WithMailbox(ctx, ts)
+	// P8: stamp the teammate's identity so team_message can route
+	// target="leader" mail with a trustworthy from= (never model text).
+	ctx = builtin.WithMailboxIdentity(ctx, name)
 	// D1 token: a granted teammate becomes a restricted writer — inject the
 	// token paths as precise write claims so tools bind to them and the fork
 	// avoids the whole-workspace claim (writer serialization). ReadOnly stays
@@ -574,6 +577,10 @@ func isTerminalStatus(st jobs.Status) bool {
 //     the Running→Idle transition flips),
 //   - wake the leader once when the finished teammate has a mail backlog
 //     (the only completion Notice, aggregated with N to prevent storms),
+//   - auto-cleanup a D1 worktree teammate whose job finished Done (P8): an
+//     untouched worktree is auto-removed (worktree + branch); a diverged one
+//     is kept and its path is reported via a Notice + slog so the user can
+//     merge manually. Failed/Killed jobs keep the worktree for forensics.
 //   - auto-advance waiting tasks whose dependencies are all terminal by
 //     re-issuing Assign with the originally recorded owner/prompt and a
 //     freshly rebuilt ctx (arbitration 3; see assignContext — no ctx caching).
@@ -596,12 +603,21 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 	if t := ts.tasks[id]; t != nil && !isTerminalStatus(t.Status) {
 		t.Status = st
 	}
-	// Idle flip: strict LastJobID match, Running→Idle only.
+	// Idle flip: strict LastJobID match, Running→Idle only. A D1 worktree
+	// teammate whose job finished Done is collected for worktree auto-cleanup
+	// (untouched → auto-removed; diverged → kept and reported for manual
+	// merge). Failed/Killed jobs keep the worktree for forensics, so only
+	// st == jobs.Done can trigger cleanup (w1's cleanupWorktreeIfNeeded).
 	var flipped string
+	var wtTeammate, wtRoot string
 	for _, tm := range ts.teammates {
 		if tm.LastJobID == id && tm.State == TeammateRunning {
 			tm.State = TeammateIdle
 			flipped = tm.Name
+			if st == jobs.Done && tm.Worktree && ts.workspaceRoot != "" {
+				wtTeammate = tm.Name
+				wtRoot = ts.workspaceRoot
+			}
 			break
 		}
 	}
@@ -634,9 +650,52 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 			ts.notifyMailBacklog(flipped, n)
 		}
 	}
+	// Worktree auto-cleanup runs outside the lock (git subprocesses); it is
+	// only ever reached for a Done job, so Failed/Killed worktrees survive.
+	if wtTeammate != "" {
+		ts.cleanupWorktreeAfterDone(wtTeammate, wtRoot)
+	}
 	for _, id := range ready {
 		ts.enqueueAuto(id)
 	}
+}
+
+// cleanupWorktreeAfterDone runs the D1 worktree auto-cleanup for a teammate
+// whose job reached Done (P8). It delegates to w1's
+// cleanupTeammateWorktreeIfNeeded, which deletes the worktree + branch iff it
+// is confirmed untouched; any divergence (or a fail-closed git error) keeps it
+// and reports the path so the user can merge manually. Called from
+// HandleJobDone outside the lock (git subprocesses are not lock-safe work).
+func (ts *TeammateStore) cleanupWorktreeAfterDone(name, root string) {
+	kept, err := cleanupTeammateWorktreeIfNeeded(context.Background(), root, name)
+	if err != nil {
+		slog.Error("team worktree cleanup failed; kept for manual review",
+			"teammate", name, "worktree", teammateWorktreePath(root, name), "err", err)
+	}
+	if kept {
+		ts.notifyWorktreeKept(name, teammateWorktreePath(root, name))
+		return
+	}
+	if err == nil {
+		slog.Info("team worktree auto-removed after done (no changes)",
+			"teammate", name, "worktree", teammateWorktreePath(root, name))
+	}
+}
+
+// notifyWorktreeKept surfaces the worktree path of a finished teammate whose
+// worktree diverged (or could not be removed) — the user must merge it
+// manually before the next run. Mirrors the mailbox-wakeup notice shape
+// (event.Notice via the sink) so the leader sees it in the same channel.
+func (ts *TeammateStore) notifyWorktreeKept(name, path string) {
+	ts.mu.Lock()
+	sink := ts.sink
+	ts.mu.Unlock()
+	if sink != nil {
+		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
+			Text: fmt.Sprintf("teammate %s finished with worktree changes — merge manually: %s (branch %s)",
+				name, path, worktreeBranchPrefix+sanitizeWorktreeName(name))})
+	}
+	slog.Info("team worktree kept for manual merge", "teammate", name, "worktree", path)
 }
 
 // depsTerminalLocked reports whether every listed dependency has a terminal
@@ -837,12 +896,103 @@ func (ts *TeammateStore) PostMail(name, text string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	payload, _ := json.Marshal(mailItem{Name: name, Text: text, At: time.Now().Unix()})
+	payload, _ := json.Marshal(MailItem{Name: name, Text: text, At: time.Now().Unix()})
 	if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.json", time.Now().UnixNano())), payload, 0o644); err != nil {
 		return err
 	}
 	ts.notifyMail(name)
 	return nil
+}
+
+// PostMailToLeader delivers a message from a teammate into the leader's
+// persistent inbox (P8). The leader mailbox lives at
+// inboxRoot/leader/inbox/<unixnano>.json and reuses the MailItem shape with
+// Name = sending teammate, so DrainLeaderMessages reads the same struct back.
+// Unlike PostMail's ephemeral fallback, a leader message MUST survive until
+// the next leader compose — a store without inboxRoot cannot honor that, so
+// it honestly refuses with an error instead of silently dropping the message.
+func (ts *TeammateStore) PostMailToLeader(from, text string) error {
+	from = sanitizeMailName(from)
+	text = strings.TrimSpace(text)
+	if from == "" || text == "" {
+		return fmt.Errorf("leader mail needs a sender and text")
+	}
+	ts.mu.Lock()
+	root := ts.inboxRoot
+	ts.mu.Unlock()
+	if root == "" {
+		return fmt.Errorf("leader mailbox unavailable: inbox persistence is disabled (no inboxRoot); leader mail must survive to the next compose")
+	}
+	dir := filepath.Join(root, "leader", "inbox")
+	// Backpressure: the leader drains ≤teamMessagesMaxPerTurn per compose
+	// (input.go), so cap the inbox to keep a runaway teammate from piling up
+	// unbounded mail; the 51st message is rejected visibly, never dropped.
+	if n, _ := countMailFiles(dir); n >= 50 {
+		return fmt.Errorf("leader inbox full (50): drain with a new turn before sending more")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	payload, _ := json.Marshal(MailItem{Name: from, Text: text, At: time.Now().Unix()})
+	if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%d.json", time.Now().UnixNano())), payload, 0o644); err != nil {
+		return err
+	}
+	return nil
+}
+
+// countMailFiles returns the number of persisted mail files in a directory
+// (0 when missing/unreadable — the cap is advisory, not a failure path).
+func countMailFiles(dir string) (int, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// DrainLeaderMessages consumes the leader's inbox (P8): every persisted
+// teammate→leader message is read FIFO (filename order = unixnano write
+// order) and removed, so each message is delivered exactly once. The
+// controller calls it on its main thread before composing a turn. A store
+// without inboxRoot has no leader mailbox and returns nil.
+func (ts *TeammateStore) DrainLeaderMessages() []MailItem {
+	if ts.inboxRoot == "" {
+		return nil
+	}
+	dir := filepath.Join(ts.inboxRoot, "leader", "inbox")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("team leader mailbox drain failed", "err", err)
+		}
+		return nil
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	var items []MailItem
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var item MailItem
+		if json.Unmarshal(data, &item) == nil && item.Text != "" {
+			items = append(items, item)
+		}
+		_ = os.Remove(filepath.Join(dir, e.Name()))
+	}
+	return items
 }
 
 // notifyMail emits the mailbox-wakeup notice (P6.2): the leader learns a
@@ -903,20 +1053,25 @@ func (ts *TeammateStore) notifyMailBacklog(name string, n int) {
 	}
 }
 
-// mailItem is one persisted inbox entry.
-type mailItem struct {
+// MailItem is one persisted inbox entry.
+type MailItem struct {
 	Name string
 	Text string
 	At   int64
 }
 
 func sanitizeMailName(name string) string {
-	return strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || r == '\x00' {
-			return '_'
-		}
-		return r
-	}, name)
+	name = strings.TrimSpace(name)
+	if name == "" || name == "." || name == ".." {
+		return ""
+	}
+	// Reject path separators and traversal dots: a crafted teammate name must
+	// never escape the inbox root via filepath.Join (low-severity guard the
+	// P8 audit flagged — Create does not validate names today).
+	if strings.ContainsAny(name, "/\\\x00") || strings.Contains(name, "..") {
+		return ""
+	}
+	return name
 }
 
 // flushMailbox moves persisted mail into the running job's P3 steer queue and
@@ -941,7 +1096,7 @@ func (ts *TeammateStore) flushMailbox(name, parentSession, jobID string) error {
 		if err != nil {
 			continue
 		}
-		var item mailItem
+		var item MailItem
 		if json.Unmarshal(data, &item) == nil && item.Text != "" {
 			_ = ts.jm.SendMessageForSession(parentSession, jobID, item.Text)
 		}

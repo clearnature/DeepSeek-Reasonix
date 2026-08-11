@@ -1662,7 +1662,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			}
 			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
 			return
-		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke":
+		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-broadcast":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
@@ -6637,5 +6637,31 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			return
 		}
 		c.notice(fmt.Sprintf("teammate %q stopped (idle — transcript kept)", name))
+	case "/team-broadcast":
+		// P8: fan a message out to every teammate's mailbox; a single
+		// failure does not abort the sweep (allSettled semantics).
+		msg := strings.TrimSpace(rest)
+		if msg == "" {
+			c.notice("usage: /team-broadcast <message>")
+			return
+		}
+		list := c.teammates.List()
+		if len(list) == 0 {
+			c.notice("no teammates — create one with /team-create <name> <role>")
+			return
+		}
+		var delivered, failed []string
+		for _, tm := range list {
+			if err := c.teammates.PostMail(tm.Name, msg); err != nil {
+				failed = append(failed, tm.Name)
+			} else {
+				delivered = append(delivered, tm.Name)
+			}
+		}
+		summary := fmt.Sprintf("team-broadcast: delivered to %d teammate(s): %s", len(delivered), strings.Join(delivered, ", "))
+		if len(failed) > 0 {
+			summary += fmt.Sprintf("; failed for %d: %s", len(failed), strings.Join(failed, ", "))
+		}
+		c.notice(summary)
 	}
 }

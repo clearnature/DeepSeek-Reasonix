@@ -258,6 +258,7 @@ var English = Messages{
 	CmdTeamStatus:       "show team roster",
 	CmdTeamRemove:       "remove a teammate",
 	CmdTeamStop:         "stop a teammate",
+	CmdTeamBroadcast:    "broadcast a message to all teammates",
 	CmdWorkMode:         "switch work mode",
 	CmdDocs:             "search version-matched embedded documentation",
 	CmdMemory:           "inspect instructions, memory, and recovery",

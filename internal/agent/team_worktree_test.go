@@ -117,3 +117,102 @@ func TestSanitizeWorktreeName(t *testing.T) {
 		}
 	}
 }
+
+// TestWorktreeCleanupRemovesWhenUnchanged verifies the D1 auto-cleanup happy
+// path: a worktree the teammate left untouched is removed after the task
+// (kept=false) — both the worktree directory and its dedicated branch are
+// gone.
+func TestWorktreeCleanupRemovesWhenUnchanged(t *testing.T) {
+	ctx := context.Background()
+	root := initGitRepo(t)
+
+	path, _, err := createTeammateWorktree(ctx, root, "gamma")
+	if err != nil {
+		t.Fatalf("createTeammateWorktree: %v", err)
+	}
+
+	kept, err := cleanupTeammateWorktreeIfNeeded(ctx, root, "gamma")
+	if err != nil {
+		t.Fatalf("cleanupTeammateWorktreeIfNeeded: %v", err)
+	}
+	if kept {
+		t.Fatal("unchanged worktree should be removed (kept=false)")
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("worktree directory %q should be gone, stat err = %v", path, statErr)
+	}
+	out, err := exec.Command("git", "-C", root, "branch", "--list", "team-gamma").Output()
+	if err != nil {
+		t.Fatalf("git branch --list: %v", err)
+	}
+	if strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("branch team-gamma should be deleted, still listed: %q", strings.TrimSpace(string(out)))
+	}
+}
+
+// TestWorktreeCleanupKeepsWhenChanged verifies the D1 auto-cleanup keep path:
+// a worktree that diverged from the workspace (dirty files) is preserved
+// (kept=true) with its directory and branch intact for manual review/merge.
+func TestWorktreeCleanupKeepsWhenChanged(t *testing.T) {
+	ctx := context.Background()
+	root := initGitRepo(t)
+
+	path, _, err := createTeammateWorktree(ctx, root, "delta")
+	if err != nil {
+		t.Fatalf("createTeammateWorktree: %v", err)
+	}
+	defer removeTeammateWorktree(ctx, root, "delta")
+
+	if err := os.WriteFile(filepath.Join(path, "delta.txt"), []byte("delta work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	kept, err := cleanupTeammateWorktreeIfNeeded(ctx, root, "delta")
+	if err != nil {
+		t.Fatalf("cleanupTeammateWorktreeIfNeeded: %v", err)
+	}
+	if !kept {
+		t.Fatal("changed worktree should be kept (kept=true)")
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Fatalf("worktree directory %q should still exist, stat err = %v", path, statErr)
+	}
+	out, err := exec.Command("git", "-C", root, "branch", "--list", "team-delta").Output()
+	if err != nil {
+		t.Fatalf("git branch --list: %v", err)
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		t.Fatal("branch team-delta should be preserved when the worktree is kept")
+	}
+}
+
+// TestWorktreeCleanupFailClosed verifies cleanup never deletes on a git
+// error: when the change probe cannot run (repository metadata destroyed),
+// the worktree is kept (kept=true) and the error surfaced — fail-closed, so
+// an unverifiable state is never cleaned by accident.
+func TestWorktreeCleanupFailClosed(t *testing.T) {
+	ctx := context.Background()
+	root := initGitRepo(t)
+
+	path, _, err := createTeammateWorktree(ctx, root, "echo")
+	if err != nil {
+		t.Fatalf("createTeammateWorktree: %v", err)
+	}
+
+	// Break the repository so the workspace HEAD probe must fail; cleanup
+	// must keep the worktree rather than delete it on an unverifiable state.
+	if err := os.RemoveAll(filepath.Join(root, ".git")); err != nil {
+		t.Fatal(err)
+	}
+
+	kept, err := cleanupTeammateWorktreeIfNeeded(ctx, root, "echo")
+	if err == nil {
+		t.Fatal("cleanupTeammateWorktreeIfNeeded should fail closed on a git error")
+	}
+	if !kept {
+		t.Fatal("fail-closed cleanup must keep the worktree (kept=true)")
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Fatalf("worktree directory %q should be preserved on git error, stat err = %v", path, statErr)
+	}
+}

@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -193,6 +194,15 @@ func (c *Controller) composeWithGoal(
 			text = "<background-jobs>\n" + note + "\n</background-jobs>\n\n" + text
 		}
 	}
+	// Teammate→leader messages (P8) ride the turn at the same fixed position:
+	// right after the <background-jobs> envelope and before the user's text.
+	// New turns only — history is never rewritten — and only when a TeammateStore
+	// is configured, so sessions without teams keep byte-identical prefixes.
+	if c.teammates != nil {
+		if block := renderTeamMessages(c.drainLeaderMessages()); block != "" {
+			text = block + "\n\n" + text
+		}
+	}
 	if includeHookContext {
 		if block := c.drainHookContextBlock(); block != "" {
 			text = block + "\n\n" + text
@@ -214,6 +224,76 @@ func (c *Controller) composeWithGoal(
 		}
 	}
 	return text
+}
+
+// teamMessagesMaxPerTurn caps how many teammate→leader messages ride one turn
+// (P8 backpressure: ≤5 per turn, mirroring the <background-jobs> drain budget).
+const teamMessagesMaxPerTurn = 5
+
+// teamMailItem is the control-side shape of one teammate→leader message. Its
+// fields mirror the exported fields of agent.mailItem (Name, Text, At) so the
+// drain helper maps them one-to-one.
+type teamMailItem struct {
+	Name string // sending teammate
+	Text string
+	At   int64 // Unix seconds, as persisted by the mailbox
+}
+
+// teamMessagesEscaper applies the same five-character escape set as
+// jobs.xmlEscaper (which is unexported, so control carries its own copy for the
+// <team-messages> envelope). Teammate-controlled names and bodies cannot forge
+// a closing tag or an extra message through the injected XML.
+var teamMessagesEscaper = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	`"`, "&quot;",
+	"'", "&apos;",
+)
+
+// drainLeaderMessages returns the teammate→leader messages queued since the
+// last turn (P8). The drainer lives on agent.TeammateStore; its MailItem
+// fields (Name, Text, At) map 1:1 onto teamMailItem. A store without a
+// leader mailbox (ephemeral) or with no mail returns nil.
+func (c *Controller) drainLeaderMessages() []teamMailItem {
+	if c.teammates == nil {
+		return nil
+	}
+	items := c.teammates.DrainLeaderMessages()
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]teamMailItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, teamMailItem{Name: it.Name, Text: it.Text, At: it.At})
+	}
+	return out
+}
+
+// renderTeamMessages renders the <team-messages> envelope (P8): one
+// <teammate-message from="X" at="..."><text>…</text></teammate-message> per
+// item, at most teamMessagesMaxPerTurn. Both the from attribute and the text
+// body are XML-escaped. Empty input renders to "", so callers prepend nothing.
+func renderTeamMessages(items []teamMailItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if len(items) > teamMessagesMaxPerTurn {
+		items = items[:teamMessagesMaxPerTurn]
+	}
+	var b strings.Builder
+	b.WriteString("<team-messages>\n")
+	for _, it := range items {
+		b.WriteString(`<teammate-message from="`)
+		b.WriteString(teamMessagesEscaper.Replace(it.Name))
+		b.WriteString(`" at="`)
+		b.WriteString(strconv.FormatInt(it.At, 10))
+		b.WriteString(`"><text>`)
+		b.WriteString(teamMessagesEscaper.Replace(it.Text))
+		b.WriteString("</text></teammate-message>\n")
+	}
+	b.WriteString("</team-messages>")
+	return b.String()
 }
 
 // LastMemoryRecall returns the last real turn's automatic-recall decision for
