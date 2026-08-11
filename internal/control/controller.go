@@ -59,6 +59,7 @@ import (
 	"reasonix/internal/store"
 	"reasonix/internal/taskmonitor"
 	"reasonix/internal/tool"
+	"reasonix/internal/tool/builtin"
 	"reasonix/internal/workspacelease"
 )
 
@@ -1471,6 +1472,25 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			if err := c.SnapshotRewrite(); err != nil {
 				slog.Warn("controller: snapshot after fast compression", "err", err)
 			}
+		}()
+	case trimmed == "/retrieve_info" || strings.HasPrefix(trimmed, "/retrieve_info "):
+		// Manual retrieval: run the retrieve_info tool on the typed query and
+		// surface its answer directly — no model round-trip needed. The tool
+		// consults the local knowledge cache first (zero cost), then the
+		// deepseek-responses web_search pipeline on miss (distill + cache
+		// write). Read-only; safe to run without the rotation gate.
+		query := strings.TrimSpace(strings.TrimPrefix(trimmed, "/retrieve_info"))
+		if query == "" {
+			c.notice("retrieve_info: query is required (usage: /retrieve_info <query>)")
+			break
+		}
+		go func() {
+			out, err := builtin.RetrieveInfoQuery(context.Background(), query)
+			if err != nil {
+				c.notice("retrieve_info failed: " + err.Error())
+				return
+			}
+			c.noticeDetail("retrieve_info: "+query, out)
 		}()
 	case trimmed == "/context":
 		c.noticeDetail(c.ContextReport())

@@ -32,9 +32,11 @@ import (
 	"reasonix/internal/plugin"
 	"reasonix/internal/pluginpkg"
 	"reasonix/internal/provider"
+	"reasonix/internal/provider/responses"
 	"reasonix/internal/skill"
 	"reasonix/internal/store"
 	"reasonix/internal/tool"
+	"reasonix/internal/tool/builtin"
 )
 
 type typedNilControllerSink struct{}
@@ -5706,5 +5708,81 @@ func TestFastCompressCommandAllowsOverflowDespiteWarmCache(t *testing.T) {
 	}
 	if got := waitForNotice(t, notices, "fast-compressed"); got == "" {
 		t.Fatal("over-window session must compress despite warm cache")
+	}
+}
+
+// TestRetrieveInfoCommandManualRetrieval pins the /retrieve_info slash
+// command: it runs the retrieve_info tool on the typed query and surfaces the
+// rendered answer via noticeDetail, with no model round-trip.
+func TestRetrieveInfoCommandManualRetrieval(t *testing.T) {
+	dir := t.TempDir()
+	sess := agent.NewSession("sys")
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 100_000, RecentKeep: 2}, event.Discard)
+
+	notices := make(chan string, 4)
+	details := make(chan string, 4)
+	c := New(Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: filepath.Join(dir, "session.jsonl"),
+		Label:       "test",
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+				details <- e.Detail
+			}
+		}),
+	})
+	// Route the retrieval pipeline to a fake: no real network in tests.
+	prevHook := builtin.SetSystemFetchTestHook(func(ctx context.Context, query string, tier responses.RetrievalTier) (*responses.KnowledgeEntry, error) {
+		return &responses.KnowledgeEntry{Query: query, AnswerSummary: "fake answer for " + query, Language: "zh"}, nil
+	})
+	defer builtin.SetSystemFetchTestHook(prevHook)
+
+	c.Submit("/retrieve_info 温州天气")
+
+	select {
+	case text := <-notices:
+		if text != "retrieve_info: 温州天气" {
+			t.Fatalf("notice text = %q, want retrieve_info: 温州天气", text)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no retrieve_info notice within 5s")
+	}
+	select {
+	case d := <-details:
+		if !strings.Contains(d, "fake answer for 温州天气") {
+			t.Fatalf("detail = %q, want fake answer for 温州天气", d)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no retrieve_info detail within 5s")
+	}
+}
+
+// TestRetrieveInfoCommandEmptyQuery rejects a bare /retrieve_info.
+func TestRetrieveInfoCommandEmptyQuery(t *testing.T) {
+	dir := t.TempDir()
+	sess := agent.NewSession("sys")
+	exec := agent.New(nil, nil, sess, agent.Options{ContextWindow: 100_000, RecentKeep: 2}, event.Discard)
+	notices := make(chan string, 4)
+	c := New(Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: filepath.Join(dir, "session.jsonl"),
+		Label:       "test",
+		Sink: event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice {
+				notices <- e.Text
+			}
+		}),
+	})
+	c.Submit("/retrieve_info")
+	select {
+	case n := <-notices:
+		if !strings.Contains(n, "query is required") {
+			t.Fatalf("notice = %q, want query-is-required", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no notice within 5s")
 	}
 }

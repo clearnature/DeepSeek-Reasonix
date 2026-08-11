@@ -26,6 +26,18 @@ func init() { tool.RegisterBuiltin(retrieveInfo{}) }
 // returns a needs_grant notice instead (§9 no-silent-web guardrail).
 type retrieveInfo struct{}
 
+// RetrieveInfoQuery runs the retrieve_info tool on query and returns its
+// rendered answer — the same path the agent tool executes. Exported so slash
+// commands (/retrieve_info) and other hosts can invoke retrieval without a
+// model round-trip.
+func RetrieveInfoQuery(ctx context.Context, query string) (string, error) {
+	args, err := json.Marshal(map[string]string{"query": query})
+	if err != nil {
+		return "", err
+	}
+	return (retrieveInfo{}).Execute(ctx, args)
+}
+
 func (retrieveInfo) Name() string { return "retrieve_info" }
 
 func (retrieveInfo) Description() string {
@@ -133,6 +145,15 @@ var errNoResponsesProvider = errors.New("deepseek-responses provider not configu
 // systemFetchTestHook lets tests replace the real network pipeline. The zero
 // value uses systemFetch (real deepseek-responses pipeline).
 var systemFetchTestHook responses.FetchFunc
+
+// SetSystemFetchTestHook replaces the retrieval network pipeline with hook
+// (nil restores the real one). Test-only: lets controller/slash-command tests
+// exercise /retrieve_info without a live provider.
+func SetSystemFetchTestHook(hook responses.FetchFunc) responses.FetchFunc {
+	prev := systemFetchTestHook
+	systemFetchTestHook = hook
+	return prev
+}
 
 // retrieveFetch is the fetch indirection used by Execute: tests inject a
 // fake via systemFetchTestHook, production runs the system pipeline.
