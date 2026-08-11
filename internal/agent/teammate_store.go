@@ -95,6 +95,11 @@ type TeammateStore struct {
 	// with precise path claims (no whole-workspace serialization) and tools
 	// bound to the granted paths. Empty slice = no token (read-only default).
 	grants map[string]WritePathSet
+	// approvals tracks pending P9 plan-approval requests (requestID → req),
+	// keyed by the teammate-supplied id so a replay is rejected. The leader
+	// drains them into its turn as <plan-approval-request> envelopes and
+	// answers with /team-approve, whose verdict rides the P3 steer queue back.
+	approvals map[string]*approvalReq
 	// workspaceRoot is the git workspace teammates branch from (D1 worktree
 	// isolation); empty disables worktree mode (ephemeral/test stores).
 	workspaceRoot string
@@ -121,6 +126,7 @@ func NewTeammateStore(task *TaskTool, jm *jobs.Manager, inboxRoot ...string) *Te
 		teammates: make(map[string]*Teammate),
 		tasks:     make(map[string]*TeamTask),
 		grants:    make(map[string]WritePathSet),
+		approvals: make(map[string]*approvalReq),
 		task:      task,
 		jm:        jm,
 	}

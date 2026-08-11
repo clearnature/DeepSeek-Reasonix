@@ -19,6 +19,11 @@ type Mailbox interface {
 	// inbox (P8). from names the sending teammate; the leader's next turn
 	// drains the inbox as a <team-messages> envelope.
 	PostMailToLeader(from, text string) error
+	// RequestApproval submits a plan for the leader's approval (P9). The
+	// teammate produces a plan and calls plan_approval_request; the leader
+	// sees it as a <plan-approval-request> envelope and answers with
+	// /team-approve, whose verdict rides the P3 steer queue back.
+	RequestApproval(from, requestID, plan string) error
 }
 
 type mailboxKey struct{}

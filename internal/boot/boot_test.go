@@ -2321,6 +2321,7 @@ func defaultFullBootToolNames() []string {
 		"multi_edit",
 		"notebook_edit",
 		"parallel_tasks",
+		"plan_approval_request",
 		"read_file",
 		"read_only_skill",
 		"read_only_task",

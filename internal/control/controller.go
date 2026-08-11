@@ -1662,7 +1662,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			}
 			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
 			return
-		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-broadcast":
+		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-approve", "/team-broadcast":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
@@ -6584,6 +6584,20 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			return
 		}
 		c.notice(fmt.Sprintf("teammate %q write token revoked — back to read-only", name))
+	case "/team-approve":
+		// Syntax: /team-approve <request_id> allow|deny — answer a teammate's
+		// plan-approval request (P9). The verdict rides the teammate's P3
+		// steer queue; the request is consumed either way.
+		fields := strings.Fields(rest)
+		if len(fields) != 2 || (fields[1] != "allow" && fields[1] != "deny") {
+			c.notice("usage: /team-approve <request_id> allow|deny")
+			return
+		}
+		if err := c.teammates.Approve(fields[0], fields[1] == "allow", c.parentSessionID()); err != nil {
+			c.notice("team-approve: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("plan %q %s — verdict sent to teammate", fields[0], fields[1]))
 	case "/team-add":
 		name, task, _ := strings.Cut(rest, " ")
 		if strings.TrimSpace(task) == "" {

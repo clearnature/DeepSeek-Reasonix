@@ -202,6 +202,12 @@ func (c *Controller) composeWithGoal(
 		if block := renderTeamMessages(c.drainLeaderMessages()); block != "" {
 			text = block + "\n\n" + text
 		}
+		// P9: pending plan-approval requests ride the same fixed position,
+		// after <team-messages> and before the user's text — the leader sees
+		// them on the next turn and answers with /team-approve.
+		if block := renderApprovalRequests(c.teammates.PendingApprovals()); block != "" {
+			text = block + "\n\n" + text
+		}
 	}
 	if includeHookContext {
 		if block := c.drainHookContextBlock(); block != "" {
@@ -293,6 +299,28 @@ func renderTeamMessages(items []teamMailItem) string {
 		b.WriteString("</text></teammate-message>\n")
 	}
 	b.WriteString("</team-messages>")
+	return b.String()
+}
+
+// renderApprovalRequests renders the pending P9 plan-approval envelopes:
+// one <plan-approval-request request_id= teammate=> per pending request,
+// with the plan body escaped. The leader answers via /team-approve.
+func renderApprovalRequests(reqs []agent.ApprovalRequest) string {
+	if len(reqs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("<plan-approval-requests>\n")
+	for _, r := range reqs {
+		b.WriteString(`<plan-approval-request request_id="`)
+		b.WriteString(teamMessagesEscaper.Replace(r.RequestID))
+		b.WriteString(`" teammate="`)
+		b.WriteString(teamMessagesEscaper.Replace(r.Teammate))
+		b.WriteString(`"><plan>`)
+		b.WriteString(teamMessagesEscaper.Replace(r.Plan))
+		b.WriteString("</plan></plan-approval-request>\n")
+	}
+	b.WriteString("</plan-approval-requests>")
 	return b.String()
 }
 

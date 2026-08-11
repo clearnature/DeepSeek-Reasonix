@@ -1186,6 +1186,27 @@
       }
     },
     {
+      "name": "plan_approval_request",
+      "description": "Submit your plan to the leader for approval before executing (P9). The leader reviews the plan and replies allow or deny via /team-approve; wait for the verdict (it arrives as a steer message) before doing the work.",
+      "parameters": {
+        "properties": {
+          "plan": {
+            "description": "The plan to execute, as markdown. Bounded to ~4KB.",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Unique id for this approval request (generate a random string).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan",
+          "request_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "read_file",
       "description": "Read a text file with optional line offset/limit. Output prefixes each line with its 1-based number (e.g. `   42→...`) so subsequent edit_file calls can target exact lines. Use `offset` and `limit` to page through large files; the tool reports total length and pagination hints in a trailer.",
       "parameters": {
