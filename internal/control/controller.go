@@ -6537,8 +6537,12 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, cmd))
 	switch cmd {
 	case "/team-create":
-		name, role, _ := strings.Cut(rest, " ")
-		if err := c.teammates.Create(name, role); err != nil {
+		// Syntax: /team-create <name> [role] [writable] — the trailing
+		// "writable" token opts out of the default read-only gate (P6.1).
+		name, rest2, _ := strings.Cut(rest, " ")
+		role, rest3, _ := strings.Cut(strings.TrimSpace(rest2), " ")
+		writable := strings.TrimSpace(rest3) == "writable"
+		if err := c.teammates.Create(name, role, writable); err != nil {
 			c.notice("team-create: " + err.Error())
 			return
 		}
