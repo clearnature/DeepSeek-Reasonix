@@ -1,0 +1,52 @@
+{
+  "generation": 2,
+  "next": "generation 3: keep elites; mutate toward minimal-ask + path-grant",
+  "population": [
+    {
+      "Name": "p0",
+      "Genes": {
+        "worktree": "true",
+        "writable": "true"
+      },
+      "Output": false,
+      "Asks": 0,
+      "Elapsed": 61778
+    },
+    {
+      "Name": "p1",
+      "Genes": {
+        "worktree": "true",
+        "writable": "false"
+      },
+      "Output": false,
+      "Asks": 0,
+      "Elapsed": 61778
+    },
+    {
+      "Name": "p3",
+      "Genes": {
+        "ask": "write_file",
+        "worktree": "true",
+        "writable": "true"
+      },
+      "Output": false,
+      "Asks": 0,
+      "Elapsed": 61778
+    },
+    {
+      "Name": "p4",
+      "Genes": {
+        "path": "true",
+        "worktree": "false",
+        "writable": "true"
+      },
+      "Output": true,
+      "Asks": 0,
+      "Elapsed": 61778
+    }
+  ],
+  "selection": {
+    "elite": "p4",
+    "note": "p3 ask-gene costs fitness (approval overhead); p4 path-grant viable"
+  }
+}
