@@ -337,6 +337,14 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 			tools = append(tools, map[string]any{"type": "web_search"})
 		}
 		for _, tool := range req.Tools {
+			if isServerBuiltinTool(tool.Type) {
+				// Server-side built-in tool (web_search): emit flat
+				// {type}, never wrapped in a function object — the
+				// function shape carries an empty name that the
+				// endpoint rejects with 400.
+				tools = append(tools, map[string]any{"type": tool.Type})
+				continue
+			}
 			parameters := tool.Parameters
 			if len(parameters) == 0 {
 				parameters = provider.CanonicalizeSchema(nil)
@@ -373,6 +381,21 @@ func splitInstructions(messages []provider.Message) (string, []provider.Message)
 		return "", messages
 	}
 	return messages[0].Content, messages[1:]
+}
+
+// isServerBuiltinTool reports whether t names a server-side built-in tool
+// (e.g. "web_search" / "web_search_2025_08_26") that Responses endpoints
+// execute themselves instead of a client-defined function. Restored from the
+// retrieval branch after an upstream merge (d643b37b9, #7466) replaced the
+// guarded loop with an unconditional function wrap — which sent an empty
+// tool name and made DeepSeek reject web_search requests with HTTP 400.
+func isServerBuiltinTool(t string) bool {
+	switch t {
+	case "web_search", "web_search_2025_08_26":
+		return true
+	default:
+		return t != "" && t != "function"
+	}
 }
 
 func messagesToInput(messages []provider.Message, vision, replayWebSearchItems, summary bool) []map[string]any {

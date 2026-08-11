@@ -183,6 +183,32 @@ func TestWebSearchToolPrecedesFunctionTools(t *testing.T) {
 	}
 }
 
+// TestWebSearchToolInRequestToolsStaysFlat pins the retrieve_info pipeline
+// shape: systemFetch passes provider.WebSearchTool(false) inside req.Tools,
+// so the serializer must emit the flat {"type":"web_search"} server-tool form
+// — wrapping it as a function carries an empty name and DeepSeek rejects the
+// request with HTTP 400 (regression: upstream d643b37b9/#7466 dropped the
+// builtin-tool guard during a merge into dev).
+func TestWebSearchToolInRequestToolsStaysFlat(t *testing.T) {
+	client := New(Config{
+		Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash",
+	}).(*client)
+	body, _, _ := client.buildRequestBody(provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "query"}},
+		Tools:    []provider.ToolSchema{provider.WebSearchTool(false)},
+	})
+	tools, ok := body["tools"].([]map[string]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one flat web_search entry", body["tools"])
+	}
+	if got := tools[0]["type"]; got != "web_search" {
+		t.Fatalf("tools[0] = %#v, want flat {type: web_search}", tools[0])
+	}
+	if _, hasName := tools[0]["name"]; hasName {
+		t.Fatalf("tools[0] = %#v, must not carry a name field", tools[0])
+	}
+}
+
 func TestStatelessRequestReplaysReasoningContentAndToolPair(t *testing.T) {
 	var body map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
