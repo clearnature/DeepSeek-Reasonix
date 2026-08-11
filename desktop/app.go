@@ -1260,6 +1260,26 @@ func (a *App) submitToTab(tabID, input string, fromBridge bool, submissionID ...
 		a.runEffortCommandForTab(tabID, trimmed)
 		return nil
 	}
+	// Team commands run inline (no agent turn): don't gate them on the turn
+	// admission barrier — a busy turn used to reject them silently.
+	if strings.HasPrefix(trimmed, "/team-") {
+		tab, _ := a.tabAndCtrlByID(tabID)
+		if a.tabIsReadOnly(tab) {
+			return readOnlyChannelErr()
+		}
+		if tab == nil {
+			return a.workspaceNotReadyErr(tab)
+		}
+		if !fromBridge && a.botBridge != nil {
+			a.botBridge.reclaimFromDesktop(tab.ID)
+		}
+		ctrl := a.controllerForTab(tab)
+		if ctrl == nil {
+			return a.workspaceNotReadyErr(tab)
+		}
+		ctrl.SubmitDisplay(trimmed, trimmed)
+		return nil
+	}
 	admission, ctrl, err := a.beginTabTurn(tabID, !fromBridge, submissionID...)
 	if err != nil {
 		return err
