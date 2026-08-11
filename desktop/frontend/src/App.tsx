@@ -38,7 +38,7 @@ import { useWailsResizeFix } from "./lib/useWailsResizeFix";
 import { asArray } from "./lib/array";
 import { createBoundedRefreshCoordinator, sameTabMetaLists, shouldRefreshTabMetaForEvent, TAB_META_MAX_IN_FLIGHT } from "./lib/tabMetaRefresh";
 import { clearLegacyLangPref, normalizeLangPref, readLegacyLangPref, t, useI18n, useT, type Translator } from "./lib/i18n";
-import { localizedNoticeText, useController, type Item, type LiveStream } from "./lib/useController";
+import { jobPanelAttentionText, localizedNoticeText, useController, type Item, type LiveStream } from "./lib/useController";
 import { app, onEvent, onProjectTreeChanged, onReady, onRemoteForwards, onRemoteServer, onRemoteStatus, onRuntimeRebuilt, onSessionRecovered, openExternal } from "./lib/bridge";
 import { generativeMusic, isGenerativeMusicEnabled } from "./lib/generative-music";
 import { clearAttentionChimeKeys, playAttentionChime, playSuccessChime, shouldPlayAttentionChimeForEvent } from "./lib/sound";
@@ -4845,6 +4845,10 @@ export default function App() {
                       summaryMode
                       onClose={() => setTasksOpen(false)}
                       onOpenSession={openTaskMonitorSession}
+                      onJobAttention={(job) => {
+                        const text = jobPanelAttentionText(job);
+                        if (text) notice(text, "warn");
+                      }}
                     />
                   </Suspense>
                 </div>

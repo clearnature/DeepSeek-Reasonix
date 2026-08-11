@@ -30,6 +30,7 @@ import (
 	"reasonix/internal/event"
 	"reasonix/internal/hook"
 	"reasonix/internal/i18n"
+	"reasonix/internal/jobs"
 	"reasonix/internal/memory"
 	"reasonix/internal/migration"
 	"reasonix/internal/outputstyle"
@@ -4882,6 +4883,86 @@ func (m *chatTUI) runSlashCommand(input string) tea.Cmd {
 	return nil
 }
 
+// jobSnapshotProvider is satisfied by *control.Controller once the P2 T2
+// wrapper lands (Controller.JobSnapshots). The type assertion keeps /status
+// compiling against controllers that only expose Status.Jobs, so the task
+// detail section degrades gracefully instead of breaking the legacy jobs line.
+type jobSnapshotProvider interface {
+	JobSnapshots() []jobs.JobSnapshot
+}
+
+// statusDetailTailBudget is the byte budget for one /status task-detail tail
+// (P2 T5): at most 64 bytes, on a single line, rune-safe. Full output remains
+// available through bash_output/wait — the snapshot tail is a non-consuming
+// preview and never advances readOffset.
+const statusDetailTailBudget = 64
+
+// statusFoldField collapses whitespace/newlines in a free-text field onto a
+// single line so a task-detail row can never span multiple transcript lines.
+func statusFoldField(s string) string {
+	s = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ").Replace(s)
+	return strings.TrimSpace(s)
+}
+
+// statusTailLine folds a snapshot tail onto one line and truncates it rune-safe
+// to at most statusDetailTailBudget bytes. A cut tail gets a "…" suffix inside
+// the budget; an empty tail renders as "" so the row keeps its column shape.
+func statusTailLine(tail string) string {
+	tail = statusFoldField(tail)
+	if len(tail) <= statusDetailTailBudget {
+		return tail
+	}
+	remain := statusDetailTailBudget - len("…")
+	var b strings.Builder
+	for _, r := range tail {
+		if rl := utf8.RuneLen(r); remain < rl {
+			break
+		}
+		b.WriteRune(r)
+		remain -= utf8.RuneLen(r)
+	}
+	if b.Len() == 0 {
+		// The budget cannot fit "…" plus a single rune; keep one rune bare.
+		for _, r := range tail {
+			b.WriteRune(r)
+			break
+		}
+	} else {
+		b.WriteString("…")
+	}
+	return b.String()
+}
+
+// jobDetailLines renders the /status task-detail section: one line per job
+// snapshot, appended right after the legacy "jobs <tag>" line (whose bytes are
+// left untouched for backward compatibility). The data source is
+// Controller.JobSnapshots (P2 T2); controllers that predate it omit the section
+// entirely, so /status stays byte-identical to the legacy output.
+func (m chatTUI) jobDetailLines() []string {
+	if m.ctrl == nil {
+		return nil
+	}
+	src, ok := m.ctrl.(jobSnapshotProvider)
+	if !ok {
+		return nil
+	}
+	snaps := src.JobSnapshots()
+	if len(snaps) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(snaps))
+	for _, s := range snaps {
+		lines = append(lines, fmt.Sprintf("  %s  %s  %s  %s  %s",
+			s.ID,
+			s.Kind,
+			s.Status,
+			statusFoldField(s.Label),
+			statusTailLine(s.Tail),
+		))
+	}
+	return lines
+}
+
 // showStatusDetails keeps diagnostics available without permanently crowding
 // the two-line composer footer.
 func (m *chatTUI) showStatusDetails() {
@@ -4924,6 +5005,10 @@ func (m *chatTUI) showStatusDetails() {
 		if tag := m.jobsTag(); tag != "" {
 			lines = append(lines, "  jobs       "+tag)
 		}
+		// P2 T5: task-detail section right after the jobs line. The jobs line
+		// itself is byte-identical to the legacy format; the detail rows are
+		// additive and only render when the controller exposes JobSnapshots.
+		lines = append(lines, m.jobDetailLines()...)
 	}
 	if m.balance != "" {
 		lines = append(lines, "  balance    "+m.balance)

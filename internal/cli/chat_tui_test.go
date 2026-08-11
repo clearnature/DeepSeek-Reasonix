@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/colorprofile"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"reasonix/internal/control"
 	"reasonix/internal/event"
 	"reasonix/internal/i18n"
+	"reasonix/internal/jobs"
 	"reasonix/internal/provider"
 	"reasonix/internal/secrets"
 	"reasonix/internal/skill"
@@ -1233,6 +1235,128 @@ func TestStatusCommandShowsRuntimeDetails(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("/status output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// statusCtrl stubs the SessionAPI reads /status performs so the P2 T5
+// task-detail assertions run without a real controller. Embedding
+// control.SessionAPI satisfies the interface; every method showStatusDetails
+// touches is overridden with a zero/empty value.
+type statusCtrl struct {
+	control.SessionAPI
+	jobViews []jobs.View
+	snaps    []jobs.JobSnapshot
+}
+
+func (s statusCtrl) Jobs() []jobs.View                { return s.jobViews }
+func (s statusCtrl) JobSnapshots() []jobs.JobSnapshot { return s.snaps }
+func (statusCtrl) ContextSnapshot() (int, int)        { return 0, 0 }
+func (statusCtrl) CompactRatio() float64              { return 0 }
+func (statusCtrl) Goal() string                       { return "" }
+func (statusCtrl) GoalStatus() string                 { return "" }
+func (statusCtrl) ToolApprovalMode() string           { return control.ToolApprovalAsk }
+func (statusCtrl) LastUsage() *provider.Usage         { return nil }
+func (statusCtrl) SessionCache() (int, int)           { return 0, 0 }
+
+// statusLegacyCtrl is the pre-T2 shape: a controller that only exposes
+// Status.Jobs (no JobSnapshots). It proves /status stays byte-identical on the
+// legacy path — the P2 T5 backward-compatibility contract.
+type statusLegacyCtrl struct {
+	control.SessionAPI
+	jobViews []jobs.View
+}
+
+func (s statusLegacyCtrl) Jobs() []jobs.View         { return s.jobViews }
+func (statusLegacyCtrl) ContextSnapshot() (int, int) { return 0, 0 }
+func (statusLegacyCtrl) CompactRatio() float64       { return 0 }
+func (statusLegacyCtrl) Goal() string                { return "" }
+func (statusLegacyCtrl) GoalStatus() string          { return "" }
+func (statusLegacyCtrl) ToolApprovalMode() string    { return control.ToolApprovalAsk }
+func (statusLegacyCtrl) LastUsage() *provider.Usage  { return nil }
+func (statusLegacyCtrl) SessionCache() (int, int)    { return 0, 0 }
+
+// TestStatusCommandShowsTaskDetailSection locks the P2 T5 output: the legacy
+// "jobs <tag>" line keeps its byte-identical shape, and one detail row per
+// job snapshot follows it as "  <id>  <kind>  <state>  <label>  <tail>".
+func TestStatusCommandShowsTaskDetailSection(t *testing.T) {
+	ctrl := statusCtrl{
+		jobViews: []jobs.View{{ID: "job-1", Kind: "bash", Label: "run tests", Status: string(jobs.Running)}},
+		snaps: []jobs.JobSnapshot{
+			{ID: "job-1", Kind: "bash", Label: "run tests", Status: string(jobs.Running), Tail: "compiling package reasonix"},
+			{ID: "job-2", Kind: "write_file", Label: "write report", Status: string(jobs.Done), Tail: "wrote 12 files"},
+		},
+	}
+	m := newTestChatTUI()
+	m.ctrl = ctrl
+	m.runSlashCommand("/status")
+	out := ansi.Strip(strings.Join(m.transcript, "\n"))
+
+	if !strings.Contains(out, "  jobs       ⚙ 1") {
+		t.Errorf("/status output missing legacy jobs line:\n%s", out)
+	}
+	for _, want := range []string{
+		"  job-1  bash  running  run tests  compiling package reasonix",
+		"  job-2  write_file  done  write report  wrote 12 files",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("/status task detail missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestStatusCommandTaskDetailDegradesToLegacyJobs proves a controller without
+// JobSnapshots (T2 not yet landed) still renders the legacy jobs line and no
+// detail rows — /status output stays byte-identical on that path.
+func TestStatusCommandTaskDetailDegradesToLegacyJobs(t *testing.T) {
+	ctrl := statusLegacyCtrl{
+		jobViews: []jobs.View{{ID: "job-1", Kind: "bash", Label: "run tests", Status: string(jobs.Running)}},
+	}
+	m := newTestChatTUI()
+	m.ctrl = ctrl
+	m.runSlashCommand("/status")
+	out := ansi.Strip(strings.Join(m.transcript, "\n"))
+
+	if !strings.Contains(out, "  jobs       ⚙ 1") {
+		t.Errorf("/status output missing legacy jobs line:\n%s", out)
+	}
+	if strings.Contains(out, "  job-1  bash") {
+		t.Errorf("task detail rendered without JobSnapshots; legacy path must stay byte-identical:\n%s", out)
+	}
+}
+
+// TestStatusTailLine locks the P2 T5 tail contract: single line, at most 64
+// bytes, rune-safe, with a "…" marker when cut.
+func TestStatusTailLine(t *testing.T) {
+	if got := statusTailLine(""); got != "" {
+		t.Errorf("statusTailLine(\"\") = %q, want empty", got)
+	}
+	if got := statusTailLine("short"); got != "short" {
+		t.Errorf("statusTailLine(short) = %q, want unchanged", got)
+	}
+	// Newlines/tabs fold so a detail row stays on one transcript line.
+	if got := statusTailLine("line1\nline2\r\ntab\tend"); got != "line1 line2 tab end" {
+		t.Errorf("statusTailLine folds = %q", got)
+	}
+	// A multi-byte tail is cut rune-safe to ≤ 64 bytes with a "…" suffix.
+	long := strings.Repeat("界", 40) // 120 bytes
+	got := statusTailLine(long)
+	if len(got) > statusDetailTailBudget {
+		t.Errorf("statusTailLine cut length = %d bytes, want ≤ %d", len(got), statusDetailTailBudget)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("statusTailLine cut = %q, want … suffix", got)
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("statusTailLine cut is not valid UTF-8: %q", got)
+	}
+	// The byte budget falling mid-rune must never split a UTF-8 sequence.
+	mid := strings.Repeat("a", 62) + "界" // 65 bytes; budget lands inside the rune
+	got = statusTailLine(mid)
+	if len(got) > statusDetailTailBudget {
+		t.Errorf("statusTailLine mid-rune cut length = %d bytes, want ≤ %d", len(got), statusDetailTailBudget)
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("statusTailLine mid-rune cut is not valid UTF-8: %q", got)
 	}
 }
 

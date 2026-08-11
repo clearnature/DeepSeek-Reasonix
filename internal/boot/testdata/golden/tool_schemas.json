@@ -1544,6 +1544,28 @@
     }
   },
   {
+    "Name": "send_message",
+    "Description": "Queue a message for a running background task job started with task(run_in_background=true). The message is delivered to the background agent on its next turn as a user instruction, letting you steer a long-running task mid-flight. The job must still be running; finished or unknown jobs are rejected, and the queue is bounded (16 messages / 8KB) — overflow is rejected, never silently dropped. Only the parent agent can call this; it is hidden from sub-agents.",
+    "ReadOnly": false,
+    "Schema": {
+      "properties": {
+        "job_id": {
+          "description": "The background task job id (e.g. \"task-1\") returned when it was started.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The instruction to send to the background agent. Delivered as a user message on the job's next turn.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "Name": "slash_command",
     "Description": "Invoke a project slash command (a reusable prompt template or skill) by name. Returns the command's expanded prompt text for you to act on in this turn — it does not run on its own. Call with an empty command (or \"list\") to see what's available. Available: explore, init, install-capability, reasonix-guide, research, review, security-review, test.",
     "ReadOnly": true,
@@ -1578,6 +1600,10 @@
         "effort": {
           "description": "Optional reasoning effort for the sub-agent (e.g. high, max). Same precedence as model.",
           "type": "string"
+        },
+        "fork": {
+          "description": "Fork this conversation into a background sub-agent: the child inherits the parent system prompt and committed history as a read-only prefix, so its first request can reuse the parent's provider prompt cache. Mutually exclusive with continue_from and fork_from. Runs in the background fire-and-forget: the result is never delivered back automatically — collect it with wait.",
+          "type": "boolean"
         },
         "max_steps": {
           "description": "Optional cap on tool-call rounds. Defaults to half the parent's cap (min 5).",
@@ -1617,6 +1643,28 @@
       },
       "required": [
         "prompt"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "Name": "team_message",
+    "Description": "Deliver mail to another teammate's inbox (teammate-to-teammate). The recipient flushes it into its next assignment's steer queue.",
+    "ReadOnly": false,
+    "Schema": {
+      "properties": {
+        "target": {
+          "description": "Teammate name to deliver the mail to.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Message body for the teammate.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "text"
       ],
       "type": "object"
     }

@@ -45,6 +45,7 @@ import (
 	"reasonix/internal/fileref"
 	fileenc "reasonix/internal/fileutil/encoding"
 	"reasonix/internal/i18n"
+	"reasonix/internal/jobs"
 	"reasonix/internal/mcpdiag"
 	"reasonix/internal/mcpregistry"
 	"reasonix/internal/memory"
@@ -11955,6 +11956,28 @@ type taskMonitorTabTarget struct {
 	sessionID   string
 }
 
+// JobPanelView is one background job as the task panel renders it: identity,
+// status, the stalled hint, and a bounded non-consuming tail. It is a strict
+// projection of jobs.JobSnapshot — capturing it never consumes readOffset,
+// resultRead, or the evidence lease, so polling the panel cannot steal model
+// output from wait/bash_output (P2 HIGH red line, locked in internal/jobs).
+type JobPanelView struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Label   string `json:"label"`
+	Status  string `json:"status"`
+	Stalled bool   `json:"stalled"`
+	Tail    string `json:"tail"`
+}
+
+// JobOutputView is one job's bounded output for the task panel detail view.
+// The output rides the same non-consuming snapshot tail as the list, so
+// opening a job detail never consumes the model's wait/bash_output stream.
+type JobOutputView struct {
+	ID     string `json:"id"`
+	Output string `json:"output"`
+}
+
 // taskMonitorTargetForTab snapshots the workspace and session identity owned by
 // tabID. Wails dispatches bound calls concurrently, so resolving the active tab
 // inside a task operation would allow a later tab switch to retarget it.
@@ -12058,6 +12081,96 @@ func filterTasksBySession(tasks []taskmonitor.TaskSnapshot, sessionID string) []
 		}
 	}
 	return filtered
+}
+
+// jobPanelTargetForTab resolves the controller owning tabID for the job panel,
+// mirroring taskMonitorTargetForTab's tab-scoped locking so a later tab switch
+// cannot retarget a poll. The controller's JobSnapshots already filters by the
+// session it owns, so no workspace/session re-derivation is needed here.
+func (a *App) jobPanelTargetForTab(tabID string) (control.SessionAPI, error) {
+	tabID = strings.TrimSpace(tabID)
+	if tabID == "" {
+		return nil, fmt.Errorf("job panel tab id is required")
+	}
+
+	a.mu.RLock()
+	tab := a.tabByIDLocked(tabID)
+	if tab == nil {
+		a.mu.RUnlock()
+		return nil, fmt.Errorf("task monitor tab %q is unavailable", tabID)
+	}
+	ctrl := tab.Ctrl
+	a.mu.RUnlock()
+	return ctrl, nil
+}
+
+// jobSnapshotsFor returns the job-panel snapshot surface of ctrl, or false when
+// the runtime cannot report job snapshots. It mirrors desktopTaskJobKiller's
+// duck-typed CancelJob probe so wrapper controllers in tests stay usable.
+func jobSnapshotsFor(ctrl control.SessionAPI) ([]jobs.JobSnapshot, bool) {
+	src, ok := ctrl.(interface{ JobSnapshots() []jobs.JobSnapshot })
+	if !ok {
+		return nil, false
+	}
+	return src.JobSnapshots(), true
+}
+
+// JobPanelJobsForTab returns the background jobs owned by tabID as the task
+// panel renders them. It routes by the tab's own controller — never the active
+// tab — and relies on Controller.JobSnapshots' non-consuming session filter, so
+// polling the panel cannot steal model output from wait/bash_output. A tab
+// whose controller is still booting yields an empty list, not an error.
+func (a *App) JobPanelJobsForTab(tabID string) ([]JobPanelView, error) {
+	ctrl, err := a.jobPanelTargetForTab(tabID)
+	if err != nil {
+		return nil, err
+	}
+	if ctrl == nil {
+		return nil, nil
+	}
+	snaps, ok := jobSnapshotsFor(ctrl)
+	if !ok {
+		return nil, fmt.Errorf("this runtime cannot report job snapshots")
+	}
+	views := make([]JobPanelView, 0, len(snaps))
+	for _, s := range snaps {
+		views = append(views, JobPanelView{
+			ID:      s.ID,
+			Kind:    s.Kind,
+			Label:   s.Label,
+			Status:  s.Status,
+			Stalled: s.Stalled,
+			Tail:    s.Tail,
+		})
+	}
+	return views, nil
+}
+
+// JobOutputForTab returns one job's bounded output owned by tabID. The output
+// comes from the same non-consuming snapshot the panel polls, so opening a job
+// detail never consumes the model's wait/bash_output stream.
+func (a *App) JobOutputForTab(tabID, jobID string) (JobOutputView, error) {
+	ctrl, err := a.jobPanelTargetForTab(tabID)
+	if err != nil {
+		return JobOutputView{}, err
+	}
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return JobOutputView{}, fmt.Errorf("job id is required")
+	}
+	if ctrl == nil {
+		return JobOutputView{}, fmt.Errorf("job %q is unavailable", jobID)
+	}
+	snaps, ok := jobSnapshotsFor(ctrl)
+	if !ok {
+		return JobOutputView{}, fmt.Errorf("this runtime cannot report job output")
+	}
+	for _, s := range snaps {
+		if s.ID == jobID {
+			return JobOutputView{ID: s.ID, Output: s.Tail}, nil
+		}
+	}
+	return JobOutputView{}, fmt.Errorf("job %q is unavailable", jobID)
 }
 
 func (a *App) GetTask(taskID string) (*taskmonitor.TaskSnapshot, error) {

@@ -1066,25 +1066,26 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	var capRuntime *agent.MCPCapabilityRuntime
 	newTaskTool := func() *agent.TaskTool {
 		return agent.NewTaskToolWithOptions(agent.TaskToolOptions{
-			Provider:            execProv,
-			Pricing:             entry.Price,
-			ParentRegistry:      reg,
-			MaxSteps:            maxSteps,
-			ContextWindow:       entry.ContextWindow,
-			RecentKeep:          cfg.Agent.RecentKeep,
-			SoftCompactRatio:    cfg.Agent.SoftCompactRatio,
-			ToolResultSnipRatio: cfg.Agent.ToolResultSnipRatio,
-			CompactRatio:        cfg.Agent.CompactRatio,
-			CompactForceRatio:   cfg.Agent.CompactForceRatio,
-			ContextEditing:      cfg.Agent.ContextEditing,
-			Temperature:         cfg.Agent.Temperature,
-			ArchiveDir:          config.ArchiveDir(),
-			SysPrompt:           "",
-			Gate:                headlessGate,
-			KeepPolicy:          keepPolicy,
-			SubagentModel:       taskModel,
-			SubagentEffort:      taskEffort,
-			ResolveProvider:     resolveSubagentProvider,
+			Provider:               execProv,
+			Pricing:                entry.Price,
+			ParentRegistry:         reg,
+			MaxSteps:               maxSteps,
+			ContextWindow:          entry.ContextWindow,
+			RecentKeep:             cfg.Agent.RecentKeep,
+			SoftCompactRatio:       cfg.Agent.SoftCompactRatio,
+			ToolResultSnipRatio:    cfg.Agent.ToolResultSnipRatio,
+			CompactRatio:           cfg.Agent.CompactRatio,
+			CompactForceRatio:      cfg.Agent.CompactForceRatio,
+			ContextEditing:         cfg.Agent.ContextEditing,
+			Temperature:            cfg.Agent.Temperature,
+			ArchiveDir:             config.ArchiveDir(),
+			SysPrompt:              "",
+			Gate:                   headlessGate,
+			KeepPolicy:             keepPolicy,
+			SubagentModel:          taskModel,
+			SubagentEffort:         taskEffort,
+			ResolveProvider:        resolveSubagentProvider,
+			AutoBackgroundizeAfter: cfg.ForegroundBackgroundize(),
 		}).
 			WithTranscripts(subagentStore, root, modelName, entry.Effort).
 			WithTranscriptIdentityResolver(subagentIdentity).
@@ -1838,6 +1839,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		WriteWorkspaceRoot:           root,
 		ProjectChecks:                projectChecks,
 		DeliveryProfile:              tokenDelivery,
+		AutoBackgroundizeAfter:       cfg.ForegroundBackgroundize(),
 		Ablation:                     opts.Ablation,
 		WorkspaceLease:               workspaceLease,
 		CapabilityLedger:             capLedger,
@@ -1918,6 +1920,19 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		}
 	}
 
+	// P6.2 production wiring: the teammate registry shares the controller's
+	// event sink so mailbox-wakeup notices reach the leader (previously only
+	// tests called SetSink — notifyMail was a silent no-op in prod). The
+	// completion observer is registered inside NewTeammateStore (it receives
+	// jm); teammate lifecycle (idle flip / dependency auto-advance / mailbox
+	// backlog wakeup) is driven by job completion events.
+	// P6 mailbox persistence root: teammate mail lands under the session dir
+	// (same lifetime as transcripts), so the mailbox backlog wake-up on job
+	// completion actually has an inbox to count.
+	inboxRoot := filepath.Join(sessionDir, "team-inbox")
+	teammates := agent.NewTeammateStore(taskTool, jm, inboxRoot)
+	teammates.SetSink(sink)
+
 	ctrlOpts := control.Options{
 		Runner:                         runner,
 		Executor:                       executor,
@@ -1943,11 +1958,16 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		// Indirection: the cleanup variable gains the extension runtime set at
 		// the end of build (snapshot assembly runs after control.New), and the
 		// controller must observe the final chain at Close time.
-		Cleanup:               func() { cleanup() },
-		BalanceURL:            entry.BalanceURL,
-		BalanceKey:            entry.APIKey(),
-		BalanceClient:         balanceClient,
-		Jobs:                  jm,
+		Cleanup:       func() { cleanup() },
+		BalanceURL:    entry.BalanceURL,
+		BalanceKey:    entry.APIKey(),
+		BalanceClient: balanceClient,
+		Jobs:          jm,
+		// P6 team: wire the teammate registry so /team-* commands are live in
+		// production (they were test-only before — see the isolation audit).
+		// Constructed above so SetSink can be called; NewTeammateStore itself
+		// keeps its original signature.
+		Teammates:             teammates,
 		WorkspaceLease:        workspaceLease,
 		Registry:              reg,
 		PluginCtx:             ctx,

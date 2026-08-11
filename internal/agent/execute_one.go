@@ -662,6 +662,10 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	}
 	cctx := tool.WithContextCompressor(withCallContext(ctx, plan.call.ID, a.sink, a.asker, a.planMode.Load()), a)
 	cctx = WithSubagentDepth(cctx, a.subagentDepth)
+	// P5 fork: expose the parent agent to tool execution (task fork:true) so the
+	// fork branch can capture the parent prefix without holding a reference in
+	// the tool registry. Lazy: ForkSourceFromContext is only resolved on fork.
+	cctx = WithForkSource(cctx, a)
 	if a.evidence != nil {
 		cctx = evidence.WithLedger(cctx, a.evidence)
 		cctx = evidence.WithSessionMessages(cctx, a.session.Snapshot)

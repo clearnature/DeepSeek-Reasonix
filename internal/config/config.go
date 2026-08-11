@@ -16,7 +16,9 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	fileencoding "reasonix/internal/fileutil/encoding"
 	"reasonix/internal/netclient"
@@ -1659,6 +1661,12 @@ func (c *Config) MCPStartupTimeoutSeconds() int {
 // BackgroundJobsConfig tunes parent-created background jobs.
 type BackgroundJobsConfig struct {
 	StalledWarningSeconds *int `toml:"stalled_warning_seconds"`
+	// ForegroundBackgroundizeSeconds is the P4 auto-backgroundize threshold: a
+	// foreground task that has run at least this long auto-requests a
+	// foreground→background handoff at its next iteration boundary. 0 disables
+	// auto-backgroundize (the /background command and Controller.Backgroundize
+	// still work). REASONIX_AUTO_BACKGROUND_MS overrides this in milliseconds.
+	ForegroundBackgroundizeSeconds *int `toml:"foreground_backgroundize_seconds"`
 }
 
 // BackgroundJobStalledWarningSeconds returns the stalled warning threshold in
@@ -1673,6 +1681,44 @@ func (c *Config) BackgroundJobStalledWarningSeconds() int {
 		return maxBackgroundJobStalledWarningSec
 	}
 	return *c.Tools.BackgroundJobs.StalledWarningSeconds
+}
+
+// autoBackgroundizeEnv is the millisecond-resolution override for the P4
+// auto-backgroundize threshold. It takes precedence over
+// [tools.background_jobs] foreground_backgroundize_seconds so a benchmark or a
+// headless run can tune the threshold without touching the project config.
+const autoBackgroundizeEnv = "REASONIX_AUTO_BACKGROUND_MS"
+
+// defaultForegroundBackgroundizeSeconds is the built-in auto-backgroundize
+// threshold: a foreground task that has run 120s auto-requests a
+// foreground→background handoff at its next iteration boundary.
+const defaultForegroundBackgroundizeSeconds = 120
+
+// ForegroundBackgroundize returns the P4 auto-backgroundize threshold. 0 means
+// auto-backgroundize is disabled (the /background command still works). An
+// omitted config (or a negative typo) keeps the 120s default, exactly like the
+// BashTimeoutSeconds pattern; explicit 0 disables it.
+// REASONIX_AUTO_BACKGROUND_MS overrides in milliseconds: a positive value wins
+// over config, 0/negative disables, and an unparsable value falls back to the
+// config so a typo cannot silently disable (or silently re-arm) the feature.
+func (c *Config) ForegroundBackgroundize() time.Duration {
+	if v := strings.TrimSpace(os.Getenv(autoBackgroundizeEnv)); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil {
+			if ms <= 0 {
+				return 0
+			}
+			return time.Duration(ms) * time.Millisecond
+		}
+		// Unparsable env: fall through to config resolution below.
+	}
+	sec := c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds
+	if sec == nil || *sec < 0 {
+		return defaultForegroundBackgroundizeSeconds * time.Second
+	}
+	if *sec == 0 {
+		return 0
+	}
+	return time.Duration(*sec) * time.Second
 }
 
 // SearchConfig tunes the grep tool's engine. Engine is "auto" (default — use

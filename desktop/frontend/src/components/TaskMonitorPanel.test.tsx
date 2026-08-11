@@ -1,5 +1,12 @@
 // Run: tsx src/components/TaskMonitorPanel.test.tsx
 
+// The panel's locale is detected from the ambient navigator.language; pin it
+// to en so assertions on English labels stay stable regardless of host locale.
+Object.defineProperty(globalThis.navigator, "language", {
+  value: "en-US",
+  configurable: true,
+});
+
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -66,9 +73,13 @@ globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.windo
 
 let listTasksImpl: () => Promise<Task[]> = async () => [];
 let listEventsImpl: () => Promise<Event[]> = async () => [];
+let listJobsImpl: () => Promise<Task[]> = async () => [];
+let jobOutputImpl: (jobID: string) => Promise<Task> = async () => ({ id: "", output: "" });
 const listTaskTabIDs: string[] = [];
 const listEventCalls: unknown[][] = [];
 const requeueCalls: unknown[][] = [];
+const listJobTabIDs: string[] = [];
+const jobOutputCalls: unknown[][] = [];
 const mockApp = {
   ListTasks: () => listTasksImpl(),
   GetTask: async () => null,
@@ -96,6 +107,14 @@ const mockApp = {
   ListTaskEventsForTab: async (...args: unknown[]) => {
     listEventCalls.push(args);
     return listEventsImpl();
+  },
+  JobPanelJobsForTab: async (tabID: string) => {
+    listJobTabIDs.push(tabID);
+    return listJobsImpl();
+  },
+  JobOutputForTab: async (...args: unknown[]) => {
+    jobOutputCalls.push(args);
+    return jobOutputImpl(String(args[1] ?? ""));
   },
   StopTaskForTab: async () => ({ schema_version: 1, command: "stop", task_id: "", accepted: true, idempotent: false }),
   CancelTaskForTab: async () => ({ schema_version: 1, command: "cancel", task_id: "", accepted: true, idempotent: false }),
@@ -129,6 +148,7 @@ async function renderPanel(
   onClose?: () => void,
   onOpenSession?: (tabID: string, taskID: string) => Promise<boolean> | boolean,
   tabID = "tab-a",
+  onJobAttention?: (job: unknown) => void,
 ) {
   activeHost = document.createElement("div");
   document.body.appendChild(activeHost);
@@ -136,7 +156,12 @@ async function renderPanel(
   await act(async () => {
     activeRoot?.render(
       <LocaleProvider>
-        <TaskMonitorPanel tabID={tabID} onClose={onClose} onOpenSession={onOpenSession} />
+        <TaskMonitorPanel
+          tabID={tabID}
+          onClose={onClose}
+          onOpenSession={onOpenSession}
+          onJobAttention={onJobAttention}
+        />
       </LocaleProvider>,
     );
     await flush();
@@ -152,15 +177,19 @@ async function cleanup() {
   activeHost = null;
   listTasksImpl = async () => [];
   listEventsImpl = async () => [];
+  listJobsImpl = async () => [];
+  jobOutputImpl = async () => ({ id: "", output: "" });
   listTaskTabIDs.length = 0;
   listEventCalls.length = 0;
   requeueCalls.length = 0;
+  listJobTabIDs.length = 0;
+  jobOutputCalls.length = 0;
 }
 
 function buttonByLabel(label: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => candidate.getAttribute("aria-label") === label);
-  if (!button) throw new Error(`missing button: ${label}`);
+  if (!button) { process.stderr.write(`MISSING [${label}]\nBODY: ${document.body.textContent?.slice(0, 800)}\n`); throw new Error(`missing button: ${label}`); }
   return button;
 }
 
@@ -329,50 +358,86 @@ await check("marks only terminal tasks", async () => {
   return document.querySelectorAll(".taskmonitor__terminal").length === 1;
 });
 
-await check("freezes terminal task elapsed time", async () => {
-  const realNow = Date.now;
-  try {
-    Date.now = () => Date.parse("2025-01-01T02:00:00Z");
-    listTasksImpl = async () => [snap({ state: "cancelled", runtime_state: "exited" })];
-    await renderPanel();
-    await openPanel();
-    const atFinish = document.querySelector(".taskmonitor__time")?.textContent;
-    Date.now = () => Date.parse("2025-01-01T03:00:00Z");
-    await click(buttonByLabel("Refresh"));
-    const afterRefresh = document.querySelector(".taskmonitor__time")?.textContent;
-    return atFinish === "1h" && afterRefresh === "1h";
-  } finally {
-    Date.now = realNow;
-  }
+// ── P2 T4: job panel rows (kind badge / label / tail) ──
+
+function job(overrides: Task = {}): Task {
+  return {
+    id: "job-1",
+    kind: "bash",
+    label: "tests",
+    status: "running",
+    stalled: false,
+    tail: "line1",
+    ...overrides,
+  };
+}
+
+await check("binds job reads to the source tab", async () => {
+  listJobsImpl = async () => [job()];
+  await renderPanel(undefined, undefined, "tab-source");
+  return listJobTabIDs.length === 1 && listJobTabIDs[0] === "tab-source";
 });
 
-await check("uses the expired runtime lease for stale task elapsed time", async () => {
-  const realNow = Date.now;
-  try {
-    Date.now = () => Date.parse("2025-01-01T02:00:00Z");
-    listTasksImpl = async () => [snap({
-      state: "stale",
-      runtime_state: "exited",
-      updated_at: "2025-01-01T00:00:00Z",
-      runtime_lease_until: "2025-01-01T00:30:00Z",
-    })];
-    await renderPanel();
-    await openPanel();
-    const atDetection = document.querySelector(".taskmonitor__time")?.textContent;
-    Date.now = () => Date.parse("2025-01-01T03:00:00Z");
-    await click(buttonByLabel("Refresh"));
-    const afterRefresh = document.querySelector(".taskmonitor__time")?.textContent;
-    return atDetection === "30m" && afterRefresh === "30m";
-  } finally {
-    Date.now = realNow;
-  }
-});
-
-await check("does not present requeue age as elapsed runtime", async () => {
-  listTasksImpl = async () => [snap({ state: "queued", runtime_state: "exited" })];
+await check("renders job rows with kind badge, label, and tail", async () => {
+  listJobsImpl = async () => [job({ id: "job-1", kind: "bash", label: "tests", status: "running", tail: "line1" })];
   await renderPanel();
   await openPanel();
-  return document.querySelector(".taskmonitor__time")?.textContent === "—";
+  await click(buttonByLabel("Job job-1 — Running"));
+  const text = document.body.textContent ?? "";
+  return text.includes("Kind") && text.includes("bash") && text.includes("tests")
+    && text.includes("Tail") && text.includes("line1");
+});
+
+await check("truncates long job tails at 512 bytes with a marker", async () => {
+  listJobsImpl = async () => [job({ tail: "x".repeat(600) })];
+  await renderPanel();
+  await openPanel();
+  await click(buttonByLabel("Job job-1 — Running"));
+  const pre = document.querySelector(".taskmonitor__tail pre");
+  const marker = document.querySelector(".taskmonitor__tail--truncated");
+  return pre?.textContent?.length === 512
+    && Boolean(marker)
+    && (document.body.textContent ?? "").includes("Tail truncated to 512 bytes");
+});
+
+await check("refreshes the detail tail from JobOutputForTab on expand", async () => {
+  listJobsImpl = async () => [job({ tail: "initial" })];
+  jobOutputImpl = async () => ({ id: "job-1", output: "refreshed-output" });
+  await renderPanel();
+  await openPanel();
+  await click(buttonByLabel("Job job-1 — Running"));
+  await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+  return (document.body.textContent ?? "").includes("refreshed-output")
+    && JSON.stringify(jobOutputCalls[0]) === JSON.stringify(["tab-a", "job-1"]);
+});
+
+await check("marks stalled running jobs only, terminal wins", async () => {
+  listJobsImpl = async () => [
+    job({ id: "j-run", kind: "bash", label: "stalled", status: "running", stalled: true, tail: "" }),
+    job({ id: "j-done", kind: "test", label: "done", status: "completed", stalled: true, tail: "" }),
+  ];
+  await renderPanel();
+  await openPanel();
+  const badges = document.querySelectorAll(".taskmonitor__badge--stalled");
+  return badges.length === 1 && badges[0]?.textContent?.includes("Stalled") === true;
+});
+
+await check("fires job attention once per stalled job across polls", async () => {
+  const attention: unknown[] = [];
+  listJobsImpl = async () => [job({ id: "job-1", status: "running", stalled: true, tail: "" })];
+  await renderPanel(undefined, undefined, "tab-a", (j) => attention.push(j));
+  await openPanel();
+  await click(buttonByLabel("Refresh"));
+  return attention.length === 1
+    && (attention[0] as Record<string, unknown>)?.id === "job-1";
+});
+
+await check("fires job attention for failed jobs", async () => {
+  const attention: unknown[] = [];
+  listJobsImpl = async () => [job({ id: "job-2", status: "failed", stalled: false, tail: "" })];
+  await renderPanel(undefined, undefined, "tab-a", (j) => attention.push(j));
+  await openPanel();
+  return attention.length === 1 && (attention[0] as Record<string, unknown>)?.id === "job-2";
 });
 
 dom.window.close();

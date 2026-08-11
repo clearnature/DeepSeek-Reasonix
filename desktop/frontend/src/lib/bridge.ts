@@ -69,6 +69,8 @@ import type {
   ActiveWorkView,
   BackgroundRuntimeView,
   JobCancelBatchView,
+  JobOutputView,
+  JobPanelView,
   WorkspaceConflictView,
   MCPMarketplaceEntry,
   MCPServerInput,
@@ -345,6 +347,8 @@ export interface AppBindings {
   CancelTaskForTab(tabID: string, taskID: string, expectedVersion: number, reason: string, idemKey: string): Promise<ControlResult>;
   RequeueTaskForTab(tabID: string, taskID: string, expectedVersion: number, idemKey: string): Promise<ControlResult>;
   OpenTaskSessionForTab(tabID: string, taskID: string): Promise<ControlResult>;
+  JobPanelJobsForTab(tabID: string): Promise<JobPanelView[]>;
+  JobOutputForTab(tabID: string, jobID: string): Promise<JobOutputView>;
   JobsForTab(tabID: string): Promise<JobView[]>;
   CancelJob(jobID: string): Promise<boolean>;
   CancelJobForTab(tabID: string, jobID: string): Promise<boolean>;
@@ -4904,6 +4908,8 @@ function makeMockApp(): AppBindings {
     async OpenTaskSession() { return { schema_version: 1, command: "open_session", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
     async ListTasksForTab() { return []; },
     async ListTaskEventsForTab() { return []; },
+    async JobPanelJobsForTab() { return []; },
+    async JobOutputForTab() { return { id: "", output: "" }; },
     async StopTaskForTab() { return { schema_version: 1, command: "stop", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
     async CancelTaskForTab() { return { schema_version: 1, command: "cancel", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
     async RequeueTaskForTab() { return { schema_version: 1, command: "requeue", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },

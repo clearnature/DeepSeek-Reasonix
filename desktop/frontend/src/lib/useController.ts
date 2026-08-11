@@ -2316,6 +2316,22 @@ export function deliveryReadinessDetail(readiness: WireFinalReadiness | undefine
   return t("notice.deliveryIncompleteMissing", { items: labels.join(t("notice.deliveryRequirementSeparator")) });
 }
 
+// jobPanelAttentionText renders the notice copy the task panel pushes into the
+// transcript when its 5s poll first sees a job that needs attention: a stalled
+// running job, or a failed background job (P2 T4). App.tsx wires it through the
+// useController `notice` callback. Stalled only decorates running jobs, so the
+// failed branch owns the terminal case; a job that needs no attention yields "".
+export function jobPanelAttentionText(job: { kind?: string; status?: string; stalled?: boolean }): string {
+  const kind = job.kind || "job";
+  if (job.stalled === true && job.status === "running") {
+    return t("notice.backgroundJobStalled", { kind });
+  }
+  if (job.status === "failed") {
+    return t("notice.backgroundJobFailed", { kind });
+  }
+  return "";
+}
+
 export function localizedBackendNoticeText(text: string): string {
   const msg = text.trim();
   const autosave = /^Session autosave failed: (.+)$/s.exec(msg);
@@ -2337,8 +2353,7 @@ export function localizedBackendNoticeText(text: string): string {
   const canonicalNoticeKey = backendNoticeKey(msg);
   if (canonicalNoticeKey) {
     return t(canonicalNoticeKey);
-  }
-  if (
+  }  if (
     /^session changed on disk; unsaved local transcript was saved as a conflict copy$/i.test(msg) ||
     /^session changed on disk; unsaved local transcript was saved as recovery branch\b/i.test(msg)
   ) {

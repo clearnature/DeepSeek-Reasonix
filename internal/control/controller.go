@@ -85,6 +85,12 @@ var (
 // (#4414). Callers log it and continue; it must never be swallowed quietly.
 var errNoSessionPath = errors.New("session has content but no session path; conversation cannot be persisted")
 
+// errNoForegroundTaskToBackgroundize is returned by Backgroundize (and
+// surfaced by /background) when no foreground turn is running, so there is
+// nothing to hand off to the background. It mirrors P3 SendTaskMessage's
+// fail-closed posture: a request with no foreground task never silently no-ops.
+var errNoForegroundTaskToBackgroundize = errors.New("no foreground task is running")
+
 // Controller drives one chat session. Construct with New; drive with the command
 // methods; observe through the Sink passed in Options.
 type Controller struct {
@@ -158,6 +164,16 @@ type Controller struct {
 	// tools spawn into it; Compose drains its completion notes into the next turn;
 	// Close cancels its still-running jobs.
 	jobs *jobs.Manager
+	// teammates is the P6 team registry; nil disables /team-* commands.
+	teammates *agent.TeammateStore
+	// foregroundBkg is the P4 foreground→backgroundize signal for the in-flight
+	// foreground turn, nil while no foreground turn is running. spawnGuardedTurn
+	// and RunTurn stamp a fresh signal into the turn context and record it here;
+	// finishGuardedTurn clears it. Controller.Backgroundize and /background
+	// request it, and the foreground task's run loop consumes it at an iteration
+	// boundary to hand the task off to a background job. Guarded by c.mu; the
+	// signal object itself is safe for concurrent Request/Requested.
+	foregroundBkg *agent.BackgroundizeSignal
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
 	workspaceLease *workspacelease.Owner
@@ -347,12 +363,32 @@ type plannerSessionResetter interface {
 // intentionally more explicit than the legacy Running bool so UI code can
 // distinguish a cancellable foreground turn from pending prompts and background
 // jobs.
+// ForegroundTaskState reports the P4 foreground→background lifecycle of the
+// in-flight foreground turn, surfaced through RuntimeStatus so frontends can
+// render it (e.g. a "/status" panel).
+type ForegroundTaskState string
+
+const (
+	// ForegroundTaskIdle means no foreground turn is running, so there is no
+	// foreground task to backgroundize.
+	ForegroundTaskIdle ForegroundTaskState = "idle"
+	// ForegroundTaskRunning means a foreground turn is running; /background
+	// would request its handoff.
+	ForegroundTaskRunning ForegroundTaskState = "running"
+	// ForegroundTaskBackgroundizeRequested means the handoff was requested and
+	// is pending at the task run loop's next iteration boundary.
+	ForegroundTaskBackgroundizeRequested ForegroundTaskState = "backgroundize_requested"
+)
+
 type RuntimeStatus struct {
 	Running         bool
 	PendingPrompt   bool
 	BackgroundJobs  int
 	CancelRequested bool
 	Cancellable     bool
+	// ForegroundTask is the P4 foreground→background state of the in-flight
+	// foreground turn (idle when no turn is running).
+	ForegroundTask ForegroundTaskState
 }
 
 const (
@@ -462,6 +498,8 @@ type Options struct {
 	BalanceClient *http.Client
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager
+	// Teammates is the P6 team registry (nil disables /team-* commands).
+	Teammates *agent.TeammateStore
 	// WorkspaceLease is the Delivery writer owner shared with the executor.
 	WorkspaceLease *workspacelease.Owner
 	// Registry is the executor's live tool set, and PluginCtx the session-scoped
@@ -606,6 +644,7 @@ func New(opts Options) *Controller {
 		balanceKey:                        opts.BalanceKey,
 		balanceClient:                     opts.BalanceClient,
 		jobs:                              opts.Jobs,
+		teammates:                         opts.Teammates,
 		workspaceLease:                    opts.WorkspaceLease,
 		mcp:                               newMcpManager(opts.Host, opts.Registry, pluginCtx),
 		mcpDefaultCallTimeout:             opts.MCPDefaultCallTimeout,
@@ -896,6 +935,16 @@ func (c *Controller) rebindCheckpoints(sessionPath string) {
 // spawnGuardedTurn launches an admitted turn body plus its autosave companion.
 // The caller must already have claimed admission (running=true) under c.mu.
 func (c *Controller) spawnGuardedTurn(ctx context.Context, cancel context.CancelFunc, body func(ctx context.Context) error) {
+	// P4: every foreground turn carries a fresh backgroundize signal. The turn
+	// context inherits down the whole sub-agent chain (withAgentContext only
+	// rebinds jobs/memory/planmode), so the signal reaches a nested task's run
+	// loop, which consumes it at an iteration boundary. finishGuardedTurn
+	// clears the recorded signal when the turn completes.
+	sig := agent.NewBackgroundizeSignal()
+	ctx = agent.WithBackgroundizeSignal(ctx, sig)
+	c.mu.Lock()
+	c.foregroundBkg = sig
+	c.mu.Unlock()
 	ctx, completion := withGuardedTurnCompletion(ctx)
 	c.autosaveWG.Go(func() {
 		c.autosaveWhileRunning(ctx)
@@ -935,6 +984,10 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	c.finishing = !c.closed
 	c.cancel = nil
 	c.canceling = false
+	// The foreground turn is over (a parked replacement re-stamps its own
+	// signal via spawnGuardedTurn), so a stale /background can no longer reach
+	// this turn's run loop and Backgroundize fails closed.
+	c.foregroundBkg = nil
 	c.mu.Unlock()
 
 	defer func() {
@@ -1062,6 +1115,19 @@ func (c *Controller) runTurn(ctx context.Context, input string) error {
 // need a blocking request/response boundary, such as ACP session/prompt.
 func (c *Controller) RunTurn(ctx context.Context, input string) error {
 	return c.runSynchronousTurn(ctx, nil, func(runCtx context.Context) error {
+		// P4: the synchronous turn carries a backgroundize signal just like the
+		// async path (spawnGuardedTurn), so /background and Backgroundize work
+		// for ACP-style blocking transports too. Cleared when the turn ends.
+		sig := agent.NewBackgroundizeSignal()
+		runCtx = agent.WithBackgroundizeSignal(runCtx, sig)
+		c.mu.Lock()
+		c.foregroundBkg = sig
+		c.mu.Unlock()
+		defer func() {
+			c.mu.Lock()
+			c.foregroundBkg = nil
+			c.mu.Unlock()
+		}()
 		return c.runTurn(runCtx, input)
 	})
 }
@@ -1587,6 +1653,34 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			return
 		case "/prometheus":
 			c.applyPrometheus(trimmed, display)
+			return
+		case "/task-message":
+			args := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
+			jobID, text, err := splitTaskMessage(args)
+			if err != nil {
+				c.notice(err.Error())
+				return
+			}
+			if err := c.SendTaskMessage(jobID, text); err != nil {
+				c.notice("task-message: " + err.Error())
+				return
+			}
+			c.notice(fmt.Sprintf("message queued for background job %s", jobID))
+			return
+		case "/background":
+			// P4 foreground→background handoff. Like /task-message this runs
+			// inline (no runGuarded turn), so it stays responsive while a
+			// foreground turn is busy — the request lands on the in-flight
+			// turn's signal and the task run loop honors it at its next
+			// iteration boundary. Fails closed with no foreground task.
+			if err := c.Backgroundize(); err != nil {
+				c.notice("background: " + err.Error())
+				return
+			}
+			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
+			return
+		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop":
+			c.applyTeamCommand(fields[0], trimmed)
 			return
 		}
 		if c.managementNotice(trimmed) {
@@ -2182,6 +2276,7 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 	running := c.running
 	active := running || c.finishing
 	canceling := c.canceling
+	foreground := c.foregroundTaskStateLocked()
 	c.mu.Unlock()
 	pending := c.approval.hasPending()
 	backgroundJobs := len(c.Jobs())
@@ -2191,7 +2286,46 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 		BackgroundJobs:  backgroundJobs,
 		CancelRequested: canceling,
 		Cancellable:     running || pending,
+		ForegroundTask:  foreground,
 	}
+}
+
+// ForegroundTaskState reports whether a foreground turn is running and whether
+// a backgroundize handoff has been requested for it.
+func (c *Controller) ForegroundTaskState() ForegroundTaskState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.foregroundTaskStateLocked()
+}
+
+// foregroundTaskStateLocked derives the P4 state from the recorded signal.
+// Callers must hold c.mu.
+func (c *Controller) foregroundTaskStateLocked() ForegroundTaskState {
+	if c.foregroundBkg == nil {
+		return ForegroundTaskIdle
+	}
+	if c.foregroundBkg.Requested() {
+		return ForegroundTaskBackgroundizeRequested
+	}
+	return ForegroundTaskRunning
+}
+
+// Backgroundize requests the in-flight foreground task (if any) to hand off to
+// a background job at its next iteration boundary, mirroring P3
+// SendTaskMessage's fail-closed posture: with no foreground turn running there
+// is nothing to backgroundize and the request errors instead of silently
+// no-opping. The request is idempotent — a repeated /background while one is
+// already in flight collapses to the same single handoff (the signal is a
+// one-shot inside the agent package).
+func (c *Controller) Backgroundize() error {
+	c.mu.Lock()
+	sig := c.foregroundBkg
+	c.mu.Unlock()
+	if sig == nil {
+		return errNoForegroundTaskToBackgroundize
+	}
+	sig.Request()
+	return nil
 }
 
 // Turn returns the current turn number (0 before the first submit).
@@ -5523,6 +5657,10 @@ func (c *Controller) ReleaseResources() {
 // Close stops plugin subprocesses and releases resources. A session that ever
 // started fires SessionEnd so a teardown hook runs.
 func (c *Controller) Close() {
+	if c.teammates != nil {
+		c.teammates.DestroyAll()
+		c.teammates.Close() // stop the auto-advance worker goroutine (P6)
+	}
 	c.close(true, closeJobsWithGrace)
 }
 
@@ -5624,6 +5762,18 @@ func (c *Controller) Jobs() []jobs.View {
 	return c.jobs.RunningForSession(c.parentSessionID())
 }
 
+// JobSnapshots returns a read-only snapshot of every background job owned by
+// this controller's session — running, terminal, tombstoned — for the task
+// panel (nil when background jobs are disabled). Each carries a bounded,
+// non-consuming tail, so polling never steals model output or mutation
+// evidence (P2 red line; jobs locks it with the snapshot tests).
+func (c *Controller) JobSnapshots() []jobs.JobSnapshot {
+	if c.jobs == nil {
+		return nil
+	}
+	return c.jobs.JobSnapshotsForSession(c.parentSessionID())
+}
+
 // KillJob cancels a running background job by ID.
 func (c *Controller) KillJob(id string) bool {
 	if c.jobs == nil {
@@ -5638,6 +5788,34 @@ func (c *Controller) CancelJob(id string) bool {
 		return false
 	}
 	return c.jobs.KillForSession(c.parentSessionID(), id)
+}
+
+// SendTaskMessage queues a P3 steer message for a running background task job
+// owned by this controller's session. The job must exist and still be Running;
+// overflow is rejected (jobs.ErrPendingQueueFull), never silently dropped.
+// Background jobs must be enabled (Jobs option), else it fails closed.
+func (c *Controller) SendTaskMessage(id, text string) error {
+	if c.jobs == nil {
+		return fmt.Errorf("background jobs are disabled")
+	}
+	return c.jobs.SendMessageForSession(c.parentSessionID(), id, text)
+}
+
+// splitTaskMessage splits "/task-message" arguments into <job_id> and <text>.
+// The first whitespace-delimited field is the job id; everything after it is
+// the message text with internal spacing preserved.
+func splitTaskMessage(args string) (jobID, text string, err error) {
+	args = strings.TrimSpace(args)
+	idx := strings.IndexAny(args, " \t")
+	if idx < 0 {
+		return "", "", errors.New("usage: /task-message <job_id> <text>")
+	}
+	jobID = args[:idx]
+	text = strings.TrimSpace(args[idx:])
+	if jobID == "" || text == "" {
+		return "", "", errors.New("usage: /task-message <job_id> <text>")
+	}
+	return jobID, text, nil
 }
 
 // WorkspaceLeaseState reports only whether this controller owns or is waiting
@@ -6357,5 +6535,77 @@ func fastCompressCacheLabel(warm, overflow bool) string {
 		return "warm"
 	default:
 		return "cold"
+	}
+}
+
+// applyTeamCommand implements the P6 /team-* management verbs. /team-create
+// registers a teammate identity; /team-add dispatches one job to a teammate
+// (first run forks the leader prefix — cache hit on the child's first request —
+// later runs continue the teammate's own transcript); /team-status lists the
+// roster; /team-remove kills and drops a member. All are host commands: the
+// output rides Notices, never the provider surface.
+func (c *Controller) applyTeamCommand(cmd, trimmed string) {
+	if c.teammates == nil {
+		c.notice("team commands are disabled (no TeammateStore configured)")
+		return
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, cmd))
+	switch cmd {
+	case "/team-create":
+		name, role, _ := strings.Cut(rest, " ")
+		if err := c.teammates.Create(name, role); err != nil {
+			c.notice("team-create: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q created (role %q) — assign work with /team-add", name, role))
+	case "/team-add":
+		name, task, _ := strings.Cut(rest, " ")
+		if strings.TrimSpace(task) == "" {
+			c.notice("usage: /team-add <name> <task...>")
+			return
+		}
+		ctx := context.Background()
+		if c.executor != nil {
+			ctx = agent.WithForkSource(ctx, c.executor)
+		}
+		if c.jobs != nil {
+			ctx = jobs.WithManager(ctx, c.jobs)
+			ctx = jobs.WithSession(ctx, c.parentSessionID())
+		}
+		ctx = agent.WithParentSession(ctx, c.parentSessionID())
+		jobID, err := c.teammates.Assign(ctx, name, task)
+		if err != nil {
+			c.notice("team-add: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q assigned (job %s) — result arrives via <background-jobs>", name, jobID))
+	case "/team-status":
+		list := c.teammates.List()
+		if len(list) == 0 {
+			c.notice("no teammates — create one with /team-create <name> <role>")
+			return
+		}
+		var b strings.Builder
+		for _, tm := range list {
+			fmt.Fprintf(&b, "\n  %s  %s  %s", tm.Name, tm.State, tm.Role)
+			if tm.LastJobID != "" {
+				fmt.Fprintf(&b, "  job=%s", tm.LastJobID)
+			}
+		}
+		c.notice(fmt.Sprintf("team roster (%d):%s", len(list), b.String()))
+	case "/team-remove":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.Remove(name); err != nil {
+			c.notice("team-remove: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q removed", name))
+	case "/team-stop":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.TeamStop(name); err != nil {
+			c.notice("team-stop: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q stopped (idle — transcript kept)", name))
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"reasonix/internal/event"
 	"reasonix/internal/evidence"
@@ -64,6 +66,22 @@ type View struct {
 	Label     string `json:"label"`
 	Status    string `json:"status"`
 	StartedAt int64  `json:"startedAt"` // unix milliseconds
+}
+
+// JobSnapshot is a read-only view of one background job for the task panel
+// (P2): identity, status, a bounded non-consuming tail, and panel hints
+// (stalled / interrupted). Never consumes readOffset/resultRead or touches
+// the evidence lease, so polling never steals output or evidence.
+type JobSnapshot struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	Session     string `json:"session"`
+	Status      string `json:"status"`
+	Tail        string `json:"tail"`        // bounded 4KiB rune-safe tail, "[truncated…]" when cut
+	Stalled     bool   `json:"stalled"`     // running but idle past the stalled warning (terminal beats stalled)
+	Interrupted bool   `json:"interrupted"` // terminal Interrupted (tombstone or repaired record)
+	Activity    int64  `json:"activity"`    // unix milliseconds of last activity
 }
 
 // Result is one job's terminal (or current) state returned by Wait.
@@ -146,6 +164,28 @@ type Job struct {
 
 	evidence          evidence.ChildEvidenceSummary
 	evidenceCommitted bool
+
+	// pendingMessages is the P3 steer queue: messages the parent sent while the
+	// job was Running, drained one-per-turn by the background agent via
+	// DrainPendingMessages. Guarded by mu like every other mutable field.
+	pendingMessages      []pendingMessage
+	pendingMessagesBytes int
+
+	// foregroundClaimPending marks a job started via StartForegroundForSession:
+	// its terminal result is claimed by the foreground run-loop through
+	// ClaimForegroundResult instead of being delivered as a P1 completion
+	// envelope. recordCompletion suppresses the envelope (and the closing
+	// Notice) while this is set; ClaimForegroundResult clears it after the
+	// run-loop takes the result. Guarded by mu.
+	foregroundClaimPending bool
+
+	// silentCompletion marks a fire-and-forget job (P5 fork) started via
+	// StartSilentForSession: its terminal result is never delivered back
+	// automatically — recordCompletion suppresses the P1 completion envelope
+	// and the closing Notice exactly like foregroundClaimPending, but nobody
+	// claims the result either. The caller polls it with wait (bash_output /
+	// steer remain fully usable). Guarded by mu.
+	silentCompletion bool
 }
 
 // Manager is the session's background-job table. It is safe for concurrent use.
@@ -178,11 +218,50 @@ type Manager struct {
 	teardownGrace  time.Duration
 
 	taskRecorder TaskRecorder // optional task-monitoring lifecycle hook
+
+	// jobDoneObservers are completion observers registered via
+	// WithJobDoneObserver / SetJobDoneObserver. The slice is guarded by mu: it
+	// is snapshotted under mu and each callback runs outside it, so a slow or
+	// panicking observer never holds the manager lock or breaks the job
+	// teardown pipeline.
+	jobDoneObservers []func(id string, st Status, err error)
+}
+
+// Snapshot limits for the structured completion record: the finished job's
+// terminal output is captured once as a bounded, rune-safe snapshot.
+const (
+	resultSnapshotMaxBytes = 4096
+	truncatedMarker        = "[truncated…]"
+	// maxResultsPerDrain caps how many completion envelopes one turn carries;
+	// the rest stay queued for the next turn (partial drain, never dropped).
+	maxResultsPerDrain = 8
+	// maxResultBlockBytes caps the total <background-job-result> block per turn;
+	// overflow drops the oldest envelopes and reports <result-overflow count>.
+	maxResultBlockBytes = 16 * 1024
+
+	// Steer message queue bounds (P3). SendMessageForSession refuses once the
+	// job's pendingMessages hit either bound — rejection, never silent drop.
+	maxPendingMessages      = 16
+	maxPendingMessagesBytes = 8 * 1024
+)
+
+// ErrPendingQueueFull is the sentinel SendMessageForSession returns when the
+// job's pending-message queue is at capacity (16 messages or 8KB total). The
+// caller must surface the rejection to the sender rather than dropping the
+// steer silently.
+var ErrPendingQueueFull = errors.New("jobs: pending message queue full (16 msgs / 8KB)")
+
+// pendingMessage is one steer message queued for the background job's next
+// drain. All fields are guarded by Job.mu.
+type pendingMessage struct {
+	text string
 }
 
 type completion struct {
 	sessionID string
 	text      string
+	result    string // bounded snapshot of the finished job's terminal output
+	envelope  string // pre-rendered <background-job-result> for auto-delivery
 }
 
 // Option configures a Manager.
@@ -242,6 +321,29 @@ func WithTaskRecorder(r TaskRecorder) Option {
 // construction. Controllers that assemble their job manager before the
 // recorder's dependencies (workspace root, session id) are known use this.
 func (m *Manager) SetTaskRecorder(r TaskRecorder) { m.taskRecorder = r }
+
+// WithJobDoneObserver registers a completion observer, called once per
+// terminal job (after the P1 envelope is queued, outside m.mu). It must not
+// call back into the Manager. Multiple observers all run.
+func WithJobDoneObserver(observer func(id string, st Status, err error)) Option {
+	return func(m *Manager) {
+		if observer != nil {
+			m.jobDoneObservers = append(m.jobDoneObservers, observer)
+		}
+	}
+}
+
+// SetJobDoneObserver installs (or clears, with nil) the observer after
+// construction. It replaces any observers registered via WithJobDoneObserver.
+func (m *Manager) SetJobDoneObserver(observer func(id string, st Status, err error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if observer == nil {
+		m.jobDoneObservers = nil
+		return
+	}
+	m.jobDoneObservers = []func(id string, st Status, err error){observer}
+}
 
 // TeardownGrace reports the manager's configured close/destroy wait window.
 func (m *Manager) TeardownGrace() time.Duration { return m.teardownGrace }
@@ -325,6 +427,7 @@ func (w jobWriter) Write(p []byte) (int, error) {
 	w.j.mu.Lock()
 	defer w.j.mu.Unlock()
 	w.j.activityAt = nowMs()
+	w.j.stalled = false // resumed activity clears the stalled marker (P2 review)
 	w.j.tail = appendTail(w.j.tail, p, defaultTailBytes)
 	if w.j.artifactFile != nil {
 		if _, err := w.j.artifactFile.Write(p); err != nil {
@@ -410,6 +513,46 @@ func (m *Manager) startInvalid(parentSession, kind, label string, validationErr 
 // StartForSession launches a job owned by parentSession. Session-scoped readers
 // only see jobs whose owner matches the active session.
 func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.startForSession(parentSession, kind, label, run, false, false)
+}
+
+// StartSilent launches a fire-and-forget job (P5 fork semantics): the terminal
+// result is never delivered back as a P1 completion envelope and no closing
+// Notice is emitted. wait / bash_output / steer remain fully usable — the
+// caller polls the result explicitly. The run func behaves exactly like Start.
+func (m *Manager) StartSilent(kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.StartSilentForSession("", kind, label, run)
+}
+
+// StartSilentForSession is StartSilent for a job owned by parentSession.
+// silent presets the job's silentCompletion flag: while it is set,
+// recordCompletion suppresses the P1 completion envelope and the closing
+// Notice (fire-and-forget — nobody claims the result; the caller polls it
+// with wait), while steer (SendMessageForSession), bash_output, and wait keep
+// working exactly as for a normal job.
+func (m *Manager) StartSilentForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.startForSession(parentSession, kind, label, run, false, true)
+}
+
+// StartForeground launches a foreground task job whose terminal result is
+// claimed by the foreground run-loop (ClaimForegroundResult) instead of being
+// delivered as a P1 <background-job-result> envelope on the next turn. The run
+// func behaves exactly like Start: it streams to the job buffer and may
+// publish evidence via PublishEvidence.
+func (m *Manager) StartForeground(kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.StartForegroundForSession("", kind, label, run)
+}
+
+// StartForegroundForSession is StartForeground for a job owned by parentSession.
+// foreground presets the job's foregroundClaimPending flag: while it is set,
+// recordCompletion suppresses the P1 completion envelope and closing Notice
+// (the foreground run-loop already surfaced the result in its tool card), so
+// the run-loop must claim the result with ClaimForegroundResult after done.
+func (m *Manager) StartForegroundForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.startForSession(parentSession, kind, label, run, true, false)
+}
+
+func (m *Manager) startForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), foreground, silent bool) *Job {
 	parentSession = strings.TrimSpace(parentSession)
 	kind = strings.TrimSpace(kind)
 	if err := validatePathSegment(parentSession, "parentSession"); err != nil {
@@ -425,20 +568,22 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 	startedAt := nowMs()
 	logPath, metaPath, file, artifactErr := m.openArtifactLocked(parentSession, id)
 	j := &Job{
-		ID:               id,
-		Kind:             kind,
-		Label:            label,
-		SessionID:        parentSession,
-		status:           Running,
-		startedAt:        startedAt,
-		activityAt:       startedAt,
-		cancel:           cancel,
-		done:             make(chan struct{}),
-		artifactPath:     logPath,
-		artifactMetaPath: metaPath,
-		artifactFile:     file,
-		artifactComplete: artifactErr == "",
-		artifactErr:      artifactErr,
+		ID:                     id,
+		Kind:                   kind,
+		Label:                  label,
+		SessionID:              parentSession,
+		status:                 Running,
+		startedAt:              startedAt,
+		activityAt:             startedAt,
+		cancel:                 cancel,
+		done:                   make(chan struct{}),
+		artifactPath:           logPath,
+		artifactMetaPath:       metaPath,
+		artifactFile:           file,
+		artifactComplete:       artifactErr == "",
+		artifactErr:            artifactErr,
+		foregroundClaimPending: foreground,
+		silentCompletion:       silent,
 	}
 	ctx = WithSession(ctx, parentSession)
 	ctx = context.WithValue(ctx, jobCtxKey{}, j)
@@ -773,23 +918,119 @@ func (m *Manager) monitorStalled(parentSession string, j *Job) {
 	}
 }
 
-// recordCompletion queues the finished-job summary for DrainCompletedNote and
-// emits a closing Notice (warn for a failure, info otherwise).
+// jobResultTextLocked returns the job's terminal output exactly as Wait/results
+// surfaces it (result, else artifact, else streamed tail, plus artifact error),
+// without consuming readOffset/resultRead or touching the evidence lease.
+// Callers must hold j.mu.
+func jobResultTextLocked(j *Job) string {
+	text := j.result
+	if text == "" && j.artifactPath != "" {
+		text = j.readArtifactAllLocked()
+	}
+	if text == "" {
+		text = string(j.tail)
+	}
+	if j.artifactErr != "" {
+		if text != "" {
+			text += "\n"
+		}
+		text += "job artifact incomplete: " + j.artifactErr
+	}
+	return text
+}
+
+// boundedResult truncates s to at most resultSnapshotMaxBytes bytes on a rune
+// boundary, appending [truncated…] when anything was cut. The marker counts
+// toward the budget, so the returned string never exceeds resultSnapshotMaxBytes.
+func boundedResult(s string) string {
+	if len(s) <= resultSnapshotMaxBytes {
+		return s
+	}
+	keep := resultSnapshotMaxBytes - len(truncatedMarker)
+	if keep <= 0 {
+		return truncatedMarker
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if b.Len()+utf8.RuneLen(r) > keep {
+			break
+		}
+		b.WriteRune(r)
+	}
+	return b.String() + truncatedMarker
+}
+
+// recordCompletion queues the finished-job summary (plus a bounded snapshot of
+// its terminal output) for the next-turn drain and emits a closing Notice (warn
+// for a failure, info otherwise). The snapshot is copied under j.mu and the
+// completion appended under m.mu, in that order, never nested.
 func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Status, err error) {
 	tag := id
 	if label != "" {
 		tag = fmt.Sprintf("%s (%s)", id, label)
 	}
 	parentSession = strings.TrimSpace(parentSession)
+	// Read-only snapshot under j.mu (does not consume readOffset/resultRead and
+	// does not touch the evidence lease), released before the m.mu-exclusive
+	// append so the two critical sections never nest. The envelope is
+	// pre-rendered here (single source of truth) so the drain path never
+	// re-acquires j under m.mu.
+	var result, envelope string
+	droppedMsgs := 0
+	suppressEnvelope := false
+	if j := m.get(parentSession, id); j != nil {
+		j.mu.Lock()
+		suppressEnvelope = j.foregroundClaimPending || j.silentCompletion
+		result = boundedResult(jobResultTextLocked(j))
+		envelope = renderResultEnvelope(j, st, result)
+		// Unconsumed steer messages die with the job; surface the count so the
+		// user knows the guidance never reached the finished agent.
+		droppedMsgs = len(j.pendingMessages)
+		j.pendingMessages = nil
+		j.pendingMessagesBytes = 0
+		j.mu.Unlock()
+	}
+	if suppressEnvelope {
+		// Foreground job (StartForegroundForSession): the foreground run-loop
+		// claims its terminal result via ClaimForegroundResult — it already
+		// surfaced in the run-loop's tool card — so the P1 completion envelope
+		// and the closing Notice are suppressed rather than double-delivered.
+		// Silent job (StartSilentForSession, P5 fork): fire-and-forget — the
+		// result is never delivered back automatically and nobody claims it;
+		// the caller polls it with wait. Both share the same suppression so a
+		// fork's completion never surprises the parent turn. P3 steer messages
+		// still die with the job (no run-loop drains them past completion). The
+		// task lifecycle hook still fires so monitoring sees the terminal
+		// transition exactly like any other job.
+		if !nilutil.IsNil(m.taskRecorder) {
+			m.taskRecorder.RecordDone(id, st, err)
+		}
+		// Symmetric with the non-suppress path below: a session being
+		// destroyed swallows its completion events (the UI is gone), so the
+		// observer must not fire a ghost auto-advance into a closing session.
+		m.mu.Lock()
+		destroying := parentSession != "" && m.destroying[parentSession]
+		m.mu.Unlock()
+		if !destroying {
+			m.fireJobDoneObservers(id, st, err)
+		}
+		return
+	}
 	shouldEmit := false
 	m.mu.Lock()
 	if parentSession != "" && m.destroying[parentSession] {
 		m.mu.Unlock()
 		return
 	}
+	if droppedMsgs > 0 {
+		detail := fmt.Sprintf("%d message(s) queued for %s were dropped on completion", droppedMsgs, id)
+		m.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "background " + kind + " finished: " + id, Detail: detail})
+	}
 	m.completed = append(m.completed, completion{
 		sessionID: parentSession,
 		text:      fmt.Sprintf("%s — %s", tag, st),
+		result:    result,
+		envelope:  envelope,
 	})
 	active := m.active
 	shouldEmit = active == "" || parentSession == "" || active == parentSession
@@ -798,6 +1039,7 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	if !nilutil.IsNil(m.taskRecorder) {
 		m.taskRecorder.RecordDone(id, st, err)
 	}
+	m.fireJobDoneObservers(id, st, err)
 
 	level, text := event.LevelInfo, fmt.Sprintf("background %s finished: %s", kind, id)
 	detail := ""
@@ -813,19 +1055,56 @@ func (m *Manager) recordCompletion(parentSession, id, kind, label string, st Sta
 	}
 }
 
+// fireJobDoneObservers runs every registered completion observer exactly once
+// for a terminal job. The callback slice is snapshotted under m.mu (never
+// held while a callback runs) and each observer is invoked outside any lock
+// with the id/status/error recordCompletion received — handlers must not look
+// the job up again, since its status is still Running at this point. A
+// panicking observer is recovered per-callback so it can neither break the job
+// teardown pipeline nor prevent its siblings from running.
+func (m *Manager) fireJobDoneObservers(id string, st Status, err error) {
+	select {
+	case <-m.root.Done():
+		return // manager closed: no completion events after Close
+	default:
+	}
+	m.mu.Lock()
+	observers := make([]func(id string, st Status, err error), len(m.jobDoneObservers))
+	copy(observers, m.jobDoneObservers)
+	m.mu.Unlock()
+	for _, obs := range observers {
+		if obs == nil {
+			continue
+		}
+		func() {
+			defer func() { _ = recover() }()
+			obs(id, st, err)
+		}()
+	}
+}
+
 func (m *Manager) recordStalled(parentSession, id, kind, label string) {
 	tag := id
 	if label != "" {
 		tag = fmt.Sprintf("%s (%s)", id, label)
 	}
 	parentSession = strings.TrimSpace(parentSession)
+	text := fmt.Sprintf("%s may be stalled — still running after %s with no visible output. Inspect it with wait or bash_output, or stop it with kill_shell.", tag, m.stalledWarning.Round(time.Second))
+	// Same read-only snapshot pattern as recordCompletion: render the running
+	// envelope under j.mu so the drain path never re-acquires j under m.mu.
+	// The stalled warning rides the envelope body so drains stay informational.
+	var envelope string
+	if j := m.get(parentSession, id); j != nil {
+		j.mu.Lock()
+		envelope = renderResultEnvelope(j, Running, text)
+		j.mu.Unlock()
+	}
 	m.mu.Lock()
 	if parentSession != "" && m.destroying[parentSession] {
 		m.mu.Unlock()
 		return
 	}
-	text := fmt.Sprintf("%s may be stalled — still running after %s with no visible output. Inspect it with wait or bash_output, or stop it with kill_shell.", tag, m.stalledWarning.Round(time.Second))
-	m.completed = append(m.completed, completion{sessionID: parentSession, text: text})
+	m.completed = append(m.completed, completion{sessionID: parentSession, text: text, envelope: envelope})
 	active := m.active
 	shouldEmit := active == "" || parentSession == "" || active == parentSession
 	m.mu.Unlock()
@@ -856,6 +1135,38 @@ func (m *Manager) findJobLocked(parentSession, id string) *Job {
 			return j
 		}
 	}
+	return nil
+}
+
+// SendMessageForSession queues a steer message for a Running job owned by
+// parentSession. Find under m.mu (released before enqueue), status+enqueue
+// under j.mu — never nested (same order as recordCompletion). Bounded queue:
+// overflow returns ErrPendingQueueFull (reject, never drop); terminal/unknown
+// jobs, non-task kinds, and empty text are rejected.
+func (m *Manager) SendMessageForSession(parentSession, id, text string) error {
+	text = strings.TrimSpace(text)
+	id = strings.TrimSpace(id)
+	if text == "" {
+		return fmt.Errorf("jobs: cannot send empty message to job %s", id)
+	}
+	j := m.get(parentSession, id)
+	if j == nil {
+		return fmt.Errorf("jobs: unknown job %s", id)
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.status != Running {
+		return fmt.Errorf("jobs: job %s is %s, not running", j.ID, j.status)
+	}
+	if j.Kind != "task" {
+		return fmt.Errorf("jobs: send_message is for task jobs, job %s is %q", j.ID, j.Kind)
+	}
+	if len(j.pendingMessages) >= maxPendingMessages ||
+		j.pendingMessagesBytes+len(text) > maxPendingMessagesBytes {
+		return ErrPendingQueueFull
+	}
+	j.pendingMessages = append(j.pendingMessages, pendingMessage{text: text})
+	j.pendingMessagesBytes += len(text)
 	return nil
 }
 
@@ -1108,6 +1419,44 @@ func (m *Manager) RunningForSession(parentSession string) []View {
 	return out
 }
 
+// JobSnapshotsForSession returns a read-only snapshot of every job owned by
+// parentSession — running, terminal, and tombstoned — for the task panel.
+// Tail uses the non-consuming path (jobResultTextLocked + boundedResult): it
+// never advances readOffset/resultRead or touches the evidence lease. Empty
+// parentSession preserves the legacy unscoped behavior. Lock order: m.mu to
+// collect pointers, released before each j.mu snapshot — never nested.
+func (m *Manager) JobSnapshotsForSession(parentSession string) []JobSnapshot {
+	parentSession = strings.TrimSpace(parentSession)
+	m.mu.Lock()
+	targets := make([]*Job, 0, len(m.jobs))
+	for _, key := range m.order {
+		j := m.jobs[key]
+		if j == nil || !sessionMatches(parentSession, j.SessionID) {
+			continue
+		}
+		targets = append(targets, j)
+	}
+	m.mu.Unlock()
+
+	out := make([]JobSnapshot, 0, len(targets))
+	for _, j := range targets {
+		j.mu.Lock()
+		out = append(out, JobSnapshot{
+			ID:          j.ID,
+			Kind:        j.Kind,
+			Label:       j.Label,
+			Session:     j.SessionID,
+			Status:      string(j.status),
+			Tail:        boundedResult(jobResultTextLocked(j)),
+			Stalled:     j.status == Running && j.stalled, // terminal beats stalled
+			Interrupted: j.status == Interrupted,
+			Activity:    j.activityAt,
+		})
+		j.mu.Unlock()
+	}
+	return out
+}
+
 // ReserveStartForSession atomically reserves capacity for a job start. The
 // caller must release the reservation after StartForSession has registered the
 // job (or when setup fails). Running jobs and in-flight start reservations both
@@ -1179,34 +1528,153 @@ func (m *Manager) DrainCompletedNote() string {
 	return m.DrainCompletedNoteForSession("")
 }
 
-// DrainCompletedNoteForSession drains completion notes for parentSession only.
-// Notes for other sessions stay queued until that session becomes active again.
-// Empty parentSession preserves the legacy unscoped behavior.
+// DrainCompletedNoteForSession returns the <background-job-result> envelopes of
+// jobs finished for parentSession since the last drain; caller wraps in
+// <background-jobs> (input.go keeps container+position, so the preview/strip
+// path is untouched). Partial: maxResultsPerDrain/call (rest queued), block
+// maxResultBlockBytes (older dropped + <result-overflow>); legacy notes fall back.
 func (m *Manager) DrainCompletedNoteForSession(parentSession string) string {
 	m.mu.Lock()
-	var c []string
-	if strings.TrimSpace(parentSession) == "" {
-		for _, item := range m.completed {
-			c = append(c, item.text)
+	var envs []string
+	overflow := 0
+	totalBytes := 0
+	drained := 0
+	remaining := m.completed[:0]
+	ps := strings.TrimSpace(parentSession)
+	for _, item := range m.completed {
+		if ps != "" && item.sessionID != ps {
+			remaining = append(remaining, item)
+			continue
 		}
-		m.completed = nil
-	} else {
-		remaining := m.completed[:0]
-		for _, item := range m.completed {
-			if item.sessionID == parentSession {
-				c = append(c, item.text)
-			} else {
-				remaining = append(remaining, item)
-			}
+		if drained >= maxResultsPerDrain {
+			remaining = append(remaining, item)
+			continue
 		}
-		m.completed = remaining
+		e := item.envelope
+		if e == "" {
+			e = item.text
+		}
+		if totalBytes+len(e) > maxResultBlockBytes {
+			overflow++
+			continue
+		}
+		envs = append(envs, e)
+		totalBytes += len(e)
+		drained++
 	}
+	m.completed = remaining
 	m.mu.Unlock()
-	if len(c) == 0 {
+	if len(envs) == 0 {
+		if overflow > 0 {
+			return fmt.Sprintf("<result-overflow count=\"%d\"/>", overflow)
+		}
 		return ""
 	}
-	return "Background job updates since your last message: " + strings.Join(c, "; ") +
-		". Read their output with bash_output or wait if you still need it."
+	var b strings.Builder
+	b.WriteString(strings.Join(envs, "\n"))
+	if overflow > 0 {
+		b.WriteString(fmt.Sprintf("\n<result-overflow count=\"%d\"/>", overflow))
+	}
+	return b.String()
+}
+
+// xmlEscaper escapes the five characters that could break XML structure
+// (attributes and text alike), so untrusted job output/errors cannot forge a
+// closing tag. Replacer.Replace is safe for concurrent use.
+var xmlEscaper = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	`"`, "&quot;",
+	"'", "&apos;",
+)
+
+// renderResultEnvelope builds one <background-job-result> envelope body from the
+// same bounded-snapshot source recordCompletion uses. st supplies the status
+// (callers pass the terminal status before it is published), so string(st)
+// keeps the "done"/"failed"/"killed" strings stable.
+func renderResultEnvelope(j *Job, st Status, body string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `<background-job-result task_id="%s" status="%s" label="%s" artifact="%s">`+"\n",
+		xmlEscaper.Replace(j.ID), xmlEscaper.Replace(string(st)), xmlEscaper.Replace(j.Label), xmlEscaper.Replace(j.artifactPath))
+	if st == Failed {
+		b.WriteString("<error>")
+		b.WriteString(xmlEscaper.Replace(body))
+		b.WriteString("</error>\n")
+	} else {
+		b.WriteString("<output>")
+		b.WriteString(xmlEscaper.Replace(body))
+		b.WriteString("</output>\n")
+	}
+	b.WriteString("</background-job-result>")
+	return b.String()
+}
+
+// ResultSnapshotForSession renders the <background-job-result> envelope for a
+// job owned by parentSession, read-only: it does not consume readOffset or
+// resultRead and does not touch the evidence lease. st supplies the terminal
+// status (callers pass it before recordCompletion publishes); ok=false if the
+// job is unknown.
+func (m *Manager) ResultSnapshotForSession(parentSession, id string, st Status) (string, bool) {
+	j := m.get(parentSession, id)
+	if j == nil {
+		return "", false
+	}
+	j.mu.Lock()
+	envelope := renderResultEnvelope(j, st, boundedResult(jobResultTextLocked(j)))
+	j.mu.Unlock()
+	return envelope, true
+}
+
+// ForegroundResult is the claimed terminal outcome of a foreground task job
+// (started via StartForegroundForSession).
+type ForegroundResult struct {
+	ID     string
+	Status Status
+	Result string // bounded snapshot, same source as wait/results surfaces
+
+	// Evidence is a lease-ready copy of the job's uncommitted mutation
+	// receipts, taken with the same TryLeaseEvidenceForSession gate the
+	// background collectBackgroundEvidence path uses: Ready is false until the
+	// job is terminal and its run goroutine has flushed PublishEvidence, and
+	// the copy is empty once the evidence has been committed. The foreground
+	// run-loop merges it into the parent turn ledger exactly like
+	// collectBackgroundEvidence does (planmode gate + NoteBackgroundLease +
+	// MergeChild), so a foreground task's mutations pass the same review gates
+	// as a background one.
+	Evidence evidence.ChildEvidenceSummary
+	Ready    bool
+}
+
+// ClaimForegroundResult claims the terminal result of a foreground job after
+// its run goroutine finishes. It returns the bounded result text and terminal
+// status, plus the same provisional evidence lease that collectBackgroundEvidence
+// takes, so the foreground run-loop can bridge the job's mutation receipts into
+// the parent turn ledger. It also clears foregroundClaimPending, so any later
+// completion bookkeeping for this job falls through to the normal path. ok is
+// false when the job is unknown (or the manager has shut down before the job
+// finished); the call blocks until the job reaches a terminal state.
+func (m *Manager) ClaimForegroundResult(parentSession, id string) (ForegroundResult, bool) {
+	parentSession = strings.TrimSpace(parentSession)
+	j := m.get(parentSession, id)
+	if j == nil {
+		return ForegroundResult{}, false
+	}
+	select {
+	case <-j.done:
+	case <-m.root.Done():
+		return ForegroundResult{}, false
+	}
+	// Same ready-gated, non-consuming lease the background collection path
+	// uses: done being closed means PublishEvidence already flushed, so the
+	// receipts below are final for this job until a CommitEvidenceForSession.
+	summary, ready := m.tryLeaseEvidenceForSession(parentSession, id)
+	j.mu.Lock()
+	st := j.status
+	result := boundedResult(jobResultTextLocked(j))
+	j.foregroundClaimPending = false
+	j.mu.Unlock()
+	return ForegroundResult{ID: j.ID, Status: st, Result: result, Evidence: summary, Ready: ready}, true
 }
 
 // SetActiveSession controls which session receives lifecycle notices for jobs
@@ -1956,6 +2424,27 @@ func PublishEvidence(ctx context.Context, summary evidence.ChildEvidenceSummary)
 	j.mu.Lock()
 	j.evidence.Receipts = append(j.evidence.Receipts, summary.Receipts...)
 	j.mu.Unlock()
+}
+
+// DrainPendingMessages pops exactly one pending steer message for the job
+// stamped on ctx — same jobCtxKey pattern as PublishEvidence. It is a pure
+// j.mu short critical section: FIFO, one message per call. ok is false when ctx
+// carries no job (foreground agent / parent / planner contexts are always
+// no-op) or when the queue is empty.
+func DrainPendingMessages(ctx context.Context) (text string, ok bool) {
+	j, _ := ctx.Value(jobCtxKey{}).(*Job)
+	if j == nil {
+		return "", false
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if len(j.pendingMessages) == 0 {
+		return "", false
+	}
+	msg := j.pendingMessages[0]
+	j.pendingMessages = j.pendingMessages[1:]
+	j.pendingMessagesBytes -= len(msg.text)
+	return msg.text, true
 }
 
 // LeaseEvidenceForSession returns a copy of a terminal job's evidence without

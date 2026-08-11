@@ -214,6 +214,60 @@ func TestCancelJobCannotCrossSessionBoundary(t *testing.T) {
 	}
 }
 
+// TestJobSnapshotsAndCancelRespectSessionBoundary locks the P2 session
+// boundary: JobSnapshots() surfaces only this controller's own jobs
+// (parentSessionID), CancelJob refuses sibling-session jobs. StartForSession
+// ids are manager-global, so a byte-identical id across sessions is not
+// constructible; this pins the strongest reachable boundary form.
+func TestJobSnapshotsAndCancelRespectSessionBoundary(t *testing.T) {
+	manager := jobs.NewManager(event.Discard)
+	t.Cleanup(manager.Close)
+	pathA := filepath.Join(t.TempDir(), "session-a.jsonl")
+	pathB := filepath.Join(t.TempDir(), "session-b.jsonl")
+	controllerA := New(Options{Jobs: manager})
+	controllerB := New(Options{Jobs: manager})
+	controllerA.sessionPath = pathA
+	controllerB.sessionPath = pathB
+	sessA := agent.BranchID(pathA)
+	sessB := agent.BranchID(pathB)
+
+	release := make(chan struct{})
+	defer close(release)
+	jobA := manager.StartForSession(sessA, "bash", "a", func(ctx context.Context, _ io.Writer) (string, error) {
+		<-release
+		return "", ctx.Err()
+	})
+	jobB := manager.StartForSession(sessB, "bash", "b", func(ctx context.Context, _ io.Writer) (string, error) {
+		<-release
+		return "", ctx.Err()
+	})
+
+	// Each controller's snapshot contains exactly its own session's job.
+	snapsA := controllerA.JobSnapshots()
+	if len(snapsA) != 1 || snapsA[0].ID != jobA.ID || snapsA[0].Session != sessA {
+		t.Fatalf("controller A snapshots = %+v, want only %s (session %s)", snapsA, jobA.ID, sessA)
+	}
+	snapsB := controllerB.JobSnapshots()
+	if len(snapsB) != 1 || snapsB[0].ID != jobB.ID || snapsB[0].Session != sessB {
+		t.Fatalf("controller B snapshots = %+v, want only %s (session %s)", snapsB, jobB.ID, sessB)
+	}
+
+	// Cancellation cannot cross the session boundary, even on the shared manager.
+	if controllerA.CancelJob(jobB.ID) {
+		t.Fatal("controller A cancelled controller B's job")
+	}
+	if controllerB.CancelJob(jobA.ID) {
+		t.Fatal("controller B cancelled controller A's job")
+	}
+	// Each controller still cancels its own job.
+	if !controllerA.CancelJob(jobA.ID) {
+		t.Fatal("controller A did not cancel its own job")
+	}
+	if !controllerB.CancelJob(jobB.ID) {
+		t.Fatal("controller B did not cancel its own job")
+	}
+}
+
 func (t startBackgroundJobTool) Name() string        { return "start_background_job" }
 func (t startBackgroundJobTool) Description() string { return "start background job" }
 func (t startBackgroundJobTool) Schema() json.RawMessage {

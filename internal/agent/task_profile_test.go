@@ -31,7 +31,7 @@ func TestTaskWriterWithoutPathsClaimsWholeWorkspace(t *testing.T) {
 		WithTranscripts(mustSubagentStore(t), root, "base", "high").
 		WithScheduler(NewSubagentScheduler(6, 3))
 
-	spec, err := task.buildTaskSpec(context.Background(), "rewrite docs", "", "", nil, nil, 0, "", "", "", "", false, false)
+	spec, err := task.buildTaskSpec(context.Background(), "rewrite docs", "", "", nil, nil, 0, "", "", "", "", false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

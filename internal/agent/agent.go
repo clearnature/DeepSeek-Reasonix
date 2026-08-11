@@ -553,20 +553,25 @@ type Agent struct {
 	subagentDepth    int
 	maxSubagentDepth int
 
-	// Context management keeps the canonical transcript immutable and installs
-	// at most one provider-visible checkpoint each time compactRatio is crossed.
-	contextWindow       int
-	compactRatio        float64
-	recentKeep          int
-	archiveDir          string
-	keepPolicy          KeepPolicy
-	compactStuck        bool
-	consecutiveCompacts int
-	sessionPath         string // bound transcript path for projection sidecars
-	workspaceID         string // stable prompt-cache lineage component
-	cacheState          string // legacy resume telemetry; never provider-visible
-	checkpointState     string // none|restored|applied; runtime-only
-	compactionState     CompactionState
+	// Context management: when a turn's prompt nears contextWindow, the older
+	// middle of the session is summarized away, keeping a token-bounded recent
+	// tail verbatim (recentKeep is the message floor) and archiving the originals
+	// under archiveDir. compactStuck latches when compaction can't get the prompt
+	// under the window (consecutiveCompacts crosses the limit), so auto-compaction
+	// pauses instead of looping.
+	contextWindow          int
+	compactRatio           float64
+	autoBackgroundizeAfter time.Duration
+	recentKeep             int
+	archiveDir             string
+	keepPolicy             KeepPolicy
+	compactStuck           bool
+	consecutiveCompacts    int
+	sessionPath            string // bound transcript path for projection sidecars
+	workspaceID            string // stable prompt-cache lineage component
+	cacheState             string // warm/cold/unknown; never provider-visible
+	checkpointState        string // none|restored|applied; runtime-only
+	compactionState        CompactionState
 	// compactionMu guards projection snapshots/install and the in-memory sidecar
 	// generation. Network summarization never runs while this lock is held.
 	compactionMu sync.Mutex
@@ -1177,8 +1182,11 @@ type Options struct {
 	CompactRatio  float64
 	// Deprecated compatibility inputs. New agents ignore these fields; automatic
 	// maintenance is controlled only by CompactRatio.
-	SoftCompactRatio       float64
-	ToolResultSnipRatio    float64
+	SoftCompactRatio    float64
+	ToolResultSnipRatio float64
+	// AutoBackgroundizeAfter auto-converts a long-running foreground task to a
+	// background job after this duration. Zero disables automatic handoff.
+	AutoBackgroundizeAfter time.Duration
 	CompactForceRatio      float64
 	RecentKeep             int
 	ArchiveDir             string
@@ -1376,6 +1384,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 		capabilityAudit:           opts.CapabilityAudit,
 		contextWindow:             opts.ContextWindow,
 		compactRatio:              opts.CompactRatio,
+		autoBackgroundizeAfter:    opts.AutoBackgroundizeAfter,
 		recentKeep:                opts.RecentKeep,
 		archiveDir:                opts.ArchiveDir,
 		keepPolicy:                opts.KeepPolicy,

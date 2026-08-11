@@ -2,6 +2,7 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"runtime/debug"
 
@@ -36,6 +37,11 @@ var runCLI = func(args []string, buildVersion string) int {
 }
 
 func main() {
+	// REASONIX_DEBUG=1 turns on slog debug output (fork prefix bytes, steer
+	// injection, mailbox flush, teammate lifecycle — the P6.1 telemetry gate).
+	if os.Getenv("REASONIX_DEBUG") != "" {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
 	os.Exit(runWithCrashCapture(os.Args[1:], version))
 }
 

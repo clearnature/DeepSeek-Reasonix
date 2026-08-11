@@ -17,6 +17,7 @@ import (
 
 	"reasonix/internal/fileutil"
 	fileencoding "reasonix/internal/fileutil/encoding"
+	"reasonix/internal/provider"
 	"reasonix/internal/store"
 	"reasonix/internal/tool"
 )
@@ -393,6 +394,36 @@ func (s *SubagentStore) PrepareFresh(spec SubagentSpec) (*SubagentRun, error) {
 	now := time.Now().UTC()
 	meta := metaFromSpec(ref, SubagentRunning, now, now, spec)
 	return &SubagentRun{Ref: ref, Session: NewSession(spec.SystemPrompt), Meta: meta, store: s, release: release}, nil
+}
+
+// PrepareParentFork 创建 fork 子代理转录（P5 fork 分支）：新 SubagentRun +
+// 全新 Session，把 captureForkPrefix 捕获的父前缀（父 system + 父已提交历史）
+// 逐条 Add 预填进去。captureForkPrefix 已对 Snapshot 深拷贝，这里的 Add 是
+// 第二次复制边界，fork 子代理与父 Session 之间零共享可变状态；父 Session
+// 本身零改动（红线：fork 捕获零发送、父零改动）。首请求 = 预填前缀 + 新
+// user 消息，前缀与父已发送字节 byte-identical（缓存命中前提，plan §五）。
+func (s *SubagentStore) PrepareParentFork(prefix []provider.Message, spec SubagentSpec) (*SubagentRun, error) {
+	if s == nil {
+		return nil, fmt.Errorf("subagent transcript store is required")
+	}
+	if err := requireParentSession(spec); err != nil {
+		return nil, err
+	}
+	ref, err := s.newRef()
+	if err != nil {
+		return nil, err
+	}
+	release, err := s.lock(ref)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	meta := metaFromSpec(ref, SubagentRunning, now, now, spec)
+	sess := NewSession("")
+	for _, m := range prefix {
+		sess.Add(m)
+	}
+	return &SubagentRun{Ref: ref, Session: sess, Meta: meta, store: s, release: release}, nil
 }
 
 func (s *SubagentStore) PrepareContinue(ref string, spec SubagentSpec) (*SubagentRun, error) {
