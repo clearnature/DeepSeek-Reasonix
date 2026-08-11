@@ -4,7 +4,7 @@
     "commented-code": 1,
     "complexity": 2128,
     "essay": 4178,
-    "file-size": 110566,
+    "file-size": 110570,
     "function-size": 9284,
     "layering": 2,
     "marker": 0,
@@ -586,7 +586,7 @@
     "internal/agent/run_loop.go": {
       "complexity": 1,
       "essay": 32,
-      "file-size": 181
+      "file-size": 185
     },
     "internal/agent/sampling_request.go": {
       "essay": 3
