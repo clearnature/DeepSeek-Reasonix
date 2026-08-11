@@ -434,6 +434,11 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	}
 	tm.State = TeammateRunning
 	ref, toolset := tm.Ref, append([]string(nil), tm.ToolSet...)
+	// Snapshot write-posture fields under the lock (P13 race audit): another
+	// goroutine may GrantWorktree/SetWorkspaceRoot concurrently — reading
+	// them after Unlock is a data race.
+	tmWorktree := tm.Worktree
+	wsRoot := ts.workspaceRoot
 	ts.mu.Unlock()
 
 	// P6.2 teammate direct-connect: stamp the mailbox so the teammate sub-agent
@@ -452,18 +457,28 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	// physically isolated instead of serialized.
 	grant := CapabilityGrant{CallTools: toolset}
 	paths := ts.grantedPaths(name)
-	if tm.Worktree && ts.workspaceRoot != "" && paths.Empty() {
-		wt, _, err := createTeammateWorktree(ctx, ts.workspaceRoot, name)
-		if err != nil {
-			ts.mu.Lock()
-			tm.State = TeammateIdle
-			ts.mu.Unlock()
-			return "", err
-		}
-		paths = WritePathSet{Paths: []string{wt}}
+	if tmWorktree && wsRoot != "" && paths.Empty() {
+		// TOCTOU: a concurrent Assign may have created the worktree between
+		// the snapshot and here — re-check the grant under the lock before
+		// creating (createTeammateWorktree stays idempotent as a fallback).
 		ts.mu.Lock()
-		ts.grants[name] = paths
-		ts.mu.Unlock()
+		if p2 := ts.grants[name]; !p2.Empty() {
+			paths = p2
+			ts.mu.Unlock()
+		} else {
+			ts.mu.Unlock()
+			wt, _, err := createTeammateWorktree(ctx, wsRoot, name)
+			if err != nil {
+				ts.mu.Lock()
+				tm.State = TeammateIdle
+				ts.mu.Unlock()
+				return "", err
+			}
+			paths = WritePathSet{Paths: []string{wt}}
+			ts.mu.Lock()
+			ts.grants[name] = paths
+			ts.mu.Unlock()
+		}
 	}
 	if !paths.Empty() {
 		grant.WritePaths = paths

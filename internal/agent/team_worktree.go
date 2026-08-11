@@ -50,6 +50,11 @@ func createTeammateWorktree(ctx context.Context, workspaceRoot, name string) (pa
 	// missing refs.
 	cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
+		// TOCTOU: a concurrent creator may have won the race — if the
+		// worktree now exists, treat it as our own (idempotent resume).
+		if _, statErr := os.Stat(filepath.Join(path, ".git")); statErr == nil {
+			return path, branch, nil
+		}
 		return "", "", fmt.Errorf("create worktree for %q: %w: %s", name, err, strings.TrimSpace(string(out)))
 	}
 	return path, branch, nil
