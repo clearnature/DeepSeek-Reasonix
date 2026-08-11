@@ -6681,7 +6681,21 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			ctx = jobs.WithSession(ctx, c.parentSessionID())
 		}
 		ctx = agent.WithParentSession(ctx, c.parentSessionID())
-		jobID, err := c.teammates.Assign(ctx, name, task)
+		// Dependency-graph surface (P6.1): a trailing " depends:<id1>,<id2>"
+		// clause orders this assignment after the listed jobs reach a
+		// terminal state — coordinator pipelines use it to serialize
+		// architect -> coder -> guard.
+		var dependsOn []string
+		if i := strings.Index(task, " depends:"); i >= 0 {
+			deps := task[i+len(" depends:"):]
+			task = strings.TrimSpace(task[:i])
+			for _, d := range strings.Split(deps, ",") {
+				if d = strings.TrimSpace(d); d != "" {
+					dependsOn = append(dependsOn, d)
+				}
+			}
+		}
+		jobID, err := c.teammates.Assign(ctx, name, task, dependsOn...)
 		if err != nil {
 			c.notice("team-add: " + err.Error())
 			return
