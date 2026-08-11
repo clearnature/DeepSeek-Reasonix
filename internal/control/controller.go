@@ -1551,28 +1551,11 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 			break
 		}
 		go func() {
-			start := time.Now()
-			out, meta, err := builtin.RetrieveInfoWithMeta(context.Background(), query)
-			ms := time.Since(start).Milliseconds()
+			out, err := builtin.RetrieveInfoQuery(context.Background(), query)
 			if err != nil {
-				c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "retrieval telemetry",
-					Detail: fmt.Sprintf("query=%s mode=error ms=%d", query, ms)})
 				c.notice("retrieve_info failed: " + err.Error())
 				return
 			}
-			mode := "miss"
-			if meta.FromCache {
-				mode = "hit"
-			}
-			if meta.StaleServed {
-				mode = "stale"
-			}
-			if meta.WebBlocked {
-				mode = "blocked"
-			}
-			c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "retrieval telemetry",
-				Detail: fmt.Sprintf("query=%s mode=%s api=%t tier=%s ms=%d chars=%d",
-					query, mode, meta.APIUsed, meta.Tier, ms, len(out))})
 			c.noticeDetail("retrieve_info: "+query, out)
 		}()
 	case trimmed == "/context":
@@ -6562,6 +6545,10 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 		name, task, _ := strings.Cut(rest, " ")
 		if strings.TrimSpace(task) == "" {
 			c.notice("usage: /team-add <name> <task...>")
+			return
+		}
+		if c.parentSessionID() == "" {
+			c.notice("team-add: no active session — the teammate fork needs a leader transcript to inherit. Start one with /new (or open/resume a session) first.")
 			return
 		}
 		ctx := context.Background()
