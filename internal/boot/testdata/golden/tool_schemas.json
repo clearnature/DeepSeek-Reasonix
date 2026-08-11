@@ -1649,12 +1649,12 @@
   },
   {
     "Name": "team_message",
-    "Description": "Deliver mail to another teammate's inbox (teammate-to-teammate). The recipient flushes it into its next assignment's steer queue.",
+    "Description": "Deliver mail to another teammate's inbox (teammate-to-teammate). The recipient flushes it into its next assignment's steer queue. Target \"leader\" is reserved (P8): it routes the mail to the leader's inbox.",
     "ReadOnly": false,
     "Schema": {
       "properties": {
         "target": {
-          "description": "Teammate name to deliver the mail to.",
+          "description": "Teammate name to deliver the mail to, or the reserved target \"leader\" to route it to the leader's inbox (P8).",
           "type": "string"
         },
         "text": {
