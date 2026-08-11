@@ -16,6 +16,9 @@
 | `bug-fixer.md` | `fixer` | Bug 修复专家（技能转化示例） |
 | `creator.md` | `creator` | 创造者（创作域/创造智能——覆盖未服务坐标区） |
 | `coordinator.md` | `coordinator` | 协调者（关系/依赖图协作拓扑） |
+| `data-scientist.md` | `datascientist` | 数据科学家（数据域/创造智能） |
+| `architect.md` | `architect` | 系统架构师（代码域/创造智能） |
+| `critic.md` | `critic` | 批评家（创作域/推理智能） |
 | `task-classifier.md` | — | 任务分类器 + 复杂度→资源映射（系统文档） |
 | `ga-iteration.md` | — | 遗传算法迭代框架（系统文档） |
 | `metrics.md` | — | 衡量标准体系（系统文档） |
