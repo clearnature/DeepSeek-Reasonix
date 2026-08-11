@@ -411,7 +411,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	if !ok {
 		return CompactionNoop, nil
 	}
-	_, _, kept, fold := a.partitionFoldForProjection(msgs[head:start])
+	kept, fold, retention := a.partitionFoldForProjection(msgs[head:start])
 	if len(fold) == 0 || (!force && !foldEconomics(fold)) {
 		return CompactionNoop, nil
 	}
@@ -459,6 +459,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	fixedPrefixTokens = a.estimatedPromptTokens(msgs[:head])
 	tele.ProjectionTokens = projTokens
 	tele.Status = CompactionStatusInstalled
+	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
 	a.emitCompactionTelemetry(tele)
 	if err := a.acceptCheckpointCandidate(trigger, force, sourceTokens, projTokens, fixedPrefixTokens); err != nil {
 		a.emitCompactionAborted(trigger)
@@ -479,6 +480,8 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	a.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(fold), Summary: summary,
 	}})
+	// Only once the checkpoint is committed: a rejected candidate folded nothing.
+	a.noticeDroppedUserTurns(retention)
 	return CompactionInstalled, nil
 }
 
@@ -561,8 +564,8 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force bool) (head, start
 	return head, start, start > head
 }
 
-func (a *Agent) partitionFoldForProjection(region []provider.Message) (early, carried, kept, fold []provider.Message) {
-	policyKeep := a.keepIndexes(region)
+func (a *Agent) partitionFoldForProjection(region []provider.Message) (kept, fold []provider.Message, retention userTurnRetention) {
+	policyKeep, retention := a.keepIndexes(region)
 	for i, m := range region {
 		switch {
 		case m.LocalOnly: // display-only output never reaches a provider
@@ -575,7 +578,7 @@ func (a *Agent) partitionFoldForProjection(region []provider.Message) (early, ca
 			fold = append(fold, m)
 		}
 	}
-	return nil, nil, kept, fold
+	return kept, fold, retention
 }
 
 // runCompactionSummary uses the single local summarizer path for every provider.
