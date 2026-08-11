@@ -6551,9 +6551,20 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 		// Syntax: /team-grant <name> <path...> — issue a D1 write token: the
 		// teammate becomes a restricted writer confined to the granted paths
 		// (precise write claims, no whole-workspace serialization).
+		//   /team-grant <name> worktree — branch-parallel mode: the teammate
+		// gets a dedicated git worktree (team-<name> branch) on first
+		// assignment; the worktree path becomes its write token.
 		fields := strings.Fields(rest)
 		if len(fields) < 2 {
-			c.notice("usage: /team-grant <name> <path...>")
+			c.notice("usage: /team-grant <name> <path...> | <name> worktree")
+			return
+		}
+		if fields[1] == "worktree" {
+			if err := c.teammates.GrantWorktree(fields[0]); err != nil {
+				c.notice("team-grant: " + err.Error())
+				return
+			}
+			c.notice(fmt.Sprintf("teammate %q granted worktree mode — dedicated branch on next assignment", fields[0]))
 			return
 		}
 		ws, err := agent.NormalizeWritePaths(c.workspaceRoot, fields[1:])

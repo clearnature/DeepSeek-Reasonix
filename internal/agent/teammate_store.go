@@ -33,6 +33,10 @@ type Teammate struct {
 	// Writable opts this teammate's fork executions into a writable gate
 	// (P6.1 enhancement 1). Default false keeps the P5 read-only fork.
 	Writable bool
+	// Worktree marks a D1 branch-parallel teammate: its fork runs inside a
+	// dedicated git worktree (team-<name> branch) so parallel writers never
+	// touch the main checkout. The worktree path doubles as the write token.
+	Worktree bool
 }
 
 // TeammateState is the assignment lifecycle of a teammate.
@@ -91,6 +95,9 @@ type TeammateStore struct {
 	// with precise path claims (no whole-workspace serialization) and tools
 	// bound to the granted paths. Empty slice = no token (read-only default).
 	grants map[string]WritePathSet
+	// workspaceRoot is the git workspace teammates branch from (D1 worktree
+	// isolation); empty disables worktree mode (ephemeral/test stores).
+	workspaceRoot string
 	// leader is the first fork source observed from an Assign context. It is
 	// the minimal template auto-advance needs to fork a first-round teammate
 	// (its rebuilt ctx carries no turn context). Set once, never the ctx object
@@ -238,6 +245,15 @@ func (ts *TeammateStore) SetSink(sink event.Sink) {
 	ts.sink = sink
 }
 
+// SetWorkspaceRoot enables D1 worktree isolation: with a git workspace root,
+// worktree-granted teammates get a dedicated worktree (team-<name> branch)
+// instead of writing into the main checkout.
+func (ts *TeammateStore) SetWorkspaceRoot(root string) {
+	ts.mu.Lock()
+	ts.workspaceRoot = root
+	ts.mu.Unlock()
+}
+
 // Grant issues a write token to a teammate: the granted workspace paths
 // become the teammate's restricted write scope (D1). A granted teammate is
 // no longer read-only — its fork runs with WritePathSet{Paths} so tools are
@@ -252,6 +268,24 @@ func (ts *TeammateStore) Grant(name string, paths WritePathSet) error {
 		return fmt.Errorf("teammate %q not found", name)
 	}
 	ts.grants[name] = paths
+	return nil
+}
+
+// GrantWorktree marks a teammate for D1 branch-parallel mode: on its first
+// assignment the store creates a dedicated git worktree (team-<name> branch)
+// whose path becomes the write token. Requires a workspace root.
+func (ts *TeammateStore) GrantWorktree(name string) error {
+	name = strings.TrimSpace(name)
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	tm, ok := ts.teammates[name]
+	if !ok {
+		return fmt.Errorf("teammate %q not found", name)
+	}
+	if ts.workspaceRoot == "" {
+		return fmt.Errorf("worktree mode needs a workspace root (SetWorkspaceRoot)")
+	}
+	tm.Worktree = true
 	return nil
 }
 
@@ -324,8 +358,26 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	// token paths as precise write claims so tools bind to them and the fork
 	// avoids the whole-workspace claim (writer serialization). ReadOnly stays
 	// false only via the token; ungranted read-only teammates stay read-only.
+	// D1 worktree: a worktree-granted teammate gets a dedicated checkout on
+	// first fork (fail-closed — no silent fallback to the shared checkout),
+	// and the worktree path is the write token, so parallel writers are
+	// physically isolated instead of serialized.
 	grant := CapabilityGrant{CallTools: toolset}
-	if paths := ts.grantedPaths(name); !paths.Empty() {
+	paths := ts.grantedPaths(name)
+	if tm.Worktree && ts.workspaceRoot != "" && paths.Empty() {
+		wt, _, err := createTeammateWorktree(ctx, ts.workspaceRoot, name)
+		if err != nil {
+			ts.mu.Lock()
+			tm.State = TeammateIdle
+			ts.mu.Unlock()
+			return "", err
+		}
+		paths = WritePathSet{Paths: []string{wt}}
+		ts.mu.Lock()
+		ts.grants[name] = paths
+		ts.mu.Unlock()
+	}
+	if !paths.Empty() {
 		grant.WritePaths = paths
 		grant.ReadOnly = false
 	}
@@ -741,6 +793,13 @@ func (ts *TeammateStore) Remove(name string) error {
 
 	if jobID != "" && ts.jm != nil {
 		ts.jm.Kill(jobID)
+	}
+	// D1 worktree cleanup: remove the dedicated checkout if the teammate had
+	// one. Errors are logged, not fatal — the member is already gone.
+	if tm.Worktree && ts.workspaceRoot != "" {
+		if err := removeTeammateWorktree(context.Background(), ts.workspaceRoot, name); err != nil {
+			slog.Warn("team worktree cleanup", "teammate", name, "err", err)
+		}
 	}
 	slog.Info("team teammate removed", "name", name, "killed_job", jobID)
 	return nil

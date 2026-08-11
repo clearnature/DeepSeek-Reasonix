@@ -1931,6 +1931,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// completion actually has an inbox to count.
 	inboxRoot := filepath.Join(sessionDir, "team-inbox")
 	teammates := agent.NewTeammateStore(taskTool, jm, inboxRoot)
+	teammates.SetWorkspaceRoot(opts.WorkspaceRoot)
 	teammates.SetSink(sink)
 
 	ctrlOpts := control.Options{
