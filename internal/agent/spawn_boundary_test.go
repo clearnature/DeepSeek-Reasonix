@@ -34,7 +34,9 @@ func TestChildConstructionForksStayEnumerated(t *testing.T) {
 	var found []string
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
-			if d != nil && d.IsDir() && (d.Name() == ".git" || d.Name() == "node_modules" || d.Name() == ".claude") {
+			if d != nil && d.IsDir() && (d.Name() == ".git" || d.Name() == "node_modules" || d.Name() == ".claude" || d.Name() == ".reasonix") {
+				// .reasonix holds runtime state (team worktrees, mailboxes);
+				// it is gitignored and must not pollute this scan.
 				return filepath.SkipDir
 			}
 			return nil
