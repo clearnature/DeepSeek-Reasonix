@@ -337,9 +337,19 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 		// Structured output: Responses text.format. MiMo/DashScope/OpenAI
 		// all accept {"text":{"format":{"type":"json_object"}}}. The model
 		// only emits JSON when the instructions also demand it.
-		body["text"] = map[string]any{
-			"format": map[string]any{"type": req.ResponseFormat.Type},
+		// json_schema formats additionally require the schema name on the
+		// wire (DeepSeek rejects a missing name with 400) — send name/schema
+		// only for that shape so json_object stays byte-stable.
+		format := map[string]any{"type": req.ResponseFormat.Type}
+		if req.ResponseFormat.Type == "json_schema" {
+			if req.ResponseFormat.Name != "" {
+				format["name"] = req.ResponseFormat.Name
+			}
+			if len(req.ResponseFormat.Schema) > 0 {
+				format["schema"] = json.RawMessage(req.ResponseFormat.Schema)
+			}
 		}
+		body["text"] = map[string]any{"format": format}
 	}
 	if req.Temperature != nil && !c.caps.ignoresTemperature {
 		body["temperature"] = *req.Temperature

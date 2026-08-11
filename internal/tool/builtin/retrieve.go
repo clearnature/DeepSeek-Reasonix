@@ -26,37 +26,6 @@ func init() { tool.RegisterBuiltin(retrieveInfo{}) }
 // returns a needs_grant notice instead (§9 no-silent-web guardrail).
 type retrieveInfo struct{}
 
-// RetrieveInfoQuery runs the retrieve_info tool on query and returns its
-// rendered answer — the same path the agent tool executes. Exported so slash
-// commands (/retrieve_info) and other hosts can invoke retrieval without a
-// model round-trip.
-func RetrieveInfoQuery(ctx context.Context, query string) (string, error) {
-	text, _, err := RetrieveInfoWithMeta(ctx, query)
-	return text, err
-}
-
-// RetrievalMeta carries the structured outcome of one retrieval pass for
-// telemetry: how it resolved (cache hit / fresh fetch / stale / blocked) and
-// the API usage, so stats rows can distinguish zero-cost hits from paid calls.
-type RetrievalMeta struct {
-	FromCache   bool
-	APIUsed     bool
-	StaleServed bool
-	WebBlocked  bool
-	Tier        string
-}
-
-// RetrieveInfoWithMeta runs the retrieval pipeline and returns both the
-// rendered answer and the structured outcome. Exported for slash commands and
-// telemetry wiring.
-func RetrieveInfoWithMeta(ctx context.Context, query string) (string, RetrievalMeta, error) {
-	args, err := json.Marshal(map[string]string{"query": query})
-	if err != nil {
-		return "", RetrievalMeta{}, err
-	}
-	return (retrieveInfo{}).executeWithMeta(ctx, args)
-}
-
 func (retrieveInfo) Name() string { return "retrieve_info" }
 
 func (retrieveInfo) Description() string {
@@ -94,23 +63,6 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 	if p.Query == "" {
 		return "", fmt.Errorf("retrieve_info: query is required")
 	}
-	text, _, err := (retrieveInfo{}).executeWithMeta(ctx, json.RawMessage(args))
-	return text, err
-}
-
-// executeWithMeta is the shared retrieval body: it runs the closed loop and
-// returns both the rendered answer and the structured outcome for telemetry.
-func (retrieveInfo) executeWithMeta(ctx context.Context, args json.RawMessage) (string, RetrievalMeta, error) {
-	var p struct {
-		Query string `json:"query"`
-	}
-	if err := json.Unmarshal(args, &p); err != nil {
-		return "", RetrievalMeta{}, fmt.Errorf("retrieve_info: parse args: %w", err)
-	}
-	p.Query = strings.TrimSpace(p.Query)
-	if p.Query == "" {
-		return "", RetrievalMeta{}, fmt.Errorf("retrieve_info: query is required")
-	}
 
 	// 会话策略：配置了 deepseek-responses 即视为会话级联网授权（管道复用，
 	// 不要求用户单独提供 API）。冷却/频率由 DynamicCooldown 控制。
@@ -125,24 +77,22 @@ func (retrieveInfo) executeWithMeta(ctx context.Context, args json.RawMessage) (
 		// 未配置 deepseek-responses / 凭据不可用 → 授权提示而非报错；
 		// 其余管道错误原样返回。
 		if errors.Is(err, errNoResponsesProvider) {
-			return blockedNotice(), RetrievalMeta{WebBlocked: true}, nil
+			return blockedNotice(), nil
 		}
-		return "", RetrievalMeta{APIUsed: res != nil && res.APIUsed}, err
+		return "", err
 	}
 
 	if res.Entry == nil {
 		if res.WebBlocked {
-			return blockedNotice(), RetrievalMeta{WebBlocked: true, APIUsed: res.APIUsed}, nil
+			return blockedNotice(), nil
 		}
-		return "本地知识缓存未命中。", RetrievalMeta{FromCache: true, Tier: string(res.Tier)}, nil
+		return "本地知识缓存未命中。", nil
 	}
 
 	if res.StaleServed {
-		meta := RetrievalMeta{StaleServed: true, FromCache: true, APIUsed: res.APIUsed, Tier: string(res.Tier)}
-		return "⚠️ " + p.Query + "\n\n（缓存信息可能过期，标注见下文）\n" + res.Entry.AnswerSummary, meta, nil
+		return "⚠️ " + p.Query + "\n\n（缓存信息可能过期，标注见下文）\n" + res.Entry.AnswerSummary, nil
 	}
 
-	meta := RetrievalMeta{FromCache: res.FromCache, APIUsed: res.APIUsed, Tier: string(res.Tier)}
 	var b strings.Builder
 	if res.FromCache {
 		b.WriteString("【本地知识缓存命中】\n\n")
@@ -169,7 +119,7 @@ func (retrieveInfo) executeWithMeta(ctx context.Context, args json.RawMessage) (
 	if res.Entry.TimeSensitive && res.Entry.FreshUntil.After(res.Entry.CreatedAt) {
 		fmt.Fprintf(&b, "\n（时效信息，截至 %s，如需最新请联网刷新）", res.Entry.FreshUntil.Format("2006-01-02 15:04"))
 	}
-	return b.String(), meta, nil
+	return b.String(), nil
 }
 
 func blockedNotice() string {
@@ -183,15 +133,6 @@ var errNoResponsesProvider = errors.New("deepseek-responses provider not configu
 // systemFetchTestHook lets tests replace the real network pipeline. The zero
 // value uses systemFetch (real deepseek-responses pipeline).
 var systemFetchTestHook responses.FetchFunc
-
-// SetSystemFetchTestHook replaces the retrieval network pipeline with hook
-// (nil restores the real one). Test-only: lets controller/slash-command tests
-// exercise /retrieve_info without a live provider.
-func SetSystemFetchTestHook(hook responses.FetchFunc) responses.FetchFunc {
-	prev := systemFetchTestHook
-	systemFetchTestHook = hook
-	return prev
-}
 
 // retrieveFetch is the fetch indirection used by Execute: tests inject a
 // fake via systemFetchTestHook, production runs the system pipeline.
@@ -328,4 +269,26 @@ func firstLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// RetrieveInfoQuery runs the retrieve_info tool on query and returns its
+// rendered answer — the same path the agent tool executes. Exported so slash
+// commands (/retrieve_info) and hosts can invoke retrieval without a model
+// round-trip; the retrieval pipeline is the system's deepseek-responses
+// channel (config provider, shared credentials) — no separate API key.
+func RetrieveInfoQuery(ctx context.Context, query string) (string, error) {
+	args, err := json.Marshal(map[string]string{"query": query})
+	if err != nil {
+		return "", err
+	}
+	return (retrieveInfo{}).Execute(ctx, args)
+}
+
+// SetSystemFetchTestHook replaces the retrieval network pipeline with hook
+// (nil restores the real one). Test-only: lets cross-package tests exercise
+// retrieval without a live provider.
+func SetSystemFetchTestHook(hook responses.FetchFunc) responses.FetchFunc {
+	prev := systemFetchTestHook
+	systemFetchTestHook = hook
+	return prev
 }
