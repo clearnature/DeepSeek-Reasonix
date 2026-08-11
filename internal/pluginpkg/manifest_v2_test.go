@@ -108,6 +108,7 @@ func TestMigrateLegacyManifestToV2(t *testing.T) {
 	legacy := `{
   "name": "oldplug",
   "version": "1.2.3",
+  "agents": ["agents"],
   "skills": []
 }`
 	if err := os.WriteFile(filepath.Join(root, NativeManifest), []byte(legacy), 0o644); err != nil {
@@ -133,6 +134,12 @@ func TestMigrateLegacyManifestToV2(t *testing.T) {
 	}
 	if got.Manifest.APIVersion != ManifestAPIVersionV2 || got.Manifest.Name != "oldplug" {
 		t.Fatalf("migrated = %+v", got.Manifest)
+	}
+	// Legacy v1 agents must survive the migration: the v1 native parser
+	// previously dropped the top-level agents field, so migrate lost the
+	// agent directory declarations (regression: computer-use plugin).
+	if len(got.Manifest.Agents) != 1 || got.Manifest.Agents[0] != "agents" {
+		t.Fatalf("migrated agents = %v, want [agents]", got.Manifest.Agents)
 	}
 }
 

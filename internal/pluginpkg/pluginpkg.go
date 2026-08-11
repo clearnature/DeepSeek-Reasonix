@@ -439,6 +439,7 @@ func parseNativeLegacy(b []byte, root string) (Package, []string, error) {
 		Description string               `json:"description"`
 		Homepage    string               `json:"homepage"`
 		Repository  string               `json:"repository"`
+		Agents      json.RawMessage      `json:"agents"`
 		Skills      json.RawMessage      `json:"skills"`
 		Commands    json.RawMessage      `json:"commands"`
 		Hooks       map[string][]Hook    `json:"hooks"`
@@ -455,12 +456,17 @@ func parseNativeLegacy(b []byte, root string) (Package, []string, error) {
 	if err != nil {
 		return Package{}, nil, err
 	}
+	agents, err := parseV1PathList(raw.Agents, "agents")
+	if err != nil {
+		return Package{}, nil, err
+	}
 	manifest := Manifest{
 		Name:        strings.TrimSpace(raw.Name),
 		Version:     strings.TrimSpace(raw.Version),
 		Description: strings.TrimSpace(raw.Description),
 		Homepage:    strings.TrimSpace(raw.Homepage),
 		Repository:  strings.TrimSpace(raw.Repository),
+		Agents:      agents,
 		Skills:      skills,
 		Commands:    commands,
 		Hooks:       normalizeHooks(raw.Hooks),
