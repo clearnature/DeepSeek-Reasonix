@@ -37,7 +37,7 @@ func TestCompactionNoopEmitsTelemetry(t *testing.T) {
 		{Role: provider.RoleSystem, Content: "sys"},
 		{Role: provider.RoleUser, Content: "hi"},
 	}}
-	outcome, err := a.compactToProjection(context.Background(), "manual", "", true)
+	outcome, err := a.compactToProjection(context.Background(), "manual", "", true, false)
 	if err != nil {
 		t.Fatalf("compactToProjection: %v", err)
 	}

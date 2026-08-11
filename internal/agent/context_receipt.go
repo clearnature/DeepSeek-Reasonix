@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"reasonix/internal/event"
@@ -134,6 +135,11 @@ func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
 		// Errors must reach the stats file too: the Recorder persists the
 		// "compaction failed" notice as a row with err_type, so a failed pass
 		// is diagnosable from stats alone.
+		// A degraded fold carries the summarizer's error but still freed the
+		// context, so it is a notice with a cause rather than a failure.
+		if t.Mode != CompactionModeDegraded {
+			slog.Warn("agent: compaction failed", "detail", detail+" err_type="+t.Error)
+		}
 		level = event.LevelWarn
 		text = "compaction failed"
 		detail += " err_type=" + t.Error

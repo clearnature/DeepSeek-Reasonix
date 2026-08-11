@@ -36,7 +36,7 @@ func TestFitFoldToWindowKeepsFoldBounded(t *testing.T) {
 		sink:              event.Discard,
 	}
 	a.session = &Session{Messages: msgs}
-	outcome, err := a.compactToProjection(t.Context(), "manual", "", true)
+	outcome, err := a.compactToProjection(t.Context(), "manual", "", true, false)
 	if err != nil {
 		t.Fatalf("manual compact: %v", err)
 	}

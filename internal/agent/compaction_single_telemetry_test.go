@@ -29,7 +29,7 @@ func TestCompactToProjectionEmitsSingleTelemetry(t *testing.T) {
 	a := New(prov, tool.NewRegistry(), sess, Options{ArchiveDir: t.TempDir()}, event.Discard)
 	a.sink = sink
 
-	outcome, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", true)
+	outcome, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", true, false)
 	if err != nil {
 		t.Fatalf("compactToProjection: %v", err)
 	}

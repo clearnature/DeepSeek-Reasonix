@@ -49,7 +49,7 @@ func builtinSlashSpecs() []builtinSlashSpec {
 		{name: "/team-ask", insert: "/team-ask ", hint: i18n.M.CmdTeamAsk, showInHelp: true},
 		{name: "/team-spawn", insert: "/team-spawn ", hint: i18n.M.CmdTeamSpawn, showInHelp: true},
 		{name: "/team-broadcast", insert: "/team-broadcast ", hint: i18n.M.CmdTeamBroadcast, showInHelp: true},
-		{name: "/work-mode", aliases: []string{"/profile"}, insert: "/work-mode ", hint: i18n.M.CmdWorkMode, descend: true, showInHelp: true},
+		{name: "/preset", aliases: []string{"/work-mode", "/profile"}, insert: "/preset ", hint: i18n.M.CmdWorkMode, descend: true, showInHelp: true},
 		{name: "/provider", insert: "/provider", hint: i18n.M.CmdProvider, descend: true, showInHelp: true},
 		{name: "/skills", aliases: []string{"/skill"}, insert: "/skills", hint: i18n.M.CmdSkill, showInHelp: true},
 		{name: "/reload-cmd", insert: "/reload-cmd", hint: i18n.M.CmdReloadCmd, showInHelp: true},

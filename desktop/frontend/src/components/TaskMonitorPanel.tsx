@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ChevronDown,
@@ -12,14 +12,61 @@ import {
 } from "lucide-react";
 import { app } from "../lib/bridge";
 import { useT } from "../lib/i18n";
-import type { JobPanelView, TaskEvent, TaskSnapshot } from "../lib/types";
+import type { TaskEvent, TaskSnapshot } from "../lib/types";
+
+type CatalogTask = TaskSnapshot & { __projectKey: string; __projectLabel: string; __catalogKey: string };
+
+function hasTaskCatalogBinding(): boolean {
+  const bound = (window as unknown as { go?: { main?: { App?: { ListTaskPage?: unknown } } } }).go?.main?.App?.ListTaskPage;
+  return typeof bound === "function";
+}
 
 // --- helpers ---
 
 type TaskTimerSnapshot = TaskSnapshot & { runtime_lease_until?: string };
 
+const STATE_CONFIG: Record<
+  string,
+  { key: "queued" | "running" | "waiting" | "succeeded" | "failed" | "cancelled" | "stale"; color: string; dot: string }
+> = {
+  queued: { key: "queued", color: "#6b7280", dot: "⚪" },
+  running: { key: "running", color: "#3b82f6", dot: "🔵" },
+  waiting: { key: "waiting", color: "#f59e0b", dot: "🟡" },
+  succeeded: { key: "succeeded", color: "#22c55e", dot: "🟢" },
+  failed: { key: "failed", color: "#ef4444", dot: "🔴" },
+  cancelled: { key: "cancelled", color: "#9ca3af", dot: "⏹️" },
+  stale: { key: "stale", color: "#d4d4d8", dot: "⬜" },
+};
+
+function stateConfig(state: string, t: ReturnType<typeof useT>) {
+  const config = STATE_CONFIG[state];
+  return config
+    ? { ...config, label: t(`task.state.${config.key}` as never) }
+    : { label: state, color: "#6b7280", dot: "❓" };
+}
+
+function runtimeConfig(state: string | undefined, t: ReturnType<typeof useT>) {
+  switch (state) {
+    case "alive":
+      return { label: t("task.runtime.live"), color: "#22c55e" };
+    case "exited":
+      return { label: t("task.runtime.exited"), color: "#9ca3af" };
+    default:
+      return { label: t("task.runtime.unknown"), color: "#6b7280" };
+  }
+}
+
+function safeStateClass(state: string): string {
+  // Sanitize state for use in CSS class names — only allow word chars.
+  return state.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 function isTerminalState(state: string): boolean {
   return state === "succeeded" || state === "failed" || state === "cancelled" || state === "stale";
+}
+
+function isStoppableState(state: string): boolean {
+  return state === "queued" || state === "running" || state === "waiting";
 }
 
 function elapsed(task: TaskTimerSnapshot, nowMs: number): string {
@@ -46,51 +93,6 @@ function elapsed(task: TaskTimerSnapshot, nowMs: number): string {
   return `${h}h`;
 }
 
-// The panel renders a job tail up to this many UTF-8 bytes and marks the rest
-// as truncated. The backend snapshot tail is already bounded at 4KiB; the 512B
-// render cap keeps a large detail list cheap without stealing the model's
-// wait/bash_output stream (P2 red line: panel reads are non-consuming).
-const TAIL_RENDER_LIMIT_BYTES = 512;
-
-const STATE_CONFIG: Record<
-  string,
-  { key: "queued" | "running" | "waiting" | "succeeded" | "failed" | "cancelled" | "stale" | "stalled"; color: string; dot: string }
-> = {
-  queued: { key: "queued", color: "#6b7280", dot: "⚪" },
-  running: { key: "running", color: "#3b82f6", dot: "🔵" },
-  waiting: { key: "waiting", color: "#f59e0b", dot: "🟡" },
-  succeeded: { key: "succeeded", color: "#22c55e", dot: "🟢" },
-  failed: { key: "failed", color: "#ef4444", dot: "🔴" },
-  cancelled: { key: "cancelled", color: "#9ca3af", dot: "⏹️" },
-  stale: { key: "stale", color: "#d4d4d8", dot: "⬜" },
-  // stalled decorates a running job whose progress has not advanced; the color
-  // is a deeper amber than the waiting badge so the two states stay distinct.
-  stalled: { key: "stalled", color: "#d97706", dot: "⚠️" },
-};
-
-function stateConfig(state: string, t: ReturnType<typeof useT>) {
-  const config = STATE_CONFIG[state];
-  return config
-    ? { ...config, label: t(`task.state.${config.key}` as never) }
-    : { label: state, color: "#6b7280", dot: "❓" };
-}
-
-function runtimeConfig(state: string | undefined, t: ReturnType<typeof useT>) {
-  switch (state) {
-    case "alive":
-      return { label: t("task.runtime.live"), color: "#22c55e" };
-    case "exited":
-      return { label: t("task.runtime.exited"), color: "#9ca3af" };
-    default:
-      return { label: t("task.runtime.unknown"), color: "#6b7280" };
-  }
-}
-
-function safeStateClass(state: string): string {
-  // Sanitize state for use in CSS class names — only allow word chars.
-  return state.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
 function shortID(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
@@ -99,65 +101,12 @@ function eventSummary(ev: TaskEvent, t: ReturnType<typeof useT>): string {
   if (ev.error_code) return t("task.event.error", { code: ev.error_code });
   switch (ev.event_type) {
     case "state_change":
-      return t("task.event.stateChange", { state: ev.state, runtime: runtimeConfig(ev.runtime_state, t).label });
+      return t("task.event.stateChange", { state: stateConfig(ev.state, t).label, runtime: runtimeConfig(ev.runtime_state, t).label });
     case "error":
       return ev.error_summary || t("task.error");
     default:
       return ev.event_type;
   }
-}
-
-// isTerminalStatus matches both the task lifecycle states and the job lifecycle
-// statuses. Terminal wins over any stalled decoration (P2: stalled only ever
-// decorates a running job).
-function isTerminalStatus(status: string): boolean {
-  return (
-    status === "succeeded" ||
-    status === "failed" ||
-    status === "cancelled" ||
-    status === "stale" ||
-    status === "completed"
-  );
-}
-
-function utf8ByteLength(s: string): number {
-  let bytes = 0;
-  for (let i = 0; i < s.length; i++) {
-    const code = s.charCodeAt(i);
-    if (code < 0x80) bytes += 1;
-    else if (code < 0x800) bytes += 2;
-    else if (code >= 0xd800 && code <= 0xdbff && i + 1 < s.length) {
-      const low = s.charCodeAt(i + 1);
-      if (low >= 0xdc00 && low <= 0xdfff) {
-        bytes += 4;
-        i += 1;
-      } else bytes += 3;
-    } else bytes += 3;
-  }
-  return bytes;
-}
-
-// boundedTail renders a job tail up to TAIL_RENDER_LIMIT_BYTES (byte-safe, so a
-// multi-byte rune is never split) and reports whether it had to truncate.
-function boundedTail(tail: string): { text: string; truncated: boolean } {
-  if (!tail) return { text: "", truncated: false };
-  if (utf8ByteLength(tail) <= TAIL_RENDER_LIMIT_BYTES) {
-    return { text: tail, truncated: false };
-  }
-  let chars = tail.length;
-  while (chars > 0 && utf8ByteLength(tail.slice(0, chars)) > TAIL_RENDER_LIMIT_BYTES) {
-    chars -= 1;
-  }
-  return { text: tail.slice(0, chars), truncated: true };
-}
-
-// A panel row merges the jobs-first source with the store fallback: when a job
-// snapshot matches a task's job_id the job decorates that task row; standalone
-// jobs render as their own row. Jobs are authoritative when both exist.
-interface PanelRow {
-  key: string;
-  task?: TaskSnapshot;
-  job?: JobPanelView;
 }
 
 // --- component ---
@@ -169,33 +118,36 @@ export function TaskMonitorPanel({
   onClose,
   onOpenSession,
   initialOpen = false,
+  initialScope = "session",
   popover = false,
   summaryMode = false,
-  onJobAttention,
 }: {
   tabID: string;
   onClose?: () => void;
   onOpenSession?: (tabID: string, taskID: string) => Promise<boolean> | boolean;
   initialOpen?: boolean;
+  initialScope?: "session" | "project" | "all";
   popover?: boolean;
   summaryMode?: boolean;
-  // Wired by App to useController's notice: fired once per new stalled/failed
-  // job seen by the 5s poll so the transcript stays informed (P2 T4).
-  onJobAttention?: (job: JobPanelView) => void;
 }) {
   const t = useT();
-  const [tasks, setTasks] = useState<TaskSnapshot[]>([]);
-  const [jobs, setJobs] = useState<JobPanelView[]>([]);
+  const [tasks, setTasks] = useState<CatalogTask[]>([]);
+	const [scope, setScope] = useState<"session" | "project" | "all">(initialScope);
+	const [query, setQuery] = useState("");
+	const [nextCursor, setNextCursor] = useState("");
+	const [indexProgress, setIndexProgress] = useState<{ indexed: number; total: number; partial: boolean }>({ indexed: 0, total: 0, partial: true });
+	const requestSeq = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const expandedRef = useRef<Set<string>>(new Set());
   const [open, setOpen] = useState(initialOpen);
   const [actionTask, setActionTask] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [pendingAction, setPendingAction] = useState<{ task: TaskSnapshot; action: "stop" | "cancel" } | null>(null);
+  const [pendingStop, setPendingStop] = useState<CatalogTask | null>(null);
+  const stopButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const confirmStopRef = useRef<HTMLButtonElement | null>(null);
 
   // Per-task event state
   const [taskEvents, setTaskEvents] = useState<Map<string, TaskEvent[]>>(
@@ -206,70 +158,37 @@ export function TaskMonitorPanel({
     () => new Map(),
   );
   const eventCursors = useRef<Map<string, number>>(new Map());
-  // Job ids already surfaced through onJobAttention, keyed by id:attention so a
-  // job that unstalls and stalls again can notify once more, but a stable state
-  // is not re-notified every 5s poll.
-  const attentionNotified = useRef<Set<string>>(new Set());
-  // Tracks whether an expanded row is a task (events polling) or a job (tail
-  // refresh), so the 5s poll refreshes the right source for each expanded row.
-  const expandedRowKind = useRef<Map<string, "task" | "job">>(new Map());
 
-  const fetchTasks = useCallback(async () => {
+  const fetchTasks = useCallback(async (cursor = "") => {
+	const seq = ++requestSeq.current;
     try {
       setError(null);
-      const list = await app.ListTasksForTab(tabID);
-      setTasks(list ?? []);
+			if (!hasTaskCatalogBinding()) {
+				const legacy = await app.ListTasksForTab(tabID);
+				if (seq !== requestSeq.current) return;
+				const filtered = legacy.filter((task) => !query.trim() || [task.task_id, task.session_id, task.error_code, task.error_summary].some((value) => (value || "").toLowerCase().includes(query.trim().toLowerCase())));
+				setTasks(filtered.map((task) => ({ ...task, __projectKey: "", __projectLabel: "", __catalogKey: task.task_id })));
+				setNextCursor("");
+				setIndexProgress({ indexed: filtered.length, total: filtered.length, partial: false });
+				return;
+			}
+			const page = await app.ListTaskPage({ scope, tabId: tabID, projectKey: "", states: [], query, cursor, limit: 50 });
+			if (seq !== requestSeq.current) return;
+			const decorated = (page.items ?? []).map((item) => ({ ...item.task, __projectKey: item.projectKey, __projectLabel: item.projectLabel, __catalogKey: `${item.projectKey}:${item.task.task_id}` }));
+			setTasks((current) => cursor ? [...current, ...decorated.filter((item) => !current.some((existing) => existing.__catalogKey === item.__catalogKey))] : decorated);
+			setNextCursor(page.nextCursor || "");
+			setIndexProgress({ indexed: page.status.indexed, total: page.status.total, partial: page.partial });
     } catch (e) {
+			if (seq !== requestSeq.current) return;
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, [tabID]);
-
-  const fetchJobs = useCallback(async () => {
-    // The jobs surface is a best-effort P2 addition; browsers/mocks without the
-    // bridge method keep rendering task rows from the store.
-    if (typeof app.JobPanelJobsForTab !== "function") return;
-    try {
-      const list = await app.JobPanelJobsForTab(tabID);
-      const next = list ?? [];
-      setJobs(next);
-      if (onJobAttention) {
-        for (const job of next) {
-          const attention =
-            job.stalled === true && job.status === "running"
-              ? "stalled"
-              : job.status === "failed"
-                ? "failed"
-                : "";
-          if (!attention) continue;
-          const key = `${job.id}:${attention}`;
-          if (attentionNotified.current.has(key)) continue;
-          attentionNotified.current.add(key);
-          onJobAttention(job);
-        }
-      }
-    } catch {
-      // Best-effort: the task rows still render from the store.
-    }
-  }, [tabID, onJobAttention]);
-
-  const fetchJobOutput = useCallback(async (jobID: string) => {
-    // Refreshes a job's detail tail from the bounded output bridge method. Also
-    // best-effort: on failure the list-provided tail is kept.
-    if (typeof app.JobOutputForTab !== "function") return;
-    try {
-      const out = await app.JobOutputForTab(tabID, jobID);
-      if (out && out.id && out.output) {
-        setJobs((prev) => prev.map((j) => (j.id === jobID ? { ...j, tail: out.output } : j)));
-      }
-    } catch {
-      // keep the list tail
-    }
-  }, [tabID]);
+  }, [query, scope, tabID]);
 
   // Fetch events for a single task, using afterSequence for incremental load.
-  const fetchEvents = useCallback(async (taskID: string) => {
+	const fetchEvents = useCallback(async (task: CatalogTask) => {
+		const taskID = task.__catalogKey;
     setEventsLoading((prev) => new Set(prev).add(taskID));
     setEventsError((prev) => {
       const next = new Map(prev);
@@ -278,7 +197,9 @@ export function TaskMonitorPanel({
     });
     try {
       const cursor = eventCursors.current.get(taskID) ?? 0;
-      const events = await app.ListTaskEventsForTab(tabID, taskID, cursor);
+			const events = hasTaskCatalogBinding()
+				? (await app.ListTaskEventPage({ projectKey: task.__projectKey, taskId: task.task_id, after: cursor, limit: 50 })).items ?? []
+				: await app.ListTaskEventsForTab(tabID, task.task_id, cursor);
       if (events.length > 0) {
         setTaskEvents((prev) => {
           const next = new Map(prev);
@@ -310,27 +231,16 @@ export function TaskMonitorPanel({
         return next;
       });
     }
-  }, [tabID]);
+	}, [tabID]);
 
-  // Initial fetch + periodic polling. While the panel is open both the task
-  // store and the jobs snapshot poll every 5s; expanded rows refresh their own
-  // source (events for tasks, bounded tail for jobs). `expanded` is read via a
-  // ref so expanding a row does not re-run this effect: a re-run would refetch
-  // the jobs list and overwrite the just-refreshed detail tail (P2 race).
+  // Initial fetch + periodic polling
   useEffect(() => {
-    fetchTasks();
-    fetchJobs();
+		void fetchTasks("");
     const interval = setInterval(() => {
-      fetchTasks();
-      fetchJobs();
-      expandedRef.current.forEach((id) => {
-        const kind = expandedRowKind.current.get(id);
-        if (kind === "task") fetchEvents(id);
-        else if (kind === "job") fetchJobOutput(id);
-      });
+			void fetchTasks("");
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [fetchTasks, fetchJobs, fetchEvents, fetchJobOutput]);
+	}, [fetchTasks]);
 
   // Live tasks need a ticking clock; terminal and queued tasks stay frozen at
   // their persisted end/update time.
@@ -340,48 +250,64 @@ export function TaskMonitorPanel({
     return () => clearInterval(interval);
   }, [tasks]);
 
-  const toggleRow = (row: PanelRow) => {
+  useEffect(() => {
+    if (pendingStop) confirmStopRef.current?.focus();
+  }, [pendingStop]);
+
+  useEffect(() => {
+    if (!pendingStop) return;
+    const current = tasks.find((task) => task.__catalogKey === pendingStop.__catalogKey);
+    if (!current || !isStoppableState(current.state)) setPendingStop(null);
+  }, [pendingStop, tasks]);
+
+  const dismissStopConfirmation = () => {
+    const taskKey = pendingStop?.__catalogKey;
+    setPendingStop(null);
+    if (taskKey) {
+      requestAnimationFrame(() => stopButtonRefs.current.get(taskKey)?.focus());
+    }
+  };
+
+  const toggleTask = (task: CatalogTask) => {
+    const id = task.__catalogKey;
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(row.key)) {
-        next.delete(row.key);
-        expandedRowKind.current.delete(row.key);
+      if (next.has(id)) {
+        next.delete(id);
       } else {
-        next.add(row.key);
-        expandedRowKind.current.set(row.key, row.task ? "task" : "job");
-        // Load events on first expand; refresh the job detail tail on open.
-        if (row.task && !taskEvents.has(row.task.task_id)) {
-          fetchEvents(row.task.task_id);
+        next.add(id);
+        // Load events on first expand
+        if (!taskEvents.has(id)) {
+			void fetchEvents(task);
         }
-        if (row.job) fetchJobOutput(row.job.id);
       }
-      expandedRef.current = next;
       return next;
     });
   };
 
-  const controlTask = async (task: TaskSnapshot, action: "stop" | "cancel" | "requeue" | "open") => {
-    if ((action === "stop" || action === "cancel") && (!pendingAction || pendingAction.task.task_id !== task.task_id || pendingAction.action !== action)) {
-      setPendingAction({ task, action });
-      return;
-    }
-    setPendingAction(null);
-    setActionTask(task.task_id);
+  const controlTask = async (task: CatalogTask, action: "stop" | "requeue" | "open") => {
+    setPendingStop(null);
+    setActionTask(task.__catalogKey);
     setActionError(null);
     setActionMessage(null);
     try {
-      if (action === "open" && onOpenSession) {
+			if (action === "open" && onOpenSession && scope === "session") {
         const opened = await onOpenSession(tabID, task.task_id);
         if (opened) onClose?.();
         return;
       }
-      const result = action === "stop"
-        ? await app.StopTaskForTab(tabID, task.task_id, task.version, "desktop request", `desktop-${action}-${task.task_id}-${task.version}`)
-        : action === "cancel"
-          ? await app.CancelTaskForTab(tabID, task.task_id, task.version, "desktop request", `desktop-${action}-${task.task_id}-${task.version}`)
-          : action === "requeue"
-            ? await app.RequeueTaskForTab(tabID, task.task_id, task.version, `desktop-${action}-${task.task_id}-${task.version}`)
-            : await app.OpenTaskSessionForTab(tabID, task.task_id);
+			const request = { projectKey: task.__projectKey, taskId: task.task_id, expectedVersion: task.version, reason: "desktop request", idempotencyKey: `desktop-${action}-${task.task_id}-${task.version}` };
+			const result = hasTaskCatalogBinding()
+				? action === "stop"
+					? await app.StopTaskByKey(request)
+					: action === "requeue"
+						? await app.RequeueTaskByKey(request)
+						: await app.OpenTaskSessionByKey({ projectKey: task.__projectKey, taskId: task.task_id })
+				: action === "stop"
+					? await app.StopTaskForTab(tabID, task.task_id, task.version, request.reason, request.idempotencyKey)
+					: action === "requeue"
+						? await app.RequeueTaskForTab(tabID, task.task_id, task.version, request.idempotencyKey)
+						: await app.OpenTaskSessionForTab(tabID, task.task_id);
       if (result.error) {
         setActionError(`${result.error.code}: ${result.error.message}`);
       } else if (action === "open") {
@@ -390,7 +316,7 @@ export function TaskMonitorPanel({
         setActionMessage(`Session: ${sessionID}`);
       } else {
         setActionMessage(result.idempotent ? "Already applied" : "Task updated");
-        await fetchTasks();
+				await fetchTasks("");
       }
     } catch (e) {
       setActionError(String(e));
@@ -399,32 +325,10 @@ export function TaskMonitorPanel({
     }
   };
 
-  // Merge the jobs snapshot (authoritative when it matches) with the task store
-  // (fallback). Standalone jobs render as their own rows.
-  const jobByID = useMemo(() => {
-    const m = new Map<string, JobPanelView>();
-    for (const j of jobs) m.set(j.id, j);
-    return m;
-  }, [jobs]);
-
-  const rows = useMemo<PanelRow[]>(() => {
-    const taskRows: PanelRow[] = tasks.map((task) => ({
-      key: task.task_id,
-      task,
-      job: task.job_id ? jobByID.get(task.job_id) : undefined,
-    }));
-    const matchedJobIDs = new Set<string>();
-    for (const r of taskRows) if (r.job) matchedJobIDs.add(r.job.id);
-    const jobRows: PanelRow[] = [];
-    for (const j of jobs) {
-      if (!matchedJobIDs.has(j.id)) jobRows.push({ key: j.id, job: j });
-    }
-    taskRows.sort(
-      (a, b) =>
-        new Date(b.task!.updated_at).getTime() - new Date(a.task!.updated_at).getTime(),
-    );
-    return [...taskRows, ...jobRows];
-  }, [tasks, jobByID]);
+  const sorted = [...tasks].sort(
+    (a, b) =>
+      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+  );
 
   return (
     <div className={`taskmonitor${popover ? " taskmonitor--popover" : ""}`}>
@@ -438,13 +342,12 @@ export function TaskMonitorPanel({
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
         <span className="taskmonitor__title">{summaryMode ? t("summary.session") : t("summary.tasks")}</span>
-        <span className="taskmonitor__count">{rows.length}</span>
+        <span className="taskmonitor__count">{tasks.length}</span>
         <button
           className="taskmonitor__refresh"
-          onClick={() => {
+			onClick={() => {
             setLoading(true);
-            fetchTasks();
-            fetchJobs();
+				void fetchTasks("");
           }}
           title={t("summary.refresh")}
           aria-label={t("summary.refresh")}
@@ -465,6 +368,17 @@ export function TaskMonitorPanel({
 
       {open && (
         <div className="taskmonitor__body">
+			{!summaryMode && (
+				<div className="taskmonitor__filters">
+					<select value={scope} onChange={(event) => setScope(event.target.value as "session" | "project" | "all")} aria-label="Task scope">
+						<option value="session">Current session</option>
+						<option value="project">Current project</option>
+						<option value="all">All projects</option>
+					</select>
+					<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter tasks" aria-label="Filter tasks" />
+				</div>
+			)}
+			{indexProgress.partial && <div className="taskmonitor__indexing">Indexing tasks ({indexProgress.indexed}/{indexProgress.total})</div>}
           {summaryMode && <div className="taskmonitor__category-title">{t("summary.tasks")}</div>}
           {actionError && <div className="taskmonitor__state taskmonitor__state--error">{actionError}</div>}
           {actionMessage && <div className="taskmonitor__state">{actionMessage}</div>}
@@ -482,7 +396,7 @@ export function TaskMonitorPanel({
             </div>
           )}
 
-          {!loading && !error && rows.length === 0 && (
+          {!loading && !error && sorted.length === 0 && (
             <div className="taskmonitor__state taskmonitor__state--empty">
               <Clock size={16} />
               <span>{t("summary.noTasks")}</span>
@@ -490,37 +404,27 @@ export function TaskMonitorPanel({
           )}
 
           {!loading &&
-            rows.map((row) => {
-              const task = row.task;
-              const job = row.job;
-              const isJobOnly = !task;
-              const state = task ? task.state : job?.status ?? "";
-              const cfg = stateConfig(state, t);
-              const runtime = runtimeConfig(task?.runtime_state, t);
-              const isOpen = expanded.has(row.key);
-              const terminal = task ? isTerminalStatus(task.state) : isTerminalStatus(job?.status ?? "");
-              // stalled decorates a running job only; terminal always wins.
-              const showStalled = job?.stalled === true && job.status === "running" && !isTerminalStatus(task?.state ?? "");
-              const evs = task ? taskEvents.get(task.task_id) ?? [] : [];
-              const evLoading = task ? eventsLoading.has(task.task_id) : false;
-              const evError = task ? eventsError.get(task.task_id) : undefined;
-              const tailInfo = boundedTail(job?.tail ?? "");
+            sorted.map((task) => {
+              const cfg = stateConfig(task.state, t);
+              const runtime = runtimeConfig(task.runtime_state, t);
+				const taskKey = task.__catalogKey;
+				const isOpen = expanded.has(taskKey);
+              const terminal = isTerminalState(task.state);
+				const evs = taskEvents.get(taskKey) ?? [];
+				const evLoading = eventsLoading.has(taskKey);
+				const evError = eventsError.get(taskKey);
 
               return (
                 <div
-                  key={row.key}
-                  className={`taskmonitor__task taskmonitor__task--${safeStateClass(state)}`}
+					key={taskKey}
+                  className={`taskmonitor__task taskmonitor__task--${safeStateClass(task.state)}`}
                 >
                   <div className="taskmonitor__task-head">
                     <button
                       className="taskmonitor__expand"
-                      onClick={() => toggleRow(row)}
+						onClick={() => toggleTask(task)}
                       aria-expanded={isOpen}
-                      aria-label={
-                        isJobOnly
-                          ? t("summary.jobLabelRow", { id: shortID(job!.id), state: cfg.label })
-                          : t("summary.taskLabel", { id: shortID(task!.task_id), state: cfg.label })
-                      }
+                      aria-label={t("summary.taskLabel", { id: shortID(task.task_id), state: cfg.label })}
                     >
                       <span
                         className="taskmonitor__dot"
@@ -529,8 +433,9 @@ export function TaskMonitorPanel({
                         {cfg.dot}
                       </span>
                       <span className="taskmonitor__id">
-                        {shortID(row.key)}
+                        {shortID(task.task_id)}
                       </span>
+							{scope === "all" && <span className="taskmonitor__project">{task.__projectLabel}</span>}
                       <span
                         className="taskmonitor__badge"
                         style={{
@@ -540,33 +445,19 @@ export function TaskMonitorPanel({
                       >
                         {cfg.label}
                       </span>
-                      {showStalled && (
-                        <span
-                          className="taskmonitor__badge taskmonitor__badge--stalled"
-                          style={{
-                            backgroundColor: STATE_CONFIG.stalled.color + "18",
-                            color: STATE_CONFIG.stalled.color,
-                          }}
-                          title={t("summary.jobStalled")}
-                        >
-                          {STATE_CONFIG.stalled.dot} {t("summary.jobStalled")}
-                        </span>
-                      )}
-                      {!isJobOnly && (
-                        <span
-                          className="taskmonitor__runtime"
-                          style={{ color: runtime.color }}
-                          title="Runtime process state"
-                        >
-                          <span aria-hidden="true">{task!.runtime_state === "alive" ? "●" : "○"}</span>
-                          {runtime.label}
-                        </span>
-                      )}
+                      <span
+                        className="taskmonitor__runtime"
+                        style={{ color: runtime.color }}
+                        title="Runtime process state"
+                      >
+                        <span aria-hidden="true">{task.runtime_state === "alive" ? "●" : "○"}</span>
+                        {runtime.label}
+                      </span>
                       {terminal && (
                         <XCircle size={12} className="taskmonitor__terminal" />
                       )}
                       <span className="taskmonitor__time">
-                        {isJobOnly ? "—" : elapsed(task!, nowMs)}
+                        {elapsed(task, nowMs)}
                       </span>
                       {isOpen ? (
                         <ChevronDown size={12} />
@@ -579,152 +470,145 @@ export function TaskMonitorPanel({
                   {isOpen && (
                     <div className="taskmonitor__detail">
                       <dl>
-                        {!isJobOnly && task && (
+                        <dt>{t("summary.taskId")}</dt>
+                        <dd>{task.task_id}</dd>
+                        <dt>{t("summary.sessionId")}</dt>
+                        <dd>{task.session_id || "—"}</dd>
+                        <dt>{t("summary.state")}</dt>
+                        <dd>{cfg.label}</dd>
+                        <dt>{t("summary.runtime")}</dt>
+                        <dd>{runtime.label}</dd>
+                        <dt>{t("summary.updated")}</dt>
+                        <dd>{new Date(task.updated_at).toLocaleString()}</dd>
+                        {task.error_code && (
                           <>
-                            <dt>{t("summary.taskId")}</dt>
-                            <dd>{task.task_id}</dd>
-                            <dt>{t("summary.sessionId")}</dt>
-                            <dd>{task.session_id || "—"}</dd>
-                            <dt>{t("summary.state")}</dt>
-                            <dd>{task.state}</dd>
-                            <dt>{t("summary.runtime")}</dt>
-                            <dd>{runtime.label}</dd>
-                            <dt>{t("summary.updated")}</dt>
-                            <dd>{new Date(task.updated_at).toLocaleString()}</dd>
-                            {task.error_code && (
-                              <>
-                                <dt>{t("summary.errorCode")}</dt>
-                                <dd className="taskmonitor__err">{task.error_code}</dd>
-                              </>
-                            )}
-                            {task.error_summary && (
-                              <>
-                                <dt>{t("summary.detail")}</dt>
-                                <dd className="taskmonitor__err-summary">
-                                  {task.error_summary}
-                                </dd>
-                              </>
-                            )}
+                            <dt>{t("summary.errorCode")}</dt>
+                            <dd className="taskmonitor__err">{task.error_code}</dd>
                           </>
                         )}
-                        {job && (
+                        {task.error_summary && (
                           <>
-                            {isJobOnly && (
-                              <>
-                                <dt>{t("summary.jobId")}</dt>
-                                <dd>{job.id}</dd>
-                                <dt>{t("summary.state")}</dt>
-                                <dd>{job.status}</dd>
-                              </>
-                            )}
-                            <dt>{t("summary.jobKind")}</dt>
-                            <dd>
-                              <span className="taskmonitor__kind-badge">{job.kind || "job"}</span>
-                            </dd>
-                            {job.label && (
-                              <>
-                                <dt>{t("summary.jobLabel")}</dt>
-                                <dd>{job.label}</dd>
-                              </>
-                            )}
-                            <dt>{t("summary.tail")}</dt>
-                            <dd
-                              className={`taskmonitor__tail${tailInfo.truncated ? " taskmonitor__tail--truncated" : ""}`}
-                              title={tailInfo.truncated ? t("summary.tailTruncated") : undefined}
-                            >
-                              {tailInfo.text ? <pre>{tailInfo.text}</pre> : "—"}
-                              {tailInfo.truncated && (
-                                <span className="taskmonitor__tail-trunc">{t("summary.tailTruncated")}</span>
-                              )}
+                            <dt>{t("summary.detail")}</dt>
+                            <dd className="taskmonitor__err-summary">
+                              {task.error_summary}
                             </dd>
                           </>
                         )}
                       </dl>
 
-                      {!isJobOnly && task && (
-                        <>
-                          {/* Events section */}
-                          <div className="taskmonitor__events">
-                            <div className="taskmonitor__events-head">
-                              <List size={12} />
-                              <span>{t("summary.recentEvents")}</span>
-                              {evs.length > 0 && (
-                                <span className="taskmonitor__events-count">
-                                  {evs.length}
+                      {/* Events section */}
+                      <div className="taskmonitor__events">
+                        <div className="taskmonitor__events-head">
+                          <List size={12} />
+                          <span>{t("summary.recentEvents")}</span>
+                          {evs.length > 0 && (
+                            <span className="taskmonitor__events-count">
+                              {evs.length}
+                            </span>
+	                      )}
+	                    </div>
+
+                        {evLoading && evs.length === 0 && (
+                          <div className="taskmonitor__state">
+                            <Loader2
+                              size={12}
+                              className="taskmonitor__spinner"
+                            />
+                            <span>{t("summary.loadingEvents")}</span>
+                          </div>
+                        )}
+
+                        {evError && (
+                          <div className="taskmonitor__state taskmonitor__state--error">
+                            <AlertCircle size={12} />
+                            <span>{evError}</span>
+                          </div>
+                        )}
+
+                        {!evLoading && !evError && evs.length === 0 && (
+                          <div className="taskmonitor__state taskmonitor__state--empty">
+                            <span>{t("summary.noEvents")}</span>
+                          </div>
+                        )}
+
+                        {evs.length > 0 && (
+                          <ul className="taskmonitor__event-list">
+                            {evs.map((ev) => (
+                              <li
+                                key={ev.sequence}
+                                className="taskmonitor__event"
+                              >
+                                <span className="taskmonitor__event-seq">
+                                  #{ev.sequence}
                                 </span>
-                              )}
-                            </div>
-
-                            {evLoading && evs.length === 0 && (
-                              <div className="taskmonitor__state">
-                                <Loader2
-                                  size={12}
-                                  className="taskmonitor__spinner"
-                                />
-                                <span>{t("summary.loadingEvents")}</span>
-                              </div>
-                            )}
-
-                            {evError && (
-                              <div className="taskmonitor__state taskmonitor__state--error">
-                                <AlertCircle size={12} />
-                                <span>{evError}</span>
-                              </div>
-                            )}
-
-                            {!evLoading && !evError && evs.length === 0 && (
-                              <div className="taskmonitor__state taskmonitor__state--empty">
-                                <span>{t("summary.noEvents")}</span>
-                              </div>
-                            )}
-
-                            {evs.length > 0 && (
-                              <ul className="taskmonitor__event-list">
-                                {evs.map((ev) => (
-                                  <li
-                                    key={ev.sequence}
-                                    className="taskmonitor__event"
-                                  >
-                                    <span className="taskmonitor__event-seq">
-                                      #{ev.sequence}
-                                    </span>
-                                    <span className="taskmonitor__event-type">
-                                      {eventSummary(ev, t)}
-                                    </span>
-                                    <span className="taskmonitor__event-time">
-                                      {new Date(ev.timestamp).toLocaleTimeString()}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
+                                <span className="taskmonitor__event-type">
+                                  {eventSummary(ev, t)}
+                                </span>
+                                <span className="taskmonitor__event-time">
+                                  {new Date(ev.timestamp).toLocaleTimeString()}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      {pendingStop?.__catalogKey === taskKey ? (
+                        <div
+                          className="taskmonitor__confirm"
+                          role="group"
+                          aria-label={t("summary.confirmStop")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              dismissStopConfirmation();
+                            }
+                          }}
+                        >
+                          <span className="taskmonitor__confirm-copy">{t("summary.confirmStop")}</span>
+                          <div className="taskmonitor__confirm-actions">
+                            <button
+                              ref={confirmStopRef}
+                              type="button"
+                              className="taskmonitor__confirm-stop"
+                              disabled={actionTask === taskKey}
+                              onClick={() => void controlTask(task, "stop")}
+                            >
+                              {t("summary.stop")}
+                            </button>
+                            <button type="button" onClick={dismissStopConfirmation}>{t("summary.keep")}</button>
                           </div>
-                          <div className="taskmonitor__actions">
-                            {(task.state === "queued" || task.state === "running" || task.state === "waiting") && (
-                              <>
-                                <button disabled={actionTask === task.task_id} onClick={() => void controlTask(task, "stop")}>{t("summary.stop")}</button>
-                                <button disabled={actionTask === task.task_id} onClick={() => void controlTask(task, "cancel")}>{t("summary.cancel")}</button>
-                              </>
-                            )}
-                            {(task.state === "failed" || task.state === "stale") && (
-                              <button disabled={actionTask === task.task_id || task.runtime_state === "alive"} onClick={() => void controlTask(task, "requeue")}>{t("summary.requeue")}</button>
-                            )}
-                            <button disabled={actionTask === task.task_id} onClick={() => void controlTask(task, "open")}>{t("summary.openSession")}</button>
-                          </div>
-                          {pendingAction?.task.task_id === task.task_id && (
-                            <div className="taskmonitor__confirm">
-                              <span>{t(pendingAction.action === "stop" ? "summary.confirmStop" : "summary.confirmCancel")}</span>
-                              <button type="button" onClick={() => void controlTask(task, pendingAction.action)}>{t("common.confirm")}</button>
-                              <button type="button" onClick={() => setPendingAction(null)}>{t("summary.keep")}</button>
-                            </div>
+                        </div>
+                      ) : (
+                        <div className="taskmonitor__actions">
+                          {isStoppableState(task.state) && (
+                            <button
+                              ref={(node) => {
+                                if (node) stopButtonRefs.current.set(taskKey, node);
+                                else stopButtonRefs.current.delete(taskKey);
+                              }}
+                              className="taskmonitor__stop"
+                              disabled={actionTask === taskKey}
+                              onClick={() => setPendingStop(task)}
+                            >
+                              {t("summary.stop")}
+                            </button>
                           )}
-                        </>
+                          {(task.state === "failed" || task.state === "stale") && (
+                            <button disabled={actionTask === taskKey || task.runtime_state === "alive"} onClick={() => void controlTask(task, "requeue")}>{t("summary.requeue")}</button>
+                          )}
+                          <button disabled={actionTask === taskKey} onClick={() => void controlTask(task, "open")}>{t("summary.openSession")}</button>
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
               );
             })}
+			{nextCursor && !loading && !error && (
+				<button className="taskmonitor__load-more" onClick={() => void fetchTasks(nextCursor)}>
+					Load more
+				</button>
+			)}
         </div>
       )}
     </div>

@@ -121,7 +121,10 @@ func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContex
 		reason = "fold"
 	}
 	a.lastFoldReason = reason
-	outcome, err := a.compactToProjection(ctx, policy.Trigger, policy.Instructions, forceFold)
+	// Where this function would answer ErrCompactionRequired, the fold is the
+	// only way out and a failed summary must degrade rather than strand the turn.
+	mustFree := policy.Trigger != CompactionTriggerManual && (policy.Trigger == CompactionTriggerOverflow || est >= hard)
+	outcome, err := a.compactToProjection(ctx, policy.Trigger, policy.Instructions, forceFold, mustFree)
 	if err != nil {
 		if errors.Is(err, errCompressStaleContext) && policy.Trigger != CompactionTriggerManual {
 			// Transcript changed during the summary call: discard the candidate
