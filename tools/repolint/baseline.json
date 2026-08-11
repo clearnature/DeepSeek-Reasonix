@@ -2,14 +2,14 @@
   "limits": {
     "banner": 48,
     "commented-code": 1,
-    "complexity": 2151,
-    "essay": 4344,
-    "file-size": 112203,
-    "function-size": 9437,
+    "complexity": 2161,
+    "essay": 4380,
+    "file-size": 112747,
+    "function-size": 9489,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "test-file-size": 71803
+    "test-file-size": 71804
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -32,7 +32,7 @@
     "desktop/app.go": {
       "complexity": 63,
       "essay": 96,
-      "file-size": 11627,
+      "file-size": 11657,
       "function-size": 381
     },
     "desktop/app_autosave_test.go": {
@@ -91,7 +91,7 @@
       "essay": 2
     },
     "desktop/frontend/src/App.tsx": {
-      "file-size": 4746
+      "file-size": 4770
     },
     "desktop/frontend/src/__tests__/app-chrome-tabs.test.ts": {
       "test-file-size": 19
@@ -562,6 +562,9 @@
     "internal/agent/parallel_tasks_test.go": {
       "essay": 2
     },
+    "internal/agent/plan_approval.go": {
+      "essay": 3
+    },
     "internal/agent/preview.go": {
       "essay": 19
     },
@@ -676,12 +679,19 @@
       "essay": 4,
       "test-file-size": 404
     },
+    "internal/agent/team_ask_gate.go": {
+      "essay": 3
+    },
+    "internal/agent/team_worktree.go": {
+      "essay": 6
+    },
     "internal/agent/teammate_done_e2e_test.go": {
       "essay": 18
     },
     "internal/agent/teammate_store.go": {
-      "essay": 44,
-      "file-size": 48
+      "essay": 61,
+      "file-size": 404,
+      "function-size": 5
     },
     "internal/agent/teammate_store_test.go": {
       "banner": 1,
@@ -711,13 +721,13 @@
     "internal/boot/boot.go": {
       "complexity": 300,
       "essay": 111,
-      "file-size": 2271,
-      "function-size": 1899,
+      "file-size": 2275,
+      "function-size": 1903,
       "narrative": 3
     },
     "internal/boot/boot_test.go": {
       "essay": 10,
-      "test-file-size": 4513
+      "test-file-size": 4514
     },
     "internal/boot/extension_dispatch_test.go": {
       "essay": 3,
@@ -1013,7 +1023,7 @@
     },
     "internal/config/config.go": {
       "essay": 58,
-      "file-size": 1552,
+      "file-size": 1555,
       "narrative": 2
     },
     "internal/config/context_auto.go": {
@@ -1117,10 +1127,10 @@
       "essay": 9
     },
     "internal/control/controller.go": {
-      "complexity": 35,
-      "essay": 182,
-      "file-size": 5804,
-      "function-size": 194,
+      "complexity": 45,
+      "essay": 185,
+      "file-size": 5913,
+      "function-size": 237,
       "narrative": 4
     },
     "internal/control/controller_test.go": {
@@ -1157,7 +1167,7 @@
       "essay": 10
     },
     "internal/control/input.go": {
-      "essay": 4
+      "essay": 5
     },
     "internal/control/input_test.go": {
       "essay": 4,
@@ -1461,7 +1471,7 @@
     },
     "internal/jobs/jobs.go": {
       "essay": 71,
-      "file-size": 1760,
+      "file-size": 1778,
       "function-size": 14
     },
     "internal/jobs/jobs_extra_test.go": {
@@ -1938,6 +1948,9 @@
     "internal/tool/builtin/notebookedit.go": {
       "essay": 6
     },
+    "internal/tool/builtin/plan_approval.go": {
+      "essay": 2
+    },
     "internal/tool/builtin/preview.go": {
       "essay": 7
     },
@@ -1949,6 +1962,9 @@
     },
     "internal/tool/builtin/session_guard.go": {
       "essay": 25
+    },
+    "internal/tool/builtin/team_message.go": {
+      "essay": 1
     },
     "internal/tool/builtin/updategoal.go": {
       "essay": 2
