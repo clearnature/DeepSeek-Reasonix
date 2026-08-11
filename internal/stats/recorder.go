@@ -141,6 +141,8 @@ func (r *Recorder) Emit(e event.Event) {
 		r.RecordTurnCompletion()
 	case e.Kind == event.Notice && isCompactionTelemetry(e.Text):
 		r.recordCompaction(e)
+	case e.Kind == event.Notice && isRetrievalTelemetry(e.Text):
+		r.recordRetrieval(e)
 	}
 }
 
@@ -337,4 +339,53 @@ func usageRequestCount(usage *provider.Usage) int {
 		return usage.RequestCount
 	}
 	return 1
+}
+
+// isRetrievalTelemetry matches retrieval telemetry notices emitted by the
+// retrieve_info tool / /retrieve_info command, so every pass lands in the
+// stats file for post-hoc diagnosis.
+func isRetrievalTelemetry(text string) bool {
+	return text == "retrieval telemetry"
+}
+
+// recordRetrieval parses a retrieval telemetry detail line
+// (query/mode/api/tier/ms/chars) into a structured record. Best-effort; never
+// interrupts the event stream.
+func (r *Recorder) recordRetrieval(e event.Event) {
+	if r == nil || r.dispatcher == nil {
+		return
+	}
+	rec := RetrievalRecord{Mode: "unknown"}
+	chars := 0
+	for _, tok := range strings.Fields(e.Detail) {
+		k, v, ok := strings.Cut(tok, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "query":
+			rec.Query = v
+		case "mode":
+			rec.Mode = v
+		case "api":
+			rec.APIUsed = v == "true"
+		case "tier":
+			rec.Tier = v
+		case "ms":
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				rec.Ms = n
+			}
+		case "chars":
+			if n, err := strconv.Atoi(v); err == nil {
+				chars = n
+			}
+		}
+	}
+	rec.Chars = chars
+	r.dispatcher.enqueue(record{
+		Timestamp: time.Now(),
+		ModelRef:  e.ModelRef,
+		Source:    r.source,
+		Retrieval: &rec,
+	})
 }

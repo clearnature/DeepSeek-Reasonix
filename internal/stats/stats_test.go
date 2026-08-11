@@ -675,3 +675,30 @@ func TestRecorderPersistsPrefixHash(t *testing.T) {
 		t.Fatalf("row missing est: %s", data)
 	}
 }
+
+// TestRecorderPersistsRetrievalTelemetry pins the retrieval telemetry path:
+// a "retrieval telemetry" notice lands a structured Retrieval row in the daily
+// stats file.
+func TestRecorderPersistsRetrievalTelemetry(t *testing.T) {
+	dir := t.TempDir()
+	rec := NewRecorder(event.Discard, dir, "desktop")
+	defer rec.Flush(context.Background())
+	rec.Emit(event.Event{Kind: event.Notice, Text: "retrieval telemetry",
+		Detail: "query=温州天气 mode=hit api=false tier=l1 ms=12 chars=340"})
+	rec.Flush(context.Background())
+	data, err := os.ReadFile(filepath.Join(dir, time.Now().Format("2006-01-02")+".jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := decodeRecords(strings.NewReader(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Retrieval == nil {
+		t.Fatalf("rows = %+v, want one retrieval row", rows)
+	}
+	r := rows[0].Retrieval
+	if r.Query != "温州天气" || r.Mode != "hit" || r.APIUsed || r.Ms != 12 || r.Chars != 340 {
+		t.Fatalf("retrieval row = %+v", r)
+	}
+}

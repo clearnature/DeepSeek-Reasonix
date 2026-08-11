@@ -52,6 +52,21 @@ type record struct {
 	// Compaction records one context-compaction pass (agent compaction
 	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
 	Compaction *CompactionRecord `json:"compaction,omitempty"`
+	// Retrieval records one retrieval pass (retrieve_info / /retrieve_info):
+	// how it resolved and whether it cost an API call. Nil on usage/turn rows.
+	Retrieval *RetrievalRecord `json:"retrieval,omitempty"`
+}
+
+// RetrievalRecord is the structured form of one retrieval pass, persisted so
+// retrieval behavior (hit vs paid call, stale serves, blocked) is diagnosable
+// from the stats file alone.
+type RetrievalRecord struct {
+	Query      string `json:"query,omitempty"`
+	Mode       string `json:"mode,omitempty"` // hit | miss | stale | blocked | error
+	APIUsed    bool   `json:"api_used,omitempty"`
+	Tier       string `json:"tier,omitempty"`
+	Ms         int64  `json:"ms,omitempty"`
+	Chars      int    `json:"chars,omitempty"`
 }
 
 // CompactionRecord is the structured form of the agent's compaction telemetry

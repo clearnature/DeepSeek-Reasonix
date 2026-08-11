@@ -5728,6 +5728,9 @@ func TestRetrieveInfoCommandManualRetrieval(t *testing.T) {
 		Label:       "test",
 		Sink: event.FuncSink(func(e event.Event) {
 			if e.Kind == event.Notice {
+				if e.Text == "retrieval telemetry" {
+					return // telemetry rows are separate; only surface the result notice
+				}
 				notices <- e.Text
 				details <- e.Detail
 			}

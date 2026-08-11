@@ -31,11 +31,30 @@ type retrieveInfo struct{}
 // commands (/retrieve_info) and other hosts can invoke retrieval without a
 // model round-trip.
 func RetrieveInfoQuery(ctx context.Context, query string) (string, error) {
+	text, _, err := RetrieveInfoWithMeta(ctx, query)
+	return text, err
+}
+
+// RetrievalMeta carries the structured outcome of one retrieval pass for
+// telemetry: how it resolved (cache hit / fresh fetch / stale / blocked) and
+// the API usage, so stats rows can distinguish zero-cost hits from paid calls.
+type RetrievalMeta struct {
+	FromCache   bool
+	APIUsed     bool
+	StaleServed bool
+	WebBlocked  bool
+	Tier        string
+}
+
+// RetrieveInfoWithMeta runs the retrieval pipeline and returns both the
+// rendered answer and the structured outcome. Exported for slash commands and
+// telemetry wiring.
+func RetrieveInfoWithMeta(ctx context.Context, query string) (string, RetrievalMeta, error) {
 	args, err := json.Marshal(map[string]string{"query": query})
 	if err != nil {
-		return "", err
+		return "", RetrievalMeta{}, err
 	}
-	return (retrieveInfo{}).Execute(ctx, args)
+	return (retrieveInfo{}).executeWithMeta(ctx, args)
 }
 
 func (retrieveInfo) Name() string { return "retrieve_info" }
@@ -75,6 +94,23 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 	if p.Query == "" {
 		return "", fmt.Errorf("retrieve_info: query is required")
 	}
+	text, _, err := (retrieveInfo{}).executeWithMeta(ctx, json.RawMessage(args))
+	return text, err
+}
+
+// executeWithMeta is the shared retrieval body: it runs the closed loop and
+// returns both the rendered answer and the structured outcome for telemetry.
+func (retrieveInfo) executeWithMeta(ctx context.Context, args json.RawMessage) (string, RetrievalMeta, error) {
+	var p struct {
+		Query string `json:"query"`
+	}
+	if err := json.Unmarshal(args, &p); err != nil {
+		return "", RetrievalMeta{}, fmt.Errorf("retrieve_info: parse args: %w", err)
+	}
+	p.Query = strings.TrimSpace(p.Query)
+	if p.Query == "" {
+		return "", RetrievalMeta{}, fmt.Errorf("retrieve_info: query is required")
+	}
 
 	// 会话策略：配置了 deepseek-responses 即视为会话级联网授权（管道复用，
 	// 不要求用户单独提供 API）。冷却/频率由 DynamicCooldown 控制。
@@ -89,22 +125,24 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 		// 未配置 deepseek-responses / 凭据不可用 → 授权提示而非报错；
 		// 其余管道错误原样返回。
 		if errors.Is(err, errNoResponsesProvider) {
-			return blockedNotice(), nil
+			return blockedNotice(), RetrievalMeta{WebBlocked: true}, nil
 		}
-		return "", err
+		return "", RetrievalMeta{APIUsed: res != nil && res.APIUsed}, err
 	}
 
 	if res.Entry == nil {
 		if res.WebBlocked {
-			return blockedNotice(), nil
+			return blockedNotice(), RetrievalMeta{WebBlocked: true, APIUsed: res.APIUsed}, nil
 		}
-		return "本地知识缓存未命中。", nil
+		return "本地知识缓存未命中。", RetrievalMeta{FromCache: true, Tier: string(res.Tier)}, nil
 	}
 
 	if res.StaleServed {
-		return "⚠️ " + p.Query + "\n\n（缓存信息可能过期，标注见下文）\n" + res.Entry.AnswerSummary, nil
+		meta := RetrievalMeta{StaleServed: true, FromCache: true, APIUsed: res.APIUsed, Tier: string(res.Tier)}
+		return "⚠️ " + p.Query + "\n\n（缓存信息可能过期，标注见下文）\n" + res.Entry.AnswerSummary, meta, nil
 	}
 
+	meta := RetrievalMeta{FromCache: res.FromCache, APIUsed: res.APIUsed, Tier: string(res.Tier)}
 	var b strings.Builder
 	if res.FromCache {
 		b.WriteString("【本地知识缓存命中】\n\n")
@@ -131,7 +169,7 @@ func (retrieveInfo) Execute(ctx context.Context, args json.RawMessage) (string, 
 	if res.Entry.TimeSensitive && res.Entry.FreshUntil.After(res.Entry.CreatedAt) {
 		fmt.Fprintf(&b, "\n（时效信息，截至 %s，如需最新请联网刷新）", res.Entry.FreshUntil.Format("2006-01-02 15:04"))
 	}
-	return b.String(), nil
+	return b.String(), meta, nil
 }
 
 func blockedNotice() string {
