@@ -1680,7 +1680,9 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 				}
 				return
 			}
-			c.runGuarded(func(ctx context.Context) error {
+			// Park while a turn runs instead of dropping: a user-typed skill
+			// command must run once the current turn finishes (FIFO drain).
+			c.runGuardedOrPark(func(ctx context.Context) error {
 				sent, err := docsCommandPrompt(ctx, query)
 				if err != nil {
 					return fmt.Errorf("docs: %w", err)

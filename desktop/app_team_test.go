@@ -51,12 +51,11 @@ func (s *noticeSink) has(sub string) bool {
 	return false
 }
 
-// TestSubmitToTabTeamCommandBypassesTurnAdmission pins the "/team-add did
-// nothing" fix: team commands run inline in the controller, so the desktop
-// submit path must not gate them on the turn-admission barrier (busy turn
-// used to reject with ErrTurnRunning and the assignment silently never
-// happened).
-func TestSubmitToTabTeamCommandBypassesTurnAdmission(t *testing.T) {
+// TestSubmitToTabSlashCommandsBypassTurnAdmission pins the "/team-add did
+// nothing" / "Team Planner 无法使用" fixes: slash commands are controller
+// management verbs, so the desktop submit path must not gate them on the
+// turn-admission barrier (a busy turn used to drop them with ErrTurnRunning).
+func TestSubmitToTabSlashCommandsBypassTurnAdmission(t *testing.T) {
 	isolateDesktopUserDirs(t)
 
 	// The foreground turn is serviced by teamBlockingRunner (never the
@@ -96,11 +95,31 @@ func TestSubmitToTabTeamCommandBypassesTurnAdmission(t *testing.T) {
 		t.Fatal("foreground turn did not enter running state")
 	}
 
-	// The team command must go through despite the busy turn.
-	if err := app.SubmitToTab("test", "/team-create alpha"); err != nil {
-		t.Fatalf("SubmitToTab /team-create during running turn = %v, want nil (ErrTurnRunning regression)", err)
+	// Every user-typed slash command must go through despite the busy turn.
+	// wantNotice asserts the command visibly took effect (not silently
+	// dropped); empty means "accepted without ErrTurnRunning" is enough (the
+	// command's own async path reports its outcome).
+	tests := []struct {
+		name       string
+		input      string
+		wantNotice string
+	}{
+		{"team-create", "/team-create alpha", "created"},
+		{"context", "/context", ""},
+		{"retrieve-info", "/retrieve_info 温州天气", ""},
+		{"team-planner", "/team-planner 规划一个快速排序", ""},
+		{"compact", "/compact", ""},
+		{"compress-fast", "/compress-fast", ""},
 	}
-	if !sink.has("created") || !sink.has("alpha") {
-		t.Fatalf("no teammate-created notice emitted; sink=%v", sink.text)
+	for _, tt := range tests {
+		if err := app.SubmitToTab("test", tt.input); err != nil {
+			t.Fatalf("SubmitToTab %q during running turn = %v, want nil (ErrTurnRunning regression)", tt.input, err)
+		}
+		if tt.wantNotice != "" && !sink.has(tt.wantNotice) {
+			t.Fatalf("command %q: no notice containing %q; sink=%v", tt.input, tt.wantNotice, sink.text)
+		}
 	}
+	// Give the async command goroutines a beat to finish their (safe) error
+	// paths before the controller closes under them.
+	time.Sleep(100 * time.Millisecond)
 }

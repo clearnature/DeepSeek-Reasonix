@@ -1260,9 +1260,9 @@ func (a *App) submitToTab(tabID, input string, fromBridge bool, submissionID ...
 		a.runEffortCommandForTab(tabID, trimmed)
 		return nil
 	}
-	// Team commands run inline (no agent turn): don't gate them on the turn
-	// admission barrier — a busy turn used to reject them silently.
-	if strings.HasPrefix(trimmed, "/team-") {
+	// Slash commands are controller-routed management verbs (inline locals
+	// or park-backed turns): don't gate them on the turn admission barrier.
+	if strings.HasPrefix(trimmed, "/") {
 		tab, _ := a.tabAndCtrlByID(tabID)
 		if a.tabIsReadOnly(tab) {
 			return readOnlyChannelErr()
