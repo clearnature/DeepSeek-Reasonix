@@ -256,6 +256,41 @@ func (ts *TeammateStore) List() []Teammate {
 	return out
 }
 
+// RosterView is the P12 UI projection of one teammate: identity, role,
+// lifecycle state, and write posture. Read-only and non-consuming — safe for
+// the desktop team panel to poll every few seconds.
+type RosterView struct {
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	State    string `json:"state"`
+	Writable bool   `json:"writable"`
+	Worktree bool   `json:"worktree"`
+	Token    bool   `json:"token"`
+	JobID    string `json:"job_id,omitempty"`
+}
+
+// Roster returns the non-consuming roster snapshot for the UI (P12). Unlike
+// List it never advances job state or consumes envelopes.
+func (ts *TeammateStore) Roster() []RosterView {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	out := make([]RosterView, 0, len(ts.teammates))
+	for name, tm := range ts.teammates {
+		rv := RosterView{
+			Name:     tm.Name,
+			Role:     tm.Role,
+			State:    string(tm.State),
+			Writable: tm.Writable,
+			Worktree: tm.Worktree,
+			Token:    len(ts.grants[name].Paths) > 0 || tm.Worktree,
+			JobID:    tm.LastJobID,
+		}
+		out = append(out, rv)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 // syncStateLocked flips a running teammate to idle once its last job is done.
 // Lazy fallback only — the event-driven HandleJobDone is the primary path.
 func (ts *TeammateStore) syncStateLocked(tm *Teammate) {

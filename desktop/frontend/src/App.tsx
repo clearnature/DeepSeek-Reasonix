@@ -1,7 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { ShellExpandProvider, useShellExpand } from "./lib/shellExpand";
 import {
-  Activity,
+  Users, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { ShellExpandProvider, useShellExpand } from "./lib/shellExpand";
+import { Activity,
   CircleHelp,
   Command,
   Copy as RestoreIcon,
@@ -31,6 +31,7 @@ import {
   Puzzle,
   X,
   TerminalSquare,
+  Users,
 } from "lucide-react";
 import { useToast } from "./lib/toast";
 import { useGoalActionHandler } from "./lib/goalAction";
@@ -298,6 +299,7 @@ const SettingsPanel = lazy(() => import("./components/SettingsPanelEntry").then(
 const RemotePanel = lazy(() => import("./components/RemotePanel").then((module) => ({ default: module.RemotePanel })));
 const TerminalPanel = lazy(() => import("./components/TerminalPanel").then((module) => ({ default: module.TerminalPanel })));
 const TaskMonitorPanel = lazy(() => import("./components/TaskMonitorPanel").then((module) => ({ default: module.TaskMonitorPanel })));
+const TeamPanel = lazy(() => import("./components/TeamPanel").then((module) => ({ default: module.TeamPanel })));
 const WorkspacePanel = lazy(() => import("./components/WorkspacePanel").then((module) => ({ default: module.WorkspacePanel })));
 
 const CHAT_MIN_WIDTH = 400;
@@ -1214,6 +1216,7 @@ export default function App() {
   const setSidebarWidth = useLayoutStore((s) => s.setSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [teamsOpen, setTeamsOpen] = useState(false);
   const [liveSidebarWidth, setLiveSidebarWidth] = useState<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window === "undefined" ? 720 : window.innerHeight));
@@ -4834,6 +4837,27 @@ export default function App() {
                   <Activity size={14} />
                 </button>
               </Tooltip>
+              <Tooltip label="Team">
+                <button
+                  className={`topicbar__action-btn topicbar__action-btn--icon topicbar__action-btn--utility${teamsOpen ? " topicbar__action-btn--active" : ""}`}
+                  type="button"
+                  aria-label="Team"
+                  aria-expanded={teamsOpen}
+                  onClick={() => setTeamsOpen((open) => !open)}
+                >
+                  <Users size={14} />
+                </button>
+              </Tooltip>
+              {teamsOpen && (
+                <div className="teampanel-popover" role="dialog" aria-label="Team panel">
+                  <Suspense fallback={null}>
+                    <TeamPanel
+                      key={`${activeTab?.id || activeTabId || "none"}:${activeTab?.workspaceRoot || "global"}`}
+                      tabID={activeTab?.id || activeTabId || ""}
+                    />
+                  </Suspense>
+                </div>
+              )}
               {tasksOpen && (
                 <div className="taskmonitor-popover" role="dialog" aria-label="Session summary">
                   <Suspense fallback={null}>

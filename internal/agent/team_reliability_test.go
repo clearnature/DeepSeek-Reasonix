@@ -114,3 +114,31 @@ func TestTeamStallAbortKillsStalled(t *testing.T) {
 		t.Fatalf("alpha state after stall abort = %s, want idle", st)
 	}
 }
+
+// TestTeamRosterViewProjection covers the P12 non-consuming roster view: it
+// reflects identity/role/state/write posture without advancing lifecycle.
+func TestTeamRosterViewProjection(t *testing.T) {
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	ts := NewTeammateStore(testTaskToolForTeam(t), jm, t.TempDir())
+	defer ts.Close()
+	ts.SetWorkspaceRoot(t.TempDir())
+
+	if err := ts.Create("alpha", "coder"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := ts.GrantWorktree("alpha"); err != nil {
+		t.Fatalf("GrantWorktree: %v", err)
+	}
+	roster := ts.Roster()
+	if len(roster) != 1 {
+		t.Fatalf("roster = %+v, want 1 entry", roster)
+	}
+	r := roster[0]
+	if r.Name != "alpha" || r.Role != "coder" || r.State != string(TeammateIdle) {
+		t.Fatalf("roster entry = %+v, want alpha/coder/idle", r)
+	}
+	if !r.Worktree || !r.Token {
+		t.Fatalf("worktree teammate should report worktree+token posture; got %+v", r)
+	}
+}

@@ -12425,3 +12425,33 @@ func (a *App) ConnectKey(apiKey string) (string, error) {
 	}
 	return warning, nil
 }
+
+// TeamPanelView is the P12 UI projection of the team panel for one tab:
+// the non-consuming roster plus pending plan/tool approvals.
+type TeamPanelView struct {
+	Roster    []agent.RosterView      `json:"roster"`
+	Approvals []agent.ApprovalRequest `json:"approvals"`
+}
+
+// TeamPanelViewForTab returns the P12 team panel projection for the tab's
+// controller (nil when the tab has no team). Safe to poll: both views are
+// non-consuming snapshots.
+func (a *App) TeamPanelViewForTab(tabID string) (*TeamPanelView, error) {
+	ctrl, err := a.jobPanelTargetForTab(tabID)
+	if err != nil {
+		return nil, err
+	}
+	if ctrl == nil {
+		return nil, nil
+	}
+	if tc, ok := ctrl.(interface {
+		TeamRosterView() []agent.RosterView
+		TeamApprovalsView() []agent.ApprovalRequest
+	}); ok {
+		return &TeamPanelView{
+			Roster:    tc.TeamRosterView(),
+			Approvals: tc.TeamApprovalsView(),
+		}, nil
+	}
+	return nil, fmt.Errorf("this runtime cannot report a team panel")
+}

@@ -4905,6 +4905,24 @@ func (c *Controller) setActiveJobSession(sessionPath string) {
 // persistence), so the caller can decide whether to mint a path.
 func (c *Controller) SessionDir() string { return c.sessionDir }
 
+// TeamRosterView returns the P12 non-consuming team roster projection for
+// the desktop panel (nil when no team is configured).
+func (c *Controller) TeamRosterView() []agent.RosterView {
+	if c.teammates == nil {
+		return nil
+	}
+	return c.teammates.Roster()
+}
+
+// TeamApprovalsView returns the pending P9/P11 approval requests for the UI
+// (non-consuming snapshot).
+func (c *Controller) TeamApprovalsView() []agent.ApprovalRequest {
+	if c.teammates == nil {
+		return nil
+	}
+	return c.teammates.PendingApprovals()
+}
+
 // SessionPath reports the file the current conversation auto-saves to ("" when
 // persistence is disabled), so a history view can mark the active session.
 func (c *Controller) SessionPath() string {
