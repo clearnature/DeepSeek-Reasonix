@@ -280,6 +280,7 @@ export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindi
   CompactForTab(tabID: string): Promise<void>;
   NewSession(): Promise<void>;
   NewSessionForTab(tabID: string): Promise<void>;
+  TeamPanelViewForTab(tabID: string): Promise<unknown>;
   ClearSession(): Promise<SessionClearResult>;
   ClearSessionForTab(tabID: string): Promise<SessionClearResult>;
   History(): Promise<HistoryMessage[]>;
@@ -3170,6 +3171,7 @@ function makeMockApp(): AppBindings {
         async CompactForTab() {},
         async NewSession() {},
         async NewSessionForTab() {},
+        async TeamPanelViewForTab() { return null; },
         async ClearSession() { return { sessionPath: "", sessionGeneration: 0 }; },
         async ClearSessionForTab() { return { sessionPath: "", sessionGeneration: 0 }; },
     async Checkpoints() {
