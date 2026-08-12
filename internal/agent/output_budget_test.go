@@ -71,7 +71,6 @@ var _ provider.Provider = (*sharedFakeProvider)(nil)
 var _ provider.OutputBudgetProvider = (*sharedFakeProvider)(nil)
 var _ provider.SharedWindowOutputProvider = (*sharedFakeProvider)(nil)
 
-
 func newSessionWithMsgs(msgs []provider.Message) *Session {
 	s := NewSession("")
 	for _, m := range msgs {
@@ -652,6 +651,17 @@ func TestCalibratedOutputBudgetCountsToolSchemasOnce(t *testing.T) {
 	}
 }
 
+func TestEffectiveOutputBudgetUsesObservedTokensWhenCalibrationAbsent(t *testing.T) {
+	// Fresh fork agents lack calibration; the 0.25 fallback inflates dense
+	// sessions ~1.8x and falsely reports overflow — the observed value wins.
+	a := &Agent{prov: &sharedWindowTestProvider{budget: 128 * 1024, shared: true},
+		contextWindow: 1_048_576, outputBudgetState: outputBudgetState{outputBudget: 128 * 1024}}
+	a.lastUsage.Store(&provider.Usage{PromptTokens: 858_000})
+	req := provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("code json {}[];", 500_000)}}}
+	if _, _, err := a.effectiveOutputBudget(req); err != nil {
+		t.Fatalf("effectiveOutputBudget wrongly overflowed with observed 858K prompt: %v", err)
+	}
+}
 func TestPrepareSamplingRequestClipsSharedWindowOutput(t *testing.T) {
 	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true}
 	msgs := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 950_000)}}

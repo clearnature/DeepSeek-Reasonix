@@ -244,6 +244,14 @@ func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
 		return 0, false, nil
 	}
 	est := a.estimatedRequestTokens(req)
+	// Admission trusts the last observed prompt size over the wire-char
+	// estimate: fresh fork agents lack calibration and the 0.25 fallback
+	// inflates dense sessions ~2x, falsely reporting shared-window overflow.
+	if u := a.lastUsage.Load(); u != nil {
+		if pt := u.LatestPromptTokens(); pt > 0 {
+			est = pt
+		}
+	}
 	available := a.contextWindow - est - outputBudgetReserve
 	if available <= 0 {
 		return 0, false, fmt.Errorf("%w: estimated prompt %d leaves no shared-window output budget", ErrCompactionRequired, est)
