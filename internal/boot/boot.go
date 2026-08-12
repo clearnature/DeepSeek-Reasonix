@@ -1763,16 +1763,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// dropped it — team commands were disabled); ablation builds keep nil.
 	var teammates *agent.TeammateStore
 	if taskTool != nil {
-		// User-level team: the store lives in the user state root, not the
-		// session dir, so roster, grants, approvals and mailbox survive across
-		// sessions and projects (team is a system feature, not a per-project one).
-		teamRoot := filepath.Join(config.StateHome(), "team")
-		_ = os.MkdirAll(teamRoot, 0o755)
-		teammates = agent.NewTeammateStore(taskTool, jm, filepath.Join(teamRoot, "team-inbox"))
+		inboxRoot := filepath.Join(sessionDir, "team-inbox")
+		teammates = agent.NewTeammateStore(taskTool, jm, inboxRoot)
 		teammates.SetWorkspaceRoot(root)
 		// P10: stalled-teammate abort (0 = warning only) + crash snapshot.
 		teammates.SetStallAbort(time.Duration(cfg.Agent.TeamStallAbortSeconds) * time.Second)
-		teammates.SetSnapshotPath(filepath.Join(teamRoot, "team-state.json"))
+		teammates.SetSnapshotPath(filepath.Join(sessionDir, "team-state.json"))
 		teammates.SetSink(sink)
 	}
 

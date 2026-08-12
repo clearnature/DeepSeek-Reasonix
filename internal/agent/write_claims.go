@@ -63,18 +63,6 @@ func NormalizeConcurrencyLimits(total, writers int) (int, int) {
 // workspace root. It rejects globs, empty entries, workspace-escape paths, and
 // symlink escapes. An empty raw list yields an empty set (read-only / no claim).
 func NormalizeWritePaths(workspaceRoot string, raw []string) (WritePathSet, error) {
-	return normalizeWritePaths(workspaceRoot, raw, true)
-}
-
-// NormalizeWritePathsExternal normalizes write claims for user-scoped explicit
-// grants that may point outside the workspace (team write tokens the user
-// authorizes for another project). Normalization, glob ban and dedup still
-// apply; only the workspace-containment check is relaxed.
-func NormalizeWritePathsExternal(workspaceRoot string, raw []string) (WritePathSet, error) {
-	return normalizeWritePaths(workspaceRoot, raw, false)
-}
-
-func normalizeWritePaths(workspaceRoot string, raw []string, requireContainment bool) (WritePathSet, error) {
 	root, err := normalizeExistingRoot(workspaceRoot)
 	if err != nil {
 		return WritePathSet{}, err
@@ -96,7 +84,7 @@ func normalizeWritePaths(workspaceRoot string, raw []string, requireContainment 
 		if err != nil {
 			return WritePathSet{}, fmt.Errorf("write_paths[%d]: %w", i, err)
 		}
-		if requireContainment && !pathWithinFold(root, abs) {
+		if !pathWithinFold(root, abs) {
 			return WritePathSet{}, fmt.Errorf("write_paths[%d]: path %q is outside the workspace", i, entry)
 		}
 		key := foldPathKey(abs)

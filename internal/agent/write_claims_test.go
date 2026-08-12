@@ -121,24 +121,3 @@ func TestWritePathSetAllowsPath(t *testing.T) {
 		t.Fatalf("should reject %s", outside)
 	}
 }
-
-func TestNormalizeWritePathsExternalAllowsOutsideWorkspace(t *testing.T) {
-	tmp := t.TempDir()
-	outside := t.TempDir()
-	// Default still rejects a path outside the workspace.
-	if _, err := NormalizeWritePaths(tmp, []string{outside}); err == nil {
-		t.Fatal("NormalizeWritePaths should reject a path outside the workspace")
-	}
-	// External entry point accepts the explicit user grant.
-	got, err := NormalizeWritePathsExternal(tmp, []string{outside})
-	if err != nil {
-		t.Fatalf("NormalizeWritePathsExternal: %v", err)
-	}
-	if len(got.Paths) != 1 || got.Paths[0] != outside {
-		t.Fatalf("external grant = %v, want [%s]", got.Paths, outside)
-	}
-	// Normalization/globbing still enforced.
-	if _, err := NormalizeWritePathsExternal(tmp, []string{filepath.Join(outside, "*.go")}); err == nil {
-		t.Fatal("external grant must still reject globs")
-	}
-}

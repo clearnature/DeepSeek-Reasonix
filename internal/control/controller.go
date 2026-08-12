@@ -6513,7 +6513,7 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			c.notice(fmt.Sprintf("teammate %q granted worktree mode — dedicated branch on next assignment", fields[0]))
 			return
 		}
-		ws, err := agent.NormalizeWritePathsExternal(c.workspaceRoot, fields[1:])
+		ws, err := agent.NormalizeWritePaths(c.workspaceRoot, fields[1:])
 		if err != nil {
 			c.notice("team-grant: " + err.Error())
 			return
