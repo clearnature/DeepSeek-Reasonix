@@ -24,6 +24,20 @@ type userTurnRetention struct {
 // when the window is genuinely short on space (automatic pressure folds).
 func (a *Agent) keepUserTurns(region []provider.Message, keep []bool, projBase, projCap int) userTurnRetention {
 	budget := a.keptUserTurnsBudget(projBase, projCap)
+	// keep-policy messages ([[keep]], pinned) also spend the projection room;
+	// reserve them so user turns cannot push the candidate past the ceiling,
+	// where the whole fold would be rejected (worse than dropping a turn).
+	if projCap > 0 && budget > keptUserTurnsBudgetTokens {
+		reserved := 0
+		for i, m := range region {
+			if keep[i] && m.Role != provider.RoleUser && !m.LocalOnly && !isCompactionSummary(m) {
+				reserved += fixedTokenEstimate(m)
+			}
+		}
+		if room := projCap - projBase - reserved; room < budget {
+			budget = max(room, keptUserTurnsBudgetTokens)
+		}
+	}
 	var ret userTurnRetention
 	// Oldest-first: the recent tail already covers the newest turns verbatim,
 	// and an old turn has survived more folds than a new one.
