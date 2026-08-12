@@ -150,6 +150,11 @@ func userSupportDir() string {
 	return reasonixHomeDir()
 }
 
+// StateHome returns the user-level state root (REASONIX_STATE_HOME, else the
+// reasonix home dir). It is the home of user-scoped data that outlives any
+// single project or session — session transcripts, stats, and the team store.
+func StateHome() string { return userSupportDir() }
+
 func legacyOSSupportDir() string {
 	if IsolatedHomeDir() != "" {
 		return ""

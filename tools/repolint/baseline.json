@@ -2,10 +2,10 @@
   "limits": {
     "banner": 48,
     "commented-code": 1,
-    "complexity": 2171,
-    "essay": 4312,
-    "file-size": 110962,
-    "function-size": 9268,
+    "complexity": 2166,
+    "essay": 4311,
+    "file-size": 110816,
+    "function-size": 9264,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -534,14 +534,14 @@
       "test-file-size": 509
     },
     "internal/agent/execute_batch.go": {
-      "complexity": 44,
-      "function-size": 207
+      "complexity": 39,
+      "function-size": 201
     },
     "internal/agent/execute_one.go": {
       "complexity": 11,
       "essay": 24,
-      "file-size": 117,
-      "function-size": 16
+      "file-size": 85,
+      "function-size": 15
     },
     "internal/agent/extensions.go": {
       "essay": 64
@@ -767,8 +767,8 @@
     "internal/boot/boot.go": {
       "complexity": 251,
       "essay": 104,
-      "file-size": 2108,
-      "function-size": 1727,
+      "file-size": 2111,
+      "function-size": 1730,
       "narrative": 3
     },
     "internal/boot/boot_test.go": {
@@ -875,7 +875,7 @@
     },
     "internal/checkpoint/checkpoint.go": {
       "essay": 8,
-      "file-size": 305
+      "file-size": 242
     },
     "internal/checkpoint/observer.go": {
       "essay": 1
@@ -1318,8 +1318,8 @@
     },
     "internal/evidence/evidence.go": {
       "complexity": 6,
-      "essay": 38,
-      "file-size": 2037
+      "essay": 37,
+      "file-size": 1988
     },
     "internal/evidence/evidence_test.go": {
       "essay": 1,
@@ -1765,7 +1765,7 @@
     "internal/recovery/rules.go": {
       "complexity": 19,
       "essay": 1,
-      "file-size": 216
+      "file-size": 211
     },
     "internal/recovery/types.go": {
       "essay": 1
