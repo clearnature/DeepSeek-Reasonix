@@ -62,6 +62,11 @@ type ProfileExecSpec struct {
 	Grant   CapabilityGrant
 	Context ContextRequest
 	Sched   SchedulerPolicy
+	// Asker is the leader's approval surface for this delegated run. Job
+	// workers rebuild their ctx from the manager root, so upstream ctx values
+	// do not reach the child — the asker rides the spec instead and is
+	// injected into the job ctx at execution.
+	Asker Asker
 }
 
 // TaskSpec is what one delegated run must accomplish. Every field is decided

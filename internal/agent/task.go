@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -892,6 +893,12 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// beginRunTurn skips re-appending it (prefix-stable continuation). The
 	// handoff is the only caller that sets resume.
 	runSessionMode := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered, resume bool) (string, error) {
+		// Job workers rebuild their ctx from the manager root, so inject the
+		// leader's asker here (inside the worker ctx) — the child's `ask`
+		// then reaches the approval chain instead of the nil-asker fallback.
+		if spec.Asker != nil {
+			runCtx = withSubagentAsker(runCtx, spec.Asker)
+		}
 		if spec.Context.Fork {
 			// P5/P6.1 execution gate: schema stays writer-capable (cache
 			// prefix), executions are gated — read-only by default; a
@@ -1832,7 +1839,26 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 	return prov, pricing, ctxWin, nil
 }
 
+// subagentAskerKey carries the leader's Asker to a spawned sub-agent so its
+// `ask` reaches the leader's approval chain instead of the headless fallback.
+type subagentAskerKey struct{}
+
+func withSubagentAsker(ctx context.Context, a Asker) context.Context {
+	return context.WithValue(ctx, subagentAskerKey{}, a)
+}
+
+func subagentAskerFromContext(ctx context.Context) (Asker, bool) {
+	a, ok := ctx.Value(subagentAskerKey{}).(Asker)
+	return a, ok
+}
+
 func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver) (string, error) {
+	// Sub-agents inherit the leader's asker so `ask` is answered per the
+	// parent's permission mode (ask=human, auto=auto-approve, yolo=decide)
+	// rather than silently falling back to a model assumption.
+	if _, _, asker, ok := CallContext(ctx); ok && asker != nil {
+		ctx = withSubagentAsker(ctx, asker)
+	}
 	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
 	opts.ModelRef = modelRef
 	// Capture the pristine task before host framing is prepended: delivery
@@ -1846,6 +1872,9 @@ func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *too
 }
 
 func (t *TaskTool) runReadOnlySubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver) (string, error) {
+	if _, _, asker, ok := CallContext(ctx); ok && asker != nil {
+		ctx = withSubagentAsker(ctx, asker)
+	}
 	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
 	opts.ModelRef = modelRef
 	// Capture the pristine task before host framing is prepended: delivery
@@ -2067,6 +2096,14 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 			sub.lastUsage.Store(usage)
 			sub.promptCalibration.Store(cal)
 		}
+	}
+	// Sub-agents inherit the leader's asker so their `ask` is answered per the
+	// parent's permission mode instead of silently falling back.
+	if asker, ok := subagentAskerFromContext(ctx); ok {
+		sub.SetAsker(asker)
+		slog.Info("subagent asker injected", "model", opts.ModelRef)
+	} else {
+		slog.Info("subagent asker absent", "model", opts.ModelRef)
 	}
 	sub.SetPlanMode(planWorkflow)
 	if err := sub.Run(ctx, prompt); err != nil {

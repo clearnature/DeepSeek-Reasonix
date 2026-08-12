@@ -2455,6 +2455,16 @@ func (c *Controller) recordDecisionReceipt(pending pendingApproval, outcome stri
 // controller in as the executor's Asker so the `ask` tool can question the user.
 // Interactive frontends (chat, desktop) call this; the headless run keeps the
 // silent gate and a nil asker from setup.
+// EnableHeadlessAsker wires the controller in as the executor's Asker while
+// keeping the silent gate — headless/auto runs use this so `ask` is answered
+// by the permission mode (ask → human, auto → auto-approve) instead of the
+// nil-asker fallback.
+func (c *Controller) EnableHeadlessAsker() {
+	if c.executor != nil {
+		c.executor.SetAsker(c)
+	}
+}
+
 func (c *Controller) EnableInteractiveApproval() {
 	trustGate := planModeReadOnlyTrustApprover{c}
 	escapeApprover := sandboxEscapeApprover{c}
@@ -2726,6 +2736,11 @@ func (c *Controller) lockPromptFor(ctx context.Context, kind string) bool {
 // tool exists to get a genuine user decision, and YOLO only auto-approves
 // tool calls; it must not answer the user's questions for them.
 func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]event.AskAnswer, error) {
+	// Permission-mode aware (sub-agents inherit the parent's posture):
+	//   auto — emit an auditable AskRequest and auto-approve the recommendation
+	//          (team completes autonomously; risk governed by the mode),
+	//   ask/yolo — the AskRequest still reaches the user; YOLO auto-approves
+	//          tools only, never user decision points (see SetAutoApproveTools).
 	// Registering after the lock left a queued question invisible everywhere:
 	// no event, absent from the snapshot, unreachable by ReplayPendingPrompts.
 	id, reply := c.approval.registerAsk(questions)
@@ -2741,6 +2756,15 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 	c.sink.Emit(event.Event{Kind: event.AskRequest, Ask: event.Ask{ID: id, Questions: questions}})
 	c.approval.promptEmitMu.Unlock()
 
+	if c.approval.toolApprovalMode == ToolApprovalAuto {
+		// Auto-approve the recommended option: the request stays emitted for
+		// audit, but no human round-trip is needed — risk is governed by the
+		// permission mode, not per-question.
+		answers := autoAnswerQuestions(questions)
+		c.AnswerQuestion(id, answers)
+		return answers, nil
+	}
+
 	waitCtx, cancelWait := c.approval.waitContext(ctx)
 	defer cancelWait()
 
@@ -2751,6 +2775,18 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 		c.approval.cancelAsk(id)
 		return nil, waitCtx.Err()
 	}
+}
+
+// autoAnswerQuestions picks the first option of every question — the
+// recommended choice under auto/yolo permission modes.
+func autoAnswerQuestions(questions []event.AskQuestion) []event.AskAnswer {
+	answers := make([]event.AskAnswer, 0, len(questions))
+	for _, q := range questions {
+		if len(q.Options) > 0 {
+			answers = append(answers, event.AskAnswer{QuestionID: q.ID, Selected: []string{q.Options[0].Label}})
+		}
+	}
+	return answers
 }
 
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.
