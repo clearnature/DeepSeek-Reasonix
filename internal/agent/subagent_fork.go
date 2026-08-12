@@ -30,14 +30,13 @@ func captureForkPrefix(parent *Agent, ctx context.Context) []provider.Message {
 	return truncateUnfinishedTurn(msgs)
 }
 
-// cloneForkMessages 深拷贝消息日志：复制外层 slice，并把每条 Message 内可变的
-// 内嵌 slice / 指针目标一并复制，保证 fork 前缀与父 Session 之间零共享可变状态。
-// 纯值字段（Role/Content/Reasoning* 等 string 与 int64/bool）本就按值复制。
+// cloneForkMessages 深拷贝消息日志：外层 slice 与每条 Message 内嵌的
+// slice/指针目标一并复制，保证 fork 前缀与父 Session 零共享可变状态；
+// 纯值字段（Role/Content/Reasoning* 等 string、int64/bool）按值复制。
 // captureForkInheritance 捕获子代理继承的 admission 校准：父的 lastUsage
-// 实测与 promptCalibration（值拷贝，原子快照）。仅当子代理与父同 model 时
-// 继承——跨 model 的 tokenizer 属性不同，calibration 不可移植。返回
-// (usage, calibration, ok)；父无可用值或 model 不一致时 ok=false，子代理
-// 保持冷启动（fallback 估算 + 首轮自校准）。
+// 实测与 promptCalibration 值快照，仅同 model 时继承（跨 model 的 tokenizer
+// 属性不同，calibration 不可移植）；父无可用值或 model 不一致则 ok=false，
+// 子代理保持冷启动（fallback 估算 + 首轮自校准）。
 func captureForkInheritance(parent *Agent, modelRef string) (*provider.Usage, *promptTokenCalibration, bool) {
 	if parent == nil || parent.modelRef != modelRef {
 		return nil, nil, false
@@ -117,15 +116,10 @@ func cloneForkMessages(msgs []provider.Message) []provider.Message {
 	return out
 }
 
-// truncateUnfinishedTurn 从尾部剔除「当前未完成的 assistant 轮次及其后」，使
-// 前缀停在父已发送的最后一个完整请求边界上（缓存命中硬前提）：
-//
-//  1. LocalOnly 消息（流式输出未完成/中断记录，永不发送）一律剔除；
-//  2. 带 tool_calls 但未被后续 tool 结果全部配对的 assistant 消息，连同其后的
-//     部分配对结果一并剔除——批量工具轮次中有一个 call 未完成即整轮作废；
-//  3. 纯文本 assistant（无 tool_calls）与配对完整的工具轮次视为完成，保留。
-//
-// 返回的是原切片的前缀视图（len 缩短），元素不变。
+// truncateUnfinishedTurn 从尾部剔除「当前未完成的 assistant 轮次及其后」，
+// 使前缀停在父已发送的最后一个完整请求边界（缓存命中硬前提）：LocalOnly
+// 消息一律剔除；带 tool_calls 但未被后续结果全部配对的轮次整轮作废；纯文本
+// assistant 与配对完整的工具轮次保留。返回原切片前缀视图（len 缩短）。
 func truncateUnfinishedTurn(msgs []provider.Message) []provider.Message {
 	end := len(msgs)
 	for {

@@ -72,17 +72,13 @@ type TaskSpec struct {
 	Objective string
 	// Description is an optional short UI label.
 	Description string
-	// Sink is the leader's event sink (the Recorder-wrapped chain). Sub-agent
-	// usage events ride it so teammate requests land in the daily stats file
-	// (prefix_hash / cache splits observable) — without it the job ctx has no
-	// CallContext and subSink falls back to event.Discard. Decided per call
-	// by the leader, so it lives with TaskSpec, not the worker profile.
+	// Sink is the leader's event sink (the Recorder-wrapped chain) so teammate
+	// usage lands in the daily stats file; the job ctx has no CallContext and
+	// would otherwise fall back to event.Discard. Per-call, lives with TaskSpec.
 	Sink event.Sink
 	// Asker is the leader's approval surface for this delegated run. Job
-	// workers rebuild their ctx from the manager root, so upstream ctx values
-	// do not reach the child — the asker rides the spec instead and is
-	// injected into the job ctx at execution. Per-call (the leader decides
-	// whose approval gates this run), so it belongs to TaskSpec.
+	// workers rebuild their ctx from the manager root, so the asker rides the
+	// spec and is injected at execution. Per-call, lives with TaskSpec.
 	Asker Asker
 }
 

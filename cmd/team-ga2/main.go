@@ -20,20 +20,10 @@ import (
 	_ "reasonix/internal/provider/openai"
 )
 
-// GA engine with AUTO-APPROVAL: the population includes ask-gene individuals
-// ("ask the leader when a decision is ambiguous"). The engine's sink watches
-// for AskRequest events and answers them automatically (first option), so ask
-// individuals complete their evaluation instead of hanging forever waiting for
-// a human.
-//
-// KNOWN GAP (2026-08-12, verified by experiment): sub-agents (teammates) are
-// spawned with a nil Asker, so AskTool.Call returns a headless model-assumption
-// fallback and NEVER emits AskRequest — the auto-approver below is currently
-// unreachable for teammate asks. The ask-gene evaluation therefore does NOT
-// exercise the approval chain until "sub-agent asker injection" lands
-// (teammate inherits the leader's Asker). See docs/team/20260812-subagent-asker/.
-// Product behavior untouched: Controller.Ask still waits for a real user; the
-// engine drives it programmatically via AnswerQuestion.
+// GA engine with AUTO-APPROVAL: ask-gene individuals ask the leader on
+// ambiguous decisions; the sink auto-answers AskRequest so they finish.
+// Sub-agents inherit the leader's Asker (cc9202f8e); Controller.Ask waits
+// for a real user, the engine drives it via AnswerQuestion.
 
 type captureSink struct {
 	mu       sync.Mutex

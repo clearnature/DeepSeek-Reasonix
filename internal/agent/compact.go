@@ -548,12 +548,9 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 	defer cancel()
 	ctx = provider.WithRequestAttemptCounter(ctx)
 	instructions = strings.TrimSpace(instructions)
-	// The summarizer request reuses the exact prefix the main request just
-	// sent (msgs[:head]) plus the fold as raw messages, so DeepSeek's prefix
-	// cache hits it instead of paying full price for a re-rendered transcript
-	// (renderTranscript text never matches the provider message bytes).
-	// The fold is marked by a short user message so the model knows what to
-	// summarize without any byte drift in the cached prefix.
+	// Reuse the main request's exact prefix (msgs[:head]) plus the raw fold so
+	// the prefix cache hits instead of paying for a re-rendered transcript.
+	// A short marker message tells the model what to summarize with no drift.
 	msgs := make([]provider.Message, 0, len(prefix)+len(region)+2)
 	msgs = append(msgs, prefix...)
 	msgs = append(msgs, provider.Message{Role: provider.RoleUser, Content: summaryFoldMarker})

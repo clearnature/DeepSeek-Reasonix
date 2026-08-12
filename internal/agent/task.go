@@ -123,25 +123,22 @@ const subagentToolBoundarySummary = "Recursive agent/skill tools are exposed onl
 const maxConcurrentBackgroundTasks = MaxSubagentConcurrencyLimit
 
 // AlwaysHiddenSubagentTools returns the tool names excluded from every
-// subagent's registry regardless of an explicit allowlist or delegation
-// depth (unlike subagentRecursiveTools, which depends on remaining depth).
-// That covers both subagentAlwaysHiddenTools and subagentJobTools —
-// SubagentToolRegistryForDepth and its read-only variant strip the job tools
-// unconditionally too. Host UIs offering a tool picker for a subagent
-// profile's allowed-tools should exclude these from the offered choices —
-// selecting them would be silently ignored at runtime.
+// subagent's registry regardless of allowlist or delegation depth (unlike
+// subagentRecursiveTools, which depends on remaining depth). That covers
+// subagentAlwaysHiddenTools and subagentJobTools — both registry variants
+// strip the job tools unconditionally. Host tool pickers for a subagent
+// profile should exclude these: selecting them is silently ignored.
 func AlwaysHiddenSubagentTools() []string {
 	names := append([]string(nil), subagentAlwaysHiddenTools...)
 	return append(names, subagentJobTools...)
 }
 
-// SubagentMetaTools returns the tool names that spawned agents should not inherit
-// from the parent registry unless a future call site deliberately opts into a
-// different boundary. They can spawn or author more agent work, so excluding them
-// preserves one layer of delegation without adding a spawn-count cap.
-// read_skill stays listed here so the guardian and planner surfaces, which
-// exclude these names, keep their provider-visible tool sets byte-identical —
-// only the sub-agent depth cap deliberately stopped stripping it.
+// SubagentMetaTools returns the tool names spawned agents should not inherit
+// unless a call site deliberately opts into a different boundary; they can
+// spawn or author more agent work, so excluding them preserves one layer of
+// delegation without a spawn-count cap. read_skill stays listed so guardian
+// and planner surfaces keep byte-identical provider-visible tool sets — only
+// the sub-agent depth cap deliberately stopped stripping it.
 func SubagentMetaTools() []string {
 	out := append([]string(nil), subagentRecursiveTools...)
 	out = append(out, "read_skill")
