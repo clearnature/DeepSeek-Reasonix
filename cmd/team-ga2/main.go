@@ -141,7 +141,7 @@ func main() {
 	for _, n := range []string{"g1", "g2", "g3"} {
 		ctrl.Submit(fmt.Sprintf("/team-add "+n+" "+task, grantDir(n)))
 	}
-	fmt.Printf("=== G5 种群 3 个体并行评估（grant=%s × 多文件任务 × natural ask）===\n", *grantMode)
+	fmt.Printf("=== GA 种群 3 个体并行评估（grant=%s × 多文件任务 × natural ask）===\n", *grantMode)
 
 	lastRoster := func() string {
 		for _, v := range slices.Backward(sink.msgs) {
@@ -177,7 +177,7 @@ func evaluate(ws string, sink *captureSink, start time.Time) {
 	// Fitness: produced order.go in own worktree = 1.0. AskRequest count
 	// measures autonomy; cache stats measure prefix stability (path-grant
 	// shares the workspace, so tool outputs may jitter the prefix).
-	fmt.Println("\n=== G5 适应度评估（多文件 fitness × ask 次数）===")
+	fmt.Println("\n=== GA 适应度评估（多文件 fitness × ask 次数）===")
 	genes := map[string]string{"g1": "natural", "g2": "natural", "g3": "natural"}
 	for _, n := range []string{"g1", "g2", "g3"} {
 		dirs := []string{
@@ -208,7 +208,7 @@ func evaluate(ws string, sink *captureSink, start time.Time) {
 	}
 	fmt.Printf("AskRequest 总数: %d\n", sink.AskRequests())
 	cacheStats(start, time.Now())
-	fmt.Println("=== G5 结论：多文件任务下 path-grant 是否仍无缓存污染（prefix 抖动/命中率）===")
+	fmt.Println("=== GA 结论：多文件任务下 path-grant 是否仍无缓存污染（prefix 抖动/命中率）===")
 }
 
 // cacheStats summarizes prefix stability and hit rate for the experiment
