@@ -786,8 +786,8 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// The sink rides the spec (job workers have no CallContext): the leader's
 	// Recorder-wrapped sink keeps sub-agent usage in the daily stats file.
 	runSink := subSink(ctx)
-	if spec.Sink != nil {
-		runSink = spec.Sink
+	if spec.Task.Sink != nil {
+		runSink = spec.Task.Sink
 	}
 	trk := newSubagentProgressTracker(ctx, runSink)
 	backgroundHandoff := false
@@ -902,8 +902,8 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		// Job workers rebuild their ctx from the manager root, so inject the
 		// leader's asker here (inside the worker ctx) — the child's `ask`
 		// then reaches the approval chain instead of the nil-asker fallback.
-		if spec.Asker != nil {
-			runCtx = withSubagentAsker(runCtx, spec.Asker)
+		if spec.Task.Asker != nil {
+			runCtx = withSubagentAsker(runCtx, spec.Task.Asker)
 		}
 		if spec.Context.Fork {
 			// P5/P6.1 execution gate: schema stays writer-capable (cache

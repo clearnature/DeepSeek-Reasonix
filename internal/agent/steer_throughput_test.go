@@ -34,14 +34,12 @@ func BenchmarkSteerConcurrentInject(b *testing.B) {
 				}
 			}()
 			b.ResetTimer()
-			for w := 0; w < workers; w++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for i := 0; i < b.N/workers; i++ {
+			for range workers {
+				wg.Go(func() {
+					for range b.N / workers {
 						a.Steer("[mid-turn guidance] step 1 of 4: inspect the draft and fold in the feedback.")
 					}
-				}()
+				})
 			}
 			wg.Wait()
 			close(stop)
@@ -61,14 +59,12 @@ func TestSteerQueueThroughputFloor(t *testing.T) {
 	const total = 50_000
 	start := time.Now()
 	var wg sync.WaitGroup
-	for w := 0; w < 8; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < total/8; i++ {
+	for range 8 {
+		wg.Go(func() {
+			for i := range total / 8 {
 				a.Steer("mid-turn steer #" + fmt.Sprint(i))
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	injectDur := time.Since(start)

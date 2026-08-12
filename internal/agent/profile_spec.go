@@ -63,16 +63,6 @@ type ProfileExecSpec struct {
 	Grant   CapabilityGrant
 	Context ContextRequest
 	Sched   SchedulerPolicy
-	// Asker is the leader's approval surface for this delegated run. Job
-	// workers rebuild their ctx from the manager root, so upstream ctx values
-	// do not reach the child — the asker rides the spec instead and is
-	// injected into the job ctx at execution.
-	Asker Asker
-	// Sink is the leader's event sink (the Recorder-wrapped chain). Sub-agent
-	// usage events ride it so teammate requests land in the daily stats file
-	// (prefix_hash / cache splits observable) — without it the job ctx has no
-	// CallContext and subSink falls back to event.Discard.
-	Sink event.Sink
 }
 
 // TaskSpec is what one delegated run must accomplish. Every field is decided
@@ -82,6 +72,18 @@ type TaskSpec struct {
 	Objective string
 	// Description is an optional short UI label.
 	Description string
+	// Sink is the leader's event sink (the Recorder-wrapped chain). Sub-agent
+	// usage events ride it so teammate requests land in the daily stats file
+	// (prefix_hash / cache splits observable) — without it the job ctx has no
+	// CallContext and subSink falls back to event.Discard. Decided per call
+	// by the leader, so it lives with TaskSpec, not the worker profile.
+	Sink event.Sink
+	// Asker is the leader's approval surface for this delegated run. Job
+	// workers rebuild their ctx from the manager root, so upstream ctx values
+	// do not reach the child — the asker rides the spec instead and is
+	// injected into the job ctx at execution. Per-call (the leader decides
+	// whose approval gates this run), so it belongs to TaskSpec.
+	Asker Asker
 }
 
 // WorkerSpec is who carries the run out: the resolved profile identity and the

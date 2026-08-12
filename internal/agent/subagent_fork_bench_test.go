@@ -13,7 +13,7 @@ import (
 
 func mkForkMessages(n int, size int) []provider.Message {
 	msgs := make([]provider.Message, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		content := strings.Repeat("a", size) + " turn " + string(rune('a'+i%26))
 		msgs = append(msgs, provider.Message{
 			Role:      "user",
@@ -30,7 +30,7 @@ func BenchmarkCloneForkMessages(b *testing.B) {
 		b.Run("total="+string(rune('0'+total/100000))+"00k", func(b *testing.B) {
 			b.SetBytes(int64(total))
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = cloneForkMessages(msgs)
 			}
 		})

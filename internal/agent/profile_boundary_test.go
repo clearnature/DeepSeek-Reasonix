@@ -57,7 +57,7 @@ func TestDelegationSpecMembersStaySeparate(t *testing.T) {
 	assertFieldSet(t, "ProfileExecSpec", ProfileExecSpec{}, []string{
 		"Task", "Worker", "Grant", "Context", "Sched",
 	})
-	assertFieldSet(t, "TaskSpec", TaskSpec{}, []string{"Objective", "Description"})
+	assertFieldSet(t, "TaskSpec", TaskSpec{}, []string{"Objective", "Description", "Sink", "Asker"})
 	assertFieldSet(t, "WorkerSpec", WorkerSpec{}, []string{
 		"Kind", "Name", "Profile", "SystemPrompt", "UseProfilePrompt", "Model", "Effort",
 	})
