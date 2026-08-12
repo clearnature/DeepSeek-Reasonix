@@ -56,7 +56,7 @@ func (a *Agent) guardedSummaryInputTokens(msgs []provider.Message) int {
 
 // summaryInputBudget is the transcript ceiling for one summarizer call.
 // Zero means the window cannot host a useful summary request.
-func (a *Agent) summaryInputBudget(instructions string) int {
+func (a *Agent) summaryInputBudget(prefix []provider.Message, instructions string) int {
 	if a.contextWindow <= 0 {
 		return 0
 	}
@@ -64,11 +64,53 @@ func (a *Agent) summaryInputBudget(instructions string) int {
 	if sharesContextWindow(a.prov) && a.configuredOutputBudget(a.maxOutputTokens) > 0 {
 		reserve += outputBudgetReserve
 	}
-	budget := a.contextWindow - reserve - estimateTextTokens(summarySystemPrompt) - estimateTextTokens(instructions) - 256
+	// The summarizer request rides the main-request prefix (msgs[:head]) plus
+	// the fold; capping only the fold still overflows once a ~900k-token
+	// prefix travels along (observed 2026-08-12: est 1,002,698 → degraded).
+	prefixTokens := a.guardedSummaryInputTokens(prefix)
+	budget := a.contextWindow - reserve - prefixTokens - estimateTextTokens(summarySystemPrompt) - estimateTextTokens(instructions) - 256
 	if budget < minSummarySpanTokens {
 		return 0
 	}
 	return budget
+}
+
+// keepFoldWithinSummaryBudget moves the oldest fold messages back to kept
+// verbatim until the summarizer request fits the shared window — retention
+// first, size second, bounded by projCap (ceiling for pressure, trigger for
+// force), so the candidate is never rejected after the move.
+func (a *Agent) keepFoldWithinSummaryBudget(prefix, kept, fold []provider.Message, projBase, projCap int) ([]provider.Message, []provider.Message) {
+	if len(fold) == 0 || a.contextWindow <= 0 {
+		return kept, fold
+	}
+	budget := a.summaryInputBudget(prefix, "")
+	if budget <= 0 {
+		// No window (or the prefix alone fills it): fold cannot shrink toward
+		// a useful digest; the unbounded single-call path decides downstream.
+		return kept, fold
+	}
+	cap := projCap
+	// Conservative ceiling bookkeeping: the candidate is measured with
+	// estimateMessagesTokens by the window checks, so the move must use the
+	// same ruler — the calibrated estimate runs ~1.3x hot on dense sessions.
+	proj := projBase
+	for _, m := range kept {
+		proj += estimateMessagesTokens([]provider.Message{m})
+	}
+	for a.guardedSummaryInputTokens(fold) > budget && len(fold) > 0 {
+		m := fold[0]
+		fold = fold[1:]
+		if m.LocalOnly || isCompactionSummary(m) {
+			continue
+		}
+		extra := estimateMessagesTokens([]provider.Message{a.keptForProjection(m)})
+		if cap > 0 && proj+extra >= cap {
+			break
+		}
+		kept = append(kept, a.keptForProjection(m))
+		proj += extra
+	}
+	return kept, fold
 }
 
 // foldToSummary turns a fold region into one digest with at most one provider
@@ -76,7 +118,7 @@ func (a *Agent) summaryInputBudget(instructions string) int {
 // only; multi-span merge and application-layer retries are gone.
 func (a *Agent) foldToSummary(ctx context.Context, prefix, fold []provider.Message, instructions string) (foldSummary, error) {
 	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: summaryInputTokens(fold)}
-	budget := a.summaryInputBudget(instructions)
+	budget := a.summaryInputBudget(prefix, instructions)
 	if budget <= 0 {
 		// No declared window (or unusable window): send one unbounded call.
 		// Manual /compact on an unconfigured provider still works this way.

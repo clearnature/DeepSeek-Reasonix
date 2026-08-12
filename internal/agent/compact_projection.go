@@ -413,6 +413,15 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		return CompactionNoop, nil
 	}
 	kept, fold, retention := a.partitionFoldForProjection(msgs[head:start])
+	// The summarizer request = prefix + fold + system prompt must stay inside
+	// the shared window: overflow fold messages keep their text verbatim in
+	// the projection instead of being shed by the summarize-side trimmer.
+	projBase := a.estimatedPromptTokens(msgs[:head]) + a.estimatedPromptTokens(msgs[start:]) + summaryHeadroomTokens
+	projCap := a.compactTrigger()
+	if !force {
+		projCap = a.checkpointCeiling()
+	}
+	kept, fold = a.keepFoldWithinSummaryBudget(msgs[:head], kept, fold, projBase, projCap)
 	if len(fold) == 0 || (!force && !foldEconomics(fold)) {
 		return CompactionNoop, nil
 	}
@@ -446,6 +455,9 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
+	}
+	if res.Mode == CompactionModeDegraded && mustFree {
+		kept = a.keepDegradedUserTurnsVerbatim(msgs, head, start, kept, fold, res.Text)
 	}
 	summary, err := a.interceptCompactionComplete(ctx, res.Text)
 	if err != nil {
@@ -591,4 +603,28 @@ func (a *Agent) runCompactionSummary(ctx context.Context, prefix, fold []provide
 		return "", CompactionModeSummarized, usage, "", err
 	}
 	return summary, CompactionModeSummarized, usage, "", nil
+}
+
+// keepDegradedUserTurnsVerbatim keeps user turns verbatim when a mechanical
+// fold had no real summary — they must not survive "through the summary" that
+// never existed. The candidate stays under the trigger ceiling or it would be
+// rejected and re-trigger every turn; newest first, as many as fit.
+func (a *Agent) keepDegradedUserTurnsVerbatim(msgs []provider.Message, head, start int, kept, fold []provider.Message, summary string) []provider.Message {
+	cap := a.compactTrigger()
+	proj := estimateMessagesTokens(msgs[:head]) + estimateMessagesTokens(msgs[start:]) + estimateTextTokens(summary)
+	for _, m := range kept {
+		proj += estimateMessagesTokens([]provider.Message{m})
+	}
+	for _, m := range fold {
+		if m.Role != provider.RoleUser || m.LocalOnly || isCompactionSummary(m) {
+			continue
+		}
+		extra := estimateMessagesTokens([]provider.Message{a.keptForProjection(m)})
+		if cap > 0 && proj+extra >= cap {
+			break
+		}
+		kept = append(kept, a.keptForProjection(m))
+		proj += extra
+	}
+	return kept
 }

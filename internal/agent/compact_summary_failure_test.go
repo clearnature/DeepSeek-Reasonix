@@ -141,7 +141,7 @@ func TestOverflowSummarizerFailureDegradesInsteadOfBlockingTheTurn(t *testing.T)
 func TestSummarizerFailureOnOversizedFoldDegrades(t *testing.T) {
 	sess := foldableSessionOverForce(120)
 	a := agentOverForceWindow(t, &fakeProvider{streamErr: errors.New("provider exploded")}, sess, 60000)
-	if tokens, budget := a.guardedSummaryInputTokens(foldRegionOf(a)), a.summaryInputBudget(""); budget <= 0 || tokens <= budget {
+	if tokens, budget := a.guardedSummaryInputTokens(foldRegionOf(a)), a.summaryInputBudget(nil, ""); budget <= 0 || tokens <= budget {
 		t.Fatalf("fixture fold is %d tokens against a %d budget; the shortening path is not exercised", tokens, budget)
 	}
 
@@ -188,5 +188,111 @@ func TestCallerCancellationDoesNotDegrade(t *testing.T) {
 	}
 	if degradedFold(a) {
 		t.Error("cancellation installed a degraded fold; it should change nothing")
+	}
+}
+
+// TestSummaryBudgetAccountsForPrefix guards the 2026-08-12 overflow: the
+// summarizer request rides the main-request prefix, so the fold budget must
+// shrink as the prefix grows. Without the deduction a ~900k-token prefix plus
+// a window-sized fold still overflowed and forced a degraded mechanical fold.
+func TestSummaryBudgetAccountsForPrefix(t *testing.T) {
+	a := agentOverForceWindow(t, &fakeProvider{}, foldableSessionOverForce(2), 1_000_000)
+	base := a.summaryInputBudget(nil, "")
+	if base <= 0 {
+		t.Fatalf("baseline budget = %d, want > 0", base)
+	}
+	big := make([]provider.Message, 0, 600)
+	for range 600 {
+		big = append(big, provider.Message{Role: provider.RoleUser, Content: strings.Repeat("x", 1500)})
+	}
+	withPrefix := a.summaryInputBudget(big, "")
+	if withPrefix >= base {
+		t.Fatalf("budget with 900k-char prefix = %d, want < baseline %d (prefix must be deducted)", withPrefix, base)
+	}
+	if withPrefix <= 0 {
+		t.Fatalf("budget with prefix = %d, want > 0 (window can still host a small fold)", withPrefix)
+	}
+}
+
+// TestKeepFoldWithinSummaryBudgetKeepsVerbatim proves the budget trimmer moves
+// overflow messages back to kept verbatim instead of dropping them, so a
+// summarize-side trim can never shed a user turn.
+func TestKeepFoldWithinSummaryBudgetKeepsVerbatim(t *testing.T) {
+	a := agentOverForceWindow(t, &fakeProvider{}, foldableSessionOverForce(2), 1_000_000)
+	prefix := make([]provider.Message, 0, 500)
+	for range 500 {
+		prefix = append(prefix, provider.Message{Role: provider.RoleUser, Content: strings.Repeat("p", 1500)})
+	}
+	var fold []provider.Message
+	for range 2500 {
+		fold = append(fold, provider.Message{Role: provider.RoleUser, Content: "keep-me-" + strings.Repeat("z", 400)})
+	}
+	kept, out := a.keepFoldWithinSummaryBudget(prefix, nil, fold, 0, 0)
+	if len(out) == 0 || len(out) == len(fold) {
+		t.Fatalf("fold %d → %d messages, want a partial trim", len(fold), len(out))
+	}
+	for _, m := range kept {
+		if !strings.HasPrefix(m.Content, "keep-me-") {
+			t.Fatalf("kept message %q is not verbatim overflow text", m.Content[:16])
+		}
+	}
+	if got := a.guardedSummaryInputTokens(out); got > a.summaryInputBudget(prefix, "") {
+		t.Fatalf("trimmed fold still exceeds the prefix-aware budget")
+	}
+}
+
+// TestDegradedFoldKeepsAllUserMessages is the data-safety contract: when the
+// summarizer fails and the fold is committed mechanically, every user turn
+// keeps its text verbatim in the projection — no turn may survive "through
+// the summary" that never existed.
+func TestDegradedFoldKeepsAllUserMessages(t *testing.T) {
+	// Large window: every user turn fits under the trigger ceiling, so all of
+	// them must survive verbatim — none may depend on a summary that never
+	// existed.
+	sess := foldableSessionOverForce(120)
+	a := agentOverForceWindow(t, &fakeProvider{streamErr: errors.New("provider exploded")}, sess, 200000)
+	if err := prepareContext(context.Background(), a, CompactionTriggerOverflow); err != nil {
+		t.Fatalf("prepare = %v, want a degraded fold", err)
+	}
+	if !degradedFold(a) {
+		t.Fatalf("fixture did not degrade; test premise broken")
+	}
+	wantUsers := 0
+	for _, m := range sess.Messages {
+		if m.Role == provider.RoleUser {
+			wantUsers++
+		}
+	}
+	projUsers := 0
+	for _, m := range a.compactionState.Projection.Messages {
+		if m.Role == provider.RoleUser && !isCompactionSummary(m) {
+			projUsers++
+		}
+	}
+	if projUsers != wantUsers {
+		t.Fatalf("projection keeps %d user turns, want all %d verbatim", projUsers, wantUsers)
+	}
+
+	// Tight window: the same safety loop must still land under the trigger
+	// ceiling — a candidate at/above it would be rejected and re-trigger
+	// every turn instead of stabilizing.
+	tight := agentOverForceWindow(t, &fakeProvider{streamErr: errors.New("provider exploded")}, foldableSessionOverForce(120), 60000)
+	if err := prepareContext(context.Background(), tight, CompactionTriggerOverflow); err != nil {
+		t.Fatalf("tight prepare = %v, want a degraded fold", err)
+	}
+	if !degradedFold(tight) {
+		t.Fatalf("tight fixture did not degrade; test premise broken")
+	}
+	tightUsers := 0
+	for _, m := range tight.compactionState.Projection.Messages {
+		if m.Role == provider.RoleUser && !isCompactionSummary(m) {
+			tightUsers++
+		}
+	}
+	if tightUsers == 0 {
+		t.Fatalf("tight projection kept no user turns")
+	}
+	if got := tight.estimatedPromptTokens(tight.compactionState.Projection.Messages); got >= tight.compactTrigger() {
+		t.Fatalf("tight degraded projection %d still at/above trigger %d (would re-trigger)", got, tight.compactTrigger())
 	}
 }
