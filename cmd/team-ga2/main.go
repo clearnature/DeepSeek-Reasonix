@@ -34,13 +34,17 @@ import (
 // engine drives it programmatically via AnswerQuestion.
 
 type captureSink struct {
-	mu   sync.Mutex
-	msgs []string
-	ask  chan event.Ask
+	mu        sync.Mutex
+	msgs      []string
+	ask       chan event.Ask
+	askCount  int
 }
 
 func (s *captureSink) Emit(e event.Event) {
 	if e.Kind == event.AskRequest {
+		s.mu.Lock()
+		s.askCount++
+		s.mu.Unlock()
 		select {
 		case s.ask <- e.Ask:
 		default:
@@ -54,6 +58,12 @@ func (s *captureSink) Emit(e event.Event) {
 	}
 }
 func (s *captureSink) Close() {}
+
+func (s *captureSink) AskRequests() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.askCount
+}
 
 func main() {
 	ws := "/home/yanli/work/DeepSeek-Reasonix"
@@ -95,7 +105,12 @@ func main() {
 	ctrl.Submit("/new")
 	time.Sleep(3 * time.Second)
 
-	// Population of 3: two plain variants + one ASK-GENE variant.
+	// Generation 3: worktree-grant × ask-gene variation. Same sorting task for
+	// all three individuals; only the ask gene differs:
+	//   g1 no-ask   — no ask guidance (fully autonomous)
+	//   g2 natural  — natural guidance (ask only when no safe default)
+	//   g3 force    — forced ask first (G2 gene, kept as control)
+	// Fitness + AskRequest count drive the inter-generation comparison.
 	ctrl.Submit("/team-create g1 coder")
 	ctrl.Submit("/team-create g2 coder")
 	ctrl.Submit("/team-create g3 coder")
@@ -105,10 +120,11 @@ func main() {
 	}
 	time.Sleep(1 * time.Second)
 
-	ctrl.Submit("/team-add g1 在 /home/yanli/work/DeepSeek-Reasonix/.reasonix/worktrees/g1/ 创建 order.go：实现插入排序（InsertionSort），Go 语言 package sortx。")
-	ctrl.Submit("/team-add g2 在 /home/yanli/work/DeepSeek-Reasonix/.reasonix/worktrees/g2/ 创建 order.go：实现选择排序（SelectionSort），Go 语言 package sortx。")
-	ctrl.Submit("/team-add g3 在 /home/yanli/work/DeepSeek-Reasonix/.reasonix/worktrees/g3/ 创建 order.go：实现冒泡排序（BubbleSort），Go 语言 package sortx。开始编码前必须先向 leader 提问一个明确的实现决策（用 ask 工具：例如排序是否原地修改输入切片、是否添加单元测试、错误处理策略三者选一），等待 leader 的回答后再继续，最后严格按回答完成实现。")
-	fmt.Println("=== 种群 3 个体并行评估（g3 = ask 基因）===")
+	const task = "在 %s 创建 order.go：实现冒泡排序（BubbleSort），Go 语言 package sortx，返回排序后的新切片（不修改输入）。"
+	ctrl.Submit(fmt.Sprintf("/team-add g1 "+task, "/home/yanli/work/DeepSeek-Reasonix/.reasonix/worktrees/g1/"))
+	ctrl.Submit(fmt.Sprintf("/team-add g2 "+task+" 遇到无安全默认的实现决策时（例如参数校验策略、命名风格），用 ask 工具向 leader 提问并按其回答继续。", "/home/yanli/work/DeepSeek-Reasonix/.reasonix/worktrees/g2/"))
+	ctrl.Submit(fmt.Sprintf("/team-add g3 "+task+" 开始编码前必须先向 leader 提问一个明确的实现决策（用 ask 工具），等待 leader 的回答后再继续，最后严格按回答完成实现。", "/home/yanli/work/DeepSeek-Reasonix/.reasonix/worktrees/g3/"))
+	fmt.Println("=== G3 种群 3 个体并行评估（worktree-grant × ask 基因：no/natural/force）===")
 
 	lastRoster := func() string {
 		for _, v := range slices.Backward(sink.msgs) {
@@ -128,7 +144,7 @@ func main() {
 		if strings.Contains(r, "g1  idle") && strings.Contains(r, "g2  idle") && strings.Contains(r, "g3  idle") {
 			fmt.Println("=== 种群评估完成 ===")
 			fmt.Println(r)
-			evaluate(ws)
+			evaluate(ws, sink)
 			return
 		}
 	}
@@ -141,17 +157,20 @@ func jsonAnswers(a []event.AskAnswer) string {
 	return string(b)
 }
 
-func evaluate(ws string) {
-	// Fitness: produced order.go in own worktree = 1.0. Ask-gene individual
-	// completing after auto-approval gets a FULL evaluation (no -0.3 penalty
-	// guesswork — the ask was actually answered).
-	fmt.Println("\n=== GA 适应度评估 ===")
+func evaluate(ws string, sink *captureSink) {
+	// Fitness: produced order.go in own worktree = 1.0. AskRequest count
+	// measures autonomy (fewer asks = fewer interruptions); the inter-
+	// generation comparison weighs fitness vs ask frequency.
+	fmt.Println("\n=== G3 适应度评估（fitness × ask 次数）===")
+	genes := map[string]string{"g1": "no-ask", "g2": "natural", "g3": "force"}
 	for _, n := range []string{"g1", "g2", "g3"} {
 		p := filepath.Join(ws, ".reasonix", "worktrees", n, "order.go")
 		if fi, err := os.Stat(p); err == nil {
-			fmt.Printf("g%s fitness=1.0 (%s, %d bytes)\n", n, strings.TrimSuffix(n, ""), fi.Size())
+			fmt.Printf("g%s (%-7s) fitness=1.0 (%d bytes)\n", n, genes[n], fi.Size())
 		} else {
-			fmt.Printf("g%s fitness=0.0 (no output: %v)\n", n, err)
+			fmt.Printf("g%s (%-7s) fitness=0.0 (no output: %v)\n", n, genes[n], err)
 		}
 	}
+	fmt.Printf("AskRequest 总数: %d（g1 no-ask 应≈0，g3 force 应≥1）\n", sink.AskRequests())
+	fmt.Println("=== G3 结论：natural 是否以最少 ask 达成 fitness=1.0（自主性最优）===")
 }
