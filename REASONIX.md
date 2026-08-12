@@ -87,6 +87,18 @@ go test ./internal/tool/builtin/ ./internal/boot/  # catches tool/boot test brea
 shows up in `go vet`, and the CI round trip that catches it instead costs ten
 minutes.
 
+After **merging upstream into dev**, also run the desktop boundary:
+
+```bash
+cd desktop && CI=true ~/go/bin/wails build -tags webkit2_41 -ldflags "-X main.version=$(date +%Y%m%d-%H%M)"
+```
+
+Wails re-runs `tsc` + `check-bundle-budget.mjs`, which catches frontend
+breakage (RecoveryLineageDialog, new panels) and bundle-budget drift that Go
+tests never see. Calibrate `check-bundle-budget.mjs` to the dev baseline when
+it fails after a merge (upstream budgets exclude dev frontend increments:
+Virtuoso/team panels/locale copy).
+
 ## Import cycle rule
 
 Before importing a new internal package from a non-test file, verify the target package's **test files** aren't already importing back to you:
