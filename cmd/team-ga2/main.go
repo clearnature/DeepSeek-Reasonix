@@ -226,7 +226,7 @@ func cacheStats(start, end time.Time) {
 		return
 	}
 	defer f.Close()
-	var reqs, hits, misses int
+	var reqs, hits, misses, completion int
 	phs := map[string]struct{}{}
 	lo := start.Format("2006-01-02T15:04")
 	hi := end.Format("2006-01-02T15:04")
@@ -236,6 +236,7 @@ func cacheStats(start, end time.Time) {
 			Ts         string `json:"ts"`
 			CacheHit   int    `json:"cache_hit"`
 			CacheMiss  int    `json:"cache_miss"`
+			Completion int    `json:"completion"`
 			PrefixHash string `json:"prefix_hash"`
 		}
 		if err := json.Unmarshal(sc.Bytes(), &r); err != nil || len(r.Ts) < 16 {
@@ -249,6 +250,7 @@ func cacheStats(start, end time.Time) {
 		reqs++
 		hits += r.CacheHit
 		misses += r.CacheMiss
+		completion += r.Completion
 		if r.PrefixHash != "" {
 			phs[r.PrefixHash] = struct{}{}
 		}
@@ -258,6 +260,9 @@ func cacheStats(start, end time.Time) {
 	if total > 0 {
 		hitRate = float64(hits) / float64(total) * 100
 	}
-	fmt.Printf("缓存指标（实验窗口 %s→%s）: 请求=%d prefix_hash唯一=%d 命中率=%.2f%% miss=%d\n",
-		start.Format("15:04:05"), end.Format("15:04:05"), reqs, len(phs), hitRate, misses)
+	// DeepSeek-v4-flash: input cache-hit ¥0.02/M, cache-miss ¥1/M, output ¥2/M.
+	// Cost is the first-priority fitness axis for GA generations.
+	cost := float64(hits)*2e-8 + float64(misses)*1e-6 + float64(completion)*2e-6
+	fmt.Printf("缓存指标（实验窗口 %s→%s）: 请求=%d prefix_hash唯一=%d 命中率=%.2f%% miss=%d 成本=¥%.4f\n",
+		start.Format("15:04:05"), end.Format("15:04:05"), reqs, len(phs), hitRate, misses, cost)
 }
