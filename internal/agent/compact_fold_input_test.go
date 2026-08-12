@@ -49,15 +49,17 @@ func TestFoldUnderBudgetIsSummarizedVerbatimInOneCall(t *testing.T) {
 	a := newFoldAgent(t, 200000, prov)
 	fold := foldOfToolResults(3, 40)
 
-	res, err := a.foldToSummary(context.Background(), fold, "")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err != nil {
 		t.Fatalf("foldToSummary: %v", err)
 	}
 	if len(prov.got) != 1 || res.Spans != 1 {
 		t.Fatalf("requests=%d spans=%d, want a single call", len(prov.got), res.Spans)
 	}
-	if body := prov.got[0].Messages[1].Content; strings.Contains(body, snippedMarker) {
-		t.Fatal("an under-budget fold must reach the summarizer unshortened")
+	for _, m := range prov.got[0].Messages {
+		if strings.Contains(m.Content, snippedMarker) {
+			t.Fatal("an under-budget fold must reach the summarizer unshortened")
+		}
 	}
 }
 
@@ -67,16 +69,22 @@ func TestOversizedFoldShortensToolResultsInOneCall(t *testing.T) {
 	a := newFoldAgent(t, 24000, prov)
 	fold := foldOfToolResults(6, 300)
 
-	res, err := a.foldToSummary(context.Background(), fold, "")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err != nil {
 		t.Fatalf("foldToSummary: %v", err)
 	}
 	if len(prov.got) != 1 || res.Spans != 1 {
 		t.Fatalf("requests=%d spans=%d, want exactly one call", len(prov.got), res.Spans)
 	}
-	body := prov.got[0].Messages[1].Content
-	if !strings.Contains(body, snippedMarker) {
-		t.Fatalf("tool results were not shortened for the summarizer:\n%.300q", body)
+	snipped := false
+	for _, m := range prov.got[0].Messages {
+		if strings.Contains(m.Content, snippedMarker) {
+			snipped = true
+			break
+		}
+	}
+	if !snipped {
+		t.Fatalf("tool results were not shortened for the summarizer: %+v", prov.got[0].Messages)
 	}
 }
 
@@ -87,7 +95,7 @@ func TestHugeFoldNeverMultiSpan(t *testing.T) {
 	a := newFoldAgent(t, 32000, prov)
 	fold := foldOfToolResults(80, 800)
 
-	res, err := a.foldToSummary(context.Background(), fold, "focus on the parser")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "focus on the parser")
 	if err != nil {
 		// Failure without a second attempt is acceptable for an unfittable fold.
 		if len(prov.got) != 0 {
@@ -98,7 +106,14 @@ func TestHugeFoldNeverMultiSpan(t *testing.T) {
 	if len(prov.got) != 1 || res.Spans != 1 {
 		t.Fatalf("requests=%d spans=%d, want at most one call", len(prov.got), res.Spans)
 	}
-	if !strings.Contains(prov.got[0].Messages[0].Content, "focus on the parser") {
+	foundFocus := false
+	for _, m := range prov.got[0].Messages {
+		if strings.Contains(m.Content, "focus on the parser") {
+			foundFocus = true
+			break
+		}
+	}
+	if !foundFocus {
 		t.Fatal("focus instructions lost")
 	}
 }
@@ -108,7 +123,7 @@ func TestNoContextWindowLeavesTheFoldUnbounded(t *testing.T) {
 	a := New(prov, nil, &Session{}, Options{}, event.Discard)
 	fold := foldOfToolResults(40, 400)
 
-	res, err := a.foldToSummary(context.Background(), fold, "")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err != nil {
 		// Without a window the input budget is 0 and the single-call path
 		// refuses before paying for a request.
@@ -125,7 +140,7 @@ func TestNoContextWindowLeavesTheFoldUnbounded(t *testing.T) {
 func TestSummarizeOnceNoRetry(t *testing.T) {
 	prov := &failOnceProvider{}
 	a := newFoldAgent(t, 200000, prov)
-	_, _, err := a.summarizeOnce(context.Background(), []provider.Message{
+	_, _, err := a.summarizeOnce(context.Background(), nil, []provider.Message{
 		{Role: provider.RoleUser, Content: "hello"},
 	}, "")
 	if err == nil {

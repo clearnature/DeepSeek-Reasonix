@@ -594,8 +594,20 @@ func isSummarizeRequest(body []byte) bool {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	}
-	_ = json.Unmarshal(msgs[0], &m)
-	return m.Role == "system" && strings.Contains(m.Content, "compacting the earlier part")
+	// The summarizer request reuses the main-request prefix as its head, so
+	// the summary prompt now travels as the trailing user message — scan all
+	// messages instead of only msgs[0].
+	for _, raw := range msgs {
+		m = struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{}
+		_ = json.Unmarshal(raw, &m)
+		if strings.Contains(m.Content, "compacting the earlier part") {
+			return true
+		}
+	}
+	return false
 }
 
 func commonPrefixMsgs(a, b []json.RawMessage) int {

@@ -1145,7 +1145,7 @@ func TestCompactionPrepareReplaceGuidance(t *testing.T) {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	for i, req := range mp.requests { // a fold too large for one call is summarized in parts
-		if sys := req.Messages[0].Content; !strings.Contains(sys, "EXTENSION GUIDANCE") {
+		if sys := req.Messages[len(req.Messages)-1].Content; !strings.Contains(sys, "EXTENSION GUIDANCE") {
 			t.Fatalf("summarizer call %d of %d missing the replaced guidance:\n%.200q", i+1, len(mp.requests), sys)
 		}
 	}
@@ -1171,9 +1171,15 @@ func TestCompactionPrepareReplaceMessages(t *testing.T) {
 	if err := a.CompactNow(context.Background(), ""); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
-	transcript := mp.requests[0].Messages[1].Content
-	if !strings.Contains(transcript, "EXTENSION FOLD") {
-		t.Fatalf("summarizer transcript = %.200q, want the replaced fold", transcript)
+	found := false
+	for _, m := range mp.requests[0].Messages {
+		if strings.Contains(m.Content, "EXTENSION FOLD") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("summarizer transcript missing the replaced fold: %.200q", joinContents(mp.requests[0].Messages))
 	}
 }
 
@@ -1660,7 +1666,7 @@ func TestCompactionPrepareSlotOwnerConsulted(t *testing.T) {
 	if err := a.CompactNow(context.Background(), ""); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
-	if sys := mp.requests[0].Messages[0].Content; !strings.Contains(sys, "OWNER GUIDANCE") {
+	if sys := mp.requests[0].Messages[len(mp.requests[0].Messages)-1].Content; !strings.Contains(sys, "OWNER GUIDANCE") {
 		t.Fatalf("summarizer system prompt missing the owner's guidance:\n%.200q", sys)
 	}
 }
@@ -1696,7 +1702,7 @@ func TestCompactionPrepareSlotOwnerFinalSayAfterChain(t *testing.T) {
 	if calls != 2 {
 		t.Fatalf("owner consulted %d times, want 2 (chain, then strategy)", calls)
 	}
-	sys := mp.requests[0].Messages[0].Content
+	sys := mp.requests[0].Messages[len(mp.requests[0].Messages)-1].Content
 	if !strings.Contains(sys, "OWNER GUIDANCE") || strings.Contains(sys, "CHAIN GUIDANCE") {
 		t.Fatalf("summarizer system prompt = %.200q, want the strategy ruling to win", sys)
 	}

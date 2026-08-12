@@ -74,13 +74,13 @@ func (a *Agent) summaryInputBudget(instructions string) int {
 // foldToSummary turns a fold region into one digest with at most one provider
 // request. Oversized input is shortened deterministically for the summarizer
 // only; multi-span merge and application-layer retries are gone.
-func (a *Agent) foldToSummary(ctx context.Context, fold []provider.Message, instructions string) (foldSummary, error) {
+func (a *Agent) foldToSummary(ctx context.Context, prefix, fold []provider.Message, instructions string) (foldSummary, error) {
 	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: summaryInputTokens(fold)}
 	budget := a.summaryInputBudget(instructions)
 	if budget <= 0 {
 		// No declared window (or unusable window): send one unbounded call.
 		// Manual /compact on an unconfigured provider still works this way.
-		return a.singleCallSummary(ctx, res, fold, instructions)
+		return a.singleCallSummary(ctx, res, prefix, fold, instructions)
 	}
 	input := fold
 	guardedTokens := a.guardedSummaryInputTokens(input)
@@ -102,11 +102,11 @@ func (a *Agent) foldToSummary(ctx context.Context, fold []provider.Message, inst
 	if guardedTokens > budget {
 		return res, fmt.Errorf("summary input still exceeds single-request budget after shortening (%d > %d)", guardedTokens, budget)
 	}
-	return a.singleCallSummary(ctx, res, input, instructions)
+	return a.singleCallSummary(ctx, res, prefix, input, instructions)
 }
 
-func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, fold []provider.Message, instructions string) (foldSummary, error) {
-	summary, mode, usage, reqID, err := a.runCompactionSummary(ctx, fold, instructions)
+func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, prefix, fold []provider.Message, instructions string) (foldSummary, error) {
+	summary, mode, usage, reqID, err := a.runCompactionSummary(ctx, prefix, fold, instructions)
 	res.Text, res.Mode, res.Usage, res.RequestID = summary, mode, usage, reqID
 	return res, err
 }
@@ -114,8 +114,8 @@ func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, fold []p
 // foldOrDegrade summarizes a fold and, when that fold is the only way out,
 // converts a summarizer failure into a mechanical one. The telemetry it returns
 // always reports the original failure, even when the fold recovered from it.
-func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool, fold []provider.Message, instructions string, sourceTokens int) (foldSummary, CompactionTelemetry, error) {
-	res, err := a.foldToSummary(ctx, fold, instructions)
+func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool, prefix, fold []provider.Message, instructions string, sourceTokens int) (foldSummary, CompactionTelemetry, error) {
+	res, err := a.foldToSummary(ctx, prefix, fold, instructions)
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
 	if err == nil {
 		return res, tele, nil

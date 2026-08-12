@@ -55,6 +55,11 @@ const (
 // failure (then a mechanical fold) instead of hanging compaction indefinitely.
 const summaryTimeout = 90 * time.Second
 
+// summaryFoldMarker separates the cached main-request prefix from the fold in
+// the summarizer request so the model knows exactly which section to compress.
+// It is a new user turn after the prefix, so it never drifts the cached bytes.
+const summaryFoldMarker = "The messages below the marker line are the older conversation section to summarize (the fold). Summarize only the marked fold section, not the earlier context."
+
 // summarySystemPrompt asks for a structured resume briefing (facts, goal,
 // decisions, files, commands, errors, next step) under fixed headings.
 const summarySystemPrompt = `You are compacting the earlier part of a coding agent's conversation to save context.
@@ -538,14 +543,26 @@ func charsOfMessages(msgs []provider.Message) int {
 // summarize asks the executor's own provider (no tools) to distill the region
 // into a briefing. instructions is optional /compact focus + PreCompact text.
 // Named returns so defer can attach RequestCount and still return usage.
-func (a *Agent) summarize(ctx context.Context, region []provider.Message, instructions string) (summary string, usage *provider.Usage, err error) {
+func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message, instructions string) (summary string, usage *provider.Usage, err error) {
 	ctx, cancel := context.WithTimeout(ctx, summaryTimeout)
 	defer cancel()
 	ctx = provider.WithRequestAttemptCounter(ctx)
+	instructions = strings.TrimSpace(instructions)
+	// The summarizer request reuses the exact prefix the main request just
+	// sent (msgs[:head]) plus the fold as raw messages, so DeepSeek's prefix
+	// cache hits it instead of paying full price for a re-rendered transcript
+	// (renderTranscript text never matches the provider message bytes).
+	// The fold is marked by a short user message so the model knows what to
+	// summarize without any byte drift in the cached prefix.
+	msgs := make([]provider.Message, 0, len(prefix)+len(region)+2)
+	msgs = append(msgs, prefix...)
+	msgs = append(msgs, provider.Message{Role: provider.RoleUser, Content: summaryFoldMarker})
+	msgs = append(msgs, region...)
 	sys := summarySystemPrompt
-	if strings.TrimSpace(instructions) != "" {
-		sys += "\n\nAdditional focus for this compaction (prioritize keeping this):\n" + strings.TrimSpace(instructions)
+	if instructions != "" {
+		sys += "\n\nAdditional focus for this compaction (prioritize keeping this):\n" + instructions
 	}
+	msgs = append(msgs, provider.Message{Role: provider.RoleUser, Content: sys})
 	defer func() {
 		usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 		if usage != nil && (usage.TotalTokens > 0 || usage.RequestCount > 0) {
@@ -558,10 +575,7 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 		maxOut = a.maxOutputTokens
 	}
 	req := provider.Request{
-		Messages: []provider.Message{
-			{Role: provider.RoleSystem, Content: sys},
-			{Role: provider.RoleUser, Content: renderTranscript(region)},
-		},
+		Messages:    msgs,
 		MaxTokens:   maxOut,
 		Temperature: provider.OptionalTemperature(a.temperature),
 	}
@@ -616,8 +630,8 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 // summarizeOnce performs exactly one application-layer summary request.
 // Timeouts, empty results, stream errors, and output truncation all fail once
 // with no second attempt.
-func (a *Agent) summarizeOnce(ctx context.Context, fold []provider.Message, instructions string) (string, *provider.Usage, error) {
-	return a.summarize(ctx, fold, instructions)
+func (a *Agent) summarizeOnce(ctx context.Context, prefix, fold []provider.Message, instructions string) (string, *provider.Usage, error) {
+	return a.summarize(ctx, prefix, fold, instructions)
 }
 
 // renderTranscript flattens messages into a readable transcript for summarization.

@@ -187,7 +187,7 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
-	res, err := a.foldToSummary(ctx, prepared.fold, prepared.instructions)
+	res, err := a.foldToSummary(ctx, snap.visible[:plan.firstFold], prepared.fold, prepared.instructions)
 	summary := res.Text
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
 	if err != nil {
@@ -440,7 +440,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	}
 
 	sourceTokens := a.estimatedPromptTokens(msgs)
-	res, tele, err := a.foldOrDegrade(ctx, trigger, mustFree, fold, instructions, sourceTokens)
+	res, tele, err := a.foldOrDegrade(ctx, trigger, mustFree, msgs[:head], fold, instructions, sourceTokens)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
@@ -582,8 +582,10 @@ func (a *Agent) partitionFoldForProjection(region []provider.Message) (kept, fol
 }
 
 // runCompactionSummary uses the single local summarizer path for every provider.
-func (a *Agent) runCompactionSummary(ctx context.Context, fold []provider.Message, instructions string) (summary, mode string, usage *provider.Usage, providerReqID string, err error) {
-	summary, usage, err = a.summarizeOnce(ctx, fold, instructions)
+// prefix is the main-request prefix (msgs[:head]) reused so the summarizer
+// request hits the provider prefix cache instead of paying full price.
+func (a *Agent) runCompactionSummary(ctx context.Context, prefix, fold []provider.Message, instructions string) (summary, mode string, usage *provider.Usage, providerReqID string, err error) {
+	summary, usage, err = a.summarizeOnce(ctx, prefix, fold, instructions)
 	if err != nil {
 		return "", CompactionModeSummarized, usage, "", err
 	}

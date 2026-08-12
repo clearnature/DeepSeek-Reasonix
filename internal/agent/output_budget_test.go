@@ -445,19 +445,24 @@ func TestSharedWindowFoldUsesGuardedInputBudget(t *testing.T) {
 		{Role: provider.RoleTool, ToolCallID: "2", Name: "read_file", Content: toolBody},
 	}
 
-	if _, err := a.foldToSummary(context.Background(), fold, ""); err != nil {
+	if _, err := a.foldToSummary(context.Background(), nil, fold, ""); err != nil {
 		t.Fatalf("foldToSummary: %v", err)
 	}
 	if prov.calls == 0 || len(prov.last.Messages) < 2 {
 		t.Fatalf("guarded fold produced no summarizer request: calls=%d request=%+v", prov.calls, prov.last)
 	}
-	got := prov.last.Messages[1].Content
+	got := ""
+	for _, m := range prov.last.Messages {
+		if strings.Contains(m.Content, "omitted") || strings.Contains(m.Content, "retained") || strings.Contains(m.Content, "snip") {
+			got = m.Content
+			break
+		}
+	}
+	if got == "" {
+		t.Fatalf("shortened fold missing a truncation marker: %+v", prov.last.Messages)
+	}
 	if len(got) >= len(renderTranscript(fold)) {
 		t.Fatalf("oversized tool fold was not shortened before summarize: len=%d original=%d", len(got), len(renderTranscript(fold)))
-	}
-	// Snip / omit markers prove the temporary request was bounded for the guard.
-	if !strings.Contains(got, "omitted") && !strings.Contains(got, "retained") && !strings.Contains(got, "snip") {
-		t.Fatalf("shortened fold missing a truncation marker:\n%.200q", got)
 	}
 	if got := prov.last.MaxTokens; got < summaryOutputReserve {
 		t.Fatalf("summarizer MaxTokens = %d, below summaryOutputReserve %d", got, summaryOutputReserve)
@@ -475,7 +480,7 @@ func TestSharedWindowFoldRejectsUnshortenableOverBudgetInput(t *testing.T) {
 		sink:              event.Discard,
 	}
 	fold := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 200_000)}}
-	_, err := a.foldToSummary(context.Background(), fold, "")
+	_, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err == nil || !strings.Contains(err.Error(), "exceeds single-request budget") {
 		t.Fatalf("foldToSummary err = %v, want single-request budget failure", err)
 	}
@@ -738,7 +743,7 @@ func TestSummarizeClipsSharedWindowOutputBudget(t *testing.T) {
 	a.lastUsage.Store(&provider.Usage{PromptTokens: 50_000})
 	a.setPromptTokenCalibration(50_000, requestCalibrationShapeOf(provider.Request{Messages: region}))
 
-	if _, _, err := a.summarize(context.Background(), region, ""); err != nil {
+	if _, _, err := a.summarize(context.Background(), nil, region, ""); err != nil {
 		t.Fatalf("summarize: %v", err)
 	}
 	if prov.last.MaxTokens <= 0 || prov.last.MaxTokens >= prov.budget {
@@ -755,7 +760,7 @@ func TestSummarizeRejectsLengthTruncation(t *testing.T) {
 		sink:              event.Discard,
 	}
 
-	_, _, err := a.summarizeOnce(context.Background(), []provider.Message{{
+	_, _, err := a.summarizeOnce(context.Background(), nil, []provider.Message{{
 		Role: provider.RoleUser, Content: "retain every durable fact",
 	}}, "")
 	if err == nil || !strings.Contains(err.Error(), "truncated") {
