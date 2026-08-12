@@ -4,7 +4,7 @@
     "commented-code": 1,
     "complexity": 2171,
     "essay": 4312,
-    "file-size": 111007,
+    "file-size": 110962,
     "function-size": 9268,
     "layering": 2,
     "marker": 0,
@@ -168,7 +168,7 @@
       "file-size": 158
     },
     "desktop/frontend/src/components/Transcript.tsx": {
-      "file-size": 278
+      "file-size": 280
     },
     "desktop/frontend/src/components/UsageStatsPanel.tsx": {
       "file-size": 276
@@ -192,7 +192,7 @@
       "file-size": 1602
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 3998
+      "file-size": 3989
     },
     "desktop/heartbeat.go": {
       "essay": 20,
@@ -1116,7 +1116,7 @@
     },
     "internal/config/load.go": {
       "essay": 26,
-      "file-size": 1781,
+      "file-size": 1748,
       "function-size": 58
     },
     "internal/config/main_test.go": {
@@ -1153,7 +1153,7 @@
       "essay": 3
     },
     "internal/config/provider_presets.go": {
-      "file-size": 305
+      "file-size": 300
     },
     "internal/config/render.go": {
       "complexity": 255,
