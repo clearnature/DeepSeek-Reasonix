@@ -40,6 +40,7 @@ func (a *App) startRecoveryGC() {
 		}
 		// Protect every upgraded user for a full startup grace before reclaiming.
 		a.sweepReclaimableRecoveryBranchesWithGrace(agent.RecoveryGCStartupGracePeriod)
+		a.sweepReclaimableEmptySessions()
 		followUp := time.NewTimer(recoveryGCFollowUpDelay)
 		ticker := time.NewTicker(recoveryGCInterval)
 		defer ticker.Stop()
@@ -59,6 +60,7 @@ func (a *App) startRecoveryGC() {
 				followUp.C = nil
 			case <-ticker.C:
 				a.sweepReclaimableRecoveryBranches()
+				a.sweepReclaimableEmptySessions()
 			}
 		}
 	})
@@ -71,6 +73,34 @@ func waitRecoveryGCStartup(done <-chan struct{}, elapsed <-chan time.Time) bool 
 	case <-done:
 		return false
 	}
+}
+
+// sweepReclaimableEmptySessions trashes 0-byte sessions (created when a topic
+// or mode was rebuilt before the first turn wrote content) whose topic is
+// still represented by a live peer. Trashing keeps them recoverable.
+func (a *App) sweepReclaimableEmptySessions() int {
+	reclaimed := 0
+	for _, dir := range recoveryGCDirs() {
+		reclaimable, err := agent.ReclaimableEmptySessions(dir, time.Now(), agent.EmptySessionGracePeriod)
+		if err != nil {
+			slog.Warn("desktop: scan reclaimable empty sessions", "dir", dir, "err", err)
+			continue
+		}
+		for _, path := range reclaimable {
+			if agent.SessionLeaseHeld(path) || a.sessionOpenInAnyTab(path) {
+				continue
+			}
+			if err := agent.TrashEmptySession(path, dir); err != nil {
+				slog.Warn("desktop: trash reclaimed empty session", "path", path, "err", err)
+				continue
+			}
+			reclaimed++
+		}
+	}
+	if reclaimed > 0 {
+		slog.Info("desktop: moved empty sessions to the session trash", "count", reclaimed)
+	}
+	return reclaimed
 }
 
 // sweepReclaimableRecoveryBranches trashes conflict-recovery branches that
