@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -26,7 +27,13 @@ func TestCompactToProjectionEmitsSingleTelemetry(t *testing.T) {
 	}}
 	prov := &fakeProvider{reply: "old work summarized"}
 	sink := &noticeCaptureSink{}
-	a := New(prov, tool.NewRegistry(), sess, Options{ArchiveDir: t.TempDir()}, event.Discard)
+	a := New(prov, tool.NewRegistry(), sess, Options{
+		ArchiveDir:    t.TempDir(),
+		ContextWindow: 1_000_000,
+		RecentKeep:    2,
+		ModelRef:      "test/model",
+		SessionPath:   filepath.Join(t.TempDir(), "s.jsonl"),
+	}, event.Discard)
 	a.sink = sink
 
 	outcome, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", true, false)

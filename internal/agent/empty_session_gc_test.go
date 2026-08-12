@@ -18,7 +18,7 @@ func mkEmptySessionWithPeer(t *testing.T, dir, name, topicID string, mod time.Ti
 	os.Chtimes(path, mod, mod)
 	writeTestBranchMeta(t, path, topicID)
 
-	peer := filepath.Join(dir, "live.jsonl")
+	peer := filepath.Join(dir, name+"-live.jsonl")
 	if err := os.WriteFile(peer, []byte("real turn content"), 0o644); err != nil {
 		t.Fatalf("write live peer: %v", err)
 	}

@@ -10,12 +10,10 @@ import (
 )
 
 // Empty-session garbage collection. Desktop creates a fresh session file when
-// a topic is opened or a mode/profile is rebuilt before the first turn writes
-// content; files that never received a single turn (0-byte .jsonl) accumulate
-// as duplicate-looking history entries. Recovery branches were covered by
-// recovery_gc.go; empty sessions were not. A 0-byte session is reclaimable
-// when it sat idle past the grace period and its topic still has a live
-// (non-empty) session to represent it.
+// a topic/mode rebuild happens before the first turn writes content; files
+// that never received a turn (0-byte .jsonl) accumulate as duplicate history.
+// A 0-byte session is reclaimable when idle past grace and its topic still
+// has a live (non-empty) peer session.
 
 // EmptySessionGracePeriod is how long a reclaimable empty session must sit
 // idle before GC may collect it. A fresh file may simply be a just-created

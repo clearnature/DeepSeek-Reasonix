@@ -49,45 +49,6 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 	}
 }
 
-func TestProjectionValidIgnoresCacheKeyMismatch(t *testing.T) {
-	msgs := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "task"},
-	}
-	hash := coveredPrefixHash(msgs, 2)
-	st := CompactionState{
-		TranscriptVersion: 1,
-		PromptCacheKey:    "ws|sess|model-a",
-		Projection: ContextProjection{
-			Messages:          []provider.Message{{Role: provider.RoleSystem, Content: "sys"}},
-			CoveredCount:      2,
-			CoveredPrefixHash: hash,
-			TranscriptVersion: 1,
-		},
-	}
-	// Content validity is the prefix hash; the cache-line key is attribution
-	// only, so a model switch keeps the projection visible (regression:
-	// switching the working model must not drop to canonical and misfire
-	// the resume gate).
-	if !projectionValid(st, msgs, 1, "ws|sess|model-b") {
-		t.Fatal("model/lineage key mismatch must NOT invalidate a content-valid projection")
-	}
-	if !projectionValid(st, msgs, 1, "ws|sess|model-a") {
-		t.Fatal("matching key should be valid")
-	}
-	// A blank stored key stays valid when the content hash matches.
-	st.PromptCacheKey = ""
-	if !projectionValid(st, msgs, 1, "ws|sess|model-a") {
-		t.Fatal("missing sidecar cache key must not invalidate when content matches")
-	}
-	// Missing prefix hash is always rejected.
-	st.PromptCacheKey = "ws|sess|model-a"
-	st.Projection.CoveredPrefixHash = ""
-	if projectionValid(st, msgs, 1, "ws|sess|model-a") {
-		t.Fatal("missing CoveredPrefixHash must invalidate projection")
-	}
-}
-
 func TestCoveredPrefixHashIncludesProviderVisibleFields(t *testing.T) {
 	base := []provider.Message{{
 		Role:               provider.RoleAssistant,

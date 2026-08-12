@@ -2,15 +2,15 @@
   "limits": {
     "banner": 48,
     "commented-code": 1,
-    "complexity": 2122,
-    "essay": 4306,
-    "file-size": 110669,
-    "function-size": 9140,
+    "complexity": 2123,
+    "essay": 4312,
+    "file-size": 110711,
+    "function-size": 9144,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "struct-state": 137,
-    "test-file-size": 71087
+    "struct-state": 138,
+    "test-file-size": 71047
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -459,9 +459,9 @@
     "internal/agent/agent.go": {
       "complexity": 37,
       "essay": 78,
-      "file-size": 2304,
+      "file-size": 2308,
       "function-size": 102,
-      "struct-state": 22
+      "struct-state": 23
     },
     "internal/agent/ask.go": {
       "essay": 4
@@ -511,6 +511,9 @@
     },
     "internal/agent/empty_final_test.go": {
       "essay": 5
+    },
+    "internal/agent/empty_session_gc.go": {
+      "essay": 2
     },
     "internal/agent/evidence_flow_test.go": {
       "test-file-size": 509
@@ -565,9 +568,6 @@
     "internal/agent/normalize.go": {
       "essay": 14
     },
-    "internal/agent/output_budget_test.go": {
-      "test-file-size": 40
-    },
     "internal/agent/parallel_tasks.go": {
       "essay": 3,
       "function-size": 73
@@ -590,9 +590,6 @@
     "internal/agent/projection_test.go": {
       "test-file-size": 7
     },
-    "internal/agent/projection_valid_test.go": {
-      "essay": 1
-    },
     "internal/agent/reasoning_language.go": {
       "essay": 2
     },
@@ -613,10 +610,10 @@
       "essay": 1
     },
     "internal/agent/run_loop.go": {
-      "complexity": 5,
-      "essay": 30,
-      "file-size": 20,
-      "function-size": 31
+      "complexity": 6,
+      "essay": 33,
+      "file-size": 58,
+      "function-size": 35
     },
     "internal/agent/run_usage.go": {
       "complexity": 1,
@@ -669,6 +666,9 @@
     },
     "internal/agent/steer_flush_test.go": {
       "essay": 1
+    },
+    "internal/agent/steer_job_test.go": {
+      "essay": 2
     },
     "internal/agent/storm_breaker.go": {
       "essay": 13

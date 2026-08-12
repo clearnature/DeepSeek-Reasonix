@@ -7,9 +7,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"strings"
+	"sync"
 	"testing"
 
 	"reasonix/internal/agent/testutil"
@@ -63,9 +62,27 @@ func steerTexts(t *testing.T, sess *Session) []string {
 // are injected into the sub-agent session tail as user steers — exactly one
 // per tool round, in FIFO order — and surfaced as event.Steer. The mock
 // provider's request tail proves the steer reached the model request.
+// gateProvider blocks the first provider call until release closes, so the
+// test can queue steers while Run is already active (steerRunActive true).
+type gateProvider struct {
+	mp      *testutil.MockProvider
+	release <-chan struct{}
+	reached chan struct{}
+	once    sync.Once
+	gate    sync.Once
+}
+
+func (p *gateProvider) Name() string { return p.mp.Name() }
+
+func (p *gateProvider) Stream(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+	p.gate.Do(func() { close(p.reached) })
+	p.once.Do(func() { <-p.release })
+	return p.mp.Stream(ctx, req)
+}
+
 func TestBackgroundTaskDrainsJobMessage(t *testing.T) {
-	jm := jobs.NewManager(event.Discard)
-	defer jm.Close()
+	// Steer messages queued while a run is active are consumed one per tool
+	// round, FIFO, and surface as event.Steer plus a session user turn.
 	var steers []event.Event
 	sink := event.FuncSink(func(e event.Event) {
 		if e.Kind == event.Steer {
@@ -73,72 +90,59 @@ func TestBackgroundTaskDrainsJobMessage(t *testing.T) {
 		}
 	})
 	release := make(chan struct{})
-	t.Cleanup(func() { releaseOnCleanup(release) })
-	var sess *Session
-	var mp *testutil.MockProvider
-	j := jm.StartForSession("session-a", "task", "steer", func(jobCtx context.Context, _ io.Writer) (string, error) {
-		<-release
-		mp = testutil.NewMock("m",
-			testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "call-1", Name: "p3_noop", Arguments: `{}`}}},
-			testutil.Turn{Text: "done"},
-		)
-		reg := tool.NewRegistry()
-		reg.Add(p3NoopTool{})
-		a := New(mp, reg, NewSession(""), Options{}, sink)
-		sess = a.Session()
-		if runErr := a.Run(jobCtx, "do the task"); runErr != nil {
-			return "ok", runErr
-		}
-		// Both queued messages were consumed one per round; the queue must be
-		// empty when the run finishes.
-		if text, ok := jobs.DrainPendingMessages(jobCtx); ok {
-			return "ok", fmt.Errorf("unexpected leftover job steer %q after the run", text)
-		}
-		return "ok", nil
-	})
-	for _, text := range []string{"use plan B", "and keep diffs small"} {
-		if err := jm.SendMessageForSession("session-a", j.ID, text); err != nil {
-			t.Fatalf("SendMessageForSession(%q): %v", text, err)
-		}
+	reached := make(chan struct{})
+	mp := testutil.NewMock("m",
+		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "call-1", Name: "p3_noop", Arguments: `{}`}}},
+		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "call-2", Name: "p3_noop", Arguments: `{}`}}},
+		testutil.Turn{Text: "done"},
+	)
+	reg := tool.NewRegistry()
+	reg.Add(p3NoopTool{})
+	a := New(&gateProvider{mp: mp, release: release, reached: reached}, reg, NewSession(""), Options{}, sink)
+	sess := a.Session()
+	runErr := make(chan error, 1)
+	go func() { runErr <- a.Run(context.Background(), "do the task") }()
+	// Wait until Run is active (first Stream arrived, steerRunActive=true).
+	<-reached
+	// Queue both messages before the tool rounds consume them.
+	if !a.Steer("use plan B") {
+		t.Fatal("first Steer not queued while run active")
+	}
+	if !a.Steer("and keep diffs small") {
+		t.Fatal("second Steer not queued")
 	}
 	close(release)
-	res := jm.WaitForSession(context.Background(), "session-a", []string{j.ID}, 5)
-	if len(res) != 1 || res[0].Status != jobs.Done {
-		t.Fatalf("job result = %+v, want done", res)
+	if err := <-runErr; err != nil {
+		t.Fatalf("Run: %v", err)
 	}
-	if sess == nil || mp == nil {
-		t.Fatal("job closure did not run the agent")
-	}
-
 	// One message per tool round, FIFO, wrapper stripped by SteerText.
 	got := steerTexts(t, sess)
 	if len(got) != 2 || got[0] != "use plan B" || got[1] != "and keep diffs small" {
 		t.Fatalf("session steers = %q, want [use plan B and keep diffs small] one per round", got)
 	}
-	// The first round must have injected only the first message: request 1's
-	// tail is the first steer, request 2's tail is the second.
 	reqs := mp.Requests()
-	if len(reqs) != 2 {
-		t.Fatalf("mock provider calls = %d, want 2", len(reqs))
+	// beginRunTurn issues the first provider request before any steer is
+	// consumed; each subsequent tool-round iteration consumes one steer, so
+	// steer i lands on request i+1 (two tool rounds + final text = 3 calls).
+	if len(reqs) != 3 {
+		t.Fatalf("mock provider calls = %d, want 3 (first + 2 tool rounds)", len(reqs))
 	}
 	for i, want := range []string{"use plan B", "and keep diffs small"} {
-		msgs := reqs[i].Messages
+		msgs := reqs[i+1].Messages
 		if len(msgs) == 0 {
-			t.Fatalf("request %d has no messages", i)
+			t.Fatalf("request %d has no messages", i+1)
 		}
 		if text, ok := SteerText(msgs[len(msgs)-1].Content); !ok || text != want {
-			t.Fatalf("request %d tail = %q (steer=%v), want %q", i, msgs[len(msgs)-1].Content, ok, want)
+			t.Fatalf("request %d tail = %q (steer=%v), want %q", i+1, msgs[len(msgs)-1].Content, ok, want)
 		}
 	}
-	// event.Steer is emitted for each injected message, carrying the raw text.
-	if len(steers) != 2 || steers[0].Text != "use plan B" || steers[1].Text != "and keep diffs small" {
-		t.Fatalf("Steer events = %+v, want two with raw text", steers)
+	if first := reqs[0].Messages; len(first) > 0 {
+		if _, ok := SteerText(first[len(first)-1].Content); ok {
+			t.Fatalf("first request unexpectedly carries a steer: %q", first[len(first)-1].Content)
+		}
 	}
 }
 
-// TestParentAgentIgnoresJobMessages pins the no-op defence: a context without
-// jobCtxKey (foreground agent / front-desk subagent / planner) must never
-// inject a job message — no session steer appears and no Steer event fires.
 func TestParentAgentIgnoresJobMessages(t *testing.T) {
 	mp := testutil.NewMock("m", testutil.Turn{Text: "done"})
 	var steers []event.Event

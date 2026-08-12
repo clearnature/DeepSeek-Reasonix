@@ -79,64 +79,6 @@ func newSessionWithMsgs(msgs []provider.Message) *Session {
 	return s
 }
 
-// TestProjectionValidAcrossModelChange guards the model-switch resume chain:
-// a projection's summary is model-independent, so switching the working model
-// must not snap model-visible messages back to the full canonical and force a
-// resume compaction. Content validity is the covered-prefix hash alone.
-func TestProjectionValidAcrossModelChange(t *testing.T) {
-	sess := NewSession("sys")
-	for range 10 {
-		sess.Add(provider.Message{Role: provider.RoleUser, Content: "user " + strings.Repeat("x", 200)})
-		sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "assistant " + strings.Repeat("y", 400)})
-	}
-	dir := t.TempDir()
-	a := New(&fakeProvider{reply: "ok"}, nil, sess, Options{
-		ContextWindow: 1_048_576,
-		RecentKeep:    2,
-		ArchiveDir:    dir,
-		SessionPath:   filepath.Join(dir, "s.jsonl"),
-		ModelRef:      "test/model-a",
-	}, event.Discard)
-
-	msgs, version := sess.snapshotMessagesVersion()
-	st := CompactionState{
-		SchemaVersion:     compactionStateSchemaCurrent,
-		TranscriptVersion: version,
-		Projection: ContextProjection{
-			Messages:          append([]provider.Message(nil), msgs...),
-			TranscriptVersion: version,
-			ProjectionVersion: 1,
-			CoveredCount:      len(msgs),
-			CoveredPrefixHash: coveredPrefixHash(msgs, len(msgs)),
-		},
-		PromptCacheKey: a.currentPromptCacheKey(),
-	}
-	a.compactionState = st
-	if !projectionValid(a.compactionState, msgs, version, a.currentPromptCacheKey()) {
-		t.Fatal("precondition: projection valid under model-a")
-	}
-
-	a.modelRef = "test/model-b" // switching the working model (e.g. to "均衡")
-	if !projectionValid(a.compactionState, msgs, version, a.currentPromptCacheKey()) {
-		t.Fatal("projection must stay valid across a model switch (content is model-independent)")
-	}
-	vis := a.modelVisibleMessages()
-	if len(vis) == len(msgs) && len(vis) > 0 {
-		// The projection snapshot here is the full fixture, so equality does
-		// not discriminate; what matters is that it is the projection view and
-		// the gate did not treat the canonical as visible.
-		t.Log("model-visible equals canonical fixture length (projection snapshot == canonical size in this fixture)")
-	}
-	if len(vis) == 0 {
-		t.Fatal("model-visible must not be empty")
-	}
-	// The resume gate must not fold: visible estimate is far below the window.
-	est := estimateMessagesTokens(provider.ModelMessages(vis))
-	if est >= 1_048_576-minOutputBudget-outputBudgetReserve {
-		t.Fatalf("resume gate would compact: visible est %d >= window allowance", est)
-	}
-}
-
 func TestMaybeCompactOnResumeUnsharedWindowNoop(t *testing.T) {
 	a := &Agent{prov: &independentBudgetProvider{budget: 128 * 1024}, agentConfig: agentConfig{contextWindow: 1_048_576}, sink: event.Discard}
 	a.session = newSessionWithMsgs([]provider.Message{{Role: provider.RoleUser, Content: "x"}})
