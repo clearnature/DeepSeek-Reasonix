@@ -412,16 +412,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	if !ok {
 		return CompactionNoop, nil
 	}
-	kept, fold, retention := a.partitionFoldForProjection(msgs[head:start])
-	// The summarizer request = prefix + fold + system prompt must stay inside
-	// the shared window: overflow fold messages keep their text verbatim in
-	// the projection instead of being shed by the summarize-side trimmer.
-	projBase := a.estimatedPromptTokens(msgs[:head]) + a.estimatedPromptTokens(msgs[start:]) + summaryHeadroomTokens
-	projCap := a.compactTrigger()
-	if !force {
-		projCap = a.checkpointCeiling()
-	}
-	kept, fold = a.keepFoldWithinSummaryBudget(msgs[:head], kept, fold, projBase, projCap)
+	kept, fold, retention := a.partitionWithBudget(msgs, head, start, force)
 	if a.contextWindow == 32000 {
 		fmt.Printf("FOLDCONTEXT-DIAG head=%d start=%d foldMsgs=%d foldTok=%d fixedPrefixTok=%d\n",
 			head, start, len(fold), summaryInputTokens(fold), estimateMessagesTokens(a.providerProjectionMessages(msgs[:head])))
@@ -583,8 +574,25 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force bool) (head, start
 	return head, start, start > head
 }
 
-func (a *Agent) partitionFoldForProjection(region []provider.Message) (kept, fold []provider.Message, retention userTurnRetention) {
-	policyKeep, retention := a.keepIndexes(region)
+// partitionWithBudget partitions the fold region against the real projection
+// room, then trims the summarizer request to the shared window. The projection
+// is the only view ever sent again, so user turns keep their text verbatim for
+// as long as the ceiling allows.
+func (a *Agent) partitionWithBudget(msgs []provider.Message, head, start int, force bool) (kept, fold []provider.Message, retention userTurnRetention) {
+	projBase := a.estimatedPromptTokens(msgs[:head]) + a.estimatedPromptTokens(msgs[start:]) + summaryHeadroomTokens
+	projCap := a.compactTrigger()
+	if !force {
+		projCap = a.checkpointCeiling()
+	}
+	kept, fold, retention = a.partitionFoldForProjection(msgs[head:start], projBase, projCap)
+	// The summarizer request = prefix + fold + system prompt must stay inside
+	// the shared window: overflow fold messages keep their text verbatim.
+	kept, fold = a.keepFoldWithinSummaryBudget(msgs[:head], kept, fold, projBase, projCap)
+	return kept, fold, retention
+}
+
+func (a *Agent) partitionFoldForProjection(region []provider.Message, projBase, projCap int) (kept, fold []provider.Message, retention userTurnRetention) {
+	policyKeep, retention := a.keepIndexes(region, projBase, projCap)
 	for i, m := range region {
 		switch {
 		case m.LocalOnly: // display-only output never reaches a provider

@@ -18,12 +18,12 @@ type userTurnRetention struct {
 }
 
 // keepUserTurns protects the user's own words from summarizer judgement: a
-// constraint stated mid-session is unrecoverable once a digest drops it, while
-// the work it governs stays re-derivable from the workspace. Unlike the keep
-// policy it ignores policyStart — a bounded budget, not a fold horizon, is what
-// stops it growing.
-func (a *Agent) keepUserTurns(region []provider.Message, keep []bool) userTurnRetention {
-	budget := a.keptUserTurnsBudget()
+// constraint stated mid-session is unrecoverable once a digest drops it. The
+// projection is the only view ever sent again, so it stays complete: the
+// budget scales with the room the checkpoint ceiling leaves, shrinking only
+// when the window is genuinely short on space (automatic pressure folds).
+func (a *Agent) keepUserTurns(region []provider.Message, keep []bool, projBase, projCap int) userTurnRetention {
+	budget := a.keptUserTurnsBudget(projBase, projCap)
 	var ret userTurnRetention
 	// Oldest-first: the recent tail already covers the newest turns verbatim,
 	// and an old turn has survived more folds than a new one.
@@ -50,14 +50,24 @@ func (a *Agent) keepUserTurns(region []provider.Message, keep []bool) userTurnRe
 	return ret
 }
 
-// keptUserTurnsBudget caps what user turns may spend of the checkpoint. Hoisting
-// them unbounded is what made an earlier revision pad candidates past the
-// acceptance ceiling, which fails compaction outright rather than degrading it.
-func (a *Agent) keptUserTurnsBudget() int {
-	if a.contextWindow <= 0 {
-		return keptUserTurnsBudgetTokens
+// keptUserTurnsBudget caps what user turns may spend of the checkpoint.
+// Unbounded hoisting padded candidates past the acceptance ceiling; a static
+// 8192 shed 96 small turns (~128k tokens) on a 1M window (2026-08-12 manual
+// /compact). The budget is dynamic: a window-proportional floor covers small
+// windows, and real ceiling room keeps every small user turn verbatim.
+func (a *Agent) keptUserTurnsBudget(projBase, projCap int) int {
+	base := keptUserTurnsBudgetTokens
+	if a.contextWindow > 0 {
+		base = min(keptUserTurnsBudgetTokens, int(float64(a.contextWindow)*keptUserTurnsWindowFrac))
 	}
-	return min(keptUserTurnsBudgetTokens, int(float64(a.contextWindow)*keptUserTurnsWindowFrac))
+	// Real ceiling room is the budget: keep every small user turn that fits,
+	// so the sent view stays complete; near-full windows stay conservative.
+	if projCap > 0 && projBase > 0 {
+		if room := projCap - projBase; room > base {
+			return min(room, maxKeptUserTurnsBudgetTokens)
+		}
+	}
+	return base
 }
 
 // noticeDroppedUserTurns reports the turns the budget could not hold. Without
@@ -71,7 +81,7 @@ func (a *Agent) noticeDroppedUserTurns(ret userTurnRetention) {
 		Text: fmt.Sprintf("%s of yours %s too large to keep whole and now survive only through the summary. Prefix a turn with [[keep]] to hold it verbatim.",
 			pluralTurns(ret.Dropped), wereOrWas(ret.Dropped)),
 		Detail: fmt.Sprintf("compaction dropped %d user turn(s) (~%d tokens) past the retention budget of %d",
-			ret.Dropped, ret.DroppedTokens, a.keptUserTurnsBudget())})
+			ret.Dropped, ret.DroppedTokens, a.keptUserTurnsBudget(0, 0))})
 }
 
 func pluralTurns(n int) string {

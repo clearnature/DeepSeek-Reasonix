@@ -21,23 +21,24 @@ import (
 // checkpoint is installed (stable prefix + one structured digest + recent tail).
 // 50% is only the normal acceptance ceiling — candidates are never padded up to it.
 const (
-	defaultCompactRatio        = 0.85 // sole automatic maintenance trigger (new configs)
-	checkpointCeilingRatio     = 0.50 // normal auto-checkpoint acceptance ceiling
-	recentTailBudgetRatio      = 0.10 // recent verbatim tail as a fraction of the window
-	minRecentTailTokens        = 32 * 1024
-	maxRecentTailTokens        = 96 * 1024
-	summaryOutputMaxTokens     = 16 * 1024 // max digest output; further clipped by remaining candidate space
-	summaryHeadroomTokens      = 4096      // reserved for the digest in the degraded projection ceiling
-	exceptionalMinSavingsRatio = 0.25      // when fixed prefix alone exceeds 50%, require at least this savings
-	minRecentKeep              = 2         // never keep fewer recent messages than this
-	minCompactMessages         = 2         // skip compaction below this many compactable messages
-	fallbackTokPerChar         = 0.25      // ~4 chars/token, used before any usage is available to calibrate
-	maxPinnedFirstUserTokens   = 1500      // ceiling on pinning the first user turn verbatim
-	pinnedFirstUserWindowFrac  = 0.15      // and never pin a first turn worth more than this fraction of the window
-	maxKeptUserTurnTokens      = 1500      // ceiling on carrying one folded user turn verbatim
-	keptUserTurnsBudgetTokens  = 8192      // and on all of them together within one fold
-	keptUserTurnsWindowFrac    = 0.05      // never spend more than this fraction of the window on them
-	protocolReserveTokens      = 256       // provider framing and control fields not represented by message estimates
+	defaultCompactRatio          = 0.85 // sole automatic maintenance trigger (new configs)
+	checkpointCeilingRatio       = 0.50 // normal auto-checkpoint acceptance ceiling
+	recentTailBudgetRatio        = 0.10 // recent verbatim tail as a fraction of the window
+	minRecentTailTokens          = 32 * 1024
+	maxRecentTailTokens          = 96 * 1024
+	summaryOutputMaxTokens       = 16 * 1024 // max digest output; further clipped by remaining candidate space
+	summaryHeadroomTokens        = 4096      // reserved for the digest in the degraded projection ceiling
+	exceptionalMinSavingsRatio   = 0.25      // when fixed prefix alone exceeds 50%, require at least this savings
+	minRecentKeep                = 2         // never keep fewer recent messages than this
+	minCompactMessages           = 2         // skip compaction below this many compactable messages
+	fallbackTokPerChar           = 0.25      // ~4 chars/token, used before any usage is available to calibrate
+	maxPinnedFirstUserTokens     = 1500      // ceiling on pinning the first user turn verbatim
+	pinnedFirstUserWindowFrac    = 0.15      // and never pin a first turn worth more than this fraction of the window
+	maxKeptUserTurnTokens        = 1500      // ceiling on carrying one folded user turn verbatim
+	keptUserTurnsBudgetTokens    = 8192      // and on all of them together within one fold
+	keptUserTurnsWindowFrac      = 0.05      // never spend more than this fraction of the window on them
+	maxKeptUserTurnsBudgetTokens = 131072    // upper bound: 1M window keeps ~128k of small turns verbatim
+	protocolReserveTokens        = 256       // provider framing and control fields not represented by message estimates
 )
 
 var (
@@ -311,7 +312,7 @@ func (a *Agent) fixedPinnableUserTurn(m provider.Message) bool {
 	return fixedTokenEstimate(m) <= budget
 }
 
-func (a *Agent) keepIndexes(region []provider.Message) ([]bool, userTurnRetention) {
+func (a *Agent) keepIndexes(region []provider.Message, projBase, projCap int) ([]bool, userTurnRetention) {
 	keep := make([]bool, len(region))
 	policyStart := 0
 	for i, m := range region {
@@ -326,7 +327,7 @@ func (a *Agent) keepIndexes(region []provider.Message) ([]bool, userTurnRetentio
 			keep[i] = true
 		}
 	}
-	retention := a.keepUserTurns(region, keep)
+	retention := a.keepUserTurns(region, keep, projBase, projCap)
 	for i, m := range region {
 		if !keep[i] {
 			continue
