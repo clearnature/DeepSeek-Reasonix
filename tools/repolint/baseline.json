@@ -2,10 +2,10 @@
   "limits": {
     "banner": 48,
     "commented-code": 1,
-    "complexity": 2170,
+    "complexity": 2171,
     "essay": 4312,
-    "file-size": 110992,
-    "function-size": 9255,
+    "file-size": 111007,
+    "function-size": 9268,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -498,9 +498,6 @@
     "internal/agent/capability_gate_test.go": {
       "essay": 1
     },
-    "internal/agent/compact_projection.go": {
-      "function-size": 2
-    },
     "internal/agent/compact_summary_failure_test.go": {
       "essay": 2
     },
@@ -768,10 +765,10 @@
       "essay": 1
     },
     "internal/boot/boot.go": {
-      "complexity": 250,
+      "complexity": 251,
       "essay": 104,
-      "file-size": 2093,
-      "function-size": 1712,
+      "file-size": 2108,
+      "function-size": 1727,
       "narrative": 3
     },
     "internal/boot/boot_test.go": {
