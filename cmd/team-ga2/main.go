@@ -137,11 +137,11 @@ func main() {
 	}
 	time.Sleep(1 * time.Second)
 
-	const task = "在 %s 创建 order.go：实现冒泡排序（BubbleSort），Go 语言 package sortx，返回排序后的新切片（不修改输入）。遇到无安全默认的实现决策时（例如参数校验策略、命名风格），用 ask 工具向 leader 提问并按其回答继续。"
+	const task = "在 %s 完成一个冒泡排序小包：① 创建 order.go：实现 BubbleSort（Go 语言 package sortx，返回排序后的新切片，不修改输入）；② 创建 order_test.go：为 BubbleSort 写至少 3 个单元测试（含空切片、单元素、乱序）；③ 创建 README.md：一行说明该包用途与用法。遇到无安全默认的实现决策时，用 ask 工具向 leader 提问并按其回答继续。"
 	for _, n := range []string{"g1", "g2", "g3"} {
 		ctrl.Submit(fmt.Sprintf("/team-add "+n+" "+task, grantDir(n)))
 	}
-	fmt.Printf("=== G4 种群 3 个体并行评估（grant=%s × natural ask）===\n", *grantMode)
+	fmt.Printf("=== G5 种群 3 个体并行评估（grant=%s × 多文件任务 × natural ask）===\n", *grantMode)
 
 	lastRoster := func() string {
 		for _, v := range slices.Backward(sink.msgs) {
@@ -177,24 +177,38 @@ func evaluate(ws string, sink *captureSink, start time.Time) {
 	// Fitness: produced order.go in own worktree = 1.0. AskRequest count
 	// measures autonomy; cache stats measure prefix stability (path-grant
 	// shares the workspace, so tool outputs may jitter the prefix).
-	fmt.Println("\n=== G4 适应度评估（fitness × ask 次数）===")
+	fmt.Println("\n=== G5 适应度评估（多文件 fitness × ask 次数）===")
 	genes := map[string]string{"g1": "natural", "g2": "natural", "g3": "natural"}
 	for _, n := range []string{"g1", "g2", "g3"} {
-		p := filepath.Join(ws, ".reasonix", "worktrees", n, "order.go")
-		p2 := filepath.Join(ws, ".reasonix", "ga-g4", n, "order.go")
-		path := p
-		if _, err := os.Stat(p2); err == nil {
-			path = p2
+		dirs := []string{
+			filepath.Join(ws, ".reasonix", "worktrees", n),
+			filepath.Join(ws, ".reasonix", "ga-g4", n),
 		}
-		if fi, err := os.Stat(path); err == nil {
-			fmt.Printf("g%s (%-7s) fitness=1.0 (%d bytes)\n", n, genes[n], fi.Size())
-		} else {
-			fmt.Printf("g%s (%-7s) fitness=0.0 (no output: %v)\n", n, genes[n], err)
+		dir := ""
+		for _, d := range dirs {
+			if fi, err := os.Stat(filepath.Join(d, "order.go")); err == nil && fi.Size() > 0 {
+				dir = d
+				break
+			}
 		}
+		if dir == "" {
+			fmt.Printf("g%s (%-7s) fitness=0.0 (no order.go)\n", n, genes[n])
+			continue
+		}
+		// Multi-file fitness: order.go + order_test.go + README.md each count.
+		score := 0.0
+		var sizes []string
+		for _, f := range []string{"order.go", "order_test.go", "README.md"} {
+			if fi, err := os.Stat(filepath.Join(dir, f)); err == nil && fi.Size() > 0 {
+				score += 1.0 / 3
+				sizes = append(sizes, f+":"+fmt.Sprint(fi.Size()))
+			}
+		}
+		fmt.Printf("g%s (%-7s) fitness=%.2f [%s]\n", n, genes[n], score, strings.Join(sizes, " "))
 	}
 	fmt.Printf("AskRequest 总数: %d\n", sink.AskRequests())
 	cacheStats(start, time.Now())
-	fmt.Println("=== G4 结论：path-grant 的 prefix 抖动/命中率是否劣于 worktree（缓存污染判定）===")
+	fmt.Println("=== G5 结论：多文件任务下 path-grant 是否仍无缓存污染（prefix 抖动/命中率）===")
 }
 
 // cacheStats summarizes prefix stability and hit rate for the experiment
