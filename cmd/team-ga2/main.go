@@ -137,7 +137,7 @@ func main() {
 	}
 	time.Sleep(1 * time.Second)
 
-	const task = "在 %s 完成一个冒泡排序小包：① 创建 order.go：实现 BubbleSort（Go 语言 package sortx，返回排序后的新切片，不修改输入）；② 创建 order_test.go：为 BubbleSort 写至少 3 个单元测试（含空切片、单元素、乱序）；③ 创建 README.md：一行说明该包用途与用法。遇到无安全默认的实现决策时，用 ask 工具向 leader 提问并按其回答继续。"
+	const task = "在 %s 完成一个冒泡排序小包（所有文件**直接放在该目录根**，不要创建任何子目录）：① 创建 order.go：实现 BubbleSort（Go 语言 package sortx，返回排序后的新切片，不修改输入）；② 创建 order_test.go：为 BubbleSort 写至少 3 个单元测试（含空切片、单元素、乱序）；③ 创建 README.md：一行说明该包用途与用法。遇到无安全默认的实现决策时，用 ask 工具向 leader 提问并按其回答继续。"
 	for _, n := range []string{"g1", "g2", "g3"} {
 		ctrl.Submit(fmt.Sprintf("/team-add "+n+" "+task, grantDir(n)))
 	}
