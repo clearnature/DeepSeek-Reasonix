@@ -783,7 +783,13 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	// terminal status (completed/cancelled/failed). The background job owns
 	// finish after handoff; every other exit finishes here, including
 	// validation errors and panics.
-	trk := newSubagentProgressTracker(ctx, subSink(ctx))
+	// The sink rides the spec (job workers have no CallContext): the leader's
+	// Recorder-wrapped sink keeps sub-agent usage in the daily stats file.
+	runSink := subSink(ctx)
+	if spec.Sink != nil {
+		runSink = spec.Sink
+	}
+	trk := newSubagentProgressTracker(ctx, runSink)
 	backgroundHandoff := false
 	defer func() {
 		if backgroundHandoff {

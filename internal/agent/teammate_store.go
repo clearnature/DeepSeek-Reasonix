@@ -503,7 +503,13 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	if ts.leader != nil && ts.leader.asker != nil {
 		spec.Asker = ts.leader.asker
 	}
-	slog.Info("team spec asker", "teammate", name, "spec_asker", spec.Asker != nil)
+	// The leader's sink rides the spec so the teammate's usage events land in
+	// the daily stats file (prefix_hash/cache observable); the job ctx has no
+	// CallContext, so subSink would otherwise discard them.
+	if ts.leader != nil && ts.leader.sink != nil {
+		spec.Sink = ts.leader.sink
+	}
+	slog.Info("team spec asker", "teammate", name, "spec_asker", spec.Asker != nil, "spec_sink", spec.Sink != nil)
 	// D1 token/worktree: a granted teammate must pass the fork write gate
 	// (Context.Writable) so WritePathSet binding (not the gate) is what
 	// confines its writes to the granted paths — otherwise the read-only
