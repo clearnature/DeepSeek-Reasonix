@@ -149,8 +149,8 @@ func TestMaybeCompactOnResumeColdLargePromptUntouched(t *testing.T) {
 
 func TestMaybeCompactOnResumeWarmSmallPromptUntouched(t *testing.T) {
 	a := &Agent{
-		svc:              agentServices{prov: &sharedWindowBudgetProvider{budget: 128 * 1024}, sink: event.Discard},
-		agentConfig:      agentConfig{contextWindow: 1_048_576},
+		svc:         agentServices{prov: &sharedWindowBudgetProvider{budget: 128 * 1024}, sink: event.Discard},
+		agentConfig: agentConfig{contextWindow: 1_048_576},
 	}
 	a.sess.cacheState = CacheStateWarm
 	a.sess.output.outputBudget = 128 * 1024
@@ -284,9 +284,9 @@ func TestMaybePredictOverflowDoesNotFire(t *testing.T) {
 		count++
 	})
 	a := &Agent{
-		svc: agentServices{sink: sink},
+		svc:         agentServices{sink: sink},
 		agentConfig: agentConfig{contextWindow: 1_048_576},
-		}
+	}
 	// est 100K, max 128K → headroom = 1M - 100K - 128K = ~820K >> 8K → no fire.
 	a.maybePredictOverflow(100_000, 131_072)
 	if count > 0 {

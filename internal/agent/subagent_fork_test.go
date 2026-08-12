@@ -193,7 +193,7 @@ func TestCaptureForkPrefixUsesProjectedView(t *testing.T) {
 	}
 	a := forkPrefixTestAgent(t, msgs)
 	canonical, version := a.Session().snapshotMessagesVersion() // 含 NewSession 自动加的 system 首条
-	n := len(canonical)                                       // 投影全量覆盖 → modelVisibleFromProjection 返回纯投影
+	n := len(canonical)                                         // 投影全量覆盖 → modelVisibleFromProjection 返回纯投影
 	projMsgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
 		{Role: provider.RoleUser, Content: "u1"},
