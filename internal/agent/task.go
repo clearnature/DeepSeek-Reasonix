@@ -1859,6 +1859,7 @@ func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *too
 	if _, _, asker, ok := CallContext(ctx); ok && asker != nil {
 		ctx = withSubagentAsker(ctx, asker)
 	}
+	slog.Info("subagent asker ctx", "model", modelRef, "callctx_asker", func() bool { _, _, a, ok := CallContext(ctx); return ok && a != nil }())
 	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
 	opts.ModelRef = modelRef
 	// Capture the pristine task before host framing is prepended: delivery

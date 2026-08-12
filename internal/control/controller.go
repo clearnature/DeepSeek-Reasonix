@@ -2635,6 +2635,17 @@ func (c *Controller) ApplyHeadlessApprovalMode(mode string) {
 	}
 	if c.executor != nil {
 		c.executor.SetGate(c.newHeadlessGate(mode))
+		// Productized autonomy: auto mode wires the controller in as the
+		// executor's Asker so `ask` is auto-approved (audited AskRequest)
+		// instead of silently falling back — headless + auto completes
+		// autonomously. ask/yolo restore the nil asker so a headless run
+		// never blocks on an unanswerable question (would-ask fails closed).
+		if mode == ToolApprovalAuto {
+			c.executor.SetAsker(c)
+		} else {
+			c.executor.SetAsker(nil)
+		}
+		slog.Info("headless approval mode applied", "mode", mode, "executor_asker", c.executor.Asker() != nil)
 	}
 }
 

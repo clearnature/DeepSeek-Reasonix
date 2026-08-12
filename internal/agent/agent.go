@@ -810,6 +810,15 @@ func (a *Agent) withTurnPreferences(input string) string {
 // Interactive frontends wire one in; headless runs leave it nil.
 func (a *Agent) SetAsker(as Asker) { a.asker = as }
 
+// Asker returns the current ask surface (nil for headless runs without a
+// wired approver); the `ask` tool falls back to a model assumption then.
+func (a *Agent) Asker() Asker {
+	if a == nil {
+		return nil
+	}
+	return a.asker
+}
+
 // SetMemoryQueue installs the sink the remember/forget tools use to apply a
 // memory change in the current session. The controller wires itself in.
 func (a *Agent) SetMemoryQueue(q memory.Queue) { a.memQueue = q }

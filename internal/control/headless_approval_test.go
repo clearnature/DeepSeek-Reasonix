@@ -64,6 +64,43 @@ func runHeadlessWriteOnce(t *testing.T, mode string, askRules []string) (prompts
 // contract: a command the config explicitly marked "ask" must NOT run silently
 // under headless auto (there is no one to approve it), yet must not prompt or
 // hang either. auto preserves explicit ask rules by failing closed.
+func TestApplyHeadlessApprovalModeAutoWiresAskerAndAutoApproves(t *testing.T) {
+	// Productized autonomy: CLI --permission-mode auto wires the controller in
+	// as the executor's Asker, so `ask` emits an auditable AskRequest and
+	// auto-approves the recommended option instead of the nil-asker fallback.
+	sink := &askProbeSink{}
+	ag := agent.New(&scriptedTurns{}, tool.NewRegistry(), agent.NewSession(""), agent.Options{}, event.Discard)
+	c := New(Options{Sink: sink, SessionDir: t.TempDir(), Executor: ag})
+	c.ApplyHeadlessApprovalMode(ToolApprovalAuto)
+
+	if c.executor == nil || c.executor.Asker() == nil {
+		t.Fatal("auto headless mode: executor asker is nil, want controller wired")
+	}
+	answers, err := c.Ask(context.Background(), askProbeQuestions())
+	if err != nil {
+		t.Fatalf("Ask(auto headless): %v", err)
+	}
+	if len(answers) != 1 || len(answers[0].Selected) != 1 || answers[0].Selected[0] != "A" {
+		t.Fatalf("auto headless answers = %+v, want recommended option A", answers)
+	}
+	if len(sink.asks) != 1 {
+		t.Fatalf("auto headless AskRequest emitted %d, want 1 (auditable)", len(sink.asks))
+	}
+}
+
+func TestApplyHeadlessApprovalModeAskClearsAskerToFallback(t *testing.T) {
+	// Switching away from auto restores the nil asker: a headless ask-mode run
+	// falls back to the model assumption, never blocks on an unanswerable
+	// question (would-ask fails closed).
+	ag := agent.New(&scriptedTurns{}, tool.NewRegistry(), agent.NewSession(""), agent.Options{}, event.Discard)
+	c := New(Options{Sink: event.Discard, SessionDir: t.TempDir(), Executor: ag})
+	c.ApplyHeadlessApprovalMode(ToolApprovalAuto)
+	c.ApplyHeadlessApprovalMode(ToolApprovalAsk)
+	if c.executor == nil || c.executor.Asker() != nil {
+		t.Fatal("ask-mode headless: asker must be nil (fallback)")
+	}
+}
+
 func TestApplyHeadlessApprovalModeAutoDeniesExplicitAskRule(t *testing.T) {
 	prompts, written := runHeadlessWriteOnce(t, ToolApprovalAuto, []string{"write_file"})
 	if prompts != 0 {

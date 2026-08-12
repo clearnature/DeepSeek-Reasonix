@@ -448,6 +448,7 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	if ts.leader != nil && ts.leader.asker != nil {
 		ctx = withSubagentAsker(ctx, ts.leader.asker)
 	}
+	slog.Info("team asker propagation", "teammate", name, "leader", ts.leader != nil, "leader_asker", ts.leader != nil && ts.leader.asker != nil)
 	// P6.2 teammate direct-connect: stamp the mailbox so the teammate sub-agent
 	// can post mail to its peers via the team_message tool (builtin.Mailbox).
 	ctx = builtin.WithMailbox(ctx, ts)
@@ -502,6 +503,7 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	if ts.leader != nil && ts.leader.asker != nil {
 		spec.Asker = ts.leader.asker
 	}
+	slog.Info("team spec asker", "teammate", name, "spec_asker", spec.Asker != nil)
 	// D1 token/worktree: a granted teammate must pass the fork write gate
 	// (Context.Writable) so WritePathSet binding (not the gate) is what
 	// confines its writes to the granted paths — otherwise the read-only
