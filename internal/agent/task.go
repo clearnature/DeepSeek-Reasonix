@@ -2059,6 +2059,15 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 		opts.Gate = g
 	}
 	sub := New(prov, reg, sess, opts, sink)
+	// Fork children inherit the parent's admission calibration so their first
+	// request is not mis-sized by the cold wire-char fallback (shared
+	// contexts otherwise report false overflow and recompact every fork).
+	if parent, ok := ForkSourceFromContext(ctx); ok {
+		if usage, cal, ok := captureForkInheritance(parent, opts.ModelRef); ok {
+			sub.lastUsage.Store(usage)
+			sub.promptCalibration.Store(cal)
+		}
+	}
 	sub.SetPlanMode(planWorkflow)
 	if err := sub.Run(ctx, prompt); err != nil {
 		if errors.Is(err, errBackgroundizeRequested) {

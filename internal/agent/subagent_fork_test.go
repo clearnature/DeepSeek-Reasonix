@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"reasonix/internal/event"
@@ -178,6 +179,90 @@ func TestTruncateUnfinishedTurn(t *testing.T) {
 
 // TestCaptureForkPrefixParentSessionUntouched 验证父 Session 零改动：捕获前后
 // 父会话的序列化字节完全一致（红线：fork 捕获零发送、父零改动）。
+func TestCaptureForkPrefixUsesProjectedView(t *testing.T) {
+	// 父已压缩（有效投影）时，fork 前缀必须是投影视图而非原始全量——
+	// 共享大上下文否则每个 fork 子代理都继承未压缩历史、反复触发
+	// overflow 压缩（8/12 凌晨 24 次反复压缩根因之一）。
+	msgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "u1"},
+		{Role: provider.RoleAssistant, Content: "a1"},
+		{Role: provider.RoleUser, Content: "u2"},
+		{Role: provider.RoleAssistant, Content: "a2"},
+		{Role: provider.RoleUser, Content: "u3"},
+	}
+	a := forkPrefixTestAgent(t, msgs)
+	canonical, version := a.session.snapshotMessagesVersion() // 含 NewSession 自动加的 system 首条
+	n := len(canonical)                                       // 投影全量覆盖 → modelVisibleFromProjection 返回纯投影
+	projMsgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "u1"},
+		{Role: provider.RoleAssistant, Content: "summary of a1 and a2"},
+		{Role: provider.RoleUser, Content: "u3"},
+	}
+	a.compactionMu.Lock()
+	a.compactionState.Projection = ContextProjection{
+		Messages:          projMsgs,
+		TranscriptVersion: version,
+		CoveredCount:      n,
+		CoveredPrefixHash: coveredPrefixHash(canonical, n),
+	}
+	a.compactionMu.Unlock()
+
+	prefix := captureForkPrefix(a, context.Background())
+	if len(prefix) != len(projMsgs) {
+		t.Fatalf("fork prefix len %d != projected len %d (raw canonical would be %d)",
+			len(prefix), len(projMsgs), len(msgs))
+	}
+	// 前缀必须带摘要（投影特征），不得含被折叠的原始 a1/a2。
+	var sb strings.Builder
+	for _, m := range prefix {
+		sb.WriteString(m.Content)
+	}
+	joined := sb.String()
+	if !strings.Contains(joined, "summary of a1 and a2") {
+		t.Fatalf("fork prefix lacks projection summary: %q", joined)
+	}
+	if !strings.Contains(joined, "a1") || !strings.Contains(joined, "a2") {
+		t.Fatalf("fork prefix dropped content: %q", joined)
+	}
+}
+
+func TestCaptureForkInheritance(t *testing.T) {
+	parent := forkPrefixTestAgent(t, []provider.Message{{Role: provider.RoleUser, Content: "u1"}})
+	parent.modelRef = "deepseek/deepseek-v4-flash"
+	parent.lastUsage.Store(&provider.Usage{PromptTokens: 858_000})
+	parent.setPromptTokenCalibration(858_000, requestCalibrationShapeOf(provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("x", 300_000)}},
+	}))
+
+	// 同 model：继承 usage + calibration（值拷贝，改父不影响子）。
+	usage, cal, ok := captureForkInheritance(parent, "deepseek/deepseek-v4-flash")
+	if !ok || usage == nil || usage.PromptTokens != 858_000 || cal == nil {
+		t.Fatalf("same-model inheritance = ok:%v usage:%v cal:%v, want values", ok, usage, cal)
+	}
+	parent.lastUsage.Store(&provider.Usage{PromptTokens: 1})
+	parent.setPromptTokenCalibration(1, parent.requestCalibrationShape(provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "x"}},
+	}))
+	if usage.PromptTokens != 858_000 {
+		t.Fatalf("inherited usage mutated with parent: %d", usage.PromptTokens)
+	}
+
+	// 跨 model：不继承（tokenizer 属性不可移植）。
+	if _, _, ok := captureForkInheritance(parent, "qwen/qwen3"); ok {
+		t.Fatal("cross-model inheritance must be rejected")
+	}
+
+	// 父无值：ok=false。
+	parent.modelRef = "deepseek/deepseek-v4-flash"
+	parent.lastUsage.Store(nil)
+	parent.promptCalibration.Store(nil)
+	if _, _, ok := captureForkInheritance(parent, "deepseek/deepseek-v4-flash"); ok {
+		t.Fatal("inheritance with empty parent values must report ok=false")
+	}
+}
+
 func TestCaptureForkPrefixParentSessionUntouched(t *testing.T) {
 	parent := forkPrefixTestAgent(t, []provider.Message{
 		{Role: provider.RoleUser, Content: "u", Images: []string{"data:image/png;base64,AAAA"}},

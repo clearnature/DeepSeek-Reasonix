@@ -10,7 +10,10 @@ import (
 // captureForkPrefix 构造 fork 子代理预填前缀：父 system + 历史截断（去当前
 // 未完成 assistant 轮次，尾部未配对剔除）+ 深拷贝——零发送、父零改动。
 // 前缀与父已发送字节 byte-identical：子代理首请求命中父已建缓存的硬前提
-// （plan §一.1/§五）。调用方（RunProfileSpec fork 分支）预填进子代理 session。
+// （plan §一.1/§五）。取父 modelVisibleMessages（投影有效则投影视图，与
+// Prepare 发送同源）而非 Session 原始快照，让子代理继承父的压缩视图而非
+// 未压缩全量——否则共享大上下文反复触发 overflow 压缩（8/12 凌晨 24 次）。
+// 调用方（RunProfileSpec fork 分支）预填进子代理 session。
 func captureForkPrefix(parent *Agent, ctx context.Context) []provider.Message {
 	if parent == nil || parent.session == nil {
 		return nil
@@ -20,7 +23,7 @@ func captureForkPrefix(parent *Agent, ctx context.Context) []provider.Message {
 			return nil
 		}
 	}
-	msgs := parent.session.Snapshot()
+	msgs := parent.modelVisibleMessages()
 	// 深拷贝先行：返回的切片完全独立于父 Session，任何修改（含 ToolCalls /
 	// Images / Receipts 等内嵌 slice）都不会回流到父会话。
 	msgs = cloneForkMessages(msgs)
@@ -30,6 +33,31 @@ func captureForkPrefix(parent *Agent, ctx context.Context) []provider.Message {
 // cloneForkMessages 深拷贝消息日志：复制外层 slice，并把每条 Message 内可变的
 // 内嵌 slice / 指针目标一并复制，保证 fork 前缀与父 Session 之间零共享可变状态。
 // 纯值字段（Role/Content/Reasoning* 等 string 与 int64/bool）本就按值复制。
+// captureForkInheritance 捕获子代理继承的 admission 校准：父的 lastUsage
+// 实测与 promptCalibration（值拷贝，原子快照）。仅当子代理与父同 model 时
+// 继承——跨 model 的 tokenizer 属性不同，calibration 不可移植。返回
+// (usage, calibration, ok)；父无可用值或 model 不一致时 ok=false，子代理
+// 保持冷启动（fallback 估算 + 首轮自校准）。
+func captureForkInheritance(parent *Agent, modelRef string) (*provider.Usage, *promptTokenCalibration, bool) {
+	if parent == nil || parent.modelRef != modelRef {
+		return nil, nil, false
+	}
+	var usage *provider.Usage
+	if lu := parent.lastUsage.Load(); lu != nil {
+		cp := *lu
+		usage = &cp
+	}
+	var cal *promptTokenCalibration
+	if c := parent.promptCalibration.Load(); c != nil {
+		cc := *c
+		cal = &cc
+	}
+	if usage == nil && cal == nil {
+		return nil, nil, false
+	}
+	return usage, cal, true
+}
+
 func cloneForkMessages(msgs []provider.Message) []provider.Message {
 	if len(msgs) == 0 {
 		return nil
