@@ -1760,9 +1760,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	}
 
 	// P6.2 production wiring (reinstated after the 2026-08-12 upstream merge
-	// dropped it — team commands were disabled): the teammate registry shares
-	// the controller's sink; completion events drive lifecycle (idle flip).
-	// Ablation/no-subagent builds have no task tool and leave team disabled.
+	// dropped it — team commands were disabled); ablation builds keep nil.
 	var teammates *agent.TeammateStore
 	if taskTool != nil {
 		inboxRoot := filepath.Join(sessionDir, "team-inbox")
