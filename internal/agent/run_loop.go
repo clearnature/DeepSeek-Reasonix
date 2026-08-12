@@ -56,231 +56,6 @@ type deferredStreamSink struct {
 	events              []event.Event
 }
 
-func newReasoningAwareStreamSink(inner event.Sink) *deferredStreamSink {
-	return &deferredStreamSink{inner: inner, waitingForReasoning: true}
-}
-
-func newDeferredStreamSink(inner event.Sink) *deferredStreamSink {
-	return &deferredStreamSink{inner: inner, deferAll: true}
-}
-
-func (s *deferredStreamSink) Emit(e event.Event) {
-	if s == nil {
-		return
-	}
-	if s.deferAll {
-		s.events = append(s.events, e)
-		return
-	}
-	if s.waitingForReasoning && e.Kind == event.Reasoning && strings.TrimSpace(e.Text) != "" {
-		s.sawReasoning = true
-		s.inner.Emit(e)
-		s.flushBuffered()
-		return
-	}
-	if s.waitingForReasoning && !s.sawReasoning && e.Kind == event.ToolDispatch {
-		s.events = append(s.events, e)
-		return
-	}
-	s.inner.Emit(e)
-}
-
-func (s *deferredStreamSink) flushBuffered() {
-	if s == nil {
-		return
-	}
-	for _, e := range s.events {
-		s.inner.Emit(e)
-	}
-	s.events = nil
-}
-
-func (s *deferredStreamSink) Flush() {
-	if s == nil {
-		return
-	}
-	s.flushBuffered()
-}
-
-func (s *deferredStreamSink) Discard() {
-	if s != nil {
-		s.events = nil
-	}
-}
-
-// beginRunTurn handles evidence scope, delivery classification, background-job
-// evidence re-lease, and the initial user-turn persistence. Callers still own
-// all Run-level defers (workspace lease, evidence commit, delivery checkpoint,
-// steer queue, active-turn timestamp).
-func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string, state *runLoopState) {
-	rawInput = RawUserInput(ctx, input)
-	providerInput := input
-	// A fresh user turn starts from zeroed per-turn host state; the new turn's
-	// values are computed below. Cross-turn state (checkpoint, scope, failure
-	// budgets) lives directly on Agent and is reconciled field by field.
-	a.perTurnState = perTurnState{}
-	a.resetStructuralRunGuards()
-	scope, scoped := DeliveryExecutionScopeFromContext(ctx)
-	preserveEvidence := a.preserveEvidenceOnce
-	// A run that starts with a pending readiness recovery (or an explicit
-	// evidence-preserving continuation) and then passes readiness counts as a
-	// recovery in the final audit.
-	a.readinessRecovered = preserveEvidence || a.deliveryRecoveryPending
-	if a.evidence != nil {
-		switch {
-		case preserveEvidence:
-			a.evidence.ResetBackgroundLeases()
-		case scoped && a.deliveryScopeID == scope.ID:
-			a.evidence.ResetBackgroundLeases()
-		default:
-			a.resetTurnEvidence()
-		}
-	}
-	a.preserveEvidenceOnce = false
-	if !preserveEvidence {
-		a.deliveryRecoveryPending = false
-	}
-	if scoped {
-		a.deliveryScopeID = scope.ID
-	} else if !preserveEvidence {
-		a.deliveryScopeID = ""
-	}
-	a.deliveryScopeActive = scoped
-	if scoped && a.deliveryCheckpoint.ScopeID != scope.ID {
-		a.deliveryCheckpoint = evidence.DeliveryCheckpoint{ScopeID: scope.ID}
-	}
-	// Re-lease this session's background-job mutations that no turn has
-	// committed yet. The Reset above just wiped any lease a failed or
-	// cancelled turn held (its ledger is gone), and a process restart starts
-	// from an empty ledger too — in both cases the job manager still marks the
-	// job's evidence uncommitted. Without re-injecting it here, a turn that
-	// never re-issues wait/bash_output (the model has no reason to if it
-	// doesn't know a mutation is still pending) would ship the background
-	// change without the final-readiness gate ever seeing it. Plan turns defer
-	// this lease like collectBackgroundEvidence does so execution evidence is
-	// consumed and audited only after plan approval.
-	if a.evidence != nil && a.jobs != nil && !a.planMode.Load() {
-		session := jobs.SessionFromContext(ctx)
-		for _, jobID := range a.jobs.PendingEvidenceJobIDsForSession(session) {
-			summary, ready := a.jobs.TryLeaseEvidenceForSession(session, jobID)
-			if !ready {
-				continue
-			}
-			if !a.evidence.NoteBackgroundLease(session, jobID) {
-				continue
-			}
-			a.evidence.MergeChild(summary)
-		}
-	}
-	a.deliveryCriteriaEstablished = a.hasIncompleteCanonicalCriteria() ||
-		(a.evidence != nil && a.evidence.HasSuccessfulTodoWrite()) ||
-		(scoped && a.deliveryCheckpoint.CriteriaEstablished)
-	// Classify delivery expectations from the task text. Sub-agent spawners
-	// pass the pristine task through Options.ClassifierTaskText (a trusted
-	// host channel) because their Run input carries host framing whose
-	// incidental verbs — "file tools resolve relative paths" — once classified
-	// every workspace-wrapped subagent prompt as a mutation request and
-	// deadlocked read-only subagents. Without the override the raw input is
-	// classified verbatim: stripping user-controllable markup here would let
-	// input dressed up as host framing disarm the delivery gates.
-	a.turnInput = a.classifierTaskText
-	if scoped && strings.TrimSpace(scope.TaskText) != "" {
-		a.turnInput = scope.TaskText
-	} else if strings.TrimSpace(a.turnInput) == "" {
-		a.turnInput = rawInput
-	}
-	intent := taskintent.Classify(a.turnInput)
-	a.deliveryTaskExpected = intent.NeedsEvidence()
-	a.deliveryMutationExpected = intent == taskintent.Mutation && registryHasWriterTools(a.tools)
-	a.deliveryPersistentExpected = taskintent.NeedsPersistentAction(a.turnInput)
-	a.recoveryTaskSummary = boundedRecoveryTaskSummary(a.turnInput)
-	// Freeze TaskPolicy for this turn from the session role setting. Subsequent
-	// SetAgentPreset calls must not change this turn's route/review floor.
-	if policy, ok := taskpolicy.FromContext(ctx); ok {
-		a.turnPolicy = policy
-	} else {
-		a.turnPolicy = taskpolicy.Derive(taskpolicy.Input{
-			Raw:         a.turnInput,
-			Instruction: taskpolicy.StripQuotedConstraints(a.turnInput),
-			Preset:      agentpreset.AgentPreset(a.AgentPreset()),
-			PlanMode:    a.planMode.Load(),
-		})
-	}
-	a.turnPolicySet = true
-	// Align legacy delivery gates with the frozen role setting. Delivery always
-	// enables the full readiness contract. Light/Balanced only elevate when the
-	// turn is a mutation that requires forced review or is high-risk.
-	switch {
-	case a.AgentPreset() == string(agentpreset.Delivery):
-		a.deliveryProfile = true
-	case a.turnPolicy.Intent == taskintent.Mutation &&
-		(a.turnPolicy.RequiresIndependentReview() || a.turnPolicy.Risk >= taskpolicy.RiskHigh):
-		a.deliveryProfile = true
-	default:
-		a.deliveryProfile = false
-	}
-	// A cancelled/error turn leaves a provider-excluded recovery record at the
-	// transcript tail. Fold its bounded facts into this new user turn exactly
-	// once; the user's raw text remains the classifier source above.
-	providerInput = withInterruptedRecovery(providerInput, a.pendingInterruptedRecovery())
-	a.prepareRepeatFailureScope(scoped, scope.ID)
-	a.sink.Emit(event.Event{Kind: event.TurnStarted})
-	a.emitTurnPhase(event.TurnPhaseWorking)
-	input = a.withTurnPreferences(providerInput)
-	// Persist the short execution-policy block in provider Content; keep the
-	// original user text in RawContent for history/title/rewind stripping.
-	policyBlock := taskpolicy.ExecutionPolicyBlock(a.turnPolicy)
-	if !strings.Contains(input, "<execution-policy") {
-		input = strings.TrimSpace(input) + "\n\n" + policyBlock
-	}
-	userCreatedAt := time.Now().UnixMilli()
-	a.activeTurnCreatedAt.Store(userCreatedAt)
-	rawContent := rawInput
-	if rawContent == "" {
-		rawContent = a.turnInput
-	}
-	// Resume mode (the foreground→background handoff) continues an in-memory
-	// session that already carries the task prompt: skipping the append keeps
-	// the historical prefix byte-identical and avoids a duplicated task turn.
-	// The turn still re-classifies delivery intent, resets per-turn state, and
-	// emits TurnStarted — only the transcript append is suppressed.
-	if !ResumeSessionFromContext(ctx) {
-		a.session.Add(provider.Message{
-			Role: provider.RoleUser, Content: input, RawContent: rawContent,
-			Images: userImages(ctx), CreatedAt: userCreatedAt,
-		})
-	}
-
-	state = &runLoopState{
-		emptyFinalBlocks:   0,
-		handoffNudges:      0,
-		usedAnyTool:        false,
-		graceRound:         false,
-		recoveryGraceRound: false,
-		todoStallRounds:    0,
-		seenTodoProgress:   make(map[string]struct{}),
-		executorHandoff:    a.executorHandoffGuard && strings.Contains(input, executorHandoffMarker),
-		input:              input,
-		budget:             runBudget{started: time.Now()},
-	}
-	state.todoProgress, state.trackingTodoProgress = a.canonicalTodoProgress()
-	if a.evidence != nil {
-		for _, sig := range a.evidence.SuccessfulProgressSignaturesSince(0) {
-			state.seenTodoProgress[sig] = struct{}{}
-		}
-	}
-	return rawInput, state
-}
-
-// P4 foreground→background backgroundize signal
-
-// errBackgroundizeRequested is the iteration-boundary sentinel returned by
-// runToolLoop when a backgroundize request was pending. It unwinds the
-// foreground task chain to RunProfileSpec, which performs the serialized
-// handoff to a background job at its single-goroutine handoff point. Every
-// completed provider round is already committed to the session before the
-// checkpoint runs, so the resumed run continues from a complete in-memory
-// transcript.
 var errBackgroundizeRequested = errors.New("backgroundize requested at iteration boundary")
 
 // BackgroundizeSignal is the idempotent one-shot host signal that asks the
@@ -363,6 +138,219 @@ func ResumeSessionFromContext(ctx context.Context) bool {
 	return v
 }
 
+func newReasoningAwareStreamSink(inner event.Sink) *deferredStreamSink {
+	return &deferredStreamSink{inner: inner, waitingForReasoning: true}
+}
+
+func newDeferredStreamSink(inner event.Sink) *deferredStreamSink {
+	return &deferredStreamSink{inner: inner, deferAll: true}
+}
+
+func (s *deferredStreamSink) Emit(e event.Event) {
+	if s == nil {
+		return
+	}
+	if s.deferAll {
+		s.events = append(s.events, e)
+		return
+	}
+	if s.waitingForReasoning && e.Kind == event.Reasoning && strings.TrimSpace(e.Text) != "" {
+		s.sawReasoning = true
+		s.inner.Emit(e)
+		s.flushBuffered()
+		return
+	}
+	if s.waitingForReasoning && !s.sawReasoning && e.Kind == event.ToolDispatch {
+		s.events = append(s.events, e)
+		return
+	}
+	s.inner.Emit(e)
+}
+
+func (s *deferredStreamSink) flushBuffered() {
+	if s == nil {
+		return
+	}
+	for _, e := range s.events {
+		s.inner.Emit(e)
+	}
+	s.events = nil
+}
+
+func (s *deferredStreamSink) Flush() {
+	if s == nil {
+		return
+	}
+	s.flushBuffered()
+}
+
+func (s *deferredStreamSink) Discard() {
+	if s != nil {
+		s.events = nil
+	}
+}
+
+// beginRunTurn handles evidence scope, delivery classification, background-job
+// evidence re-lease, and the initial user-turn persistence. Callers still own
+// all Run-level defers (workspace lease, evidence commit, delivery checkpoint,
+// steer queue, active-turn timestamp).
+func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string, state *runLoopState) {
+	rawInput = RawUserInput(ctx, input)
+	providerInput := input
+	// A fresh user turn starts from zeroed per-turn host state; the new turn's
+	// values are computed below. Cross-turn state (checkpoint, scope, failure
+	// budgets) lives directly on Agent and is reconciled field by field.
+	a.perTurnState = perTurnState{}
+	a.resetStructuralRunGuards()
+	scope, scoped := DeliveryExecutionScopeFromContext(ctx)
+	preserveEvidence := a.preserveEvidenceOnce
+	// A run that starts with a pending readiness recovery (or an explicit
+	// evidence-preserving continuation) and then passes readiness counts as a
+	// recovery in the final audit.
+	a.readinessRecovered = preserveEvidence || a.deliveryRecoveryPending
+	if a.task.ledger != nil {
+		switch {
+		case preserveEvidence:
+			a.task.ledger.ResetBackgroundLeases()
+		case scoped && a.task.scopeID == scope.ID:
+			a.task.ledger.ResetBackgroundLeases()
+		default:
+			a.resetTurnEvidence()
+		}
+	}
+	a.preserveEvidenceOnce = false
+	if !preserveEvidence {
+		a.deliveryRecoveryPending = false
+	}
+	if scoped {
+		a.task.scopeID = scope.ID
+	} else if !preserveEvidence {
+		a.task.scopeID = ""
+	}
+	a.deliveryScopeActive = scoped
+	if scoped && a.task.checkpoint.ScopeID != scope.ID {
+		a.task.checkpoint = evidence.DeliveryCheckpoint{ScopeID: scope.ID}
+	}
+	// Re-lease this session's background-job mutations that no turn has
+	// committed yet. The Reset above just wiped any lease a failed or
+	// cancelled turn held (its ledger is gone), and a process restart starts
+	// from an empty ledger too — in both cases the job manager still marks the
+	// job's evidence uncommitted. Without re-injecting it here, a turn that
+	// never re-issues wait/bash_output (the model has no reason to if it
+	// doesn't know a mutation is still pending) would ship the background
+	// change without the final-readiness gate ever seeing it. Plan turns defer
+	// this lease like collectBackgroundEvidence does so execution evidence is
+	// consumed and audited only after plan approval.
+	if a.task.ledger != nil && a.jobs != nil && !a.planMode.Load() {
+		session := jobs.SessionFromContext(ctx)
+		for _, jobID := range a.jobs.PendingEvidenceJobIDsForSession(session) {
+			summary, ready := a.jobs.TryLeaseEvidenceForSession(session, jobID)
+			if !ready {
+				continue
+			}
+			if !a.task.ledger.NoteBackgroundLease(session, jobID) {
+				continue
+			}
+			a.task.ledger.MergeChild(summary)
+		}
+	}
+	a.deliveryCriteriaEstablished = a.hasIncompleteCanonicalCriteria() ||
+		(a.task.ledger != nil && a.task.ledger.HasSuccessfulTodoWrite()) ||
+		(scoped && a.task.checkpoint.CriteriaEstablished)
+	// Classify delivery expectations from the task text. Sub-agent spawners
+	// pass the pristine task through Options.ClassifierTaskText (a trusted
+	// host channel) because their Run input carries host framing whose
+	// incidental verbs — "file tools resolve relative paths" — once classified
+	// every workspace-wrapped subagent prompt as a mutation request and
+	// deadlocked read-only subagents. Without the override the raw input is
+	// classified verbatim: stripping user-controllable markup here would let
+	// input dressed up as host framing disarm the delivery gates.
+	a.turnInput = a.classifierTaskText
+	if scoped && strings.TrimSpace(scope.TaskText) != "" {
+		a.turnInput = scope.TaskText
+	} else if strings.TrimSpace(a.turnInput) == "" {
+		a.turnInput = rawInput
+	}
+	intent := taskintent.Classify(a.turnInput)
+	a.deliveryTaskExpected = intent.NeedsEvidence()
+	a.deliveryMutationExpected = intent == taskintent.Mutation && registryHasWriterTools(a.tools)
+	a.deliveryPersistentExpected = taskintent.NeedsPersistentAction(a.turnInput)
+	a.recoveryTaskSummary = boundedRecoveryTaskSummary(a.turnInput)
+	// Freeze TaskPolicy for this turn from the session role setting. Subsequent
+	// SetAgentPreset calls must not change this turn's route/review floor.
+	if policy, ok := taskpolicy.FromContext(ctx); ok {
+		a.turnPolicy = policy
+	} else {
+		a.turnPolicy = taskpolicy.Derive(taskpolicy.Input{
+			Raw:         a.turnInput,
+			Instruction: taskpolicy.StripQuotedConstraints(a.turnInput),
+			Preset:      agentpreset.AgentPreset(a.AgentPreset()),
+			PlanMode:    a.planMode.Load(),
+		})
+	}
+	a.turnPolicySet = true
+	// Align legacy delivery gates with the frozen role setting. Delivery always
+	// enables the full readiness contract. Light/Balanced only elevate when the
+	// turn is a mutation that requires forced review or is high-risk.
+	switch {
+	case a.AgentPreset() == string(agentpreset.Delivery):
+		a.deliveryProfile = true
+	case a.turnPolicy.Intent == taskintent.Mutation &&
+		(a.turnPolicy.RequiresIndependentReview() || a.turnPolicy.Risk >= taskpolicy.RiskHigh):
+		a.deliveryProfile = true
+	default:
+		a.deliveryProfile = false
+	}
+	// A cancelled/error turn leaves a provider-excluded recovery record at the
+	// transcript tail. Fold its bounded facts into this new user turn exactly
+	// once; the user's raw text remains the classifier source above.
+	providerInput = withInterruptedRecovery(providerInput, a.pendingInterruptedRecovery())
+	a.task.prepareScope(scoped, scope.ID)
+	a.sink.Emit(event.Event{Kind: event.TurnStarted})
+	a.emitTurnPhase(event.TurnPhaseWorking)
+	input = a.withTurnPreferences(providerInput)
+	// Persist the short execution-policy block in provider Content; keep the
+	// original user text in RawContent for history/title/rewind stripping.
+	policyBlock := taskpolicy.ExecutionPolicyBlock(a.turnPolicy)
+	if !strings.Contains(input, "<execution-policy") {
+		input = strings.TrimSpace(input) + "\n\n" + policyBlock
+	}
+	userCreatedAt := time.Now().UnixMilli()
+	a.activeTurnCreatedAt.Store(userCreatedAt)
+	rawContent := rawInput
+	if rawContent == "" {
+		rawContent = a.turnInput
+	}
+	// The turn still re-classifies delivery intent, resets per-turn state, and
+	// emits TurnStarted — only the transcript append is suppressed.
+	if !ResumeSessionFromContext(ctx) {
+		a.session.Add(provider.Message{
+			Role: provider.RoleUser, Content: input, RawContent: rawContent,
+			Images: userImages(ctx), CreatedAt: userCreatedAt,
+		})
+	}
+
+	state = &runLoopState{
+		emptyFinalBlocks:   0,
+		handoffNudges:      0,
+		usedAnyTool:        false,
+		graceRound:         false,
+		recoveryGraceRound: false,
+		todoStallRounds:    0,
+		seenTodoProgress:   make(map[string]struct{}),
+		executorHandoff:    a.executorHandoffGuard && strings.Contains(input, executorHandoffMarker),
+		input:              input,
+		budget:             runBudget{started: time.Now()},
+	}
+	state.todoProgress, state.trackingTodoProgress = a.canonicalTodoProgress()
+	if a.task.ledger != nil {
+		for _, sig := range a.task.ledger.SuccessfulProgressSignaturesSince(0) {
+			state.seenTodoProgress[sig] = struct{}{}
+		}
+	}
+	return rawInput, state
+}
+
 // runToolLoop owns the main tool-round budget and dispatches each streamed
 // assistant turn into final-response or tool-round handling.
 func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
@@ -380,19 +368,12 @@ func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
 			// (unapplied path marks uncertain + pause via the notice sink).
 			a.RecordUnappliedSteer("(body load failed)", itemID)
 		}
-		// P3 background-job steer channel: DrainPendingMessages reads the job
-		// via jobCtxKey, stamped only onto background run closures (foreground
-		// no-op). One per turn; producers target Kind=="task" (fleet out).
-		if text, ok := jobs.DrainPendingMessages(ctx); ok {
-			a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(midTurnSteerMessage(text))})
-			a.sink.Emit(event.Event{Kind: event.Steer, Text: text})
-		}
 		// P4: backgroundize checkpoint — one per tool-round boundary. A request
 		// may arrive mid-round (user /background); it is honored only here, so
 		// the current provider round and its tool execution finish (and commit
 		// to the session) cleanly first. Returning the sentinel unwinds the
-		// foreground chain to RunProfileSpec's serialized handoff, which moves
-		// the same in-memory session to a background job.
+		// foreground chain to the serialized handoff, which moves the same
+		// in-memory session to a background job.
 		if a.backgroundizeRequested(ctx) {
 			return errBackgroundizeRequested
 		}
@@ -417,10 +398,6 @@ func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
 		text, reasoning, signature, calls, responsesItems, usage := streamed.text, streamed.reasoning, streamed.signature, streamed.calls, streamed.responsesItems, streamed.usage
 		partialCalls, err := streamed.partialCalls, streamed.err
 		cacheDiagnostics := CompareShape(prevPrefixShape, prefixShape, usage, contentReasons)
-		// Response-side cache-break detection (record-only): the hit count
-		// grows turn-over-turn as the prefix lengthens; a significant drop
-		// without a compaction/snip rewrite signals a server-side eviction.
-		cacheDiagnostics.CacheMissDrop = detectResponseCacheMiss(a, cacheDiagnostics.CacheHitTokens, contentReasons)
 		if err != nil {
 			a.emitTurnUsage(usage, &cacheDiagnostics)
 			a.observeRunBudget(state, usage)
@@ -479,11 +456,6 @@ func (a *Agent) runToolLoop(ctx context.Context, state *runLoopState) error {
 	return a.gracePause(state)
 }
 
-// backgroundizeRequested reports whether the current run should hand off to a
-// background job at this iteration boundary. Only an explicit foreground
-// request counts: a resume run (the foreground→background handoff already
-// consumed the signal) never re-checkpoints, or the resumed job would
-// immediately return the sentinel again and fail instead of continuing.
 func (a *Agent) backgroundizeRequested(ctx context.Context) bool {
 	// Only a foreground (sync) task sub-agent may hand off; everyone else
 	// (main agent, background jobs, planner) ignores signal + auto threshold,
@@ -684,7 +656,7 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *runLoopState, te
 		a.contextManager().ObserveUsage(usage)
 		reason := ""
 		if ctrl := a.recoveryEpisodeControl(); ctrl != nil {
-			_, _ = ctrl.ConsumeFinalization(a.recoveryTaskID)
+			_, _ = ctrl.ConsumeFinalization(a.recovery.taskID)
 		}
 		return false, &RecoveryPauseError{
 			Message:    "Automatic retries paused. Reasonix stopped repeated attempts and kept completed work. Send \"continue\" to start a fresh attempt, or add instructions to change direction.",
@@ -781,8 +753,8 @@ func (a *Agent) handleToolRound(ctx context.Context, state *runLoopState, step i
 	}
 
 	receiptMark := 0
-	if a.evidence != nil {
-		receiptMark = a.evidence.Len()
+	if a.task.ledger != nil {
+		receiptMark = a.task.ledger.Len()
 	}
 	batch := a.executeBatch(ctx, calls)
 	results, images := batch.results, batch.images
@@ -832,7 +804,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *runLoopState, step i
 	if batch.recoveryStopTurn && !state.recoveryGraceRound {
 		state.recoveryGraceRound = true
 		if ctrl := a.recoveryEpisodeControl(); ctrl != nil {
-			ctrl.MarkFinalizationOffered(a.recoveryTaskID)
+			ctrl.MarkFinalizationOffered(a.recovery.taskID)
 		}
 		nudge := "Auto recovery has reached its limit for this turn. Do not call any more tools. Summarize what was completed, what failed, and what the user should do next. The user can continue in the next message."
 		a.session.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(nudge)})
@@ -841,7 +813,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *runLoopState, step i
 
 	// Spend is checked before rounds: it is the axis a runaway is actually
 	// reported in, so on the turns both would catch it should be the one named.
-	if axis, detail := a.taskBudget.exceeded(a.taskBudgetLimit(ctx)); axis != "" {
+	if axis, detail := a.task.budget.exceeded(a.taskBudgetLimit(ctx)); axis != "" {
 		a.armFinalizationRound(state, landCause{kind: "task_budget", axis: axis, detail: detail})
 		return true, nil
 	}

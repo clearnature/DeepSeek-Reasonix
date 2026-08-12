@@ -78,6 +78,7 @@ export const zhTW: Record<DictKey, string> = {
   "summary.jobLabelRow": "任務 {id} — {state}",
   "summary.jobId": "任務 ID",
   "summary.tailTruncated": "尾部輸出已截斷（≤512B）",
+
   "task.error": "錯誤",
   "task.event.error": "錯誤：{code}",
   "task.event.stateChange": "狀態 {state} · 執行時 {runtime}",
@@ -2573,6 +2574,7 @@ export const zhTW: Record<DictKey, string> = {
   "projectTree.status.backgroundJob": "背景任務",
   "projectTree.status.paused": "已暫停",
   "projectTree.status.error": "異常",
+  "projectTree.status.divergedRecovery": "多個復原分支",
   "projectTree.collapseAllTooltip": "收起所有專案",
   "projectTree.restoreCollapsedTooltip": "恢復上次展開",
   "projectTree.timeFilter": "按時間篩選",

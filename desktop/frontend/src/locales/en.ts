@@ -87,6 +87,7 @@ export const en = {
   "summary.jobLabelRow": "Job {id} — {state}",
   "summary.jobId": "Job ID",
   "summary.tailTruncated": "Tail truncated to 512 bytes",
+
   "task.error": "Error",
   "task.event.error": "Error: {code}",
   "task.event.stateChange": "State → {state} · Runtime → {runtime}",
@@ -1290,6 +1291,7 @@ export const en = {
   "projectTree.status.backgroundJob": "background job",
   "projectTree.status.paused": "paused",
   "projectTree.status.error": "error",
+  "projectTree.status.divergedRecovery": "multiple recovery branches",
   "projectTree.removeProject": "Remove from sidebar",
   "projectTree.confirmRemoveProject": "Confirm remove from sidebar",
   "projectTree.removeProjectShort": "Remove",

@@ -59,13 +59,13 @@ import (
 	"reasonix/internal/store"
 	"reasonix/internal/taskmonitor"
 	"reasonix/internal/tool"
-	"reasonix/internal/tool/builtin"
 	"reasonix/internal/workspacelease"
 )
 
 // ErrTurnRunning reports that a caller tried to start a second foreground turn
 // while one is already active in the same Controller.
 var ErrTurnRunning = errors.New("turn already running")
+var errNoForegroundTaskToBackgroundize = errors.New("no foreground task to backgroundize")
 
 // ErrRuntimeDraining reports that a caller targeted a controller generation
 // superseded by a successful rebuild.
@@ -84,12 +84,6 @@ var (
 // dir in a bot deployment) that previously dropped conversations silently
 // (#4414). Callers log it and continue; it must never be swallowed quietly.
 var errNoSessionPath = errors.New("session has content but no session path; conversation cannot be persisted")
-
-// errNoForegroundTaskToBackgroundize is returned by Backgroundize (and
-// surfaced by /background) when no foreground turn is running, so there is
-// nothing to hand off to the background. It mirrors P3 SendTaskMessage's
-// fail-closed posture: a request with no foreground task never silently no-ops.
-var errNoForegroundTaskToBackgroundize = errors.New("no foreground task is running")
 
 // Controller drives one chat session. Construct with New; drive with the command
 // methods; observe through the Sink passed in Options.
@@ -135,6 +129,12 @@ type Controller struct {
 	disableImplicitSkillInvocation bool
 	slashSkillSeq                  atomic.Uint64
 	hooks                          *hook.Runner // session hook runner; nil-safe (no hooks configured)
+	teammates                      *agent.TeammateStore
+	// foregroundBkg is the P4 foreground→backgroundize signal for the in-flight
+	// foreground turn, nil while no foreground turn is running. spawnGuardedTurn
+	// and RunTurn stamp a fresh signal into the turn context and record it here;
+	// finishGuardedTurn clears it. Guarded by c.mu.
+	foregroundBkg *agent.BackgroundizeSignal
 	// hookContexts carries one-shot lifecycle hook context into the next real
 	// user turn without changing the cache-stable system prompt.
 	hookContexts []string
@@ -169,16 +169,6 @@ type Controller struct {
 	// tools spawn into it; Compose drains its completion notes into the next turn;
 	// Close cancels its still-running jobs.
 	jobs *jobs.Manager
-	// teammates is the P6 team registry; nil disables /team-* commands.
-	teammates *agent.TeammateStore
-	// foregroundBkg is the P4 foreground→backgroundize signal for the in-flight
-	// foreground turn, nil while no foreground turn is running. spawnGuardedTurn
-	// and RunTurn stamp a fresh signal into the turn context and record it here;
-	// finishGuardedTurn clears it. Controller.Backgroundize and /background
-	// request it, and the foreground task's run loop consumes it at an iteration
-	// boundary to hand the task off to a background job. Guarded by c.mu; the
-	// signal object itself is safe for concurrent Request/Requested.
-	foregroundBkg *agent.BackgroundizeSignal
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
 	workspaceLease *workspacelease.Owner
@@ -369,9 +359,6 @@ type plannerSessionResetter interface {
 // intentionally more explicit than the legacy Running bool so UI code can
 // distinguish a cancellable foreground turn from pending prompts and background
 // jobs.
-// ForegroundTaskState reports the P4 foreground→background lifecycle of the
-// in-flight foreground turn, surfaced through RuntimeStatus so frontends can
-// render it (e.g. a "/status" panel).
 type ForegroundTaskState string
 
 const (
@@ -453,6 +440,8 @@ type Options struct {
 	Runner   agent.Runner
 	Executor *agent.Agent
 	Guardian *guardian.Session
+	// Teammates is the P6 team registry (nil disables /team-* commands).
+	Teammates *agent.TeammateStore
 	// RecoveryReviewer is the optional independent recovery reviewer (nil =
 	// rule-only path with fail-closed human confirmation for ambiguous cases).
 	RecoveryReviewer recovery.Reviewer
@@ -508,8 +497,6 @@ type Options struct {
 	BalanceClient *http.Client
 	// Jobs is the session-scoped background-job manager (nil disables background jobs).
 	Jobs *jobs.Manager
-	// Teammates is the P6 team registry (nil disables /team-* commands).
-	Teammates *agent.TeammateStore
 	// TaskStore remains a FileStore-compatible authority. Desktop injects one
 	// observed instance so recorder and task-control APIs share post-commit
 	// projection hints; nil preserves the ordinary FileStore.
@@ -969,16 +956,6 @@ func (c *Controller) rebindCheckpoints(sessionPath string) {
 // spawnGuardedTurn launches an admitted turn body plus its autosave companion.
 // The caller must already have claimed admission (running=true) under c.mu.
 func (c *Controller) spawnGuardedTurn(ctx context.Context, cancel context.CancelFunc, body func(ctx context.Context) error) {
-	// P4: every foreground turn carries a fresh backgroundize signal. The turn
-	// context inherits down the whole sub-agent chain (withAgentContext only
-	// rebinds jobs/memory/planmode), so the signal reaches a nested task's run
-	// loop, which consumes it at an iteration boundary. finishGuardedTurn
-	// clears the recorded signal when the turn completes.
-	sig := agent.NewBackgroundizeSignal()
-	ctx = agent.WithBackgroundizeSignal(ctx, sig)
-	c.mu.Lock()
-	c.foregroundBkg = sig
-	c.mu.Unlock()
 	ctx, completion := withGuardedTurnCompletion(ctx)
 	c.autosaveWG.Go(func() {
 		c.autosaveWhileRunning(ctx)
@@ -1018,10 +995,6 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	c.finishing = !c.closed
 	c.cancel = nil
 	c.canceling = false
-	// The foreground turn is over (a parked replacement re-stamps its own
-	// signal via spawnGuardedTurn), so a stale /background can no longer reach
-	// this turn's run loop and Backgroundize fails closed.
-	c.foregroundBkg = nil
 	c.mu.Unlock()
 
 	defer func() {
@@ -1149,19 +1122,6 @@ func (c *Controller) runTurn(ctx context.Context, input string) error {
 // need a blocking request/response boundary, such as ACP session/prompt.
 func (c *Controller) RunTurn(ctx context.Context, input string) error {
 	return c.runSynchronousTurn(ctx, nil, func(runCtx context.Context) error {
-		// P4: the synchronous turn carries a backgroundize signal just like the
-		// async path (spawnGuardedTurn), so /background and Backgroundize work
-		// for ACP-style blocking transports too. Cleared when the turn ends.
-		sig := agent.NewBackgroundizeSignal()
-		runCtx = agent.WithBackgroundizeSignal(runCtx, sig)
-		c.mu.Lock()
-		c.foregroundBkg = sig
-		c.mu.Unlock()
-		defer func() {
-			c.mu.Lock()
-			c.foregroundBkg = nil
-			c.mu.Unlock()
-		}()
 		return c.runTurn(runCtx, input)
 	})
 }
@@ -1462,7 +1422,7 @@ func (c *Controller) submitHTTPWithFormat(input, display, format string) {
 	c.submitCommandOrTurn(trimmed, input, display, true, "", format)
 }
 
-func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedRefsOnly bool, editedOriginal, format string) {
+func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, scopedRefsOnly bool, editedOriginal, format string) {
 	runRefTurn := func(input, display string) {
 		c.runRefTurnWithFormat(input, display, format)
 	}
@@ -1503,94 +1463,6 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 					slog.Warn("controller: snapshot after compact", "err", err)
 				}
 			}
-		}()
-	case trimmed == "/compress-fast" || strings.HasPrefix(trimmed, "/compress-fast "):
-		// No-AI fast compression (qwen-code analog): elide stale tool results
-		// to short placeholders without a summarizer call; never drops a
-		// message and keeps tool_call/result pairing intact.
-		go func() {
-			// The rotation gate keeps a running turn from racing the session
-			// rewrite (prune reads then replaces the whole log, TOCTOU).
-			if err := c.beginRotation(); err != nil {
-				c.notice("fast compression failed: " + err.Error())
-				return
-			}
-			defer c.endRotation()
-			// --force (or -f) overrides the warm-cache gate: the user opts into
-			// punching the prefix-cache hole, e.g. before ending a session or
-			// switching topic where the next-turn hit has no value. Without it
-			// the gate below stays authoritative.
-			force := false
-			for tok := range strings.FieldsSeq(strings.TrimSpace(strings.TrimPrefix(trimmed, "/compress-fast"))) {
-				if tok == "--force" || tok == "-f" {
-					force = true
-				}
-			}
-			// Cache gate: rewriting tool results changes the wire prefix, so
-			// every byte from the first elided result onward misses the
-			// server-side cache. Only do that when the cache is already cold
-			// (idle past the vendor TTL) — unless the transcript is already
-			// past the compact trigger, where a projection rewrite is
-			// imminent anyway; a cache miss then beats re-folding the same
-			// region twice.
-			warm := false
-			if last := c.executor.LastAPICallAt(); !last.IsZero() && time.Since(last) < c.cacheColdAfter() {
-				warm = true
-			}
-			overflow := c.executor.PromptOverflow()
-			if warm && !overflow && !force {
-				c.emitFastCompressTelemetry("warm", 0, 0, "refused")
-				c.noticeDetail("fast compression refused",
-					fmt.Sprintf("provider cache still warm (last call %s ago, TTL %s); rewriting would punch a hole in every hit from the first elided result. Retry after idle, or use /compress-fast --force to override, or /compact (AI summarize) instead.", time.Since(c.executor.LastAPICallAt()).Round(time.Minute), c.cacheColdAfter().Round(time.Minute)))
-				return
-			}
-			// Backup the whole transcript before the rewrite so a prune
-			// regression can be reverted (Codex compress-fast .bak analog).
-			if err := c.backupSessionBeforeRewrite(); err != nil {
-				c.notice("fast compression failed: backup: " + err.Error())
-				return
-			}
-			stats, err := c.executor.PruneStaleToolResults()
-			if err != nil {
-				c.notice("fast compression failed: " + err.Error())
-				return
-			}
-			if stats.Results == 0 {
-				c.emitFastCompressTelemetry(fastCompressCacheLabel(warm, overflow), 0, 0, "noop")
-				c.notice("no stale tool results to compress")
-				return
-			}
-			c.emitFastCompressTelemetry(fastCompressCacheLabel(warm, overflow), stats.Results, stats.SavedChars, "")
-			c.noticeDetail("fast-compressed",
-				fmt.Sprintf("elided %d stale tool results, saved ~%d chars", stats.Results, stats.SavedChars))
-			// Signal the frontend: the model-visible context shrank (projection
-			// rewritten), so the context gauge must refresh even though no API
-			// call/turn_done happened.
-			c.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
-				Trigger: "manual", Messages: stats.Results, Summary: "",
-			}})
-			if err := c.SnapshotRewrite(); err != nil {
-				slog.Warn("controller: snapshot after fast compression", "err", err)
-			}
-		}()
-	case trimmed == "/retrieve_info" || strings.HasPrefix(trimmed, "/retrieve_info "):
-		// Manual retrieval: run the retrieve_info tool on the typed query and
-		// surface its answer directly — no model round-trip needed. The tool
-		// consults the local knowledge cache first (zero cost), then the
-		// deepseek-responses web_search pipeline on miss (distill + cache
-		// write). Read-only; safe to run without the rotation gate.
-		query := strings.TrimSpace(strings.TrimPrefix(trimmed, "/retrieve_info"))
-		if query == "" {
-			c.notice("retrieve_info: query is required (usage: /retrieve_info <query>)")
-			break
-		}
-		go func() {
-			out, err := builtin.RetrieveInfoQuery(context.Background(), query)
-			if err != nil {
-				c.notice("retrieve_info failed: " + err.Error())
-				return
-			}
-			c.noticeDetail("retrieve_info: "+query, out)
 		}()
 	case trimmed == "/context":
 		c.noticeDetail(c.ContextReport())
@@ -1671,31 +1543,6 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 		case "/prometheus":
 			c.applyPrometheus(trimmed, display)
 			return
-		case "/task-message":
-			args := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
-			jobID, text, err := splitTaskMessage(args)
-			if err != nil {
-				c.notice(err.Error())
-				return
-			}
-			if err := c.SendTaskMessage(jobID, text); err != nil {
-				c.notice("task-message: " + err.Error())
-				return
-			}
-			c.notice(fmt.Sprintf("message queued for background job %s", jobID))
-			return
-		case "/background":
-			// P4 foreground→background handoff. Like /task-message this runs
-			// inline (no runGuarded turn), so it stays responsive while a
-			// foreground turn is busy — the request lands on the in-flight
-			// turn's signal and the task run loop honors it at its next
-			// iteration boundary. Fails closed with no foreground task.
-			if err := c.Backgroundize(); err != nil {
-				c.notice("background: " + err.Error())
-				return
-			}
-			c.notice("backgroundize requested — the foreground task will move to the background at its next checkpoint")
-			return
 		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-approve", "/team-broadcast", "/team-ask", "/team-spawn":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
@@ -1714,9 +1561,7 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 				}
 				return
 			}
-			// Park while a turn runs instead of dropping: a user-typed skill
-			// command must run once the current turn finishes (FIFO drain).
-			c.runGuardedOrPark(func(ctx context.Context) error {
+			c.runGuarded(func(ctx context.Context) error {
 				sent, err := docsCommandPrompt(ctx, query)
 				if err != nil {
 					return fmt.Errorf("docs: %w", err)
@@ -2132,7 +1977,7 @@ func (c *Controller) noticeDetail(text, detail string) {
 // Run executes a turn synchronously, returning the agent's error. Used by the
 // headless `reasonix run` path, where the Sink renders to stdout and the caller
 // just needs the exit status — no TurnDone event, no cancel bookkeeping.
-func (c *Controller) Run(ctx context.Context, input string) (err error) {
+func (c *Controller) runReady(ctx context.Context, input string) (err error) {
 	ctx = extension.ContextWithRuntimeOwner(ctx, c.RuntimeOwner())
 	if c.RuntimePhase() == RuntimePhaseDraining {
 		c.emitDrainingNotice()
@@ -2289,7 +2134,6 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 	running := c.running
 	active := running || c.finishing
 	canceling := c.canceling
-	foreground := c.foregroundTaskStateLocked()
 	c.mu.Unlock()
 	pending := c.approval.hasPending()
 	backgroundJobs := len(c.Jobs())
@@ -2299,46 +2143,7 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 		BackgroundJobs:  backgroundJobs,
 		CancelRequested: canceling,
 		Cancellable:     running || pending,
-		ForegroundTask:  foreground,
 	}
-}
-
-// ForegroundTaskState reports whether a foreground turn is running and whether
-// a backgroundize handoff has been requested for it.
-func (c *Controller) ForegroundTaskState() ForegroundTaskState {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.foregroundTaskStateLocked()
-}
-
-// foregroundTaskStateLocked derives the P4 state from the recorded signal.
-// Callers must hold c.mu.
-func (c *Controller) foregroundTaskStateLocked() ForegroundTaskState {
-	if c.foregroundBkg == nil {
-		return ForegroundTaskIdle
-	}
-	if c.foregroundBkg.Requested() {
-		return ForegroundTaskBackgroundizeRequested
-	}
-	return ForegroundTaskRunning
-}
-
-// Backgroundize requests the in-flight foreground task (if any) to hand off to
-// a background job at its next iteration boundary, mirroring P3
-// SendTaskMessage's fail-closed posture: with no foreground turn running there
-// is nothing to backgroundize and the request errors instead of silently
-// no-opping. The request is idempotent — a repeated /background while one is
-// already in flight collapses to the same single handoff (the signal is a
-// one-shot inside the agent package).
-func (c *Controller) Backgroundize() error {
-	c.mu.Lock()
-	sig := c.foregroundBkg
-	c.mu.Unlock()
-	if sig == nil {
-		return errNoForegroundTaskToBackgroundize
-	}
-	sig.Request()
-	return nil
 }
 
 // Turn returns the current turn number (0 before the first submit).
@@ -2455,16 +2260,6 @@ func (c *Controller) recordDecisionReceipt(pending pendingApproval, outcome stri
 // controller in as the executor's Asker so the `ask` tool can question the user.
 // Interactive frontends (chat, desktop) call this; the headless run keeps the
 // silent gate and a nil asker from setup.
-// EnableHeadlessAsker wires the controller in as the executor's Asker while
-// keeping the silent gate — headless/auto runs use this so `ask` is answered
-// by the permission mode (ask → human, auto → auto-approve) instead of the
-// nil-asker fallback.
-func (c *Controller) EnableHeadlessAsker() {
-	if c.executor != nil {
-		c.executor.SetAsker(c)
-	}
-}
-
 func (c *Controller) EnableInteractiveApproval() {
 	trustGate := planModeReadOnlyTrustApprover{c}
 	escapeApprover := sandboxEscapeApprover{c}
@@ -2635,17 +2430,6 @@ func (c *Controller) ApplyHeadlessApprovalMode(mode string) {
 	}
 	if c.executor != nil {
 		c.executor.SetGate(c.newHeadlessGate(mode))
-		// Productized autonomy: auto mode wires the controller in as the
-		// executor's Asker so `ask` is auto-approved (audited AskRequest)
-		// instead of silently falling back — headless + auto completes
-		// autonomously. ask/yolo restore the nil asker so a headless run
-		// never blocks on an unanswerable question (would-ask fails closed).
-		if mode == ToolApprovalAuto {
-			c.executor.SetAsker(c)
-		} else {
-			c.executor.SetAsker(nil)
-		}
-		slog.Info("headless approval mode applied", "mode", mode, "executor_asker", c.executor.Asker() != nil)
 	}
 }
 
@@ -2747,11 +2531,6 @@ func (c *Controller) lockPromptFor(ctx context.Context, kind string) bool {
 // tool exists to get a genuine user decision, and YOLO only auto-approves
 // tool calls; it must not answer the user's questions for them.
 func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]event.AskAnswer, error) {
-	// Permission-mode aware (sub-agents inherit the parent's posture):
-	//   auto — emit an auditable AskRequest and auto-approve the recommendation
-	//          (team completes autonomously; risk governed by the mode),
-	//   ask/yolo — the AskRequest still reaches the user; YOLO auto-approves
-	//          tools only, never user decision points (see SetAutoApproveTools).
 	// Registering after the lock left a queued question invisible everywhere:
 	// no event, absent from the snapshot, unreachable by ReplayPendingPrompts.
 	id, reply := c.approval.registerAsk(questions)
@@ -2767,15 +2546,6 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 	c.sink.Emit(event.Event{Kind: event.AskRequest, Ask: event.Ask{ID: id, Questions: questions}})
 	c.approval.promptEmitMu.Unlock()
 
-	if c.approval.toolApprovalMode == ToolApprovalAuto {
-		// Auto-approve the recommended option: the request stays emitted for
-		// audit, but no human round-trip is needed — risk is governed by the
-		// permission mode, not per-question.
-		answers := autoAnswerQuestions(questions)
-		c.AnswerQuestion(id, answers)
-		return answers, nil
-	}
-
 	waitCtx, cancelWait := c.approval.waitContext(ctx)
 	defer cancelWait()
 
@@ -2786,18 +2556,6 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 		c.approval.cancelAsk(id)
 		return nil, waitCtx.Err()
 	}
-}
-
-// autoAnswerQuestions picks the first option of every question — the
-// recommended choice under auto/yolo permission modes.
-func autoAnswerQuestions(questions []event.AskQuestion) []event.AskAnswer {
-	answers := make([]event.AskAnswer, 0, len(questions))
-	for _, q := range questions {
-		if len(q.Options) > 0 {
-			answers = append(answers, event.AskAnswer{QuestionID: q.ID, Selected: []string{q.Options[0].Label}})
-		}
-	}
-	return answers
 }
 
 // AnswerQuestion resolves a pending AskRequest by ID with the user's selections.
@@ -4099,22 +3857,11 @@ func (c *Controller) snapshotWithDurability(markActivity, forceRewrite, shutdown
 	if strategyErr != nil {
 		return false, strategyErr
 	}
-	forceRewrite = forceRewrite || s.NeedsRewriteSave()
-	var err error
-	if forceRewrite {
-		err = s.SaveRewrite(path)
-	} else {
-		err = s.SaveSnapshot(path)
-		if errors.Is(err, agent.ErrSessionSnapshotConflict) {
-			// The no-rewrite decision may already be stale: auto-compaction
-			// can rewrite history between the decision and the write. Re-check
-			// and retry once as an owned rewrite before treating the failure as
-			// a real cross-runtime conflict.
-			if s.NeedsRewriteSave() {
-				forceRewrite = true
-				err = s.SaveRewrite(path)
-			}
-		}
+	err, forceRewrite := persistSessionSnapshot(s, path, forceRewrite)
+	if authoritySaveError(err) {
+		// Missing/stale authority must not enter diverged/recovery. Frontends
+		// rebind the lease or surface the typed error.
+		return false, err
 	}
 	if err != nil {
 		if shutdownRecovery && errors.Is(err, agent.ErrSessionFileLockHeld) {
@@ -4198,59 +3945,6 @@ func snapshotConflictLogAttrs(saveErr error, path, mode string) []any {
 		)
 	}
 	return attrs
-}
-
-type snapshotConflictDiagnostic struct {
-	At               time.Time `json:"at"`
-	BranchID         string    `json:"branch_id"`
-	Mode             string    `json:"mode"`
-	Outcome          string    `json:"outcome"`
-	Kind             string    `json:"kind,omitempty"`
-	DiskMessages     int       `json:"disk_messages,omitempty"`
-	SnapshotMessages int       `json:"snapshot_messages,omitempty"`
-	BaseRevision     int64     `json:"base_revision,omitempty"`
-	DiskRevision     int64     `json:"disk_revision,omitempty"`
-	RecoveryBranchID string    `json:"recovery_branch_id,omitempty"`
-	ExistingRecovery bool      `json:"existing_recovery,omitempty"`
-}
-
-func appendSnapshotConflictDiagnostic(path, mode, outcome string, saveErr error, recoveryPath string, existing bool) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return
-	}
-	rec := snapshotConflictDiagnostic{
-		At:       time.Now(),
-		BranchID: agent.BranchID(path),
-		Mode:     mode,
-		Outcome:  outcome,
-	}
-	var conflict *agent.SessionSnapshotConflictError
-	if errors.As(saveErr, &conflict) && conflict != nil {
-		rec.Kind = string(conflict.Kind)
-		rec.DiskMessages = conflict.ExistingMessages
-		rec.SnapshotMessages = conflict.SnapshotMessages
-		rec.BaseRevision = conflict.BaseRevision
-		rec.DiskRevision = conflict.DiskRevision
-	}
-	if recoveryPath != "" {
-		rec.RecoveryBranchID = agent.BranchID(recoveryPath)
-		rec.ExistingRecovery = existing
-	}
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	logPath := store.SessionConflictLog(path)
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-		return
-	}
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	_, _ = f.Write(append(data, '\n'))
 }
 
 // conflictOutcome is recoverSnapshotConflict's declared result. Callers act
@@ -4426,9 +4120,9 @@ func (c *Controller) commitRecoveredSession(originalPath, reason string, info ag
 	c.sessionPath = info.Path
 	c.guardianPath = guardian.PathFor(info.Path)
 	c.mu.Unlock()
-	// Recovery branch is a new lineage path; do not keep writing the original
-	// session's projection sidecar.
-	c.bindExecutorProjection(info.Path, false)
+	// Recovery branch is a new lineage path. Load an inherited projection
+	// sidecar when present so the model view stays compressed across the fork.
+	c.bindExecutorProjection(info.Path, true)
 	c.setActiveJobSession(info.Path)
 	c.rebindCheckpoints(info.Path)
 	c.transplantInFlightTurnMarker(originalPath, info.Path)
@@ -5088,24 +4782,6 @@ func (c *Controller) setActiveJobSession(sessionPath string) {
 // SessionDir reports the directory new session files land in ("" disables
 // persistence), so the caller can decide whether to mint a path.
 func (c *Controller) SessionDir() string { return c.sessionDir }
-
-// TeamRosterView returns the P12 non-consuming team roster projection for
-// the desktop panel (nil when no team is configured).
-func (c *Controller) TeamRosterView() []agent.RosterView {
-	if c.teammates == nil {
-		return nil
-	}
-	return c.teammates.Roster()
-}
-
-// TeamApprovalsView returns the pending P9/P11 approval requests for the UI
-// (non-consuming snapshot).
-func (c *Controller) TeamApprovalsView() []agent.ApprovalRequest {
-	if c.teammates == nil {
-		return nil
-	}
-	return c.teammates.PendingApprovals()
-}
 
 // SessionPath reports the file the current conversation auto-saves to ("" when
 // persistence is disabled), so a history view can mark the active session.
@@ -5844,10 +5520,6 @@ func (c *Controller) ReleaseResources() {
 // Close stops plugin subprocesses and releases resources. A session that ever
 // started fires SessionEnd so a teardown hook runs.
 func (c *Controller) Close() {
-	if c.teammates != nil {
-		c.teammates.DestroyAll()
-		c.teammates.Close() // stop the auto-advance worker goroutine (P6)
-	}
 	c.close(true, closeJobsWithGrace)
 }
 
@@ -5949,11 +5621,7 @@ func (c *Controller) Jobs() []jobs.View {
 	return c.jobs.RunningForSession(c.parentSessionID())
 }
 
-// JobSnapshots returns a read-only snapshot of every background job owned by
-// this controller's session — running, terminal, tombstoned — for the task
-// panel (nil when background jobs are disabled). Each carries a bounded,
-// non-consuming tail, so polling never steals model output or mutation
-// evidence (P2 red line; jobs locks it with the snapshot tests).
+// JobSnapshots returns the background-job snapshots for the current session.
 func (c *Controller) JobSnapshots() []jobs.JobSnapshot {
 	if c.jobs == nil {
 		return nil
@@ -5977,20 +5645,6 @@ func (c *Controller) CancelJob(id string) bool {
 	return c.jobs.KillForSession(c.parentSessionID(), id)
 }
 
-// SendTaskMessage queues a P3 steer message for a running background task job
-// owned by this controller's session. The job must exist and still be Running;
-// overflow is rejected (jobs.ErrPendingQueueFull), never silently dropped.
-// Background jobs must be enabled (Jobs option), else it fails closed.
-func (c *Controller) SendTaskMessage(id, text string) error {
-	if c.jobs == nil {
-		return fmt.Errorf("background jobs are disabled")
-	}
-	return c.jobs.SendMessageForSession(c.parentSessionID(), id, text)
-}
-
-// splitTaskMessage splits "/task-message" arguments into <job_id> and <text>.
-// The first whitespace-delimited field is the job id; everything after it is
-// the message text with internal spacing preserved.
 func splitTaskMessage(args string) (jobID, text string, err error) {
 	args = strings.TrimSpace(args)
 	idx := strings.IndexAny(args, " \t")
@@ -6686,51 +6340,13 @@ func (c *Controller) emitPlanModeReadOnlyCommandTrustResult(r PlanModeReadOnlyCo
 	}
 }
 
-func (c *Controller) backupSessionBeforeRewrite() error {
-	path := c.SessionPath()
-	if path == "" {
-		return nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	bak := path + ".bak"
-	if err := os.WriteFile(bak, raw, 0o600); err != nil {
-		return err
-	}
-	slog.Info("controller: backed up session before fast compression", "path", path, "backup", bak)
-	return nil
-}
-
-func (c *Controller) emitFastCompressTelemetry(cache string, results, savedChars int, status string) {
-	detail := fmt.Sprintf("trigger=manual mode=prune cache=%s results=%d saved_chars=%d", cache, results, savedChars)
-	if status != "" {
-		detail += " status=" + status
-	}
-	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "compaction telemetry", Detail: detail})
-}
-
-func fastCompressCacheLabel(warm, overflow bool) string {
-	switch {
-	case warm && overflow:
-		return "warm_over_window"
-	case warm:
-		return "warm"
-	default:
-		return "cold"
-	}
-}
-
 // applyTeamCommand implements the P6 /team-* management verbs. /team-create
 // registers a teammate identity; /team-add dispatches one job to a teammate
 // (first run forks the leader prefix — cache hit on the child's first request —
 // later runs continue the teammate's own transcript); /team-status lists the
 // roster; /team-remove kills and drops a member. All are host commands: the
 // output rides Notices, never the provider surface.
+
 func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 	if c.teammates == nil {
 		c.notice("team commands are disabled (no TeammateStore configured)")
@@ -6940,4 +6556,47 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 		}
 		c.notice(summary)
 	}
+}
+
+func (c *Controller) TeamRosterView() []agent.RosterView {
+	if c.teammates == nil {
+		return nil
+	}
+	return c.teammates.Roster()
+}
+
+func (c *Controller) EnableHeadlessAsker() {
+	if c.executor != nil {
+		c.executor.SetAsker(c)
+	}
+}
+
+// ForegroundTaskState reports the P4 foreground-task state for /background UI.
+func (c *Controller) ForegroundTaskState() ForegroundTaskState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.foregroundTaskStateLocked()
+}
+
+func (c *Controller) foregroundTaskStateLocked() ForegroundTaskState {
+	if c.foregroundBkg == nil {
+		return ForegroundTaskIdle
+	}
+	if c.foregroundBkg.Requested() {
+		return ForegroundTaskBackgroundizeRequested
+	}
+	return ForegroundTaskRunning
+}
+
+// Backgroundize requests the current foreground task to move to the background
+// at its next iteration boundary (P8). No-op when no foreground task is active.
+func (c *Controller) Backgroundize() error {
+	c.mu.Lock()
+	sig := c.foregroundBkg
+	c.mu.Unlock()
+	if sig == nil {
+		return errNoForegroundTaskToBackgroundize
+	}
+	sig.Request()
+	return nil
 }

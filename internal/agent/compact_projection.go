@@ -233,6 +233,7 @@ func (a *Agent) compressVisibleRange(
 		a.emitCompactionAborted(trigger)
 		return tool.CompressResult{}, err
 	}
+	tele.Status = CompactionStatusInstalled
 	a.emitCompactionTelemetry(tele)
 	a.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(plan.fold), Summary: summary, Archive: state.LastReceipt.Archive,
@@ -383,7 +384,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	a.compactionRunMu.Lock()
 	defer a.compactionRunMu.Unlock()
 	activeTurn := a.activeTurnCreatedAt.Load()
-	if activeTurn != 0 && a.lastCompactionTurn.Load() == activeTurn && trigger != CompactionTriggerManual {
+	if activeTurn != 0 && a.compaction.lastTurn.Load() == activeTurn && trigger != CompactionTriggerManual {
 		return CompactionNoop, nil
 	}
 	canonical, transcriptVersion := a.session.snapshotMessagesVersion()
@@ -458,7 +459,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	projTokens := a.estimatedPromptTokens(projMsgs)
 	fixedPrefixTokens = a.estimatedPromptTokens(msgs[:head])
 	tele.ProjectionTokens = projTokens
-	tele.Status = CompactionStatusInstalled
 	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
 	a.emitCompactionTelemetry(tele)
 	if err := a.acceptCheckpointCandidate(trigger, force, sourceTokens, projTokens, fixedPrefixTokens); err != nil {
@@ -501,7 +501,7 @@ func checkpointProjectionMessages(msgs []provider.Message, head, start int, kept
 	projMsgs = append(projMsgs, formatSummaryMessage(summary))
 	projMsgs = append(projMsgs, kept...)
 	projMsgs = append(projMsgs, msgs[start:]...)
-	return provider.ModelMessages(projMsgs)
+	return provider.ProjectionMessages(projMsgs)
 }
 
 // acceptCheckpointCandidate: ≤50% + smaller for auto; force may exceed 50%

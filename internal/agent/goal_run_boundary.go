@@ -28,32 +28,15 @@ func isToolLoopPause(err error) bool {
 
 // HostProgressSignatures exposes successful evidence identities to the Goal FSM.
 func (a *Agent) HostProgressSignatures() []string {
-	if a == nil || a.evidence == nil {
+	if a == nil || a.task.ledger == nil {
 		return nil
 	}
-	return a.evidence.SuccessfulProgressSignaturesSince(0)
+	return a.task.ledger.SuccessfulProgressSignaturesSince(0)
 }
 
 func (a *Agent) resetStructuralRunGuards() {
 	a.stormSig, a.stormCount, a.blockedTurnStreak = "", 0, 0
 	a.progress.reset()
-}
-
-func (a *Agent) prepareRepeatFailureScope(scoped bool, scopeID string) {
-	if !scoped || a.repeatFailureScope != scopeID {
-		a.repeatFailureCounts = nil
-	} else {
-		for sig, failure := range a.repeatFailureCounts {
-			if !failure.stateRecheck {
-				delete(a.repeatFailureCounts, sig)
-			}
-		}
-	}
-	if scoped {
-		a.repeatFailureScope = scopeID
-	} else {
-		a.repeatFailureScope = ""
-	}
 }
 
 func (a *Agent) stopUnexecutedBoundaryCalls(state *runLoopState, calls []provider.ToolCall, usage *provider.Usage) (error, bool) {
@@ -63,7 +46,7 @@ func (a *Agent) stopUnexecutedBoundaryCalls(state *runLoopState, calls []provide
 		return a.gracePause(state), true
 	case state.recoveryGraceRound:
 		if ctrl := a.recoveryEpisodeControl(); ctrl != nil {
-			_, _ = ctrl.ConsumeFinalization(a.recoveryTaskID)
+			_, _ = ctrl.ConsumeFinalization(a.recovery.taskID)
 		}
 		a.pairUnexecutedGraceCalls(calls, "blocked: Auto recovery already paused this turn. Do not call tools; the user will continue in the next message.")
 		a.contextManager().ObserveUsage(usage)
@@ -84,8 +67,8 @@ func (a *Agent) trackTodoProgress(ctx context.Context, state *runLoopState, rece
 	}
 	nextProgress, nextTracking := a.canonicalTodoProgress()
 	hostProgress := false
-	if a.evidence != nil {
-		for _, sig := range a.evidence.SuccessfulProgressSignaturesSince(receiptMark) {
+	if a.task.ledger != nil {
+		for _, sig := range a.task.ledger.SuccessfulProgressSignaturesSince(receiptMark) {
 			if _, seen := state.seenTodoProgress[sig]; !seen {
 				hostProgress = true
 				state.seenTodoProgress[sig] = struct{}{}

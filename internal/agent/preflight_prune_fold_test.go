@@ -86,7 +86,7 @@ func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T)
 		if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 			t.Fatalf("preflight: %v", err)
 		}
-		if a.compactStuck {
+		if a.compaction.stuck {
 			t.Fatal("healthy window must not latch after a successful fold")
 		}
 	})
@@ -101,7 +101,7 @@ func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T)
 			if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 				t.Fatalf("preflight: %v", err)
 			}
-			if a.compactStuck {
+			if a.compaction.stuck {
 				t.Fatal("healthy window latched; over-pause regression")
 			}
 		}

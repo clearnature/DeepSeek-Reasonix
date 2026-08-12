@@ -60,6 +60,12 @@ console.log("\nbundle budgets");
 // The merged execution-setting controller adds 1.1 KiB gzip (0.27%) over the
 // 400.8 KiB base while keeping the interaction on the existing startup path.
 assertBudget("initial JavaScript gzip", initialJSGzip, 403 * 1024);
+// React Virtuoso replaces the transcript's custom measurement/anchor engine.
+// Its production runtime adds 16.9 KiB gzip (4.2%) over the 402 KiB baseline.
+// This exceptional overrun is locally attributable and trades ~1400 lines of
+// competing state machines for a maintained library. The new gates retain 1%
+// headroom (4.6 KiB gzip / 23.2 KiB raw) to bound incidental feature growth.
+assertBudget("initial JavaScript gzip", initialJSGzip, 423.5 * 1024);
 assertBudget("largest initial JavaScript chunk gzip", largestInitialJS, 280 * 1024);
 assertBudget("render-blocking CSS gzip", initialCSSGzip, 4 * 1024);
 // Extension surfaces, Task Monitor, and compact decision receipts share the
@@ -74,7 +80,7 @@ for (const path of localeChunks) {
   // Task Monitor, billing, indexed history, Task Center, Extension UI, and
   // runtime controls plus execution-setting receipts add localized copy. Keep
   // both dictionaries bounded.
-  const budget = name.startsWith("zh-TW-") ? 56.0 * 1024 : 55.0 * 1024;
+const budget = name.startsWith("zh-TW-") ? 56.0 * 1024 : 55.0 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -89,4 +95,7 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // raw allowance ratcheted while gzip startup budgets stay flat.
 // The same contract adds 4.2 KiB raw (0.19%) over the 2,264.0 KiB base.
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, 2_272.0 * 1024);
+// The maintained Virtuoso engine adds 49.1 KiB raw (2.2%) over the previous
+// 2268.7 KiB gate. Retain 1% headroom to bound hash/minifier drift.
+assertBudget("initial raw JavaScript and CSS", rawInitialBytes, 2_341 * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

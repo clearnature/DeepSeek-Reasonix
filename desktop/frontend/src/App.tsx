@@ -1,5 +1,5 @@
 import {
-  lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ShellExpandProvider, useShellExpand } from "./lib/shellExpand";
 import { Activity,
   Command,
@@ -1183,7 +1183,7 @@ export default function App() {
   const setSidebarWidth = useLayoutStore((s) => s.setSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [tasksOpen, setTasksOpen] = useState<false | "session" | "all">(false);
-  const [teamsOpen, setTeamsOpen] = useState(false);
+const [teamsOpen, setTeamsOpen] = useState(false);
   const [liveSidebarWidth, setLiveSidebarWidth] = useState<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window === "undefined" ? 720 : window.innerHeight));
@@ -4774,7 +4774,7 @@ export default function App() {
                   </button>
                 </Tooltip>
               )}
-              <Tooltip label="Team">
+<Tooltip label="Team">
                 <button
                   className={`topicbar__action-btn topicbar__action-btn--icon topicbar__action-btn--utility${teamsOpen ? " topicbar__action-btn--active" : ""}`}
                   type="button"

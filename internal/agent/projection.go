@@ -33,7 +33,6 @@ const (
 
 // Compaction trigger labels.
 const (
-	CompactionTriggerAuto     = "auto"
 	CompactionTriggerPressure = "pressure"
 	CompactionTriggerManual   = "manual"
 	CompactionTriggerOverflow = "overflow"
@@ -145,13 +144,13 @@ type CompactionTelemetry struct {
 	Trigger    string  `json:"trigger"`
 	Reason     string  `json:"reason,omitempty"` // fold admission: manual|overflow|force|fold
 	CacheState string  `json:"cache_state"`
-	Mode       string  `json:"mode"`
 	Status     string  `json:"status,omitempty"` // installed | noop | aborted; "" on legacy paths
 	TokPerChar float64 `json:"tpc,omitempty"`    // usage-calibrated token/char at fold time; 0 until calibrated
 	// Results/SavedChars describe a prune/snip pass (mode=snip): how many stale
 	// tool results were elided and roughly how many characters were saved.
 	Results           int    `json:"results,omitempty"`
 	SavedChars        int    `json:"saved_chars,omitempty"`
+	Mode              string `json:"mode"`
 	Native            bool   `json:"native"`
 	SourceTokens      int    `json:"source_tokens"`
 	FoldTokens        int    `json:"fold_tokens"` // summarizer input after any shortening
@@ -332,12 +331,26 @@ func projectionValid(st CompactionState, msgs []provider.Message, transcriptVers
 	if len(st.Projection.Messages) == 0 {
 		return false
 	}
+	// Current lineage known: stored key must match (legacy native suffix ok).
+	if cacheKey != "" {
+		if _, ok := lineageKeyCompatible(st.PromptCacheKey, cacheKey); !ok {
+			return false
+		}
+	}
+	return projectionContentValid(st, msgs, transcriptVersion)
+}
+
+// projectionContentValid reports whether st's projection body still matches the
+// canonical transcript, independent of provider/model lineage. LoadProjectionSidecar
+// uses it to rebind across upgrade/model/workspace key changes.
+func projectionContentValid(st CompactionState, msgs []provider.Message, transcriptVersion uint64) bool {
+	if len(st.Projection.Messages) == 0 {
+		return false
+	}
 	n := st.Projection.CoveredCount
 	if n <= 0 || n > len(msgs) {
 		return false
 	}
-	// Cache-line attribution only: content validity is the prefix hash below,
-	// so a model switch keeps visible messages on the projection.
 	// Prefix hash is required; legacy sidecars without it are rebuilt.
 	if st.Projection.CoveredPrefixHash == "" {
 		return false

@@ -201,6 +201,7 @@ func TestCaptureForkPrefixUsesProjectedView(t *testing.T) {
 		{Role: provider.RoleUser, Content: "u3"},
 	}
 	a.compactionMu.Lock()
+	a.compactionState.PromptCacheKey = promptCacheKey("", "", "")
 	a.compactionState.Projection = ContextProjection{
 		Messages:          projMsgs,
 		TranscriptVersion: version,

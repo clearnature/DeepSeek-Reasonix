@@ -533,7 +533,7 @@ export interface DeliveryWorktreeOpenResult {
   tab: TabMeta;
 }
 
-export type ProjectTopicStatus = "thinking" | "streaming" | "waiting_confirmation" | "background_job" | "paused" | "error";
+export type ProjectTopicStatus = "thinking" | "streaming" | "waiting_confirmation" | "background_job" | "paused" | "error" | "diverged_recovery";
 
 export interface TopicMeta {
   id: string;
@@ -832,34 +832,7 @@ export interface RewindResultView {
   coverage?: string;
 }
 
-// SessionMeta is one saved session for the history panel.
-export interface SessionMeta {
-  path: string;
-  preview: string;
-  title?: string; // user-chosen name; falls back to preview when empty
-  turns: number;
-  turnsState?: "unknown" | "valid" | "corrupt" | string;
-  createdAt: number; // unix milliseconds
-  lastActivityAt: number; // unix milliseconds
-  modTime: number; // compatibility alias for lastActivityAt
-  deletedAt?: number; // unix milliseconds, present for trashed sessions
-  current: boolean;
-  open: boolean;
-  scope?: string;       // "project" | "global"; empty for legacy → treated as "global"
-  workspaceRoot?: string;
-  topicId?: string;
-  topicTitle?: string;
-  kind?: "session" | "channel" | string;
-  channel?: string;
-  channelLabel?: string;
-  remoteId?: string;
-  chatType?: string;
-  userId?: string;
-  threadId?: string;
-  sessionSource?: string;
-  recovered?: boolean; // created by conflict recovery, including a continued branch
-  recoveryCopy?: boolean; // actual branch content is unchanged and covered by its parent
-}
+export type { SessionMeta } from "./sessionMetaTypes";
 
 export type { HistoryIndexStatus, HistorySearchContextLine, HistorySearchContextRequest, HistorySearchHit, HistorySearchPage, HistorySearchRequest, HistorySessionPage, HistorySessionPageRequest } from "./historyCatalogTypes";
 
@@ -1907,30 +1880,6 @@ export interface JobView {
   startedAt: number; // unix milliseconds
 }
 
-// JobPanelView is one background job as the task panel renders it: identity,
-// status, the stalled hint, and a bounded non-consuming tail. It is a strict
-// projection of the desktop bridge's JobPanelJobsForTab (desktop/app.go
-// JobPanelView) — capturing it never consumes readOffset/resultRead, so
-// polling the panel cannot steal model output from wait/bash_output (P2 red
-// line). `status` is the job lifecycle state ("running" | "completed" |
-// "failed" | ...); `stalled` only ever decorates a running job.
-export interface JobPanelView {
-  id: string;
-  kind: string; // "bash" | "test" | ...
-  label: string;
-  status: string;
-  stalled: boolean;
-  tail: string; // bounded rune-safe snapshot tail (backend caps at 4KiB)
-}
-
-// JobOutputView is one job's bounded output for the task panel detail view.
-// The output rides the same non-consuming snapshot tail as the list, so
-// opening a job detail never consumes the model's wait/bash_output stream.
-export interface JobOutputView {
-  id: string;
-  output: string;
-}
-
 export interface ActiveWorkView {
   running: boolean;
   pendingPrompt: boolean;
@@ -2375,4 +2324,28 @@ export interface TaskEvent {
   runtime_state?: RuntimeState;
   error_code?: string;
   error_summary?: string;
+}
+
+// JobPanelView is one background job as the task panel renders it: identity,
+// status, the stalled hint, and a bounded non-consuming tail. It is a strict
+// projection of the desktop bridge's JobPanelJobsForTab (desktop/app.go
+// JobPanelView) — capturing it never consumes readOffset/resultRead, so
+// polling the panel cannot steal model output from wait/bash_output (P2 red
+// line). `status` is the job lifecycle state ("running" | "completed" |
+// "failed" | ...); `stalled` only ever decorates a running job.
+export interface JobPanelView {
+  id: string;
+  kind: string; // "bash" | "test" | ...
+  label: string;
+  status: string;
+  stalled: boolean;
+  tail: string; // bounded rune-safe snapshot tail (backend caps at 4KiB)
+}
+
+// JobOutputView is one job's bounded output for the task panel detail view.
+// The output rides the same non-consuming snapshot tail as the list, so
+// opening a job detail never consumes the model's wait/bash_output stream.
+export interface JobOutputView {
+  id: string;
+  output: string;
 }

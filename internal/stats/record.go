@@ -4,10 +4,14 @@
 //
 // Design notes:
 //   - Only provider usage (including request-only failures) and turn
-//     completions (event.TurnDone) are recorded; turn markers power the
-//     panel's "completed turns" metric and are not presented as sessions.
-//   - Files are append-only JSONL; a crash mid-line leaves at most one torn
-//     trailing line, which decodeRecords tolerates and skips.
+//     completions (event.TurnDone) are recorded here. Turn markers power the
+//     panel's "completed turns" metric;
+//     they are deliberately not presented as distinct conversation sessions.
+//     Token usage was never persisted before this feature, so token numbers
+//     accumulate from the day the feature ships.
+//   - Files are append-only: each record is one JSON line appended with
+//     O_APPEND. A crash mid-line leaves at most one torn trailing line, which
+//     decodeRecords tolerates and skips.
 package stats
 
 import (
@@ -44,18 +48,12 @@ type record struct {
 	CacheMiss  int       `json:"cache_miss,omitempty"`
 	Total      int       `json:"total,omitempty"`
 	Requests   int       `json:"requests,omitempty"` // provider requests represented by this row
-	Est        int       `json:"est,omitempty"`      // Prepare admission estimate; est vs prompt exposes estimate drift
-	// PrefixHash fingerprints the sent request prefix (CacheDiagnostics),
-	// distinguishing a miss from a changed prefix vs server-side expiry.
-	PrefixHash    string   `json:"prefix_hash,omitempty"`
-	PrefixChanged bool     `json:"prefix_changed,omitempty"`
-	PrefixReasons []string `json:"prefix_reasons,omitempty"`
-	Turn          bool     `json:"turn,omitempty"` // true for TurnDone marker rows
+	Turn       bool      `json:"turn,omitempty"`     // true for TurnDone marker rows
 	// Compaction records one context-compaction pass (agent compaction
 	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
 	Compaction *CompactionRecord `json:"compaction,omitempty"`
-	// Retrieval records one retrieval pass (retrieve_info / /retrieve_info):
-	// how it resolved and whether it cost an API call. Nil on usage/turn rows.
+	// Retrieval records one retrieval pass (retrieve_info): how it resolved and
+	// whether it cost an API call.
 	Retrieval *RetrievalRecord `json:"retrieval,omitempty"`
 	// Cost quote fields (additive; older readers ignore them).
 	UsageSource        string   `json:"usage_source,omitempty"`
@@ -81,9 +79,13 @@ type record struct {
 	SelectedCost float64 `json:"selected_cost,omitempty"`
 }
 
-// RetrievalRecord is the structured form of one retrieval pass, persisted so
-// retrieval behavior (hit vs paid call, stale serves, blocked) is diagnosable
-// from the stats file alone.
+// CompactionRecord is the structured form of the agent's compaction telemetry
+// detail line (trigger/mode/cache/src/proj/in/out/hit/miss/write/reqs),
+// persisted so a misbehaving compaction can be diagnosed from the stats file
+// alone. Error carries the full provider/estimator failure when the pass
+// failed; RequestID links to provider logs when present.
+// RetrievalRecord describes one retrieval pass (retrieve_info / /retrieve_info):
+// how it resolved and whether it cost an API call.
 type RetrievalRecord struct {
 	Query   string `json:"query,omitempty"`
 	Mode    string `json:"mode,omitempty"` // hit | miss | stale | blocked | error
@@ -93,32 +95,21 @@ type RetrievalRecord struct {
 	Chars   int    `json:"chars,omitempty"`
 }
 
-// CompactionRecord is the structured form of the agent's compaction telemetry
-// detail line (trigger/mode/cache/src/proj/in/out/hit/miss/write/reqs),
-// persisted so a misbehaving compaction can be diagnosed from the stats file
-// alone. Error carries the full provider/estimator failure when the pass
-// failed; RequestID links to provider logs when present.
 type CompactionRecord struct {
-	Trigger   string `json:"trigger,omitempty"`
-	Mode      string `json:"mode,omitempty"`
-	Cache     string `json:"cache,omitempty"`
-	SourceTok int    `json:"src,omitempty"`
-	ProjTok   int    `json:"proj,omitempty"`
-	InputTok  int    `json:"in,omitempty"`
-	OutTok    int    `json:"out,omitempty"`
-	HitTok    int    `json:"hit,omitempty"`
-	MissTok   int    `json:"miss,omitempty"`
-	WriteTok  int    `json:"write,omitempty"`
-	Reqs      int    `json:"reqs,omitempty"`
-	// Results/SavedChars describe a no-AI fast compression pass (mode=prune):
-	// elided tool results, saved chars; Status records the pass outcome
-	// (installed/noop/aborted/refused).
-	Results    int    `json:"results,omitempty"`
-	SavedChars int    `json:"saved_chars,omitempty"`
-	Status     string `json:"status,omitempty"`
-	// TokPerChar is the usage-calibrated token/char factor at fold time
-	// (0 until a turn reports usage). It makes src/proj values verifiable:
-	// src ≈ chars × tpc. Fast-compress (prune) passes leave it zero.
+	Trigger    string  `json:"trigger,omitempty"`
+	Mode       string  `json:"mode,omitempty"`
+	Cache      string  `json:"cache,omitempty"`
+	SourceTok  int     `json:"src,omitempty"`
+	ProjTok    int     `json:"proj,omitempty"`
+	InputTok   int     `json:"in,omitempty"`
+	OutTok     int     `json:"out,omitempty"`
+	HitTok     int     `json:"hit,omitempty"`
+	MissTok    int     `json:"miss,omitempty"`
+	WriteTok   int     `json:"write,omitempty"`
+	Reqs       int     `json:"reqs,omitempty"`
+	Results    int     `json:"results,omitempty"`
+	SavedChars int     `json:"saved_chars,omitempty"`
+	Status     string  `json:"status,omitempty"`
 	TokPerChar float64 `json:"tpc,omitempty"`
 	RequestID  string  `json:"provider_request_id,omitempty"`
 	Error      string  `json:"err_type,omitempty"`
@@ -296,8 +287,10 @@ func decodeRecords(r io.Reader) ([]record, error) {
 		}
 		var rec record
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
-			// Malformed lines (crash mid-write or manual edit) are skipped
-			// rather than failing the whole day's aggregation.
+			// Malformed lines (a crash mid-write or a manual edit) are skipped
+			// rather than failing the whole day's aggregation. This tolerates
+			// any number of bad lines; a fully corrupt file reads as an empty
+			// day, which is preferable to the panel erroring out.
 			continue
 		}
 		out = append(out, rec)

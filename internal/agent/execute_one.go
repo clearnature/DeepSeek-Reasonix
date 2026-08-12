@@ -334,11 +334,11 @@ func (a *Agent) applyPlanModeAndProxy(ctx context.Context, plan *toolCallPlan) (
 				a.noteCapabilityInvocation(call.Name, json.RawMessage(call.Arguments), nil)
 			}
 			result := rc.Result
-			if a.evidence != nil {
+			if a.task.ledger != nil {
 				// inspect/decline are not mutations; unavailable call targets are not success.
 				success := !rc.Unavailable
 				rec := evidence.ReceiptFromToolCall(call.Name, json.RawMessage(call.Arguments), success, true)
-				a.evidence.Record(rec)
+				a.task.ledger.Record(rec)
 			}
 			if rc.Unavailable {
 				return toolOutcome{output: result, errMsg: firstLine(rc.UnavailableReason)}, true
@@ -486,7 +486,7 @@ func (a *Agent) applyRecoveryAndPermission(ctx context.Context, plan *toolCallPl
 	episodeStopped := false
 	if ctrl := a.recoveryEpisodeControl(); ctrl != nil {
 		plan.recoveryGen = ctrl.Generation()
-		episodeStopped = ctrl.EpisodeStopped(a.recoveryTaskID)
+		episodeStopped = ctrl.EpisodeStopped(a.recovery.taskID)
 	}
 	if a.recoveryGate != nil && (plan.mutates || plan.verification || plan.planTransition || episodeStopped) {
 		subject := recoverySubject(plan.evidenceName, plan.evidenceArgs)
@@ -670,12 +670,8 @@ func (a *Agent) prepareToolExecution(ctx context.Context, plan *toolCallPlan) (t
 	}
 	cctx := tool.WithContextCompressor(withCallContext(ctx, plan.call.ID, a.sink, a.asker, a.planMode.Load()), a)
 	cctx = WithSubagentDepth(cctx, a.subagentDepth)
-	// P5 fork: expose the parent agent to tool execution (task fork:true) so the
-	// fork branch can capture the parent prefix without holding a reference in
-	// the tool registry. Lazy: ForkSourceFromContext is only resolved on fork.
-	cctx = WithForkSource(cctx, a)
-	if a.evidence != nil {
-		cctx = evidence.WithLedger(cctx, a.evidence)
+	if a.task.ledger != nil {
+		cctx = evidence.WithLedger(cctx, a.task.ledger)
 		cctx = evidence.WithSessionMessages(cctx, a.session.Snapshot)
 		if a.deliveryProfile {
 			cctx = evidence.WithDeliveryProfile(cctx)

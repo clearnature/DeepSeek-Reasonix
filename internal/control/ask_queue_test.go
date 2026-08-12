@@ -206,26 +206,6 @@ func TestAskCancelledWhileQueuedLeavesNothingBehind(t *testing.T) {
 
 // Ask has no timeout of its own: approvalTimeout defaults to zero, so a
 // question nobody answers blocks its turn until the user cancels.
-func TestAskAutoModeAutoApprovesRecommendedOption(t *testing.T) {
-	// Permission mode "auto": the AskRequest is emitted for audit but the
-	// recommended (first) option is approved without a human round-trip, so a
-	// team running under auto completes autonomously.
-	sink := &askProbeSink{}
-	c := New(Options{Sink: sink, SessionDir: t.TempDir()})
-	c.approval.toolApprovalMode = ToolApprovalAuto
-
-	answers, err := c.Ask(context.Background(), askProbeQuestions())
-	if err != nil {
-		t.Fatalf("Ask(auto): %v", err)
-	}
-	if len(answers) != 1 || len(answers[0].Selected) != 1 || answers[0].Selected[0] != "A" {
-		t.Fatalf("auto answers = %+v, want recommended option A", answers)
-	}
-	if len(sink.asks) != 1 {
-		t.Fatalf("auto AskRequest emitted %d, want 1 (auditable)", len(sink.asks))
-	}
-}
-
 func TestAskWithoutTimeoutBlocksUntilCancelled(t *testing.T) {
 	c := New(Options{Sink: event.Discard, SessionDir: t.TempDir()})
 	if c.approval.approvalTimeout != 0 {

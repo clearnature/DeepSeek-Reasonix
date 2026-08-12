@@ -125,27 +125,21 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
 	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f reason=%s user_kept=%d user_dropped=%d",
 		t.Trigger, t.Mode, t.Status, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
-		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount, t.TokPerChar, t.Reason,
-		t.UserTurnsKept, t.UserTurnsDropped)
+		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount,
+		t.TokPerChar, t.Reason, t.UserTurnsKept, t.UserTurnsDropped)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}
-	level := event.LevelInfo
-	text := "compaction telemetry"
 	if t.Error != "" {
-		// Errors must reach the stats file too: the Recorder persists the
-		// "compaction failed" notice as a row with err_type, so a failed pass
-		// is diagnosable from stats alone.
 		// A degraded fold carries the summarizer's error but still freed the
 		// context, so it is a notice with a cause rather than a failure.
 		if t.Mode != CompactionModeDegraded {
 			slog.Warn("agent: compaction failed", "detail", detail+" err_type="+t.Error)
+			return
 		}
-		level = event.LevelWarn
-		text = "compaction failed"
 		detail += " err_type=" + t.Error
 	}
-	a.sink.Emit(event.Event{Kind: event.Notice, Level: level, Text: text, Detail: detail})
+	a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "compaction telemetry", Detail: detail})
 }
 
 func (a *Agent) emitCompactionAborted(trigger string) {

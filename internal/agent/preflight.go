@@ -65,9 +65,9 @@ func (a *Agent) InvalidateProjection() {
 	path := a.sessionPath
 	a.compactionState = CompactionState{}
 	a.compactionMu.Unlock()
-	a.compactStuck = false
-	a.consecutiveCompacts = 0
-	a.lastCompactionTurn.Store(0)
+	a.compaction.stuck = false
+	a.compaction.consecutive = 0
+	a.compaction.lastTurn.Store(0)
 	if path != "" {
 		if err := RemoveCompactionState(path); err != nil {
 			slog.Warn("agent: remove context projection", "err", err)
@@ -112,6 +112,18 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		st.BlockedInputHash != "" ||
 		(st.LastReceipt != nil && (st.LastReceipt.Status == "blocked" || st.LastReceipt.Status == "failed" ||
 			st.LastReceipt.Status == "applied"))
+	if key != "" && !keyOK {
+		// Lineage key changed (upgrade, model/workspace switch). Rebind when
+		// the projection body still matches the canonical covered prefix.
+		var msgs []provider.Message
+		var version uint64
+		if a.session != nil {
+			msgs, version = a.session.snapshotMessagesVersion()
+		}
+		if projectionContentValid(st, msgs, version) {
+			normalized, keyOK = key, true
+		}
+	}
 	if (key != "" && !keyOK) || !hasMaintenanceSignal {
 		a.compactionState = CompactionState{}
 		a.checkpointState = "none"
@@ -198,9 +210,9 @@ func (a *Agent) BindSessionPath(path string, loadSidecar bool) {
 	a.checkpointState = "none"
 	a.cacheState = CacheStateUnknown
 	a.compactionMu.Unlock()
-	a.compactStuck = false
-	a.consecutiveCompacts = 0
-	a.lastCompactionTurn.Store(0)
+	a.compaction.stuck = false
+	a.compaction.consecutive = 0
+	a.compaction.lastTurn.Store(0)
 }
 
 // SetSessionPath binds the transcript path used for projection persistence.

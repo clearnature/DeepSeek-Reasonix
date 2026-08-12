@@ -163,4 +163,3 @@ func sanitizeWorktreeName(name string) string {
 	}
 	return out
 }
-

@@ -88,6 +88,7 @@ export const zh: Record<DictKey, string> = {
   "summary.jobLabelRow": "任务 {id} — {state}",
   "summary.jobId": "任务 ID",
   "summary.tailTruncated": "尾部输出已截断（≤512B）",
+
   "task.error": "错误",
   "task.event.error": "错误：{code}",
   "task.event.stateChange": "状态 {state} · 运行 {runtime}",
@@ -1291,6 +1292,7 @@ export const zh: Record<DictKey, string> = {
   "projectTree.status.backgroundJob": "后台任务",
   "projectTree.status.paused": "已暂停",
   "projectTree.status.error": "异常",
+  "projectTree.status.divergedRecovery": "多个恢复分支",
   "projectTree.removeProject": "移出侧边栏",
   "projectTree.confirmRemoveProject": "确认移出侧边栏",
   "projectTree.removeProjectShort": "移除",
