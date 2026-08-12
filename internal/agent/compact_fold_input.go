@@ -306,10 +306,14 @@ func (a *Agent) omitLowValueForSummary(fold []provider.Message, budget int) []pr
 		return fold
 	}
 	if len(head)+len(tail) == 0 {
-		// Nothing fit the budget (a single message exceeds the summarizer's
-		// available span): the marker alone still bounds the request instead
-		// of returning the oversized fold untouched. The omitted messages'
-		// text is lost either way, but the digest request must not overflow.
+		if len(fold) <= 1 {
+			// A single unshortenable message cannot become an omission
+			// marker without losing its entire content — fail instead.
+			return fold
+		}
+		// Nothing fit the budget: the marker alone still bounds the request
+		// instead of returning the oversized fold untouched (the omitted
+		// text is lost either way, but the digest must not overflow).
 		return []provider.Message{marker}
 	}
 	marker.Content = fmt.Sprintf(summaryOmittedMessage, dropped)

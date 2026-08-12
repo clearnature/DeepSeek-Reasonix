@@ -292,3 +292,21 @@ func SetSystemFetchTestHook(hook responses.FetchFunc) responses.FetchFunc {
 	systemFetchTestHook = hook
 	return prev
 }
+
+// RetrieveSystem runs the system retrieval pipeline for host commands such as
+// /retrieve_info. Tests replace the network leg via SetSystemFetchTestHook.
+func RetrieveSystem(ctx context.Context, query string) (*responses.KnowledgeEntry, error) {
+	pol := responses.DefaultPolicy()
+	pol.Approve(responses.GrantSession, time.Now())
+	res, err := responses.Retrieve(ctx, query, responses.RetrieveOptions{
+		Policy:    &pol,
+		PanicMode: true,
+	}, retrieveFetch)
+	if err != nil {
+		return nil, err
+	}
+	if res.Entry == nil {
+		return nil, fmt.Errorf("retrieval returned no entry")
+	}
+	return res.Entry, nil
+}

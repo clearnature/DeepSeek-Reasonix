@@ -26,6 +26,7 @@ func TestControllerCloseStopsTeammateAutoWorker(t *testing.T) {
 	executor := agent.New(rec, tool.NewRegistry(), agent.NewSession("sys"), agent.Options{}, event.Discard)
 	task := agent.NewTaskTool(rec, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil)
 	ts := agent.NewTeammateStore(task, jm, t.TempDir())
+	t.Cleanup(ts.Close)
 
 	c := New(Options{
 		Executor:     executor,

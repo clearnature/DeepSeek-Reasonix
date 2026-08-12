@@ -66,6 +66,7 @@ func TestTeamChainRealDeepSeek(t *testing.T) {
 	task := agent.NewTaskTool(subProv, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", systemPrompt, nil, 0, "", "", nil).
 		WithTranscripts(agent.NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort")
 	ts := agent.NewTeammateStore(task, jm, t.TempDir())
+	t.Cleanup(ts.Close)
 	ts.SetSink(sink)
 
 	c := New(Options{

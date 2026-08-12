@@ -59,13 +59,14 @@ import (
 	"reasonix/internal/store"
 	"reasonix/internal/taskmonitor"
 	"reasonix/internal/tool"
+	"reasonix/internal/tool/builtin"
 	"reasonix/internal/workspacelease"
 )
 
 // ErrTurnRunning reports that a caller tried to start a second foreground turn
 // while one is already active in the same Controller.
 var ErrTurnRunning = errors.New("turn already running")
-var errNoForegroundTaskToBackgroundize = errors.New("no foreground task to backgroundize")
+var errNoForegroundTaskToBackgroundize = errors.New("no foreground task is running")
 
 // ErrRuntimeDraining reports that a caller targeted a controller generation
 // superseded by a successful rebuild.
@@ -1570,6 +1571,31 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		case "/prometheus":
 			c.applyPrometheus(trimmed, display)
 			return
+		case "/background":
+			if err := c.Backgroundize(); err != nil {
+				c.notice(err.Error())
+			} else {
+				c.notice("backgroundize requested")
+			}
+			return
+		case "/compress-fast":
+			c.applyFastCompress(trimmed)
+			return
+		case "/retrieve_info":
+			c.applyRetrieveInfo(trimmed)
+			return
+		case "/task-message":
+			jobID, text, err := splitTaskMessage(strings.TrimPrefix(trimmed, fields[0]))
+			if err != nil {
+				c.notice(err.Error())
+				return
+			}
+			if err := c.SendTaskMessage(jobID, text); err != nil {
+				c.notice(err.Error())
+				return
+			}
+			c.notice("message queued for background job " + jobID)
+			return
 		case "/team-create", "/team-add", "/team-status", "/team-remove", "/team-stop", "/team-grant", "/team-revoke", "/team-approve", "/team-broadcast", "/team-ask", "/team-spawn":
 			c.applyTeamCommand(fields[0], trimmed)
 			return
@@ -2459,6 +2485,14 @@ func (c *Controller) ApplyHeadlessApprovalMode(mode string) {
 	}
 	if c.executor != nil {
 		c.executor.SetGate(c.newHeadlessGate(mode))
+		// Productized autonomy: auto wires the controller in as the executor's
+		// Asker so `ask` emits an auditable AskRequest and auto-approves the
+		// recommended option; any other mode restores the nil-asker fallback.
+		if mode == ToolApprovalAuto {
+			c.executor.SetAsker(c)
+		} else {
+			c.executor.SetAsker(nil)
+		}
 	}
 }
 
@@ -2574,6 +2608,19 @@ func (c *Controller) Ask(ctx context.Context, questions []event.AskQuestion) ([]
 	c.approval.markAskEmitted(id)
 	c.sink.Emit(event.Event{Kind: event.AskRequest, Ask: event.Ask{ID: id, Questions: questions}})
 	c.approval.promptEmitMu.Unlock()
+
+	if c.approval.mode() == ToolApprovalAuto {
+		// Headless auto answers immediately with the recommended (first)
+		// option; the AskRequest above keeps the decision auditable.
+		var answers []event.AskAnswer
+		for _, q := range questions {
+			if len(q.Options) > 0 {
+				answers = append(answers, event.AskAnswer{QuestionID: q.ID, Selected: []string{q.Options[0].Label}})
+			}
+		}
+		c.approval.cancelAsk(id)
+		return answers, nil
+	}
 
 	waitCtx, cancelWait := c.approval.waitContext(ctx)
 	defer cancelWait()
@@ -5618,6 +5665,9 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 			c.sessionTemp.Release()
 		}
 	})
+	if c.teammates != nil {
+		c.teammates.Close()
+	}
 }
 
 // SessionTemp returns the logical-session private temporary directory manager.
@@ -5672,6 +5722,15 @@ func (c *Controller) CancelJob(id string) bool {
 		return false
 	}
 	return c.jobs.KillForSession(c.parentSessionID(), id)
+}
+
+// SendTaskMessage routes a /task-message payload to a background job owned by
+// this controller's session. Fails closed when background jobs are disabled.
+func (c *Controller) SendTaskMessage(jobID, text string) error {
+	if c.jobs == nil {
+		return errors.New("background jobs are disabled")
+	}
+	return c.jobs.SendMessageForSession(c.parentSessionID(), jobID, text)
 }
 
 func splitTaskMessage(args string) (jobID, text string, err error) {
@@ -6628,4 +6687,72 @@ func (c *Controller) Backgroundize() error {
 	}
 	sig.Request()
 	return nil
+}
+
+// applyFastCompress is the /compress-fast host command: elide stale tool
+// results without an API call. Refused while a turn is running or while the
+// provider cache is warm (a rewrite then would only cost cache misses);
+// --force overrides the warm gate. The canonical transcript is never
+// rewritten — the elision lands in a pruned projection view.
+func (c *Controller) applyFastCompress(trimmed string) {
+	force := false
+	for _, f := range strings.Fields(trimmed)[1:] {
+		if f == "--force" {
+			force = true
+		}
+	}
+	c.mu.Lock()
+	running := c.running
+	c.mu.Unlock()
+	if running {
+		c.notice("fast compress failed: a turn is running")
+		return
+	}
+	exec := c.executor
+	if exec == nil {
+		c.notice("fast compress failed: no executor")
+		return
+	}
+	if !force && !exec.PromptOverflow() {
+		last := exec.LastAPICallAt()
+		if !last.IsZero() && time.Since(last) < c.cacheColdAfter() {
+			c.notice(fmt.Sprintf("fast compress refused: provider cache is warm (last API call %s ago)", time.Since(last).Round(time.Second)))
+			return
+		}
+	}
+	if path := c.sessionPath; path != "" {
+		if raw, err := os.ReadFile(path); err == nil {
+			_ = os.WriteFile(path+".bak", raw, 0o644)
+		}
+	}
+	stats, err := exec.PruneStaleToolResults()
+	if err != nil {
+		c.notice("fast compress failed: " + err.Error())
+		return
+	}
+	if stats.Results == 0 {
+		c.notice("no stale tool results to compress")
+		return
+	}
+	c.noticeDetail("compaction telemetry",
+		fmt.Sprintf("trigger=manual mode=prune status=installed cache=unknown src=0 fold=0 spans=0 proj=0 in=0 out=0 hit=0 miss=0 write=0 reqs=0 tpc=0 reason= user_kept=0 user_dropped=0 elided=%d saved=%d",
+			stats.Results, stats.SavedChars))
+	c.notice(fmt.Sprintf("fast-compressed: %d stale tool result(s) elided (%d chars)", stats.Results, stats.SavedChars))
+}
+
+// applyRetrieveInfo is the /retrieve_info host command: run the system
+// retrieval pipeline on the typed query and surface the rendered answer via
+// noticeDetail, with no model round-trip.
+func (c *Controller) applyRetrieveInfo(trimmed string) {
+	q := strings.TrimSpace(strings.TrimPrefix(trimmed, "/retrieve_info"))
+	if q == "" {
+		c.notice("retrieve_info: query is required")
+		return
+	}
+	entry, err := builtin.RetrieveSystem(context.Background(), q)
+	if err != nil {
+		c.notice("retrieve_info failed: " + err.Error())
+		return
+	}
+	c.noticeDetail("retrieve_info: "+q, entry.AnswerSummary)
 }

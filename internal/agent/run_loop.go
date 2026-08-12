@@ -352,6 +352,12 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 	ctx = a.withAgentContext(ctx)
 	for step := 0; state.runMaxSteps <= 0 || step < state.runMaxSteps || state.graceRound || state.recoveryGraceRound; step++ {
+		// P3: messages queued on a background job context (/task-message via
+		// SendMessageForSession) bridge into the steer queue; the foreground
+		// path queues via Steer directly. One message per tool round, FIFO.
+		if text, ok := jobs.DrainPendingMessages(ctx); ok {
+			a.Steer(text)
+		}
 		// Consume a queued steer and persist it to the session so it
 		// survives tab switches and history replay. The model sees it as
 		// guidance (with a prefix), not a new task. One cache miss per
