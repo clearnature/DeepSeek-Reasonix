@@ -192,7 +192,7 @@ func TestCaptureForkPrefixUsesProjectedView(t *testing.T) {
 		{Role: provider.RoleUser, Content: "u3"},
 	}
 	a := forkPrefixTestAgent(t, msgs)
-	canonical, version := a.session.snapshotMessagesVersion() // 含 NewSession 自动加的 system 首条
+	canonical, version := a.Session().snapshotMessagesVersion() // 含 NewSession 自动加的 system 首条
 	n := len(canonical)                                       // 投影全量覆盖 → modelVisibleFromProjection 返回纯投影
 	projMsgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
@@ -200,15 +200,15 @@ func TestCaptureForkPrefixUsesProjectedView(t *testing.T) {
 		{Role: provider.RoleAssistant, Content: "summary of a1 and a2"},
 		{Role: provider.RoleUser, Content: "u3"},
 	}
-	a.compactionMu.Lock()
-	a.compactionState.PromptCacheKey = promptCacheKey("", "", "")
-	a.compactionState.Projection = ContextProjection{
+	a.sess.compactionMu.Lock()
+	a.sess.compactionState.PromptCacheKey = promptCacheKey("", "", "")
+	a.sess.compactionState.Projection = ContextProjection{
 		Messages:          projMsgs,
 		TranscriptVersion: version,
 		CoveredCount:      n,
 		CoveredPrefixHash: coveredPrefixHash(canonical, n),
 	}
-	a.compactionMu.Unlock()
+	a.sess.compactionMu.Unlock()
 
 	prefix := captureForkPrefix(a, context.Background())
 	if len(prefix) != len(projMsgs) {
@@ -232,7 +232,7 @@ func TestCaptureForkPrefixUsesProjectedView(t *testing.T) {
 func TestCaptureForkInheritance(t *testing.T) {
 	parent := forkPrefixTestAgent(t, []provider.Message{{Role: provider.RoleUser, Content: "u1"}})
 	parent.modelRef = "deepseek/deepseek-v4-flash"
-	parent.lastUsage.Store(&provider.Usage{PromptTokens: 858_000})
+	parent.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 858_000})
 	parent.setPromptTokenCalibration(858_000, requestCalibrationShapeOf(provider.Request{
 		Messages: []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("x", 300_000)}},
 	}))
@@ -242,7 +242,7 @@ func TestCaptureForkInheritance(t *testing.T) {
 	if !ok || usage == nil || usage.PromptTokens != 858_000 || cal == nil {
 		t.Fatalf("same-model inheritance = ok:%v usage:%v cal:%v, want values", ok, usage, cal)
 	}
-	parent.lastUsage.Store(&provider.Usage{PromptTokens: 1})
+	parent.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 1})
 	parent.setPromptTokenCalibration(1, parent.requestCalibrationShape(provider.Request{
 		Messages: []provider.Message{{Role: provider.RoleUser, Content: "x"}},
 	}))
@@ -257,8 +257,8 @@ func TestCaptureForkInheritance(t *testing.T) {
 
 	// 父无值：ok=false。
 	parent.modelRef = "deepseek/deepseek-v4-flash"
-	parent.lastUsage.Store(nil)
-	parent.promptCalibration.Store(nil)
+	parent.sess.output.lastUsage.Store(nil)
+	parent.sess.output.promptCalibration.Store(nil)
 	if _, _, ok := captureForkInheritance(parent, "deepseek/deepseek-v4-flash"); ok {
 		t.Fatal("inheritance with empty parent values must report ok=false")
 	}
@@ -273,9 +273,9 @@ func TestCaptureForkPrefixParentSessionUntouched(t *testing.T) {
 		{Role: provider.RoleAssistant, LocalOnly: true, Content: "partial"}, // 未完成轮次
 	})
 
-	before := marshalMessages(t, parent.session.Snapshot())
+	before := marshalMessages(t, parent.Session().Snapshot())
 	_ = captureForkPrefix(parent, context.Background())
-	after := marshalMessages(t, parent.session.Snapshot())
+	after := marshalMessages(t, parent.Session().Snapshot())
 	if before != after {
 		t.Fatalf("parent session mutated by captureForkPrefix\n before: %s\n after: %s", before, after)
 	}

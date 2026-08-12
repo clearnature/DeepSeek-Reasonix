@@ -3,13 +3,13 @@
     "banner": 48,
     "commented-code": 1,
     "complexity": 2123,
-    "essay": 4312,
-    "file-size": 110711,
-    "function-size": 9144,
+    "essay": 4278,
+    "file-size": 110525,
+    "function-size": 9140,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "struct-state": 138,
+    "struct-state": 123,
     "test-file-size": 71047
   },
   "files": {
@@ -165,7 +165,7 @@
       "file-size": 158
     },
     "desktop/frontend/src/components/Transcript.tsx": {
-      "file-size": 269
+      "file-size": 278
     },
     "desktop/frontend/src/components/UsageStatsPanel.tsx": {
       "file-size": 276
@@ -458,10 +458,10 @@
     },
     "internal/agent/agent.go": {
       "complexity": 37,
-      "essay": 78,
-      "file-size": 2308,
+      "essay": 57,
+      "file-size": 2117,
       "function-size": 102,
-      "struct-state": 23
+      "struct-state": 8
     },
     "internal/agent/ask.go": {
       "essay": 4
@@ -612,8 +612,8 @@
     "internal/agent/run_loop.go": {
       "complexity": 6,
       "essay": 33,
-      "file-size": 58,
-      "function-size": 35
+      "file-size": 54,
+      "function-size": 31
     },
     "internal/agent/run_usage.go": {
       "complexity": 1,
@@ -733,9 +733,6 @@
     },
     "internal/agent/turn_phase.go": {
       "complexity": 6
-    },
-    "internal/agent/turnstate.go": {
-      "essay": 13
     },
     "internal/agent/usecapability.go": {
       "essay": 9,

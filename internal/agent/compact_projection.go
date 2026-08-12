@@ -69,11 +69,11 @@ type explicitCompressionSnapshot struct {
 }
 
 func (a *Agent) snapshotExplicitCompression() explicitCompressionSnapshot {
-	canonical, version := a.session.snapshotMessagesVersion()
+	canonical, version := a.sess.conversation.snapshotMessagesVersion()
 	cacheKey := a.currentPromptCacheKey()
-	a.compactionMu.Lock()
-	state := a.compactionState
-	a.compactionMu.Unlock()
+	a.sess.compactionMu.Lock()
+	state := a.sess.compactionState
+	a.sess.compactionMu.Unlock()
 	visible := canonical
 	if projectionValid(state, canonical, version, cacheKey) {
 		if projected := modelVisibleFromProjection(state.Projection, canonical); len(projected) > 0 {
@@ -164,8 +164,8 @@ func (a *Agent) compressVisibleRange(
 	preview string,
 	instructions string,
 ) (tool.CompressResult, error) {
-	a.compactionRunMu.Lock()
-	defer a.compactionRunMu.Unlock()
+	a.sess.compactionRunMu.Lock()
+	defer a.sess.compactionRunMu.Unlock()
 	if !a.explicitCompressionSnapshotCurrent(snap) {
 		return tool.CompressResult{}, errCompressStaleContext
 	}
@@ -175,7 +175,7 @@ func (a *Agent) compressVisibleRange(
 	}
 	result := plan.result
 
-	a.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
+	a.svc.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
 	prepared, reason, err := a.prepareVisibleCompression(ctx, trigger, plan.fold, instructions)
 	if err != nil {
 		a.emitCompactionAborted(trigger)
@@ -235,7 +235,7 @@ func (a *Agent) compressVisibleRange(
 	}
 	tele.Status = CompactionStatusInstalled
 	a.emitCompactionTelemetry(tele)
-	a.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
+	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(plan.fold), Summary: summary, Archive: state.LastReceipt.Archive,
 	}})
 	result.Status = "ok"
@@ -244,11 +244,11 @@ func (a *Agent) compressVisibleRange(
 }
 
 func (a *Agent) explicitCompressionSnapshotCurrent(snap explicitCompressionSnapshot) bool {
-	current, version := a.session.snapshotMessagesVersion()
-	a.compactionMu.Lock()
-	projectionVersion := a.compactionState.Projection.ProjectionVersion
-	generation := a.compactionState.Generation
-	a.compactionMu.Unlock()
+	current, version := a.sess.conversation.snapshotMessagesVersion()
+	a.sess.compactionMu.Lock()
+	projectionVersion := a.sess.compactionState.Projection.ProjectionVersion
+	generation := a.sess.compactionState.Generation
+	a.sess.compactionMu.Unlock()
 	return version == snap.transcriptVersion && len(current) == len(snap.canonical) &&
 		coveredPrefixHash(current, len(current)) == snap.coveredHash &&
 		projectionVersion == snap.projectionVersion && generation == snap.generation &&
@@ -313,8 +313,8 @@ func (a *Agent) planVisibleCompression(snap explicitCompressionSnapshot, directi
 }
 
 func (a *Agent) prepareVisibleCompression(ctx context.Context, trigger string, fold []provider.Message, instructions string) (preparedVisibleCompression, string, error) {
-	if a.hooks != nil {
-		if hookInstructions := a.hooks.PreCompact(ctx, trigger); hookInstructions != "" {
+	if a.svc.hooks != nil {
+		if hookInstructions := a.svc.hooks.PreCompact(ctx, trigger); hookInstructions != "" {
 			if instructions != "" {
 				instructions += "\n"
 			}
@@ -381,13 +381,13 @@ func (a *Agent) compact(ctx context.Context, trigger, instructions string, force
 // was foldable; callers at physical overflow must treat that as hard failure.
 // mustFree marks the fold the caller cannot proceed without.
 func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force, mustFree bool) (outcome CompactionOutcome, err error) {
-	a.compactionRunMu.Lock()
-	defer a.compactionRunMu.Unlock()
+	a.sess.compactionRunMu.Lock()
+	defer a.sess.compactionRunMu.Unlock()
 	activeTurn := a.activeTurnCreatedAt.Load()
-	if activeTurn != 0 && a.compaction.lastTurn.Load() == activeTurn && trigger != CompactionTriggerManual {
+	if activeTurn != 0 && a.sess.compaction.lastTurn.Load() == activeTurn && trigger != CompactionTriggerManual {
 		return CompactionNoop, nil
 	}
-	canonical, transcriptVersion := a.session.snapshotMessagesVersion()
+	canonical, transcriptVersion := a.sess.conversation.snapshotMessagesVersion()
 	// Silent exits (Noop/aborted) must still land in the stats file: a fold
 	// that found nothing is the "compacted but nothing happened" case that
 	// was invisible (user-observed 2026-08-09). Success paths emit inside.
@@ -398,11 +398,11 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 			emit(a.silentCompactionTelemetry(trigger, canonical, err))
 		}
 	}()
-	a.compactionMu.Lock()
-	stateSnapshot := a.compactionState
-	startProjectionVersion := a.compactionState.Projection.ProjectionVersion
-	startGeneration := a.compactionState.Generation
-	a.compactionMu.Unlock()
+	a.sess.compactionMu.Lock()
+	stateSnapshot := a.sess.compactionState
+	startProjectionVersion := a.sess.compactionState.Projection.ProjectionVersion
+	startGeneration := a.sess.compactionState.Generation
+	a.sess.compactionMu.Unlock()
 	msgs := a.visibleInputForFold(stateSnapshot, canonical, transcriptVersion)
 	viewInputHash := providerVisibleFingerprint(provider.ModelMessages(msgs))
 	if trigger != CompactionTriggerManual && stateSnapshot.LastReceipt != nil && stateSnapshot.LastReceipt.Status == "applied" && stateSnapshot.LastReceipt.Action == "summary" && stateSnapshot.LastReceipt.InputHash == viewInputHash {
@@ -422,6 +422,10 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		projCap = a.checkpointCeiling()
 	}
 	kept, fold = a.keepFoldWithinSummaryBudget(msgs[:head], kept, fold, projBase, projCap)
+	if a.contextWindow == 32000 {
+		fmt.Printf("FOLDCONTEXT-DIAG head=%d start=%d foldMsgs=%d foldTok=%d fixedPrefixTok=%d\n",
+			head, start, len(fold), summaryInputTokens(fold), estimateMessagesTokens(a.providerProjectionMessages(msgs[:head])))
+	}
 	if len(fold) == 0 || (!force && !foldEconomics(fold)) {
 		return CompactionNoop, nil
 	}
@@ -430,9 +434,9 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		return CompactionNoop, fmt.Errorf("%w: fixed prefix (%d tokens) already exceeds trigger (%d)", errCheckpointRejected, fixedPrefixTokens, a.compactTrigger())
 	}
 
-	a.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
-	if a.hooks != nil {
-		if hookInstr := a.hooks.PreCompact(ctx, trigger); hookInstr != "" {
+	a.svc.sink.Emit(event.Event{Kind: event.CompactionStarted, Compaction: event.Compaction{Trigger: trigger}})
+	if a.svc.hooks != nil {
+		if hookInstr := a.svc.hooks.PreCompact(ctx, trigger); hookInstr != "" {
 			if instructions != "" {
 				instructions += "\n"
 			}
@@ -490,7 +494,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
 	}
-	a.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
+	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: len(fold), Summary: summary,
 	}})
 	// Only once the checkpoint is committed: a rejected candidate folded nothing.

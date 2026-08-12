@@ -49,7 +49,7 @@ func TestPreflightPruneThenFoldFitsWindow(t *testing.T) {
 	if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 		t.Fatalf("preflight must succeed after prune + bounded fold: %v", err)
 	}
-	st := a.compactionState
+	st := a.sess.compactionState
 	if !projectionValid(st, sess.Messages, st.TranscriptVersion, a.currentPromptCacheKey()) {
 		t.Fatal("no valid projection installed after preflight")
 	}
@@ -86,7 +86,7 @@ func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T)
 		if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 			t.Fatalf("preflight: %v", err)
 		}
-		if a.compaction.stuck {
+		if a.sess.compaction.stuck {
 			t.Fatal("healthy window must not latch after a successful fold")
 		}
 	})
@@ -101,7 +101,7 @@ func TestPreflightTooSmallWindowLatchesOnlyWhenProjectionCannotFit(t *testing.T)
 			if _, err := a.contextManager().Prepare(context.Background(), ContextPreparePolicy{Trigger: CompactionTriggerPressure}); err != nil {
 				t.Fatalf("preflight: %v", err)
 			}
-			if a.compaction.stuck {
+			if a.sess.compaction.stuck {
 				t.Fatal("healthy window latched; over-pause regression")
 			}
 		}

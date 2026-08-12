@@ -2097,8 +2097,8 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 	// contexts otherwise report false overflow and recompact every fork).
 	if parent, ok := ForkSourceFromContext(ctx); ok {
 		if usage, cal, ok := captureForkInheritance(parent, opts.ModelRef); ok {
-			sub.lastUsage.Store(usage)
-			sub.promptCalibration.Store(cal)
+			sub.sess.output.lastUsage.Store(usage)
+			sub.sess.output.promptCalibration.Store(cal)
 		}
 	}
 	// Sub-agents inherit the leader's asker so their `ask` is answered per the
@@ -2135,7 +2135,7 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 		nudges := 0
 		for !sub.HasSuccessfulReviewReport(kind) && nudges < maxReviewReportNudges {
 			nudges++
-			sub.preserveEvidenceOnce = true
+			sub.pending.preserveEvidence = true
 			if err := sub.Run(ctx, reviewReportNudgePrompt(kind)); err != nil {
 				mergeChildEvidence(ctx, sub)
 				// A retry that fails still keeps local parent mutations; the

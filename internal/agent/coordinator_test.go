@@ -972,7 +972,7 @@ func TestCoordinatorSkipsExecutorWhenPlannerConcludesNoChanges(t *testing.T) {
 	if got := len(exec.requests); got != 0 {
 		t.Fatalf("executor requests = %d, want skip after no-op planner conclusion", got)
 	}
-	messages := executor.session.Messages
+	messages := executor.sess.conversation.Messages
 	if got := len(messages); got != 3 {
 		t.Fatalf("executor session messages = %d, want system + user + no-op assistant", got)
 	}
@@ -1319,7 +1319,7 @@ func TestCoordinatorSkipsExecutorOnExplicitNoChangesMarker(t *testing.T) {
 	if got := len(exec.requests); got != 0 {
 		t.Fatalf("executor requests = %d, want skip on explicit [no_changes] marker", got)
 	}
-	messages := executor.session.Messages
+	messages := executor.sess.conversation.Messages
 	if got := len(messages); got != 3 {
 		t.Fatalf("executor session messages = %d, want system + user + no-op assistant", got)
 	}
@@ -1780,7 +1780,7 @@ func TestCoordinatorPersistsDeniedPlanTurnToExecutorSession(t *testing.T) {
 	if len(exec.requests) != 0 {
 		t.Fatal("executor must not run when the plan is denied")
 	}
-	msgs := executor.session.Messages
+	msgs := executor.sess.conversation.Messages
 	if len(msgs) < 2 {
 		t.Fatalf("executor session messages = %d, want the denied turn persisted", len(msgs))
 	}

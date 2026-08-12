@@ -735,13 +735,13 @@ func TestForkChildFirstRequestReusesParentCachePrefix(t *testing.T) {
 	// 2. The inherited prefix is the parent's committed history — the same
 	//    bytes the parent last sent, plus the not-yet-sent assistant tail.
 	prefix := captureForkPrefix(parent, context.Background())
-	if len(prefix) != len(parent.session.Snapshot()) {
-		t.Fatalf("fork prefix len %d != parent session len %d", len(prefix), len(parent.session.Snapshot()))
+	if len(prefix) != len(parent.Session().Snapshot()) {
+		t.Fatalf("fork prefix len %d != parent session len %d", len(prefix), len(parent.Session().Snapshot()))
 	}
 
 	// 3. Freeze the parent-untouched baselines (T5-3).
-	parentBefore := marshalMessages(t, parent.session.Snapshot())
-	schemas := parent.tools.Schemas()
+	parentBefore := marshalMessages(t, parent.Session().Snapshot())
+	schemas := parent.svc.tools.Schemas()
 	shapeBefore := parent.capturePrefixShape(schemas)
 
 	// 4. Spawn the fork through the real task path: fire-and-forget silent
@@ -816,7 +816,7 @@ func TestForkChildFirstRequestReusesParentCachePrefix(t *testing.T) {
 	}
 
 	// T5-3 parent untouched: session bytes and prefix shape are stable.
-	if after := marshalMessages(t, parent.session.Snapshot()); after != parentBefore {
+	if after := marshalMessages(t, parent.Session().Snapshot()); after != parentBefore {
 		t.Fatalf("parent session mutated by fork\n before: %s\n after: %s", parentBefore, after)
 	}
 	if shapeAfter := parent.capturePrefixShape(schemas); shapeAfter != shapeBefore {

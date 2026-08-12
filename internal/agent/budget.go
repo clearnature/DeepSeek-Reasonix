@@ -17,10 +17,10 @@ const minOutputBudget = 8 * 1024
 // so a request below it cannot be rejected for exceeding the model context
 // length; independent-ceiling providers keep the plain ratio mark.
 func (a *Agent) MaybeCompactOnResume(ctx context.Context) {
-	if a == nil || a.session == nil || a.contextWindow <= 0 {
+	if a == nil || a.Session() == nil || a.contextWindow <= 0 {
 		return
 	}
-	if !sharesContextWindow(a.prov) {
+	if !sharesContextWindow(a.svc.prov) {
 		return
 	}
 	// Model-visible shape, not the canonical transcript: a large history with
@@ -35,7 +35,7 @@ func (a *Agent) MaybeCompactOnResume(ctx context.Context) {
 	// rejected regardless of cache state. Compact unconditionally.
 	if est >= a.contextWindow-minOutputBudget-outputBudgetReserve {
 		if err := a.CompactNow(ctx, ""); err == nil {
-			a.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
+			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: fmt.Sprintf(
 				"resumed session prompt ~%d tokens est. exceeds the shared context window's input allowance — compacted before first send", est)})
 		}
 	}
@@ -46,12 +46,12 @@ func (a *Agent) MaybeCompactOnResume(ctx context.Context) {
 // may overflow the shared context window. Compaction is not triggered — this
 // is a diagnostic signal, not a pressure gate.
 func (a *Agent) maybePredictOverflow(est, maxTokens int) {
-	if a == nil || a.sink == nil || a.contextWindow <= 0 || maxTokens <= 0 {
+	if a == nil || a.svc.sink == nil || a.contextWindow <= 0 || maxTokens <= 0 {
 		return
 	}
 	headroom := a.contextWindow - est - maxTokens
 	if headroom < minOutputBudget {
-		a.sink.Emit(event.Event{
+		a.svc.sink.Emit(event.Event{
 			Kind:  event.Notice,
 			Level: event.LevelInfo,
 			Text:  "context window nearly full",

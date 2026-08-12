@@ -34,7 +34,7 @@ func TestCompactToProjectionEmitsSingleTelemetry(t *testing.T) {
 		ModelRef:      "test/model",
 		SessionPath:   filepath.Join(t.TempDir(), "s.jsonl"),
 	}, event.Discard)
-	a.sink = sink
+	a.svc.sink = sink
 
 	outcome, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", true, false)
 	if err != nil {

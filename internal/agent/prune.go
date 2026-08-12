@@ -94,7 +94,7 @@ func (a *Agent) applyToolResultMaintenanceView(msgs []provider.Message, mode too
 func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) error {
 	// Collect read-only data before taking the lock: modelVisibleMessages
 	// re-enters compactionMu, so it cannot run inside the locked section.
-	canonical, version := a.session.snapshotMessagesVersion()
+	canonical, version := a.Session().snapshotMessagesVersion()
 	if len(canonical) == 0 {
 		return nil
 	}
@@ -106,9 +106,9 @@ func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) 
 		action = "prune"
 	}
 
-	a.compactionMu.Lock()
-	defer a.compactionMu.Unlock()
-	state := a.compactionState
+	a.sess.compactionMu.Lock()
+	defer a.sess.compactionMu.Unlock()
+	state := a.sess.compactionState
 	projVersion := state.Projection.ProjectionVersion + 1
 	now := time.Now().UTC()
 	state.Projection = ContextProjection{
@@ -136,10 +136,10 @@ func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) 
 		CacheBreak: true, CreatedAt: now,
 	}
 	state.UpdatedAt = now
-	prev := a.compactionState
-	a.compactionState = state
+	prev := a.sess.compactionState
+	a.sess.compactionState = state
 	if err := a.persistCompactionStateLocked(); err != nil {
-		a.compactionState = prev
+		a.sess.compactionState = prev
 		return err
 	}
 	a.emitContextMaintenance(state.LastReceipt)
@@ -217,8 +217,8 @@ var (
 )
 
 func (a *Agent) snipStrategyFor(name string) snipStrategy {
-	if a.tools != nil {
-		if t, ok := a.tools.Get(name); ok {
+	if a.svc.tools != nil {
+		if t, ok := a.svc.tools.Get(name); ok {
 			if h, ok := t.(tool.SnipHinter); ok {
 				return snipStrategyFromHint(h.SnipHint())
 			}

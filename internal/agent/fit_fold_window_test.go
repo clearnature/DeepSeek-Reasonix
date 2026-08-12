@@ -29,12 +29,12 @@ func TestFitFoldToWindowKeepsFoldBounded(t *testing.T) {
 		)
 	}
 	a := &Agent{
-		prov:              &capturingBudgetProvider{sharedFakeProvider: sharedFakeProvider{fakeProvider: &fakeProvider{reply: "SUMMARY"}, budget: 128 * 1024}},
-		agentConfig:       agentConfig{contextWindow: 1_000_000, compactRatio: 0.8},
-		outputBudgetState: outputBudgetState{outputBudget: 128 * 1024},
-		sink:              event.Discard,
+		svc: agentServices{prov: &capturingBudgetProvider{sharedFakeProvider: sharedFakeProvider{fakeProvider: &fakeProvider{reply: "SUMMARY"}, budget: 128 * 1024}},
+			sink: event.Discard},
+		agentConfig: agentConfig{contextWindow: 1_000_000, compactRatio: 0.8},
 	}
-	a.session = &Session{Messages: msgs}
+	a.sess.output.outputBudget = 128 * 1024
+	a.sess.conversation = &Session{Messages: msgs}
 	outcome, err := a.compactToProjection(t.Context(), "manual", "", true, false)
 	if err != nil {
 		t.Fatalf("manual compact: %v", err)

@@ -26,13 +26,12 @@ func (s *noticeCaptureSink) Emit(e event.Event) {
 func TestCompactionNoopEmitsTelemetry(t *testing.T) {
 	sink := &noticeCaptureSink{}
 	a := &Agent{
-		prov:           &fakeProvider{reply: "SUMMARY"},
+		svc:            agentServices{prov: &fakeProvider{reply: "SUMMARY"}, sink: sink},
 		agentConfig:    agentConfig{contextWindow: 1_000_000, compactRatio: 0.8},
 		lastFoldReason: "manual",
-		sink:           sink,
 	}
 	// A session so small the fold region is empty: everything fits in head+tail.
-	a.session = &Session{Messages: []provider.Message{
+	a.sess.conversation = &Session{Messages: []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
 		{Role: provider.RoleUser, Content: "hi"},
 	}}

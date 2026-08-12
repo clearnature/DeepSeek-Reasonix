@@ -445,10 +445,10 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	// reaches the leader's approval chain instead of the headless fallback;
 	// the permission mode (ask/auto/yolo) decides whether a human round-trip
 	// is needed.
-	if ts.leader != nil && ts.leader.asker != nil {
-		ctx = withSubagentAsker(ctx, ts.leader.asker)
+	if ts.leader != nil && ts.leader.Asker() != nil {
+		ctx = withSubagentAsker(ctx, ts.leader.Asker())
 	}
-	slog.Info("team asker propagation", "teammate", name, "leader", ts.leader != nil, "leader_asker", ts.leader != nil && ts.leader.asker != nil)
+	slog.Info("team asker propagation", "teammate", name, "leader", ts.leader != nil, "leader_asker", ts.leader != nil && ts.leader.Asker() != nil)
 	// P6.2 teammate direct-connect: stamp the mailbox so the teammate sub-agent
 	// can post mail to its peers via the team_message tool (builtin.Mailbox).
 	ctx = builtin.WithMailbox(ctx, ts)
@@ -500,14 +500,14 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	}
 	// The leader's asker rides the spec so the job worker (which rebuilds its
 	// ctx from the manager root) can inject it for the teammate's `ask`.
-	if ts.leader != nil && ts.leader.asker != nil {
-		spec.Task.Asker = ts.leader.asker
+	if ts.leader != nil && ts.leader.Asker() != nil {
+		spec.Task.Asker = ts.leader.Asker()
 	}
 	// The leader's sink rides the spec so the teammate's usage events land in
 	// the daily stats file (prefix_hash/cache observable); the job ctx has no
 	// CallContext, so subSink would otherwise discard them.
-	if ts.leader != nil && ts.leader.sink != nil {
-		spec.Task.Sink = ts.leader.sink
+	if ts.leader != nil && ts.leader.svc.sink != nil {
+		spec.Task.Sink = ts.leader.svc.sink
 	}
 	slog.Info("team spec asker", "teammate", name, "spec_asker", spec.Task.Asker != nil, "spec_sink", spec.Task.Sink != nil)
 	// D1 token/worktree: a granted teammate must pass the fork write gate
@@ -526,8 +526,8 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	// Job workers run under the manager's root ctx, so the Assign-time
 	// withSubagentAsker is not inherited here — re-inject the leader's asker
 	// at execution so the teammate's `ask` reaches the approval chain.
-	if ts.leader != nil && ts.leader.asker != nil {
-		ctx = withSubagentAsker(ctx, ts.leader.asker)
+	if ts.leader != nil && ts.leader.Asker() != nil {
+		ctx = withSubagentAsker(ctx, ts.leader.Asker())
 	}
 	out, err := ts.task.RunProfileSpec(ctx, spec)
 	if err != nil {

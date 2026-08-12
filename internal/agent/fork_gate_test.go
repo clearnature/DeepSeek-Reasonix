@@ -56,23 +56,24 @@ func TestForkReadOnlyGateExecutionBlocksWriterAndAllowsReadOnly(t *testing.T) {
 	reg.Add(fakeTool{name: "write_file", readOnly: false})
 
 	a := New(nil, reg, NewSession(""), Options{Gate: forkReadOnlyGate{}}, event.Discard)
+	turn := &turnRuntime{}
 
-	blocked := a.executeOne(context.Background(), provider.ToolCall{Name: "write_file", Arguments: `{"path":"/a"}`})
+	blocked := a.executeOne(context.Background(), turn, provider.ToolCall{Name: "write_file", Arguments: `{"path":"/a"}`})
 	if !strings.HasPrefix(blocked.output, "blocked:") || !blocked.blocked {
 		t.Errorf("writer call = %q/%+v, want a blocked result", blocked.output, blocked)
 	}
 
-	blockedBash := a.executeOne(context.Background(), provider.ToolCall{Name: "bash", Arguments: `{"command":"rm -rf /tmp/x"}`})
+	blockedBash := a.executeOne(context.Background(), turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"rm -rf /tmp/x"}`})
 	if !strings.HasPrefix(blockedBash.output, "blocked:") || !blockedBash.blocked {
 		t.Errorf("writer bash call = %q/%+v, want a blocked result", blockedBash.output, blockedBash)
 	}
 
-	okBash := a.executeOne(context.Background(), provider.ToolCall{Name: "bash", Arguments: `{"command":"git status --short"}`})
+	okBash := a.executeOne(context.Background(), turn, provider.ToolCall{Name: "bash", Arguments: `{"command":"git status --short"}`})
 	if strings.HasPrefix(okBash.output, "blocked:") {
 		t.Errorf("read-only bash call should run, got %q", okBash.output)
 	}
 
-	okRead := a.executeOne(context.Background(), provider.ToolCall{Name: "read_file", Arguments: `{"path":"/a"}`})
+	okRead := a.executeOne(context.Background(), turn, provider.ToolCall{Name: "read_file", Arguments: `{"path":"/a"}`})
 	if strings.HasPrefix(okRead.output, "blocked:") {
 		t.Errorf("read-only tool should run, got %q", okRead.output)
 	}

@@ -956,6 +956,16 @@ func (c *Controller) rebindCheckpoints(sessionPath string) {
 // spawnGuardedTurn launches an admitted turn body plus its autosave companion.
 // The caller must already have claimed admission (running=true) under c.mu.
 func (c *Controller) spawnGuardedTurn(ctx context.Context, cancel context.CancelFunc, body func(ctx context.Context) error) {
+	// P4: every foreground turn carries a fresh backgroundize signal. The turn
+	// context inherits down the whole sub-agent chain (withAgentContext only
+	// rebinds jobs/memory/planmode), so the signal reaches a nested task's run
+	// loop, which consumes it at an iteration boundary. finishGuardedTurn
+	// clears the recorded signal when the turn completes.
+	sig := agent.NewBackgroundizeSignal()
+	ctx = agent.WithBackgroundizeSignal(ctx, sig)
+	c.mu.Lock()
+	c.foregroundBkg = sig
+	c.mu.Unlock()
 	ctx, completion := withGuardedTurnCompletion(ctx)
 	c.autosaveWG.Go(func() {
 		c.autosaveWhileRunning(ctx)
@@ -995,6 +1005,10 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	c.finishing = !c.closed
 	c.cancel = nil
 	c.canceling = false
+	// The foreground turn is over (a parked replacement re-stamps its own
+	// signal via spawnGuardedTurn), so a stale /background can no longer reach
+	// this turn's run loop and Backgroundize fails closed.
+	c.foregroundBkg = nil
 	c.mu.Unlock()
 
 	defer func() {
@@ -1122,6 +1136,19 @@ func (c *Controller) runTurn(ctx context.Context, input string) error {
 // need a blocking request/response boundary, such as ACP session/prompt.
 func (c *Controller) RunTurn(ctx context.Context, input string) error {
 	return c.runSynchronousTurn(ctx, nil, func(runCtx context.Context) error {
+		// P4: the synchronous turn carries a backgroundize signal just like the
+		// async path (spawnGuardedTurn), so /background and Backgroundize work
+		// for ACP-style blocking transports too. Cleared when the turn ends.
+		sig := agent.NewBackgroundizeSignal()
+		runCtx = agent.WithBackgroundizeSignal(runCtx, sig)
+		c.mu.Lock()
+		c.foregroundBkg = sig
+		c.mu.Unlock()
+		defer func() {
+			c.mu.Lock()
+			c.foregroundBkg = nil
+			c.mu.Unlock()
+		}()
 		return c.runTurn(runCtx, input)
 	})
 }
@@ -2134,6 +2161,7 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 	running := c.running
 	active := running || c.finishing
 	canceling := c.canceling
+	foreground := c.foregroundTaskStateLocked()
 	c.mu.Unlock()
 	pending := c.approval.hasPending()
 	backgroundJobs := len(c.Jobs())
@@ -2143,6 +2171,7 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 		BackgroundJobs:  backgroundJobs,
 		CancelRequested: canceling,
 		Cancellable:     running || pending,
+		ForegroundTask:  foreground,
 	}
 }
 

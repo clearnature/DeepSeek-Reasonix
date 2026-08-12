@@ -15,7 +15,7 @@ import (
 // 未压缩全量——否则共享大上下文反复触发 overflow 压缩（8/12 凌晨 24 次）。
 // 调用方（RunProfileSpec fork 分支）预填进子代理 session。
 func captureForkPrefix(parent *Agent, ctx context.Context) []provider.Message {
-	if parent == nil || parent.session == nil {
+	if parent == nil || parent.Session() == nil {
 		return nil
 	}
 	if ctx != nil {
@@ -42,12 +42,12 @@ func captureForkInheritance(parent *Agent, modelRef string) (*provider.Usage, *p
 		return nil, nil, false
 	}
 	var usage *provider.Usage
-	if lu := parent.lastUsage.Load(); lu != nil {
+	if lu := parent.LastUsage(); lu != nil {
 		cp := *lu
 		usage = &cp
 	}
 	var cal *promptTokenCalibration
-	if c := parent.promptCalibration.Load(); c != nil {
+	if c := parent.sess.output.promptCalibration.Load(); c != nil {
 		cc := *c
 		cal = &cc
 	}
