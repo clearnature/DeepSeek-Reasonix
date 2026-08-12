@@ -1762,16 +1762,17 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// P6.2 production wiring (reinstated after the 2026-08-12 upstream merge
 	// dropped it — team commands were disabled): the teammate registry shares
 	// the controller's sink; completion events drive lifecycle (idle flip).
-	inboxRoot := filepath.Join(sessionDir, "team-inbox")
-	if taskTool == nil {
-		return nil, fmt.Errorf("boot: task tool not built, cannot wire TeammateStore")
+	// Ablation/no-subagent builds have no task tool and leave team disabled.
+	var teammates *agent.TeammateStore
+	if taskTool != nil {
+		inboxRoot := filepath.Join(sessionDir, "team-inbox")
+		teammates = agent.NewTeammateStore(taskTool, jm, inboxRoot)
+		teammates.SetWorkspaceRoot(root)
+		// P10: stalled-teammate abort (0 = warning only) + crash snapshot.
+		teammates.SetStallAbort(time.Duration(cfg.Agent.TeamStallAbortSeconds) * time.Second)
+		teammates.SetSnapshotPath(filepath.Join(sessionDir, "team-state.json"))
+		teammates.SetSink(sink)
 	}
-	teammates := agent.NewTeammateStore(taskTool, jm, inboxRoot)
-	teammates.SetWorkspaceRoot(root)
-	// P10: stalled-teammate abort (0 = warning only) + crash snapshot.
-	teammates.SetStallAbort(time.Duration(cfg.Agent.TeamStallAbortSeconds) * time.Second)
-	teammates.SetSnapshotPath(filepath.Join(sessionDir, "team-state.json"))
-	teammates.SetSink(sink)
 
 	ctrlOpts := control.Options{
 		TaskBudget:                     taskBudgetFromConfig(cfg),
