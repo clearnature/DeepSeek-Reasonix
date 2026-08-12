@@ -1232,6 +1232,21 @@ func (a *App) submitToTab(tabID, input string, fromBridge bool, submissionID ...
 		if ctrl == nil {
 			return a.workspaceNotReadyErr(tab)
 		}
+		// Local management verbs still correlate one optimistic UI item: the
+		// submission id tags the notice/TurnDone that answers the command.
+		// Local verbs resolve synchronously (a notice answers them and no
+		// TurnDone follows), so the reservation is released right after
+		// submission; a guarded turn (e.g. /mcp__) is now running and
+		// releases the reservation itself at TurnDone fan-out. A failed
+		// reservation (an in-flight turn owns the sink) leaves the command
+		// un-correlated but still runs it.
+		if tab.sink != nil && tab.sink.tryBeginTurn(submissionID...) {
+			ctrl.SubmitDisplay(trimmed, trimmed)
+			if !ctrl.RuntimeStatus().Running {
+				tab.sink.cancelTurnStart()
+			}
+			return nil
+		}
 		ctrl.SubmitDisplay(trimmed, trimmed)
 		return nil
 	}
