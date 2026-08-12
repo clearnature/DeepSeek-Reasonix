@@ -577,7 +577,7 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 		MaxTokens:   maxOut,
 		Temperature: provider.OptionalTemperature(a.temperature),
 	}
-	if budget, clipped, budgetErr := a.effectiveOutputBudget(req); budgetErr != nil {
+	if budget, clipped, budgetErr := a.effectiveOutputBudget(req, false); budgetErr != nil {
 		return "", usage, budgetErr
 	} else if clipped {
 		req.MaxTokens = budget

@@ -296,3 +296,42 @@ func TestDegradedFoldKeepsAllUserMessages(t *testing.T) {
 		t.Fatalf("tight degraded projection %d still at/above trigger %d (would re-trigger)", got, tight.compactTrigger())
 	}
 }
+
+func TestSummarizerBudgetIgnoresMainRequestObservedSize(t *testing.T) {
+	// Regression for 2026-08-12 22:56: the summarizer request carries its own
+	// shape (system + prefix + fold, no retained tail), so admission must not
+	// substitute the main request's observed prompt size — a 1.38M observed
+	// main prompt (tail included) falsely rejected a ~300k summarizer request
+	// and degraded the fold, dropping 98 user turns.
+	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true}
+	a := &Agent{
+		agentConfig: agentConfig{contextWindow: 1_048_576, maxOutputTokens: 128 * 1024},
+		svc:         agentServices{prov: prov},
+		sess:        sessionRuntime{output: outputBudgetState{outputBudget: 128 * 1024}},
+	}
+	// Simulate the observed main prompt (large, includes the retained tail).
+	a.storeLatestRequestUsage(&provider.Usage{PromptTokens: 1_385_656})
+	// The summarizer request is small: system + a modest fold.
+	req := provider.Request{
+		Messages: []provider.Message{
+			{Role: provider.RoleSystem, Content: summarySystemPrompt},
+			{Role: provider.RoleUser, Content: strings.Repeat("fold region text ", 10_000)},
+		},
+		MaxTokens: 4096,
+	}
+	est := a.estimatedRequestTokens(req)
+	t.Logf("est=%d shapeChars=%d", est, a.requestCalibrationShape(req).requestChars)
+	got, clipped, err := a.effectiveOutputBudget(req, false)
+	if err != nil {
+		t.Fatalf("summarizer rejected by main-request observed size: %v", err)
+	}
+	// 0 + !clipped is the pass signal: the request fits, no clipping needed.
+	if clipped {
+		t.Fatalf("summarizer should not be clipped: got=%d", got)
+	}
+	// The same request with useObserved=true is what the main request does;
+	// the observed substitution is intentional there (fresh-agent fallback).
+	if _, _, err := a.effectiveOutputBudget(req, true); err == nil {
+		t.Fatal("useObserved=true should report overflow against the 1.38M observed prompt")
+	}
+}

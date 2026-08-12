@@ -56,7 +56,7 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	if budget, clipped, budgetErr := a.effectiveOutputBudget(frozen.req); budgetErr != nil {
+	if budget, clipped, budgetErr := a.effectiveOutputBudget(frozen.req, true); budgetErr != nil {
 		// One-shot physical overflow recovery. Do not loop.
 		if _, perr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
 			Trigger: CompactionTriggerOverflow,
@@ -68,11 +68,11 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		if rerr != nil {
 			return samplingRequest{}, rerr
 		}
-		if _, _, budgetErr2 := a.effectiveOutputBudget(rebuilt.req); budgetErr2 != nil {
+		if _, _, budgetErr2 := a.effectiveOutputBudget(rebuilt.req, true); budgetErr2 != nil {
 			return samplingRequest{}, budgetErr2
 		}
 		// Re-apply clipping on the recovered view.
-		if budget2, clipped2, err2 := a.effectiveOutputBudget(rebuilt.req); err2 == nil && clipped2 {
+		if budget2, clipped2, err2 := a.effectiveOutputBudget(rebuilt.req, true); err2 == nil && clipped2 {
 			rebuilt.req.MaxTokens = budget2
 		}
 		shape := a.requestCalibrationShape(rebuilt.req)

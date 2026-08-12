@@ -433,7 +433,7 @@ func TestEffectiveOutputBudgetClipsSharedWindowRequest(t *testing.T) {
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 950_000})
 	a.setPromptTokenCalibration(950_000, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
 
-	got, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: msgs})
+	got, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, true)
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestCalibratedOutputBudgetIncludesReplayedReasoning(t *testing.T) {
 	if after < before+99_000 {
 		t.Fatalf("400K replayed reasoning was not calibrated: before=%d after=%d", before, after)
 	}
-	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current})
+	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, true)
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -494,7 +494,7 @@ func TestCalibratedOutputBudgetKeepsCJKConservativeFloor(t *testing.T) {
 		t.Fatalf("calibrated estimate %d fell below mixed-script safety floor %d", calibrated, wantFloor)
 	}
 
-	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current})
+	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, true)
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -537,7 +537,7 @@ func TestCalibratedResponsesBudgetIncludesNewOrdinaryReasoning(t *testing.T) {
 	if got := a.estimatedRequestTokens(current); got < 174_000 {
 		t.Fatalf("Responses ordinary reasoning estimate = %d, want newly replayed reasoning included", got)
 	}
-	if budget, clipped, err := a.effectiveOutputBudget(current); err != nil || !clipped || budget >= prov.budget {
+	if budget, clipped, err := a.effectiveOutputBudget(current, true); err != nil || !clipped || budget >= prov.budget {
 		t.Fatalf("Responses ordinary reasoning budget = %d clipped=%v err=%v, want a clipped budget", budget, clipped, err)
 	}
 }
@@ -559,7 +559,7 @@ func TestCalibratedResponsesBudgetIncludesNewReplayItems(t *testing.T) {
 	if got := a.estimatedRequestTokens(current); got < 174_000 {
 		t.Fatalf("Responses replay-item estimate = %d, want newly replayed item included", got)
 	}
-	if budget, clipped, err := a.effectiveOutputBudget(current); err != nil || !clipped || budget >= prov.budget {
+	if budget, clipped, err := a.effectiveOutputBudget(current, true); err != nil || !clipped || budget >= prov.budget {
 		t.Fatalf("Responses replay-item budget = %d clipped=%v err=%v, want a clipped budget", budget, clipped, err)
 	}
 }
@@ -587,7 +587,7 @@ func TestEffectiveOutputBudgetUsesObservedTokensWhenCalibrationAbsent(t *testing
 	a.sess.output.outputBudget = 128 * 1024
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 858_000})
 	req := provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("code json {}[];", 500_000)}}}
-	if _, _, err := a.effectiveOutputBudget(req); err != nil {
+	if _, _, err := a.effectiveOutputBudget(req, true); err != nil {
 		t.Fatalf("effectiveOutputBudget wrongly overflowed with observed 858K prompt: %v", err)
 	}
 }
@@ -618,7 +618,7 @@ func TestEffectiveOutputBudgetRejectsExhaustedSharedWindow(t *testing.T) {
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 1_045_000})
 	a.setPromptTokenCalibration(1_045_000, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
 
-	_, _, err := a.effectiveOutputBudget(provider.Request{Messages: msgs})
+	_, _, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, true)
 	if !errors.Is(err, ErrCompactionRequired) {
 		t.Fatalf("effectiveOutputBudget error = %v, want ErrCompactionRequired", err)
 	}
@@ -629,7 +629,7 @@ func TestEffectiveOutputBudgetLeavesIndependentProviderUnchanged(t *testing.T) {
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov}, sess: sessionRuntime{output: outputBudgetState{outputBudget: prov.budget}}}
 	got, clipped, err := a.effectiveOutputBudget(provider.Request{
 		Messages: []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 950_000)}},
-	})
+	}, true)
 	if err != nil || clipped || got != 0 {
 		t.Fatalf("independent provider changed: budget=%d clipped=%v err=%v", got, clipped, err)
 	}
@@ -641,7 +641,7 @@ func TestEffectiveOutputBudgetHonorsExplicitOmit(t *testing.T) {
 	got, clipped, err := a.effectiveOutputBudget(provider.Request{
 		Messages:  []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 950_000)}},
 		MaxTokens: -1,
-	})
+	}, true)
 	if err != nil || clipped || got != 0 {
 		t.Fatalf("explicit omit changed: budget=%d clipped=%v err=%v", got, clipped, err)
 	}

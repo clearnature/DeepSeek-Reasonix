@@ -460,7 +460,9 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
 	}
-	if res.Mode == CompactionModeDegraded && mustFree {
+	if res.Mode == CompactionModeDegraded {
+		// A mechanical fold must keep user turns verbatim regardless of how
+		// the fold was triggered: "through the summary" never existed.
 		kept = a.keepDegradedUserTurnsVerbatim(msgs, head, start, kept, fold, res.Text)
 	}
 	summary, err := a.interceptCompactionComplete(ctx, res.Text)

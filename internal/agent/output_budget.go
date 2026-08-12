@@ -238,7 +238,13 @@ func isCJKRune(r rune) bool {
 
 // effectiveOutputBudget clips completion tokens at send time only; it never
 // moves compact_ratio. Exhausted windows fail locally before HTTP 400.
-func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
+// useObserved admits the last observed prompt size over the wire-char
+// estimate (fresh agents lack calibration and the 0.25 fallback inflates
+// dense sessions ~2x). It is only valid for the main request: the summarizer
+// request has its own shape (no retained tail), and reusing the main prompt
+// size there over-reports overflow (observed 2026-08-12: est 1,385,656 →
+// degraded with 98 user turns dropped), so summary calls pass false.
+func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (int, bool, error) {
 	if a == nil || a.contextWindow <= 0 || !sharesContextWindow(a.svc.prov) {
 		return 0, false, nil
 	}
@@ -250,9 +256,11 @@ func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
 	// Admission trusts the last observed prompt size over the wire-char
 	// estimate: fresh fork agents lack calibration and the 0.25 fallback
 	// inflates dense sessions ~2x, falsely reporting shared-window overflow.
-	if u := a.LastUsage(); u != nil {
-		if pt := u.LatestPromptTokens(); pt > 0 {
-			est = pt
+	if useObserved {
+		if u := a.LastUsage(); u != nil {
+			if pt := u.LatestPromptTokens(); pt > 0 {
+				est = pt
+			}
 		}
 	}
 	available := a.contextWindow - est - outputBudgetReserve
