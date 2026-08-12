@@ -236,8 +236,12 @@ func TestKeepFoldWithinSummaryBudgetKeepsVerbatim(t *testing.T) {
 			t.Fatalf("kept message %q is not verbatim overflow text", m.Content[:16])
 		}
 	}
-	if got := a.guardedSummaryInputTokens(out); got > a.summaryInputBudget(prefix, "") {
-		t.Fatalf("trimmed fold still exceeds the prefix-aware budget")
+	req := provider.Request{Messages: append(append([]provider.Message{
+		{Role: provider.RoleSystem, Content: summarySystemPrompt},
+	}, prefix...), out...)}
+	avail := a.contextWindow - outputBudgetReserve
+	if a.estimatedRequestTokens(req) > avail {
+		t.Fatalf("trimmed fold still rejected by the full-request estimate: %d > %d", a.estimatedRequestTokens(req), avail)
 	}
 }
 

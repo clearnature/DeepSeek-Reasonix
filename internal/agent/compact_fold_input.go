@@ -55,7 +55,9 @@ func (a *Agent) guardedSummaryInputTokens(msgs []provider.Message) int {
 }
 
 // summaryInputBudget is the transcript ceiling for one summarizer call.
-// Zero means the window cannot host a useful summary request.
+// The result keeps a calibrated-estimate margin (the window checks reject
+// with the ~1.3x-hotter full-request estimate). Zero means the window
+// cannot host a useful summary request.
 func (a *Agent) summaryInputBudget(prefix []provider.Message, instructions string) int {
 	if a.contextWindow <= 0 {
 		return 0
@@ -64,10 +66,10 @@ func (a *Agent) summaryInputBudget(prefix []provider.Message, instructions strin
 	if sharesContextWindow(a.svc.prov) && a.configuredOutputBudget(a.maxOutputTokens) > 0 {
 		reserve += outputBudgetReserve
 	}
-	// The summarizer request rides the main-request prefix (msgs[:head]) plus
-	// the fold; capping only the fold still overflows once a ~900k-token
-	// prefix travels along (observed 2026-08-12: est 1,002,698 → degraded).
-	prefixTokens := a.guardedSummaryInputTokens(prefix)
+	// The summarizer sends the prefix as raw messages, so the budget must
+	// use the raw ruler the window checks reject with — a rendered-transcript
+	// estimate under-sizes it ~2x (2026-08-13 06:48 degraded).
+	prefixTokens := estimateMessagesTokens(prefix)
 	budget := a.contextWindow - reserve - prefixTokens - estimateTextTokens(summarySystemPrompt) - estimateTextTokens(instructions) - 256
 	if budget < minSummarySpanTokens {
 		return 0
@@ -97,7 +99,7 @@ func (a *Agent) keepFoldWithinSummaryBudget(prefix, kept, fold []provider.Messag
 	for _, m := range kept {
 		proj += estimateMessagesTokens([]provider.Message{m})
 	}
-	for a.guardedSummaryInputTokens(fold) > budget && len(fold) > 0 {
+	for estimateMessagesTokens(fold) > budget && len(fold) > 0 {
 		m := fold[0]
 		fold = fold[1:]
 		if m.LocalOnly || isCompactionSummary(m) {
