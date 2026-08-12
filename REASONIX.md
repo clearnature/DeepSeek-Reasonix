@@ -122,6 +122,6 @@ Values `n/a`, `none`, `todo`, `tbd` are rejected — use a descriptive reason in
 
 - **前缀缓存是第一原则**：任何发送侧改动（序列化/字段/顺序/重放）先问「会不会改变前缀字节？」——会 = 破坏服务端缓存 = 用户付全价，否决或必须有缓存收益补偿。
 - **B2 小 turns 保留窗口必须按「消息位置固定」实现**（保留 `[head, head+N]` 区间），禁止「最新 N 条」动态保留——否则每次 compaction 前缀漂移、服务端缓存反复打穿。
-- **打开历史会话/recovery 恢复时先压缩再发送（C1 重放门控）**：把「赌前缀恰好命中缓存」变成「确定的小前缀 + 后续稳定命中」——重放 1.2M 前缀差一字节就是全价。
+- **C1 重放门控：打开历史会话/recovery 恢复时按缓存窗口分路**：窗口内（`cacheColdAfter()`/TTL 内，deepseek/mimo 24h、dashscope 5m）**原样暖重放**——前缀命中缓存是便宜的知识恢复（不压缩）；窗口外才 `maybeColdResumePrune` 裁剪旧 tool results——把「赌缓存」变成「窗口内确定命中 + 窗口外小前缀」。
 
 <!-- MENTAL-SEAL:END -->
