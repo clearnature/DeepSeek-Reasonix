@@ -168,7 +168,7 @@ func TestKeepIndexesKeepsSiblingToolResultsForKeptError(t *testing.T) {
 		{Role: provider.RoleTool, ToolCallID: "ok", Name: "read_file", Content: "package main"},
 	}
 
-	keep, _ := (&Agent{keepPolicy: KeepErrors}).keepIndexes(region)
+	keep, _ := (&Agent{keepPolicy: KeepErrors}).keepIndexes(region, 0, 0)
 	for i, kept := range keep {
 		if !kept {
 			t.Fatalf("keep[%d] = false, want all sibling tool-call messages kept: %v", i, keep)
@@ -186,7 +186,7 @@ func TestKeepIndexesScopesPolicyAfterLatestSummary(t *testing.T) {
 		{Role: provider.RoleTool, ToolCallID: "new", Name: "bash", Content: "error: new failure"},
 	}
 
-	keep, _ := (&Agent{keepPolicy: KeepErrors}).keepIndexes(region)
+	keep, _ := (&Agent{keepPolicy: KeepErrors}).keepIndexes(region, 0, 0)
 	want := []bool{false, false, false, true, true}
 	for i := range want {
 		if keep[i] != want[i] {
@@ -515,7 +515,7 @@ func TestInterruptedDisplayStaysOutOfCompactionPromptAndProjection(t *testing.T)
 		InterruptedTurn: &provider.InterruptedTurnRecovery{Pending: true},
 	}
 	a := &Agent{}
-	kept, fold, retention := a.partitionFoldForProjection([]provider.Message{local})
+	kept, fold, retention := a.partitionFoldForProjection([]provider.Message{local}, 0, 0)
 	if len(kept) != 0 || len(fold) != 0 {
 		t.Fatalf("compaction partition kept=%+v fold=%+v, want display-only output in neither", kept, fold)
 	}
