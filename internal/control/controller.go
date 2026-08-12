@@ -6749,10 +6749,23 @@ func (c *Controller) applyRetrieveInfo(trimmed string) {
 		c.notice("retrieve_info: query is required")
 		return
 	}
-	entry, err := builtin.RetrieveSystem(context.Background(), q)
+	start := time.Now()
+	text, res, err := builtin.RetrieveSystem(context.Background(), q)
 	if err != nil {
 		c.notice("retrieve_info failed: " + err.Error())
 		return
 	}
-	c.noticeDetail("retrieve_info: "+q, entry.AnswerSummary)
+	mode := "miss"
+	switch {
+	case res.WebBlocked:
+		mode = "blocked"
+	case res.FromCache && res.StaleServed:
+		mode = "stale"
+	case res.FromCache:
+		mode = "hit"
+	}
+	c.noticeDetail("retrieval telemetry", fmt.Sprintf(
+		"query=%s mode=%s api=%t tier=%s ms=%d chars=%d",
+		q, mode, res.APIUsed, res.Tier, time.Since(start).Milliseconds(), len(text)))
+	c.noticeDetail("retrieve_info: "+q, text)
 }

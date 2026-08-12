@@ -2,6 +2,7 @@ package stats
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -134,10 +135,151 @@ func (r *Recorder) Emit(e event.Event) {
 	if r != nil && r.writer != nil && e.Kind == event.Usage {
 		r.recordUsage(e)
 	} else if r != nil && r.writer != nil && e.Kind == event.GuardianAssessment && e.Guardian.Usage != nil {
-		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, nil, "")
+		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, nil, "", nil, 0)
 	} else if r != nil && r.writer != nil && e.Kind == event.TurnDone {
 		r.RecordTurnCompletion()
+	} else if r != nil && r.writer != nil && e.Kind == event.Notice && isCompactionTelemetry(e.Text) {
+		r.recordCompaction(e)
+	} else if r != nil && r.writer != nil && e.Kind == event.Notice && isRetrievalTelemetry(e.Text) {
+		r.recordRetrieval(e)
 	}
+}
+
+// isCompactionTelemetry matches the agent's compaction telemetry notices, so
+// every pass (success or failure, from any trigger) lands in the stats file
+// for post-hoc diagnosis even when the frontend swallows the notice.
+func isCompactionTelemetry(text string) bool {
+	return text == "compaction telemetry" || text == "compaction failed"
+}
+
+// recordCompaction parses the agent's compaction telemetry detail line
+// (trigger/mode/cache/src/proj/in/out/hit/miss/write/reqs[/err_type]) into a
+// structured record so a compaction problem can be pinned from the stats file
+// alone. Parsing is best-effort and never interrupts the event stream.
+func (r *Recorder) recordCompaction(e event.Event) {
+	if r == nil || r.dispatcher == nil {
+		return
+	}
+	rec := CompactionRecord{Trigger: "unknown", Mode: "unknown"}
+	for _, tok := range strings.Fields(e.Detail) {
+		k, v, ok := strings.Cut(tok, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "trigger":
+			rec.Trigger = v
+		case "mode":
+			rec.Mode = v
+		case "cache":
+			rec.Cache = v
+		case "provider_request_id":
+			rec.RequestID = v
+		case "err_type":
+			if i := strings.Index(e.Detail, "err_type="); i >= 0 {
+				rec.Error = strings.TrimSpace(e.Detail[i+len("err_type="):])
+			}
+			r.dispatcher.enqueue(record{
+				Timestamp:  time.Now(),
+				ModelRef:   e.ModelRef,
+				Source:     r.source,
+				Compaction: &rec,
+			})
+			return
+		case "status":
+			rec.Status = v
+		case "tpc":
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				rec.TokPerChar = f
+			}
+		default:
+			setCompactionInt(&rec, k, v)
+		}
+	}
+	r.dispatcher.enqueue(record{
+		Timestamp:  time.Now(),
+		ModelRef:   e.ModelRef,
+		Source:     r.source,
+		Compaction: &rec,
+	})
+}
+
+func setCompactionInt(rec *CompactionRecord, key, val string) {
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return
+	}
+	switch key {
+	case "src":
+		rec.SourceTok = n
+	case "proj":
+		rec.ProjTok = n
+	case "in":
+		rec.InputTok = n
+	case "out":
+		rec.OutTok = n
+	case "hit":
+		rec.HitTok = n
+	case "miss":
+		rec.MissTok = n
+	case "write":
+		rec.WriteTok = n
+	case "reqs":
+		rec.Reqs = n
+	case "results":
+		rec.Results = n
+	case "saved_chars":
+		rec.SavedChars = n
+	}
+}
+
+// isRetrievalTelemetry matches retrieval telemetry notices emitted by the
+// retrieve_info tool / /retrieve_info command, so every pass lands in the
+// stats file for post-hoc diagnosis.
+func isRetrievalTelemetry(text string) bool {
+	return text == "retrieval telemetry"
+}
+
+// recordRetrieval parses a retrieval telemetry detail line
+// (query/mode/api/tier/ms/chars) into a structured record. Best-effort; never
+// interrupts the event stream.
+func (r *Recorder) recordRetrieval(e event.Event) {
+	if r == nil || r.dispatcher == nil {
+		return
+	}
+	rec := RetrievalRecord{Mode: "unknown"}
+	chars := 0
+	for _, tok := range strings.Fields(e.Detail) {
+		k, v, ok := strings.Cut(tok, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "query":
+			rec.Query = v
+		case "mode":
+			rec.Mode = v
+		case "api":
+			rec.APIUsed = v == "true"
+		case "tier":
+			rec.Tier = v
+		case "ms":
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				rec.Ms = n
+			}
+		case "chars":
+			if n, err := strconv.Atoi(v); err == nil {
+				chars = n
+			}
+		}
+	}
+	rec.Chars = chars
+	r.dispatcher.enqueue(record{
+		Timestamp: time.Now(),
+		ModelRef:  e.ModelRef,
+		Source:    r.source,
+		Retrieval: &rec,
+	})
 }
 
 // RecordTurnCompletion records synchronous controller runs that deliberately do
@@ -222,10 +364,10 @@ func (r *Recorder) RecordDelegationAdmission(a event.DelegationAdmissionAudit) {
 }
 
 func (r *Recorder) recordUsage(e event.Event) {
-	r.recordProviderUsage(e.ModelRef, e.Usage, e.CostQuote, e.UsageSource)
+	r.recordProviderUsage(e.ModelRef, e.Usage, e.CostQuote, e.UsageSource, e.CacheDiagnostics, e.EstTokens)
 }
 
-func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, quote *billing.CostQuote, usageSource string) {
+func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, quote *billing.CostQuote, usageSource string, diag *event.CacheDiagnostics, est int) {
 	if usage == nil || (usage.TotalTokens <= 0 && usage.RequestCount <= 0) {
 		return
 	}
@@ -243,6 +385,12 @@ func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, q
 		Total:       usage.TotalTokens,
 		Requests:    usageRequestCount(usage),
 		UsageSource: strings.TrimSpace(usageSource),
+		Est:         est,
+	}
+	if diag != nil {
+		rec.PrefixHash = diag.PrefixHash
+		rec.PrefixChanged = diag.PrefixChanged
+		rec.PrefixReasons = diag.PrefixChangeReasons
 	}
 	if quote != nil {
 		rec.CostAmount = quote.Original.Amount

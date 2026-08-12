@@ -295,7 +295,9 @@ func SetSystemFetchTestHook(hook responses.FetchFunc) responses.FetchFunc {
 
 // RetrieveSystem runs the system retrieval pipeline for host commands such as
 // /retrieve_info. Tests replace the network leg via SetSystemFetchTestHook.
-func RetrieveSystem(ctx context.Context, query string) (*responses.KnowledgeEntry, error) {
+// It returns the rendered answer and the structured outcome (cache hit vs
+// paid call) so telemetry can distinguish zero-cost hits from API usage.
+func RetrieveSystem(ctx context.Context, query string) (string, *responses.RetrieveResult, error) {
 	pol := responses.DefaultPolicy()
 	pol.Approve(responses.GrantSession, time.Now())
 	res, err := responses.Retrieve(ctx, query, responses.RetrieveOptions{
@@ -303,10 +305,14 @@ func RetrieveSystem(ctx context.Context, query string) (*responses.KnowledgeEntr
 		PanicMode: true,
 	}, retrieveFetch)
 	if err != nil {
-		return nil, err
+		return "", res, err
 	}
 	if res.Entry == nil {
-		return nil, fmt.Errorf("retrieval returned no entry")
+		return "", res, fmt.Errorf("retrieval returned no entry")
 	}
-	return res.Entry, nil
+	text := res.Entry.AnswerSummary
+	if res.StaleServed {
+		text = "⚠️ " + query + "\n\n（缓存信息可能过期，标注见下文）\n" + text
+	}
+	return text, res, nil
 }
