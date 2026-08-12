@@ -69,6 +69,7 @@ func (s *captureSink) AskRequests() int {
 
 func main() {
 	grantMode := flag.String("grant", "worktree", "teammate grant mode: worktree (git worktree isolation) | path (WritePathSet path grant, shared workspace)")
+	pop := flag.Int("pop", 3, "population size: number of parallel teammates to evaluate")
 	flag.Parse()
 
 	ws := "/home/yanli/work/DeepSeek-Reasonix"
@@ -124,11 +125,15 @@ func main() {
 		}
 		return filepath.Join(ws, ".reasonix", "worktrees", n)
 	}
-	ctrl.Submit("/team-create g1 coder")
-	ctrl.Submit("/team-create g2 coder")
-	ctrl.Submit("/team-create g3 coder")
+	names := make([]string, *pop)
+	for i := range *pop {
+		names[i] = fmt.Sprintf("dev%d", i)
+	}
+	for _, n := range names {
+		ctrl.Submit("/team-create " + n + " coder")
+	}
 	time.Sleep(1 * time.Second)
-	for _, n := range []string{"g1", "g2", "g3"} {
+	for _, n := range names {
 		if *grantMode == "path" {
 			ctrl.Submit("/team-grant " + n + " " + grantDir(n))
 		} else {
@@ -138,10 +143,10 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	const task = "在 %s 完成一个冒泡排序小包（所有文件**直接放在该目录根**，不要创建任何子目录）：① 创建 order.go：实现 BubbleSort（Go 语言 package sortx，返回排序后的新切片，不修改输入）；② 创建 order_test.go：为 BubbleSort 写至少 3 个单元测试（含空切片、单元素、乱序）；③ 创建 README.md：一行说明该包用途与用法。遇到无安全默认的实现决策时，用 ask 工具向 leader 提问并按其回答继续。"
-	for _, n := range []string{"g1", "g2", "g3"} {
+	for _, n := range names {
 		ctrl.Submit(fmt.Sprintf("/team-add "+n+" "+task, grantDir(n)))
 	}
-	fmt.Printf("=== GA 种群 3 个体并行评估（grant=%s × 多文件任务 × natural ask）===\n", *grantMode)
+	fmt.Printf("=== GA 种群 %d 个体并行评估（grant=%s × 多文件任务 × natural ask）===\n", *pop, *grantMode)
 
 	lastRoster := func() string {
 		for _, v := range slices.Backward(sink.msgs) {
@@ -157,10 +162,17 @@ func main() {
 		time.Sleep(15 * time.Second)
 		ctrl.Submit("/team-status")
 		r := lastRoster()
-		if strings.Contains(r, "g1  idle") && strings.Contains(r, "g2  idle") && strings.Contains(r, "g3  idle") {
+		allIdle := true
+		for _, n := range names {
+			if !strings.Contains(r, n+"  idle") {
+				allIdle = false
+				break
+			}
+		}
+		if allIdle {
 			fmt.Println("=== 种群评估完成 ===")
 			fmt.Println(r)
-			evaluate(ws, sink, start)
+			evaluate(ws, sink, start, names)
 			return
 		}
 	}
@@ -173,13 +185,16 @@ func jsonAnswers(a []event.AskAnswer) string {
 	return string(b)
 }
 
-func evaluate(ws string, sink *captureSink, start time.Time) {
+func evaluate(ws string, sink *captureSink, start time.Time, names []string) {
 	// Fitness: produced order.go in own worktree = 1.0. AskRequest count
 	// measures autonomy; cache stats measure prefix stability (path-grant
 	// shares the workspace, so tool outputs may jitter the prefix).
 	fmt.Println("\n=== GA 适应度评估（多文件 fitness × ask 次数）===")
-	genes := map[string]string{"g1": "natural", "g2": "natural", "g3": "natural"}
-	for _, n := range []string{"g1", "g2", "g3"} {
+	genes := map[string]string{}
+	for _, n := range names {
+		genes[n] = "natural"
+	}
+	for _, n := range names {
 		dirs := []string{
 			filepath.Join(ws, ".reasonix", "worktrees", n),
 			filepath.Join(ws, ".reasonix", "ga-g4", n),
