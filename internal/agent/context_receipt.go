@@ -124,10 +124,10 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
 	t.TokPerChar = a.tokPerChar()
-	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s est=%d src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f elapsed_ms=%d reason=%s user_kept=%d user_dropped=%d pref_hash=%s",
+	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s est=%d src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f elapsed_ms=%d reason=%s user_kept=%d user_dropped=%d pref_hash=%s results=%d saved_chars=%d",
 		t.Trigger, t.Mode, t.Status, t.CacheState, t.EstTokens, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount,
-		t.TokPerChar, t.ElapsedMs, t.Reason, t.UserTurnsKept, t.UserTurnsDropped, t.PrefixHash)
+		t.TokPerChar, t.ElapsedMs, t.Reason, t.UserTurnsKept, t.UserTurnsDropped, t.PrefixHash, t.Results, t.SavedChars)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}
