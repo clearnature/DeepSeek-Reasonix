@@ -67,9 +67,13 @@ type ContextProjection struct {
 	// CoveredPrefixHash fingerprints provider-visible canonical[:CoveredCount]
 	// so append-only growth can be distinguished from prefix edits/rewrites.
 	CoveredPrefixHash string `json:"covered_prefix_hash,omitempty"`
-	SummaryHash       string `json:"summary_hash,omitempty"`
-	SourceTokens      int    `json:"source_tokens,omitempty"`
-	ProjectionTokens  int    `json:"projection_tokens,omitempty"`
+	// SemanticPrefixHash fingerprints covered non-tool messages: prune/snip
+	// only shorten tool results, so this stays stable and the projection body
+	// remains usable; real content changes invalidate it.
+	SemanticPrefixHash string `json:"semantic_prefix_hash,omitempty"`
+	SummaryHash        string `json:"summary_hash,omitempty"`
+	SourceTokens       int    `json:"source_tokens,omitempty"`
+	ProjectionTokens   int    `json:"projection_tokens,omitempty"`
 	// ViewInputHash/ViewOutputHash make free maintenance idempotent across
 	// retries and resume. They fingerprint the visible view, not canonical
 	// storage, so a projection can evolve without rewriting the transcript.
@@ -275,6 +279,23 @@ func coveredPrefixHash(msgs []provider.Message, n int) string {
 	return providerVisibleFingerprint(provider.ModelMessages(msgs[:n]))
 }
 
+// semanticPrefixHash fingerprints the non-tool messages of canonical[:n]. A
+// prune/rewrite that only shortens tool results keeps this hash stable, so the
+// projection body stays usable; real content changes invalidate it.
+func semanticPrefixHash(msgs []provider.Message, n int) string {
+	if n <= 0 || n > len(msgs) {
+		return ""
+	}
+	nonTool := make([]provider.Message, 0, n)
+	for _, m := range msgs[:n] {
+		if m.Role == provider.RoleTool {
+			continue
+		}
+		nonTool = append(nonTool, m)
+	}
+	return providerVisibleFingerprint(provider.ModelMessages(nonTool))
+}
+
 // providerVisibleFingerprint is the stable hash of fields that reach a provider.
 func providerVisibleFingerprint(msgs []provider.Message) string {
 	type wireCall struct {
@@ -362,7 +383,15 @@ func projectionContentValid(st CompactionState, msgs []provider.Message, transcr
 		return false
 	}
 	if coveredPrefixHash(msgs, n) != st.Projection.CoveredPrefixHash {
-		return false
+		// Covered content changed: keep only when non-tool messages are
+		// untouched (prune/snip shorten tool results; the summary body stays
+		// approximately valid). The next compaction rebuilds it.
+		if st.Projection.SemanticPrefixHash == "" {
+			return false
+		}
+		if semanticPrefixHash(msgs, n) != st.Projection.SemanticPrefixHash {
+			return false
+		}
 	}
 	if st.TranscriptVersion == transcriptVersion || st.Projection.TranscriptVersion == transcriptVersion {
 		return true
