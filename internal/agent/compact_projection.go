@@ -195,6 +195,7 @@ func (a *Agent) compressVisibleRange(
 	tele.ElapsedMs = time.Since(start).Milliseconds()
 	if err != nil {
 		tele.Error = err.Error()
+		tele.Status = "failed"
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
 		return tool.CompressResult{}, err
@@ -202,6 +203,7 @@ func (a *Agent) compressVisibleRange(
 	summary, err = a.interceptCompactionComplete(ctx, summary)
 	if err != nil {
 		tele.Error = err.Error()
+		tele.Status = "failed"
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
 		return tool.CompressResult{}, err
