@@ -161,6 +161,7 @@ func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, prefix, 
 func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool, prefix, fold []provider.Message, instructions string, sourceTokens int) (foldSummary, CompactionTelemetry, error) {
 	res, err := a.foldToSummary(ctx, prefix, fold, instructions)
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	tele.PrefixHash = summarizePrefixHash(prefix)
 	if err == nil {
 		return res, tele, nil
 	}
@@ -171,7 +172,18 @@ func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool
 	}
 	tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
 	tele.Error = cause
+	tele.PrefixHash = summarizePrefixHash(prefix)
 	return res, tele, nil
+}
+
+// summarizePrefixHash fingerprints the summarizer's prefix so compaction
+// passes can be compared for prefix drift (stable hash + low hit = drift).
+func summarizePrefixHash(prefix []provider.Message) string {
+	h := providerVisibleFingerprint(provider.ModelMessages(prefix))
+	if len(h) > 12 {
+		h = h[:12]
+	}
+	return h
 }
 
 // mechanicalFoldDigest stands in for a digest the summarizer could not produce.

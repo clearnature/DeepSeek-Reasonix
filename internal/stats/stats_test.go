@@ -735,3 +735,28 @@ func TestRecorderWritesResumeTelemetry(t *testing.T) {
 		t.Fatalf("resume record = %+v", got.Resume)
 	}
 }
+
+func TestRecorderWritesCompactionPrefHash(t *testing.T) {
+	dir := t.TempDir()
+	r := NewRecorder(&spySink{}, dir, "desktop")
+	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry",
+		Detail: "trigger=pressure mode=summarized status=installed cache=warm src=1000 fold=200 spans=1 proj=300 in=400 out=50 hit=10 miss=390 write=0 reqs=1 tpc=0.25 reason=fold user_kept=2 user_dropped=1 pref_hash=abc123def456"})
+	flushRecorder(t, r)
+	files := dailyJSONLFiles(t, dir)
+	data, err := os.ReadFile(filepath.Join(dir, files[0].Name()))
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	var got struct {
+		Compaction *CompactionRecord `json:"compaction"`
+	}
+	if err := json.Unmarshal([]byte(data), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Compaction == nil || got.Compaction.PrefHash != "abc123def456" {
+		t.Fatalf("pref_hash not parsed: %+v", got.Compaction)
+	}
+	if got.Compaction.UserKept != 2 || got.Compaction.UserDrop != 1 {
+		t.Fatalf("user turn fields: %+v", got.Compaction)
+	}
+}

@@ -163,6 +163,10 @@ type CompactionTelemetry struct {
 	CacheHitTokens    int    `json:"cache_hit_tokens"`
 	CacheMissTokens   int    `json:"cache_miss_tokens"`
 	CacheWriteTokens  int    `json:"cache_write_tokens"`
+	// PrefixHash fingerprints the summarizer's prefix (msgs[:head]) so two
+	// compaction passes can be compared: a stable hash with low hit rate means
+	// the provider never saw those bytes (prefix drift), not TTL expiry.
+	PrefixHash string `json:"prefix_hash,omitempty"`
 	RequestCount      int    `json:"request_count"`
 	ProviderRequestID string `json:"provider_request_id,omitempty"`
 	Error             string `json:"error,omitempty"`

@@ -129,6 +129,7 @@ type CompactionRecord struct {
 	SavedChars int     `json:"saved_chars,omitempty"`
 	UserKept   int     `json:"user_kept,omitempty"`
 	UserDrop   int     `json:"user_dropped,omitempty"`
+	PrefHash   string  `json:"pref_hash,omitempty"`
 	Status     string  `json:"status,omitempty"`
 	TokPerChar float64 `json:"tpc,omitempty"`
 	RequestID  string  `json:"provider_request_id,omitempty"`
