@@ -454,7 +454,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	if res.Mode == CompactionModeDegraded {
 		// A mechanical fold must keep user turns verbatim regardless of how
 		// the fold was triggered: "through the summary" never existed.
-		kept = a.keepDegradedUserTurnsVerbatim(msgs, head, start, kept, fold, res.Text)
+		kept = a.keepDegradedUserTurnsVerbatim(msgs, head, start, kept, fold, res.Text, &retention)
 	}
 	summary, err := a.interceptCompactionComplete(ctx, res.Text)
 	if err != nil {
@@ -623,7 +623,7 @@ func (a *Agent) runCompactionSummary(ctx context.Context, prefix, fold []provide
 // fold had no real summary — they must not survive "through the summary" that
 // never existed. The candidate stays under the trigger ceiling or it would be
 // rejected and re-trigger every turn; newest first, as many as fit.
-func (a *Agent) keepDegradedUserTurnsVerbatim(msgs []provider.Message, head, start int, kept, fold []provider.Message, summary string) []provider.Message {
+func (a *Agent) keepDegradedUserTurnsVerbatim(msgs []provider.Message, head, start int, kept, fold []provider.Message, summary string, retention *userTurnRetention) []provider.Message {
 	cap := a.compactTrigger()
 	proj := estimateMessagesTokens(msgs[:head]) + estimateMessagesTokens(msgs[start:]) + estimateTextTokens(summary)
 	for _, m := range kept {
@@ -639,6 +639,15 @@ func (a *Agent) keepDegradedUserTurnsVerbatim(msgs []provider.Message, head, sta
 		}
 		kept = append(kept, a.keptForProjection(m))
 		proj += extra
+		if retention != nil && retention.Dropped > 0 {
+			// A mechanical fold keeps the turn verbatim; it is no longer a
+			// summary-only survivor, so the dropped bookkeeping must follow.
+			retention.Dropped--
+			retention.DroppedTokens -= fixedTokenEstimate(m)
+			if retention.DroppedTokens < 0 {
+				retention.DroppedTokens = 0
+			}
+		}
 	}
 	return kept
 }

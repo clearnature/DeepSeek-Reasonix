@@ -232,6 +232,10 @@ func setCompactionInt(rec *CompactionRecord, key, val string) {
 		rec.Results = n
 	case "saved_chars":
 		rec.SavedChars = n
+	case "user_kept":
+		rec.UserKept = n
+	case "user_dropped":
+		rec.UserDrop = n
 	}
 }
 
