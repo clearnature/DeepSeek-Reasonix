@@ -117,6 +117,7 @@ type CompactionRecord struct {
 	Trigger    string  `json:"trigger,omitempty"`
 	Mode       string  `json:"mode,omitempty"`
 	Cache      string  `json:"cache,omitempty"`
+	EstTok     int     `json:"est_tokens,omitempty"` // decision estimate that crossed the trigger
 	SourceTok  int     `json:"src,omitempty"`
 	ProjTok    int     `json:"proj,omitempty"`
 	InputTok   int     `json:"in,omitempty"`

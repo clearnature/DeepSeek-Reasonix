@@ -207,6 +207,57 @@ func estimateTextTokens(s string) int {
 	return byBytes
 }
 
+// estimateTextTokensOfficial applies DeepSeek's published char-to-token ratios
+// (1 CJK char ≈ 0.6 token, 1 ASCII char ≈ 0.3 token) so the decision estimate
+// does not over-trigger compaction on CJK/dense sessions (8/13: 316K real
+// prompt estimated ≥850K by the conservative fallback).
+func estimateTextTokensOfficial(s string) int {
+	if s == "" {
+		return 0
+	}
+	cjk, ascii := 0, 0
+	for _, r := range s {
+		switch {
+		case r >= 0x4E00 && r <= 0x9FFF, // CJK unified ideographs
+			r >= 0x3400 && r <= 0x4DBF, // extension A
+			r >= 0x3000 && r <= 0x30FF, // CJK punct + kana
+			r >= 0xFF00 && r <= 0xFFEF: // fullwidth forms
+			cjk++
+		default:
+			ascii++
+		}
+	}
+	// 0.6 token per CJK rune, 0.3 per other rune; ceil to whole tokens.
+	return (cjk*6 + ascii*3 + 9) / 10
+}
+
+// officialMessagesTokens is estimateMessagesTokens with the official char
+// ratios; used only by the decision estimate so CJK sessions do not
+// over-trigger (the reject path keeps the conservative shape).
+func officialMessagesTokens(msgs []provider.Message) int {
+	total := 0
+	for _, m := range msgs {
+		if m.LocalOnly {
+			continue
+		}
+		total += 4
+		total += estimateTextTokensOfficial(m.Content)
+		total += estimateTextTokensOfficial(m.ReasoningContent)
+		total += estimateTextTokensOfficial(m.Name)
+		total += estimateTextTokensOfficial(m.ToolCallID)
+		for _, tc := range m.ToolCalls {
+			total += 8
+			total += estimateTextTokensOfficial(tc.ID)
+			total += estimateTextTokensOfficial(tc.Name)
+			total += estimateTextTokensOfficial(tc.Arguments)
+		}
+		for _, item := range m.ResponsesItems {
+			total += estimateTextTokensOfficial(string(item))
+		}
+	}
+	return total
+}
+
 // SummarizeFrom keeps the compatibility index contract while installing a
 // projection that compresses from that user-turn boundary onward.
 func (a *Agent) SummarizeFrom(ctx context.Context, fromIdx int) error {
@@ -694,6 +745,7 @@ func (a *Agent) silentCompactionTelemetry(trigger string, canonical []provider.M
 		Reason:       a.lastFoldReason,
 		CacheState:   a.CacheState(),
 		Mode:         CompactionModeSummarized,
+		EstTokens:    a.decisionEstimateTokens(),
 		SourceTokens: a.estimatedPromptTokens(canonical),
 		TokPerChar:   a.tokPerChar(),
 	}

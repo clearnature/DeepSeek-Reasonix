@@ -189,7 +189,7 @@ func (a *Agent) compressVisibleRange(
 
 	res, err := a.foldToSummary(ctx, snap.visible[:plan.firstFold], prepared.fold, prepared.instructions)
 	summary := res.Text
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, a.decisionEstimateTokens(), res)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -345,9 +345,10 @@ func buildVisibleCompressionProjection(visible []provider.Message, plan visibleC
 	return provider.ModelMessages(projection)
 }
 
-func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary) CompactionTelemetry {
+func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens, estTokens int, res foldSummary) CompactionTelemetry {
 	tele := CompactionTelemetry{
 		Trigger: trigger, CacheState: cacheState, Mode: res.Mode,
+		EstTokens:         estTokens,
 		SourceTokens:      sourceTokens,
 		ProviderRequestID: res.RequestID,
 		FoldTokens:        res.FoldTokens,

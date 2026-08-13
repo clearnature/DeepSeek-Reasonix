@@ -152,6 +152,7 @@ type CompactionTelemetry struct {
 	SavedChars       int    `json:"saved_chars,omitempty"`
 	Mode             string `json:"mode"`
 	Native           bool   `json:"native"`
+	EstTokens        int    `json:"est_tokens"`      // decision estimate that crossed the fold trigger
 	SourceTokens     int    `json:"source_tokens"`
 	FoldTokens       int    `json:"fold_tokens"` // summarizer input after any shortening
 	Spans            int    `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split

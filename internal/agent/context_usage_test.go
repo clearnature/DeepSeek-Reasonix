@@ -156,13 +156,22 @@ func TestContextUsedTokensFollowsTheTranscript(t *testing.T) {
 
 func TestEstimatedVisibleRequestTokensLanguageAwareFallback(t *testing.T) {
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024}}
-	// Compact CJK: the 0.25 wire-char fallback under-sizes ~4x (1 rune ≈ 1
-	// token); the message-level language-aware estimate must win so an
-	// over-window resume replay folds before the first send.
+	// Official CJK ratio (0.6/rune) must win for an over-window resume replay
+	// without the 1.0 over-count that mis-triggered compaction (8/13).
 	content := strings.Repeat("压缩上下文超窗重放诊断测试", 1000) // 13000 runes
 	visible := []provider.Message{{Role: provider.RoleUser, Content: content}}
 	est := a.estimatedVisibleRequestTokens(visible)
-	if est < 12000 {
-		t.Fatalf("language-aware fallback not applied: est=%d want >= 12000", est)
+	if est < 7000 || est > 9000 { // official CJK ≈ 0.6 × 13000 = 7800
+		t.Fatalf("language-aware fallback wrong: est=%d want ~7800", est)
+	}
+}
+
+func TestEstimateTextTokensOfficialRatios(t *testing.T) {
+	// 10 CJK runes ≈ 6 tokens; 10 ASCII runes ≈ 3 tokens.
+	if got := estimateTextTokensOfficial("一二三四五六七八九十"); got != 6 {
+		t.Fatalf("CJK ratio: got %d want 6 (10 runes × 0.6)", got)
+	}
+	if got := estimateTextTokensOfficial("abcdefghij"); got != 3 {
+		t.Fatalf("ASCII ratio: got %d want 3 (10 runes × 0.3)", got)
 	}
 }

@@ -160,7 +160,7 @@ func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, prefix, 
 // always reports the original failure, even when the fold recovered from it.
 func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool, prefix, fold []provider.Message, instructions string, sourceTokens int) (foldSummary, CompactionTelemetry, error) {
 	res, err := a.foldToSummary(ctx, prefix, fold, instructions)
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, a.decisionEstimateTokens(), res)
 	tele.PrefixHash = summarizePrefixHash(prefix)
 	if err == nil {
 		return res, tele, nil
@@ -170,7 +170,7 @@ func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool
 		tele.Error = cause
 		return res, tele, err
 	}
-	tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, a.decisionEstimateTokens(), res)
 	tele.Error = cause
 	tele.PrefixHash = summarizePrefixHash(prefix)
 	return res, tele, nil

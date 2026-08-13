@@ -201,6 +201,12 @@ func (m ContextManager) currentPrepared() PreparedContext {
 // estimatedVisibleRequestTokens sizes the pre-interceptor sampling shape:
 // ModelMessages + role projection + tool schemas. Extension interceptors are
 // intentionally omitted here (see prepareOnce) to avoid double side effects.
+// decisionEstimateTokens is the estimate that crosses the fold trigger in
+// Prepare; recorded so a pass can be audited against the actual prompt.
+func (a *Agent) decisionEstimateTokens() int {
+	return a.estimatedVisibleRequestTokens(a.modelVisibleMessages())
+}
+
 func (a *Agent) estimatedVisibleRequestTokens(visible []provider.Message) int {
 	if a == nil {
 		return 0
@@ -223,13 +229,12 @@ func (a *Agent) estimatedVisibleRequestTokens(visible []provider.Message) int {
 	if calibrated, ok := a.calibratedPromptTokens(shape); ok {
 		return calibrated
 	}
-	// No calibration yet (fresh fork or resume first turn): the 0.25 fallback
-	// under-sizes compact CJK sessions ~4x. A message-level estimate is a safe
-	// floor only when CJK is present (ASCII counts 1 rune/token there too).
+	// No calibration yet (fresh fork or resume first turn): the 0.25 wire-char
+	// fallback under-sizes CJK (0.25 × 3-byte runes = phantom 0.75/rune). Use
+	// official ratios (CJK 0.6, ASCII 0.3); 1.0 mis-triggered 8/13 (316K est
+	// ≥ 850K).
 	if containsCJKText(msgs) {
-		if msgEst := estimateMessagesTokens(msgs); msgEst > int(float64(shape.requestChars)*fallbackTokPerChar) {
-			return msgEst
-		}
+		return officialMessagesTokens(msgs)
 	}
 	return a.estimatedRequestTokens(req)
 }

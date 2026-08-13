@@ -214,6 +214,8 @@ func setCompactionInt(rec *CompactionRecord, key, val string) {
 		return
 	}
 	switch key {
+	case "est_tokens":
+		rec.EstTok = n
 	case "src":
 		rec.SourceTok = n
 	case "proj":
