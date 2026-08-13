@@ -87,6 +87,7 @@ func (a *Agent) keptUserTurnsBudget(projBase, projCap int) int {
 // noticeDroppedUserTurns reports the turns the budget could not hold. Without
 // it the drop is invisible: the projection reads as complete, and the escape
 // hatch is only useful to someone told it exists at the moment it is needed.
+// "Folded" not "dropped": the turns are summarised, not lost.
 func (a *Agent) noticeDroppedUserTurns(ret userTurnRetention) {
 	if ret.Dropped == 0 {
 		return
@@ -94,7 +95,7 @@ func (a *Agent) noticeDroppedUserTurns(ret userTurnRetention) {
 	a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn,
 		Text: fmt.Sprintf("%s of yours %s too large to keep whole and now survive only through the summary. Prefix a turn with [[keep]] to hold it verbatim.",
 			pluralTurns(ret.Dropped), wereOrWas(ret.Dropped)),
-		Detail: fmt.Sprintf("compaction dropped %d user turn(s) (~%d tokens) past the retention budget of %d",
+		Detail: fmt.Sprintf("compaction folded %d user turn(s) (~%d tokens) into the summary; retention budget is %d",
 			ret.Dropped, ret.DroppedTokens, a.keptUserTurnsBudget(0, 0))})
 }
 
