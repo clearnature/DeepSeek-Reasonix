@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
@@ -159,8 +160,10 @@ func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, prefix, 
 // converts a summarizer failure into a mechanical one. The telemetry it returns
 // always reports the original failure, even when the fold recovered from it.
 func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool, prefix, fold []provider.Message, instructions string, sourceTokens int) (foldSummary, CompactionTelemetry, error) {
+	start := time.Now()
 	res, err := a.foldToSummary(ctx, prefix, fold, instructions)
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, a.decisionEstimateTokens(), res)
+	tele.ElapsedMs = time.Since(start).Milliseconds()
 	tele.PrefixHash = summarizePrefixHash(prefix)
 	if err == nil {
 		return res, tele, nil
@@ -172,6 +175,7 @@ func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool
 	}
 	tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, a.decisionEstimateTokens(), res)
 	tele.Error = cause
+	tele.ElapsedMs = time.Since(start).Milliseconds()
 	tele.PrefixHash = summarizePrefixHash(prefix)
 	return res, tele, nil
 }
