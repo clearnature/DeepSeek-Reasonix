@@ -291,6 +291,30 @@ canonical transcript（只增不减，永久事实源）
 4. **响应侧缓存验证**（CCB 分析唯一实质差距）：DeepSeek `prompt_cache_hit_tokens` 已在 Usage，只差判定逻辑（>5% 且 ≥2000 tokens 记录不告警）——待真实会话验证 token 语义后实施。
 5. **#8030/#8031 增量 arm 默认关闭**：carried digests 保真（70/71）与前缀 append 是加分项，但上游保持 full-fold 默认——本地如需默认启用需在 ablation 层决策。
 
+## 六b、摘要调用开销实证（2026-08-13 数据闭环）
+
+**现象**：摘要调用（summarize）命中率长期 3-10%（9 次/1.96M 输入/¥2.39）——一度误判为 prefix 漂移/TTL 过期。
+
+**判定过程（遥测 + 服务端数据双源验证）**：
+1. `pref_hash` 指纹落盘（`739253b0f`）：三样本（10:26/10:30/11:30）**完全一致（8ff12faef6b0）**——prefix 字节稳定，**漂移排除**；
+2. 命中率差异的**结构归因**：10:26 全量折叠（fold=165K）3.3% vs 10:30 增量折叠（fold≈0）99.4%——**低命中 = fold 区（从未发送的新内容）的必然 miss**，不是 prefix 问题；
+3. 服务端 amount 数据（8/13，按小时）：主请求全天 97.9% 命中；miss 成本 ¥3.25/天，**摘要+写放大占 >50%**；miss 高峰集中在"重放→全量折叠"事件（07:00 ¥0.97、10:00 ¥0.56），稳态时段（09:00）几乎为零。
+
+**根因与修复**：
+- **全量折叠根因**：重放后投影失效 → 首轮折叠走全量。失效候选机制 = 版本计数漂移（事件日志重放不还原内存计数器）+ 尚未 append（n == len）→ `projectionContentValid` 的 append-only 分支（`n < len(msgs)`）拒绝；
+- **修复（6158a6317）**：covered 前缀哈希已验证后，版本漂移不再单独使投影失效（哈希 fail-closed 保持——内容改写仍失配重算）。
+
+**验证（修复后 11:30 样本）**：
+```
+trigger=pressure mode=summarized status=installed cache=warm
+src=290,056 fold=21,583（增量） spans=1 proj=274,729
+in=34,968 hit=13,184 miss=21,784 write=0
+user_kept=131 user_dropped=0 pref_hash=8ff12faef6b0
+```
+- fold 165K→21.6K（↓7.6 倍）；prefix 命中 98.5%；miss 成本 ¥0.18→¥0.022/次（↓8 倍）；零丢弃、零重写。
+
+**成本规律（可复用判据）**：miss 成本集中在"重放→全量折叠"事件；稳态增量折叠 ≈ 0。诊断顺序：先 `pref_hash` 自对比（排除漂移）→ 再按 fold 大小归因（fold≈miss 即"新增内容必然 miss"，非缺陷）。
+
 ## 七、时间线
 
 | 日期 | 事件 |
