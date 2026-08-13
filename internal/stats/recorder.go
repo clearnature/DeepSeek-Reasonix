@@ -142,6 +142,8 @@ func (r *Recorder) Emit(e event.Event) {
 		r.recordCompaction(e)
 	} else if r != nil && r.writer != nil && e.Kind == event.Notice && isRetrievalTelemetry(e.Text) {
 		r.recordRetrieval(e)
+	} else if r != nil && r.writer != nil && e.Kind == event.Notice && isResumeTelemetry(e.Text) {
+		r.recordResume(e)
 	}
 }
 
@@ -238,6 +240,45 @@ func setCompactionInt(rec *CompactionRecord, key, val string) {
 // stats file for post-hoc diagnosis.
 func isRetrievalTelemetry(text string) bool {
 	return text == "retrieval telemetry"
+}
+
+// isResumeTelemetry matches the C1 resume-gate notices so every historical
+// session reopen lands in the stats file with its cache-warmth decision.
+func isResumeTelemetry(text string) bool {
+	return text == "resume telemetry"
+}
+
+// recordResume parses a resume telemetry detail line
+// (path/state/idle_min/decision). Best-effort; never interrupts the stream.
+func (r *Recorder) recordResume(e event.Event) {
+	if r == nil || r.dispatcher == nil {
+		return
+	}
+	rec := ResumeRecord{State: "unknown", Decision: "replay"}
+	for _, tok := range strings.Fields(e.Detail) {
+		k, v, ok := strings.Cut(tok, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "path":
+			rec.Path = v
+		case "state":
+			rec.State = v
+		case "idle_min":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.IdleMin = n
+			}
+		case "decision":
+			rec.Decision = v
+		}
+	}
+	r.dispatcher.enqueue(record{
+		Timestamp: time.Now(),
+		ModelRef:  e.ModelRef,
+		Source:    r.source,
+		Resume:    &rec,
+	})
 }
 
 // recordRetrieval parses a retrieval telemetry detail line

@@ -61,6 +61,9 @@ type record struct {
 	// Retrieval records one retrieval pass (retrieve_info): how it resolved and
 	// whether it cost an API call.
 	Retrieval *RetrievalRecord `json:"retrieval,omitempty"`
+	// Resume records one session-resume gate decision (C1): how warm the
+	// provider cache was and what the replay did with the history.
+	Resume *ResumeRecord `json:"resume,omitempty"`
 	// Cost quote fields (additive; older readers ignore them).
 	UsageSource        string   `json:"usage_source,omitempty"`
 	CostAmount         string   `json:"cost_amount,omitempty"`     // original amount decimal
@@ -99,6 +102,15 @@ type RetrievalRecord struct {
 	Tier    string `json:"tier,omitempty"`
 	Ms      int64  `json:"ms,omitempty"`
 	Chars   int    `json:"chars,omitempty"`
+}
+
+// ResumeRecord is one C1 resume-gate decision: the provider-cache warmth
+// seen when a historical session was reopened, and what the replay did.
+type ResumeRecord struct {
+	Path     string `json:"path,omitempty"`
+	State    string `json:"state,omitempty"` // warm | cold | unknown
+	IdleMin  int    `json:"idle_min,omitempty"`
+	Decision string `json:"decision,omitempty"` // replay | record-only
 }
 
 type CompactionRecord struct {

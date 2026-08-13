@@ -702,3 +702,36 @@ func TestRecorderPersistsRetrievalTelemetry(t *testing.T) {
 		t.Fatalf("retrieval row = %+v", r)
 	}
 }
+
+func TestRecorderWritesResumeTelemetry(t *testing.T) {
+	dir := t.TempDir()
+	r := NewRecorder(&spySink{}, dir, "desktop")
+	r.Emit(event.Event{Kind: event.Notice, Text: "resume telemetry",
+		Detail: "path=/tmp/sess.jsonl state=cold idle_min=1530 decision=replay"})
+	flushRecorder(t, r)
+	files := dailyJSONLFiles(t, dir)
+	if len(files) != 1 {
+		t.Fatalf("want 1 daily file, got %d", len(files))
+	}
+	data, err := os.ReadFile(filepath.Join(dir, files[0].Name()))
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	var got struct {
+		Resume *ResumeRecord `json:"resume"`
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.Contains(line, "resume") {
+			if err := json.Unmarshal([]byte(line), &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			break
+		}
+	}
+	if got.Resume == nil {
+		t.Fatalf("no resume row in daily file: %s", data)
+	}
+	if got.Resume.State != "cold" || got.Resume.IdleMin != 1530 || got.Resume.Decision != "replay" || got.Resume.Path != "/tmp/sess.jsonl" {
+		t.Fatalf("resume record = %+v", got.Resume)
+	}
+}
