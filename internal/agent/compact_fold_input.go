@@ -42,17 +42,17 @@ func summaryInputTokens(msgs []provider.Message) int {
 	return estimateTextTokens(renderTranscript(msgs))
 }
 
-// guardedSummaryInputTokens uses the same calibrated/conservative estimator as
-// shared-window output clipping. Other providers retain the rendered-transcript
-// estimate.
+// guardedSummaryInputTokens sizes what the summarizer request actually sends:
+// the real message list (tool-call arguments in full), not the flattened
+// transcript whose summarizeToolArgs truncates them — 8/13: a fold shortened
+// to the rendered budget still sent ~1.9M tokens and was rejected by the
+// window check.
 func (a *Agent) guardedSummaryInputTokens(msgs []provider.Message) int {
 	raw := summaryInputTokens(msgs)
 	if !sharesContextWindow(a.svc.prov) || a.configuredOutputBudget(a.maxOutputTokens) <= 0 || len(msgs) == 0 {
 		return raw
 	}
-	return a.estimatedPromptTokens([]provider.Message{{
-		Role: provider.RoleUser, Content: renderTranscript(msgs),
-	}})
+	return a.estimatedPromptTokens(msgs)
 }
 
 // summaryInputBudget is the transcript ceiling for one summarizer call.

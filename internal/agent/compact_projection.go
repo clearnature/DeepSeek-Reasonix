@@ -503,7 +503,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 
 // visibleInputForFold prefers the prior projection + new history over full canonical.
 func (a *Agent) visibleInputForFold(state CompactionState, canonical []provider.Message, transcriptVersion uint64) []provider.Message {
-	if projectionValid(state, canonical, transcriptVersion, a.currentPromptCacheKey()) {
+	if a.projectionUsable(state, canonical, transcriptVersion) {
 		if projected := modelVisibleFromProjection(state.Projection, canonical); len(projected) > 0 {
 			return projected
 		}

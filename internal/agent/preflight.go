@@ -24,12 +24,28 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
-	if projectionValid(st, msgs, version, a.currentPromptCacheKey()) {
+	if a.projectionUsable(st, msgs, version) {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
 	}
 	return msgs
+}
+
+// projectionUsable requires the projection to validate and fit the window:
+// a full-history projection that already overflows the physical ceiling (a
+// prune/snip rebuilt one, 8/13: 7.2K messages ≈ 2.2M) must not be sent; it
+// falls back to canonical so the request path folds it down.
+func (a *Agent) projectionUsable(st CompactionState, msgs []provider.Message, version uint64) bool {
+	if !projectionValid(st, msgs, version, a.currentPromptCacheKey()) {
+		return false
+	}
+	if a.contextWindow > 0 && sharesContextWindow(a.svc.prov) {
+		if est := estimateMessagesTokens(provider.ModelMessages(st.Projection.Messages)); est >= a.hardInputCeiling() {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *Agent) currentProjectionVersion() uint64 {
@@ -143,10 +159,10 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		msgs, version = a.sess.conversation.snapshotMessagesVersion()
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, version, key)
-	// Fail closed only when the transcript is present: a resume binding the
-	// sidecar before the conversation loaded must not drop a valid projection;
-	// modelVisible re-validates once the transcript is available.
-	if !valid && len(st.Projection.Messages) > 0 && len(msgs) > 0 {
+	// Fail closed only when the transcript can judge the covered prefix: a
+	// resume binding the sidecar before the conversation loaded (or with a
+	// partial UI slice) keeps the projection; modelVisible re-validates.
+	if !valid && len(st.Projection.Messages) > 0 && len(msgs) >= st.Projection.CoveredCount {
 		// Keep blocked receipts / telemetry; drop unusable projection body.
 		st.Projection = ContextProjection{}
 	}

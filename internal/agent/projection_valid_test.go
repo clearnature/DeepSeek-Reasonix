@@ -156,6 +156,8 @@ func TestLoadProjectionSidecarKeepsBodyWithoutTranscript(t *testing.T) {
 	msgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
 		{Role: provider.RoleUser, Content: "task"},
+		{Role: provider.RoleAssistant, Content: "a1"},
+		{Role: provider.RoleUser, Content: "q2"},
 	}
 	if err := SaveCompactionState(path, CompactionState{
 		SchemaVersion:     compactionStateSchemaV1,
@@ -163,22 +165,63 @@ func TestLoadProjectionSidecarKeepsBodyWithoutTranscript(t *testing.T) {
 		TranscriptVersion: 1,
 		Projection: ContextProjection{
 			Messages:          []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
-			CoveredCount:      2,
-			CoveredPrefixHash: coveredPrefixHash(msgs, 2),
+			CoveredCount:      4,
+			CoveredPrefixHash: coveredPrefixHash(msgs, 4),
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Transcript entirely missing: keep the projection body.
 	a := &Agent{agentConfig: agentConfig{workspaceID: "ws", modelRef: "this-model"}, sess: sessionRuntime{}}
 	a.LoadProjectionSidecar(path)
 	if len(a.sess.compactionState.Projection.Messages) == 0 {
 		t.Fatal("projection body dropped when transcript was not loaded yet")
 	}
-	// Once the real transcript is attached the projection is usable again.
+	// Partial UI-provided slice (resumeWithFreshSystemPrompt fallback path):
+	// shorter than CoveredCount, so it cannot judge the covered prefix —
+	// keep the projection instead of dropping it.
+	partial := &Agent{agentConfig: agentConfig{workspaceID: "ws", modelRef: "this-model"}, sess: sessionRuntime{}}
+	partial.sess.conversation = NewSession("sys")
+	partial.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: "task"})
+	partial.LoadProjectionSidecar(path)
+	if len(partial.sess.compactionState.Projection.Messages) == 0 {
+		t.Fatal("projection body dropped when transcript was only partially loaded")
+	}
+	// Once the full transcript is attached the projection is usable again.
 	a.sess.conversation = NewSession("sys")
-	a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: "task"})
+	for _, m := range msgs[1:] {
+		a.sess.conversation.Add(m)
+	}
 	if vis := a.modelVisibleMessages(); len(vis) != 1 || vis[0].Content != "summary" {
 		t.Fatalf("modelVisible after transcript attach = %+v, want the projection", vis)
+	}
+}
+
+// TestProjectionUsableRejectsOverflowingBody pins the window-fit guard: a
+// projection whose body alone overflows the physical ceiling (a prune/snip
+// rebuilt full-history one) must not be sent — modelVisible falls back to
+// canonical so the request path folds it down (8/13: 7.2K messages ≈ 2.2M).
+func TestProjectionUsableRejectsOverflowingBody(t *testing.T) {
+	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true}
+	huge := provider.Message{Role: provider.RoleUser, Content: strings.Repeat("字", 400_000)} // 1.2M bytes CJK
+	projMsgs := []provider.Message{huge, huge, huge}                                         // ≈ 3.6M bytes
+	sess := &Session{Messages: append([]provider.Message{{Role: provider.RoleSystem, Content: "sys"}}, projMsgs...)}
+	a := New(prov, tool.NewRegistry(), sess, Options{
+		SessionPath:   filepath.Join(t.TempDir(), "s.jsonl"),
+		ContextWindow: 1_048_576,
+		WorkspaceID:   "ws",
+		ModelRef:      "m",
+	}, event.Discard)
+	a.sess.compactionState.Projection = ContextProjection{
+		Messages:          projMsgs,
+		CoveredCount:      3,
+		CoveredPrefixHash: coveredPrefixHash(sess.Messages, 3),
+	}
+	if a.projectionUsable(a.sess.compactionState, sess.Messages, 0) {
+		t.Fatal("overflowing projection body accepted as usable")
+	}
+	if vis := a.modelVisibleMessages(); len(vis) != 4 {
+		t.Fatalf("modelVisible = %d messages, want canonical fallback (4)", len(vis))
 	}
 }
 
