@@ -285,3 +285,31 @@ func TestCompactInstallsCoveredPrefixHash(t *testing.T) {
 		t.Fatal("fresh projection should validate")
 	}
 }
+
+// TestProjectionContentValidVersionDriftSamePrefix pins the resume-after-replay
+// case: covered prefix bytes identical but the version counter drifted (event
+// replay does not restore it). With no append (n == len) the projection must
+// stay valid so the first turn folds incrementally (8/13: full fold 3.3% hit
+// vs incremental 99.4%).
+func TestProjectionContentValidVersionDriftSamePrefix(t *testing.T) {
+	msgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "task"},
+		{Role: provider.RoleAssistant, Content: "plan"},
+		{Role: provider.RoleUser, Content: "continue"},
+	}
+	n := len(msgs)
+	st := CompactionState{
+		TranscriptVersion: 1, // persisted before the restart
+		Projection: ContextProjection{
+			CoveredCount:      n,
+			CoveredPrefixHash: coveredPrefixHash(msgs, n),
+			Messages:          msgs,
+		},
+	}
+	// Version drifted (in-memory counter started at 2 after reload) but the
+	// covered prefix is byte-identical and nothing was appended.
+	if !projectionContentValid(st, msgs, 2) {
+		t.Fatalf("version drift with identical covered prefix must keep the projection valid")
+	}
+}

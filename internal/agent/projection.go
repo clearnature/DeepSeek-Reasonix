@@ -148,25 +148,25 @@ type CompactionTelemetry struct {
 	TokPerChar float64 `json:"tpc,omitempty"`    // usage-calibrated token/char at fold time; 0 until calibrated
 	// Results/SavedChars describe a prune/snip pass (mode=snip): how many stale
 	// tool results were elided and roughly how many characters were saved.
-	Results           int    `json:"results,omitempty"`
-	SavedChars        int    `json:"saved_chars,omitempty"`
-	Mode              string `json:"mode"`
-	Native            bool   `json:"native"`
-	SourceTokens      int    `json:"source_tokens"`
-	FoldTokens        int    `json:"fold_tokens"` // summarizer input after any shortening
-	Spans             int    `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split
-	ProjectionTokens  int    `json:"projection_tokens"`
-	UserTurnsKept     int    `json:"user_turns_kept"`
-	UserTurnsDropped  int    `json:"user_turns_dropped"` // past the retention budget, now summary-only
-	InputTokens       int    `json:"input_tokens"`
-	OutputTokens      int    `json:"output_tokens"`
-	CacheHitTokens    int    `json:"cache_hit_tokens"`
-	CacheMissTokens   int    `json:"cache_miss_tokens"`
-	CacheWriteTokens  int    `json:"cache_write_tokens"`
+	Results          int    `json:"results,omitempty"`
+	SavedChars       int    `json:"saved_chars,omitempty"`
+	Mode             string `json:"mode"`
+	Native           bool   `json:"native"`
+	SourceTokens     int    `json:"source_tokens"`
+	FoldTokens       int    `json:"fold_tokens"` // summarizer input after any shortening
+	Spans            int    `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split
+	ProjectionTokens int    `json:"projection_tokens"`
+	UserTurnsKept    int    `json:"user_turns_kept"`
+	UserTurnsDropped int    `json:"user_turns_dropped"` // past the retention budget, now summary-only
+	InputTokens      int    `json:"input_tokens"`
+	OutputTokens     int    `json:"output_tokens"`
+	CacheHitTokens   int    `json:"cache_hit_tokens"`
+	CacheMissTokens  int    `json:"cache_miss_tokens"`
+	CacheWriteTokens int    `json:"cache_write_tokens"`
 	// PrefixHash fingerprints the summarizer's prefix (msgs[:head]) so two
 	// compaction passes can be compared: a stable hash with low hit rate means
 	// the provider never saw those bytes (prefix drift), not TTL expiry.
-	PrefixHash string `json:"prefix_hash,omitempty"`
+	PrefixHash        string `json:"prefix_hash,omitempty"`
 	RequestCount      int    `json:"request_count"`
 	ProviderRequestID string `json:"provider_request_id,omitempty"`
 	Error             string `json:"error,omitempty"`
@@ -365,8 +365,10 @@ func projectionContentValid(st CompactionState, msgs []provider.Message, transcr
 	if st.TranscriptVersion == transcriptVersion || st.Projection.TranscriptVersion == transcriptVersion {
 		return true
 	}
-	// Append-only growth with a verified covered prefix.
-	return n < len(msgs)
+	// Append-only growth with a verified covered prefix; a version drift alone
+	// (replay does not restore the counter) with identical covered content
+	// keeps the projection valid (8/13: full fold 3.3% vs incremental 99.4%).
+	return true
 }
 
 // modelVisibleFromProjection splices the projection with any messages appended
