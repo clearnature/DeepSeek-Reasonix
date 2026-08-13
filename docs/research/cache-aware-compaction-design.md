@@ -62,6 +62,9 @@ turn 结束后 `maybeCompact` 在 `[high, force)` 区间优先尝试免费 prune
 
 - 投影 `projEst < high`（用未校准 `estimateMessagesTokens` 估算 pruned 视图）→ 返回延迟，下一轮用投影发送、真实 usage 下降后不再压；
 - 投影 `projEst ≥ high`（大 user 内容主导，prune 不足以降压）→ **继续 `compactToProjection` 立即折叠**，不能无条件 `return`。
+- 应用层 summary 是默认路径；Responses 等 native compaction 标记 unsupported 时回退 summary
+- `max_output_tokens=0` 在官方 DeepSeek 上省略该字段（服务端 384K 上限）；MiMo 等仍用 16K/32K 梯子。思考深度只走 effort。
+- auto ladder 与 `compact_ratio` 解耦
 
 早期实现曾无条件延迟（"等 force"），导致 [high, force) 之间的死窗口：prune 每轮装投影但从不折叠，prompt 卡在 800k+ 数分钟（实测 802k→837k、142 请求、0 压缩）。修复后折叠必达，投影只是免费的降压尝试。
 

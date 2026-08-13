@@ -111,11 +111,12 @@ var vendorTable = map[string]vendorCapabilities{
 		toolCallReasoning:      true,
 		singleSegmentReasoning: false,
 		ignoresTemperature:     false,
-		defaultMaxOutputTokens: provider.DefaultHighOutputTokens,
+		// 0 = omit max_output_tokens; official server ceiling is 384K.
+		defaultMaxOutputTokens: 0,
 		summaryMode:            "detailed",
-		// Compaction summaries are short briefings; keep the budget separate
-		// from ordinary answer output so a summary call cannot inherit 32K.
-		compactionOutputTokens: 4096,
+		// Compaction summaries use a dedicated 16K-class budget, independent of
+		// ordinary answer output so a summary call cannot inherit 128K.
+		compactionOutputTokens: provider.DefaultOrdinaryOutputTokens,
 	},
 	"mimo": {
 		stateless:              true,
