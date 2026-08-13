@@ -117,7 +117,8 @@ type chatTUI struct {
 	// todoArgs is the latest todo_write call's raw args; it drives the task list
 	// pinned just above the input (see renderTodoPanel). "" when there's no list.
 	// Persists across turns until the work completes or a new session starts.
-	todoArgs string
+	todoArgs      string
+	searchSources []provider.ServerSearchHit // post-answer footnotes; cleared when the turn settles
 
 	// marker rides in outgoing user messages so the cache-stable prompt prefix is
 	// left untouched.
@@ -4498,6 +4499,7 @@ func (m *chatTUI) ingestEvent(e event.Event) {
 			m.pending.Reset()
 			m.pending.WriteString(e.Text)
 		}
+		m.writeSearchFootnotes()
 		m.commitReasoning()
 		m.commitPending()
 
@@ -4552,6 +4554,7 @@ func (m *chatTUI) ingestEvent(e event.Event) {
 		if e.Tool.Name == "todo_write" && e.Tool.Err == "" {
 			m.todoArgs = e.Tool.Args
 		}
+		m.rememberSearchResult(e.Tool)
 		if e.Tool.Err != "" {
 			m.finalizeStreamed()
 			label := shellToolDisplayName(e.Tool.Name, e.Tool.Execution)
@@ -4698,6 +4701,7 @@ func (m *chatTUI) ingestEvent(e event.Event) {
 		// and gate a plan-mode proposal on the user's approval. Autosave already
 		// happened in Controller so every frontend shares the same activity-time
 		// semantics.
+		m.writeSearchFootnotes()
 		m.commitReasoning()
 		m.commitPending()
 		// The bubble was echoed on Enter and an un-sent turn is swallowed above

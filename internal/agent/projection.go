@@ -305,17 +305,18 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 		ThoughtSignature string `json:"ts,omitempty"`
 	}
 	type wireMsg struct {
-		Role               string            `json:"r"`
-		Content            string            `json:"c,omitempty"`
-		Images             []string          `json:"img,omitempty"`
-		ReasoningContent   string            `json:"rc,omitempty"`
-		ReasoningID        string            `json:"rid,omitempty"`
-		ReasoningStatus    string            `json:"rst,omitempty"`
-		ReasoningSignature string            `json:"rsig,omitempty"`
-		ToolCallID         string            `json:"tid,omitempty"`
-		Name               string            `json:"n,omitempty"`
-		ToolCalls          []wireCall        `json:"tc,omitempty"`
-		ResponsesItems     []json.RawMessage `json:"ri,omitempty"`
+		Role               string                      `json:"r"`
+		Content            string                      `json:"c,omitempty"`
+		Images             []string                    `json:"img,omitempty"`
+		ReasoningContent   string                      `json:"rc,omitempty"`
+		ReasoningID        string                      `json:"rid,omitempty"`
+		ReasoningStatus    string                      `json:"rst,omitempty"`
+		ReasoningSignature string                      `json:"rsig,omitempty"`
+		ToolCallID         string                      `json:"tid,omitempty"`
+		Name               string                      `json:"n,omitempty"`
+		ToolCalls          []wireCall                  `json:"tc,omitempty"`
+		ResponsesItems     []json.RawMessage           `json:"ri,omitempty"`
+		ServerSearch       []provider.ServerSearchCall `json:"ss,omitempty"`
 	}
 	wire := make([]wireMsg, 0, len(msgs))
 	for _, m := range msgs {
@@ -340,6 +341,9 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 			for i, item := range m.ResponsesItems {
 				wm.ResponsesItems[i] = append(json.RawMessage(nil), item...)
 			}
+		}
+		if len(m.ServerSearch) > 0 {
+			wm.ServerSearch = append([]provider.ServerSearchCall(nil), m.ServerSearch...)
 		}
 		wire = append(wire, wm)
 	}
@@ -430,6 +434,7 @@ func coalesceProjectionUserRuns(msgs []provider.Message) []provider.Message {
 			clone.Images = append([]string(nil), msg.Images...)
 			clone.ToolCalls = append([]provider.ToolCall(nil), msg.ToolCalls...)
 			clone.ResponsesItems = append([]json.RawMessage(nil), msg.ResponsesItems...)
+			clone.ServerSearch = append([]provider.ServerSearchCall(nil), msg.ServerSearch...)
 			out = append(out, clone)
 			continue
 		}
@@ -443,6 +448,7 @@ func coalesceProjectionUserRuns(msgs []provider.Message) []provider.Message {
 		prev.Images = append(prev.Images, msg.Images...)
 		prev.ToolCalls = append(prev.ToolCalls, msg.ToolCalls...)
 		prev.ResponsesItems = append(prev.ResponsesItems, msg.ResponsesItems...)
+		prev.ServerSearch = append(prev.ServerSearch, msg.ServerSearch...)
 	}
 	return out
 }
