@@ -188,6 +188,8 @@ func (r *Recorder) recordCompaction(e event.Event) {
 				Compaction: &rec,
 			})
 			return
+		case "reason":
+			rec.Reason = v
 		case "status":
 			rec.Status = v
 		case "pref_hash":
@@ -226,6 +228,10 @@ func setCompactionInt(rec *CompactionRecord, key, val string) {
 		rec.EstTok = n
 	case "src":
 		rec.SourceTok = n
+	case "fold":
+		rec.FoldTok = n
+	case "spans":
+		rec.Spans = n
 	case "proj":
 		rec.ProjTok = n
 	case "in":

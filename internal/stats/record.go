@@ -121,6 +121,9 @@ type CompactionRecord struct {
 	EstTok     int     `json:"est_tokens,omitempty"` // decision estimate that crossed the trigger
 	SourceTok  int     `json:"src,omitempty"`
 	ProjTok    int     `json:"proj,omitempty"`
+	FoldTok    int     `json:"fold,omitempty"`
+	Spans      int     `json:"spans,omitempty"`
+	Reason     string  `json:"reason,omitempty"`
 	InputTok   int     `json:"in,omitempty"`
 	OutTok     int     `json:"out,omitempty"`
 	HitTok     int     `json:"hit,omitempty"`
