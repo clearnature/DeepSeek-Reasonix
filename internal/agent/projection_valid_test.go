@@ -203,8 +203,8 @@ func TestLoadProjectionSidecarKeepsBodyWithoutTranscript(t *testing.T) {
 // canonical so the request path folds it down (8/13: 7.2K messages ≈ 2.2M).
 func TestProjectionUsableRejectsOverflowingBody(t *testing.T) {
 	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true}
-	huge := provider.Message{Role: provider.RoleUser, Content: strings.Repeat("字", 400_000)} // 1.2M bytes CJK
-	projMsgs := []provider.Message{huge, huge, huge}                                         // ≈ 3.6M bytes
+	huge := provider.Message{Role: provider.RoleUser, Content: strings.Repeat("字", 1_200_000)} // 1.2M CJK runes
+	projMsgs := []provider.Message{huge, huge}                                                 // official est ≈ 1.44M
 	sess := &Session{Messages: append([]provider.Message{{Role: provider.RoleSystem, Content: "sys"}}, projMsgs...)}
 	a := New(prov, tool.NewRegistry(), sess, Options{
 		SessionPath:   filepath.Join(t.TempDir(), "s.jsonl"),
@@ -214,14 +214,14 @@ func TestProjectionUsableRejectsOverflowingBody(t *testing.T) {
 	}, event.Discard)
 	a.sess.compactionState.Projection = ContextProjection{
 		Messages:          projMsgs,
-		CoveredCount:      3,
-		CoveredPrefixHash: coveredPrefixHash(sess.Messages, 3),
+		CoveredCount:      2,
+		CoveredPrefixHash: coveredPrefixHash(sess.Messages, 2),
 	}
 	if a.projectionUsable(a.sess.compactionState, sess.Messages, 0) {
 		t.Fatal("overflowing projection body accepted as usable")
 	}
-	if vis := a.modelVisibleMessages(); len(vis) != 4 {
-		t.Fatalf("modelVisible = %d messages, want canonical fallback (4)", len(vis))
+	if vis := a.modelVisibleMessages(); len(vis) != 3 {
+		t.Fatalf("modelVisible = %d messages, want canonical fallback (3)", len(vis))
 	}
 }
 

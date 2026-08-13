@@ -35,13 +35,14 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 // projectionUsable requires the projection to validate and fit the window:
 // a full-history projection that already overflows the physical ceiling (a
 // prune/snip rebuilt one, 8/13: 7.2K messages ≈ 2.2M) must not be sent; it
-// falls back to canonical so the request path folds it down.
+// falls back to canonical so the request path folds it down. Sizing uses the
+// calibrated send-path estimate (the 1-rune ruler over-sizes CJK ~5x).
 func (a *Agent) projectionUsable(st CompactionState, msgs []provider.Message, version uint64) bool {
 	if !projectionValid(st, msgs, version, a.currentPromptCacheKey()) {
 		return false
 	}
 	if a.contextWindow > 0 && sharesContextWindow(a.svc.prov) {
-		if est := estimateMessagesTokens(provider.ModelMessages(st.Projection.Messages)); est >= a.hardInputCeiling() {
+		if est := a.estimatedPromptTokens(provider.ModelMessages(st.Projection.Messages)); est >= a.hardInputCeiling() {
 			return false
 		}
 	}
