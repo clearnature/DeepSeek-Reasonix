@@ -110,7 +110,8 @@ type ResumeRecord struct {
 	Path     string `json:"path,omitempty"`
 	State    string `json:"state,omitempty"` // warm | cold | unknown
 	IdleMin  int    `json:"idle_min,omitempty"`
-	Decision string `json:"decision,omitempty"` // replay | record-only
+	Decision string `json:"decision,omitempty"` // replay | compact-first | record-only
+	EstTok   int    `json:"est,omitempty"`      // resume 决策时估算（超窗才 compact-first）
 }
 
 type CompactionRecord struct {

@@ -283,6 +283,10 @@ func (r *Recorder) recordResume(e event.Event) {
 			}
 		case "decision":
 			rec.Decision = v
+		case "est":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.EstTok = n
+			}
 		}
 	}
 	r.dispatcher.enqueue(record{

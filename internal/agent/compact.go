@@ -57,6 +57,10 @@ const (
 // failure (then a mechanical fold) instead of hanging compaction indefinitely.
 const summaryTimeout = 90 * time.Second
 
+// maxSummaryTimeout caps the adaptive summarize deadline: a fold fed by a 1M+
+// cold replay gets minutes, but a truly stalled stream must still surface.
+const maxSummaryTimeout = 5 * time.Minute
+
 // summaryFoldMarker separates the cached main-request prefix from the fold in
 // the summarizer request so the model knows exactly which section to compress.
 // It is a new user turn after the prefix, so it never drifts the cached bytes.
@@ -597,8 +601,6 @@ func charsOfMessages(msgs []provider.Message) int {
 // into a briefing. instructions is optional /compact focus + PreCompact text.
 // Named returns so defer can attach RequestCount and still return usage.
 func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message, instructions string) (summary string, usage *provider.Usage, err error) {
-	ctx, cancel := context.WithTimeout(ctx, summaryTimeout)
-	defer cancel()
 	ctx = provider.WithRequestAttemptCounter(ctx)
 	instructions = strings.TrimSpace(instructions)
 	// Reuse the main request's exact prefix (msgs[:head]) plus the raw fold so
@@ -613,6 +615,17 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 		sys += "\n\nAdditional focus for this compaction (prioritize keeping this):\n" + instructions
 	}
 	msgs = append(msgs, provider.Message{Role: provider.RoleUser, Content: sys})
+	// Scale the deadline with the estimated input: a 1M+ cold replay feeds the
+	// summarizer hundreds of K tokens and needs minutes, not 90s.
+	timeout := summaryTimeout
+	if in := estimateMessagesTokens(msgs); in > 150_000 {
+		timeout += summaryTimeout * time.Duration(in/150_000)
+		if timeout > maxSummaryTimeout {
+			timeout = maxSummaryTimeout
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	defer func() {
 		usage = provider.UsageWithRequestAttemptCount(ctx, usage)
 		if usage != nil && (usage.TotalTokens > 0 || usage.RequestCount > 0) {
