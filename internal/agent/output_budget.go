@@ -13,7 +13,11 @@ import (
 const outputBudgetReserve = 8 * 1024
 
 type outputBudgetState struct {
-	outputBudget int
+	// lastPersistedRatio de-dupes calibration writes: persist only when the
+	// ratio moved meaningfully, so a request every few seconds does not hit
+	// the disk on every turn.
+	lastPersistedRatio float64
+	outputBudget       int
 	// lastUsage caches the latest provider telemetry for per-turn readouts.
 	// The run loop writes it while a frontend reads it, so it is atomic.
 	lastUsage         atomic.Pointer[provider.Usage]
@@ -55,13 +59,21 @@ func (a *Agent) setPromptTokenCalibration(promptTokens int, shape requestCalibra
 	if a == nil || promptTokens <= 0 || shape.requestChars <= 0 {
 		return
 	}
-	a.sess.output.promptCalibration.Store(&promptTokenCalibration{
+	cal := &promptTokenCalibration{
 		promptTokens: promptTokens,
 		requestChars: shape.requestChars,
 		compactChars: shape.compactChars,
 		cjkRunes:     shape.cjkRunes,
 		cjkBytes:     shape.cjkBytes,
-	})
+	}
+	a.sess.output.promptCalibration.Store(cal)
+	// Best-effort persistence: write only when the ratio moved ≥2% vs the
+	// last persisted value (first write always persists).
+	if r := float64(promptTokens) / float64(shape.compactChars); r > 0 && r != a.sess.output.lastPersistedRatio &&
+		(a.sess.output.lastPersistedRatio == 0 || absRatioDelta(r, a.sess.output.lastPersistedRatio) >= 0.02) {
+		a.sess.output.lastPersistedRatio = r
+		persistCalibration(a.calibrationKey(), cal)
+	}
 }
 
 func (a *Agent) setPromptTokenCalibrationFromActive(promptTokens int) {

@@ -1187,6 +1187,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
 	a.maybeArmForkFromEnv()
 	a.maybeWrapForkCaptureProvider()
+	a.restorePersistedCalibration(opts.ModelRef)
 	return a
 }
 
