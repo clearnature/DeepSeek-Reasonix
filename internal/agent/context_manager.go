@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sync/atomic"
 
+	"reasonix/internal/event"
 	"reasonix/internal/provider"
 )
 
@@ -115,6 +116,12 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	forceFold := policy.Force || policy.Trigger == CompactionTriggerManual || policy.Trigger == CompactionTriggerOverflow || est >= hard
 	if est < fold && !forceFold {
 		return prepared, nil
+	}
+	if est > a.contextWindow && a.sess.cacheState != "" && a.svc.sink != nil {
+		// Resume replay past the window: the C1 gate let it through warm, but
+		// it must fold before the first send. Land the decision for diagnosis.
+		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "resume telemetry",
+			Detail: fmt.Sprintf("state=%s idle_min=0 decision=compact-first est=%d", a.sess.cacheState, est)})
 	}
 
 	return m.foldContext(ctx, prepared, policy, inputHash, est, fold, hard, forceFold)
