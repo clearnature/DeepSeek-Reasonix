@@ -263,6 +263,9 @@ func officialMessagesTokens(msgs []provider.Message) int {
 		for _, item := range m.ResponsesItems {
 			total += estimateTextTokensOfficial(string(item))
 		}
+		for _, search := range m.ServerSearch {
+			total += estimateTextTokensOfficial(string(search.Raw))
+		}
 	}
 	return total
 }

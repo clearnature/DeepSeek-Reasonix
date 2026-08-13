@@ -45,15 +45,31 @@ v1.25.1 的 #8728/#8727 是相关修复尝试，**但 #8739 明确仍复现**（
 |---|---|---|
 | 7b82fc3bc | #8718 | web_search 重放排除出 compact 估算（compact.go + output_budget.go） |
 
-**hold 依据（红区）**：与本地保护清单 5 文件交集（compact.go / output_budget.go /
-sampling_request.go / projection.go / compact_projection.go）。2.1 判定 = **同向互补**
-（上游 web_search 排除 + 本地 est 实测优先 f105a0454——不同缺口）——**可合**，
-但按第 0 条（压缩/缓存 = 第一风险，触及必红）需 **team-planner 深入分析 +
-守卫套件全量**（cachehit_e2e / healthy-window / RejectsExhaustedSharedWindow /
-投影/校准测试）+ 四方审计。
+**判定（2026-08-14 深入分析后）：不吸收——上游假设与官方计费口径相反**。
 
-**合并条件**：独立执行一次深入分析（双修复共存确认 + 守卫全量）——影响面小
-（web_search 重放估算）但触及第一风险域，故不并入批量。
+**上游 #8718 的断言**（commit message）："Anthropic does not count replayed
+encrypted search results toward input tokens" → 估算排除 Raw。
+**官方口径（多源交叉证实）**：Anthropic web search 文档原文——"Web search results
+retrieved throughout a conversation are counted as input tokens, in search
+iterations executed during a single turn **and in subsequent conversation turns**"
+——搜索结果计入 input tokens 且**后续轮次重放仍计**；仅引用展示字段
+（cited_text/title/url）不计费。**#8718 排除 Raw（计费大头）、计入 title/URL
+（官方明确不计费）——字段选择近乎颠倒**。
+
+**引入风险（用户观察"上游启动超窗"的机制）**：三处估算排除 Raw → 搜索密集会话
+est 显著低估 → 触发延迟（est < fold 不压）→ 实际发送超窗（400）；上游无
+`MaybeCompactOnResume`（本地独有防线）→ 恢复超窗会话首轮裸发无守卫。
+
+**本地保留理由**：① 计入 Raw + usage 校准（校准 ratio 由真实 input_tokens 驱动
+= 官方口径）→ 贴近真实；② 三道防线（resume gate / forceThreshold /
+effectiveOutputBudget）防超窗；③ 与「宁可保守不超窗」+ 前缀缓存纪律一致。
+
+**本地缺口已补（任务 2，2026-08-14）**：`officialMessagesTokens`（CJK 无校准分支）
+原完全漏掉 ServerSearch → 新增 ServerSearch Raw 计数（对齐 estimateMessagesTokens）
++ `TestOfficialMessagesTokensIncludesServerSearch` + 守卫套件通过。
+
+**状态**：⛔ 不吸收（上游假设错误）；本地补缺口完成；如需可向上游提 issue 修正
+WalkServerSearchEstimate 字段口径。
 
 ---
 
@@ -73,7 +89,7 @@ sampling_request.go / projection.go / compact_projection.go）。2.1 判定 = **
 | 主题 | 数量 | 风险 | 状态 | 解锁条件 |
 |---|---|---|---|---|
 | A desktop 会话树/归档 | 15 | 🔴（#8739 同域） | hold | #8739 关闭 / v1.25.2 / 社区确认缓解 |
-| B 压缩估算 #8718 | 1 | 🔴（第一风险域红区） | hold | 深入分析 + 守卫套件全量 |
+| B 压缩估算 #8718 | 1 | 🔴（上游口径冲突） | ⛔ 不吸收 | 本地缺口已补（任务 2）；提上游 issue 修正字段口径 |
 | C inbox #8701 | 1 | 🟡 | 待评估 | 2.1 差别识别（与 dev team inbox） |
 
 **原则**：主题合并模式下，17 个未合 = "合了风险大于收益"（A：数据丢失域未清；
