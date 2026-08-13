@@ -196,6 +196,10 @@ func (r *Recorder) recordCompaction(e event.Event) {
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
 				rec.TokPerChar = f
 			}
+		case "est":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.EstTok = n
+			}
 		default:
 			setCompactionInt(&rec, k, v)
 		}
