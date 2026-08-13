@@ -14,13 +14,31 @@
 4. **统计准确性**——stats/遥测字段落盘（四方审计）
 
 **三级别风险预警**：
-- 🟢 **低（绿）**：无上述四域重叠 / 无内核文件改动 → 常规验证链（§6）
+- 🟢 **低（绿）**：无上述四域重叠 / 无内核文件改动 → 常规验证链（§7）
 - 🟡 **中（黄）**：同文件双改（非核心）/ docs / 前端 → 定向核对 + 相关守卫测试
-- 🔴 **高（红）**：压缩/缓存/统计/内核**同域同文件** → team-planner 深入分析 + 守卫套件全量 + 遥测四方审计（§8）+ 风险文档归档
+- 🔴 **高（红）**：压缩/缓存/统计/内核**同域同文件** → team-planner 深入分析 + 守卫套件全量 + 遥测四方审计（§9）+ 风险文档归档
 
 **产出**：风险等级 + 核对点清单 → 归档 `docs/merge/YYYYMMDD-<版本>-merge-risk.md`（先读本目录已有分析，按主题矩阵核对点执行）。
 
-## 1. 合并前侦察
+## 1. 主题合并模式（代替版本合并）
+
+**核心原则：以主题合并代替版本合并**——不一次性 merge 整个版本（风险面大），按主题逐项评估、逐项决定。
+
+**主题合并流程**（每个主题独立执行）：
+1. **主题合并历史追溯**：`git log --oneline -- <主题文件>`（上游 + dev 双方历史——识别长期冲突模式 / 重复修复 / 谁先谁后）
+2. **issue/PR 社区追踪**：该主题的社区 issue/PR 状态（已修复？仍复现？——hold 判断依据，如 v1.25.0 的 #8739/#8741 是否被 v1.25.1 解决）
+3. **风险等级**（第 0 条四域识别 + 三级别预警）
+4. **合并决策**：
+   - ✅ 立即合并（低风险 / 社区已确认修复 / 与 dev 无重叠）
+   - ⏸ **推迟合并**：新架构和功能合并（不急需——等稳定）；上游剧烈变动（等社区验证沉淀）
+   - ⛔ 不合并（hold——社区 bug 未清 / 与我们的修复冲突）
+5. 每主题独立执行验证链（§7）+ 遥测四方审计（§9）
+
+**版本合并 vs 主题合并**：
+- 版本合并（旧）：一次吞整个版本（26 提交）——红级风险面大、hold 无法局部化（坏主题拖累好主题）
+- 主题合并（新）：按主题独立评估/决策/验证——**hold 可局部化**（坏主题 hold、好主题吸收）、风险可控、追溯清晰
+
+## 2. 合并前侦察
 
 ```bash
 git rev-list --count HEAD..origin/main-v2          # 落后量
@@ -32,13 +50,13 @@ git log --oneline HEAD..origin/main-v2 -- <file>   # 上游是否改过它
 comm -23 <(git grep -o 'func [A-Za-z]*' <ours>) <(...)   # 函数级超集对比（判断哪边是超集）
 ```
 
-## 2. 逐块精确处理（绝不整文件/整包 checkout）
+## 3. 逐块精确处理（绝不整文件/整包 checkout）
 
 - **禁止**：`git checkout <other-branch> -- <file/dir>`（整文件覆盖会带入对方分支的无关演进）、`git merge <branch>` 到 PR 分支、`git checkout <commit> -- .` 探测历史。
 - **正确**：`awk`/`sed` 打印每个冲突块 → 判断 ours/theirs → `edit_file` 逐块解决（只补主题相关行）。
 - **铁律**："7488 + 基线 ≠ dev"——dev 还有后续开发，整包 checkout 会拉入无关优化（如 max_output_tokens 抖动、注释改写）。
 
-## 3. 自动合并语义丢失复查
+## 4. 自动合并语义丢失复查
 
 git 标"自动合并成功"的文件也可能保留旧版语义（曾：自动合并保留 dev 旧版 `runRefTurn`（无 format 绑定），丢上游 `runRefTurnWithFormat`，测试失败才暴露）。核心功能文件（controller.go / run_loop.go / responses.go / compact*.go / stats）merge 后：
 
@@ -46,11 +64,11 @@ git 标"自动合并成功"的文件也可能保留旧版语义（曾：自动�
 git diff origin/main-v2 -- <file>   # 复查——确认没保留过时实现、没丢新修复
 ```
 
-## 4. 冲突方向确认再 edit
+## 5. 冲突方向确认再 edit
 
 `<<<<<<< HEAD` 侧**未必是正确版本**（曾把 gofmt 缩进冲突解决反）。先对比哪边是新修复（版本、语义、host 匹配），再决定取舍。
 
-## 5. 生成文件三件套
+## 6. 生成文件三件套
 
 ```bash
 git checkout --theirs   # 清冲突标记
@@ -59,7 +77,7 @@ go run ./cmd/remote-protocol-gen -check   # 验证
 ```
 不要手改 schema/generated 文件。
 
-## 6. 合并后验证链（顺序固定）
+## 7. 合并后验证链（顺序固定）
 
 1. `gofmt -l .` 全量（CI 同款；排除 desktop/.direnv/本地实验目录）
 2. `go build ./...`
@@ -72,13 +90,13 @@ go run ./cmd/remote-protocol-gen -check   # 验证
    cd desktop && CI=true ~/go/bin/wails build -tags webkit2_41 -ldflags "-X main.version=$(date +%Y%m%d-%H%M)"
    ```
 
-## 7. 隐藏产物排查清单
+## 8. 隐藏产物排查清单
 
 - 重复声明（`grep -c 'var xxx'`——合并可能带两遍）
 - 多余括号 / 丢失缩进（编译错误行号定位 / `gofmt -d` 看 diff）
 - `validate`/`omitempty` 类语义差异（对照 dev 已修复版本 `git show dev/clearnature:<file>`）
 
-## 8. 遥测四方审计（合并涉及遥测文件后必做）
+## 9. 遥测四方审计（合并涉及遥测文件后必做）
 
 涉及 `internal/agent/*telemetry*.go`、`internal/stats/*` 的合并：
 
@@ -87,13 +105,13 @@ CompactionTelemetry 结构 ↔ emit 的 detail 键 ↔ recordCompaction/setCompa
 ```
 **任一环缺 = 断链，一次补完（禁止零敲碎打）**。失败路径必须落盘（`status=failed` + `err_type=`，禁止 return 吞 notice）。历史教训：PrefixHash / CompactionRecord / Est / Results / SavedChars / ElapsedMs 曾静默丢失——**编译通过 ≠ 无丢失**，必须行为级核对（跑 FastCompress / QueryCompactions 测试 + 实际运行验证 stats 落盘字段）。详见 `docs/telemetry-audit-20260813.md`。
 
-## 9. 分支纪律
+## 10. 分支纪律
 
 - `main-v2` = 只读镜像：只 `git fetch origin` + `git merge --ff-only origin/main-v2`，**绝不在上面提交**。
 - `dev/clearnature` = 唯一本地开发分支（文档/决策/代码都在这）。
 - PR 分支更新：上游基线重建 + 逐个 cherry-pick 主题 commit（一次一个，冲突逐个解决）；**禁止 merge dev 全量**。
 - merge 优先于 rebase：rebase 逐提交重放产生伪冲突（上游没改的文件也被标记）；merge 一次性解决。
 
-## 10. 0 文本冲突 ≠ 0 语义风险
+## 11. 0 文本冲突 ≠ 0 语义风险
 
 `git merge-tree` 报 0 冲突不代表安全——**同文件双方都改 = 逐字段核对**（主题 B 类：同域修复合并后跑守卫测试套件确认双修复并存）。合并前先读 `docs/merge/` 的风险分析（按主题矩阵核对点执行）。
