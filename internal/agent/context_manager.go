@@ -80,9 +80,7 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	}
 	visible := a.modelVisibleMessages()
 	// Threshold uses the stable pre-interceptor request shape (messages + tools
-	// + role projection). Extension interceptors run only on the real sampling
-	// request so side-effecting plugins are not double-invoked; if they expand
-	// the prompt past the hard ceiling, overflow recovery still fires.
+	// + role projection); interceptor expansion past hard still overflows.
 	est := a.estimatedVisibleRequestTokens(visible)
 	prepared := PreparedContext{
 		Messages:          append([]provider.Message(nil), visible...),
@@ -215,10 +213,44 @@ func (a *Agent) estimatedVisibleRequestTokens(visible []provider.Message) int {
 	if a.svc.tools != nil {
 		tools = a.svc.tools.Schemas()
 	}
-	return a.estimatedRequestTokens(provider.Request{
+	req := provider.Request{
 		Messages:    msgs,
 		Tools:       tools,
 		MaxTokens:   a.maxOutputTokens,
 		Temperature: provider.OptionalTemperature(a.temperature),
-	})
+	}
+	shape := a.requestCalibrationShape(req)
+	if calibrated, ok := a.calibratedPromptTokens(shape); ok {
+		return calibrated
+	}
+	// No calibration yet (fresh fork or resume first turn): the 0.25 fallback
+	// under-sizes compact CJK sessions ~4x. A message-level estimate is a safe
+	// floor only when CJK is present (ASCII counts 1 rune/token there too).
+	if containsCJKText(msgs) {
+		if msgEst := estimateMessagesTokens(msgs); msgEst > int(float64(shape.requestChars)*fallbackTokPerChar) {
+			return msgEst
+		}
+	}
+	return a.estimatedRequestTokens(req)
+}
+
+// containsCJKText reports whether any visible message carries CJK runes, the
+// only case where the conservative 1-rune-per-token estimate is appropriate
+// before provider calibration exists.
+func containsCJKText(msgs []provider.Message) bool {
+	for _, m := range msgs {
+		for _, r := range m.Content {
+			if isCJKRune(r) {
+				return true
+			}
+		}
+		for _, tc := range m.ToolCalls {
+			for _, r := range tc.Arguments {
+				if isCJKRune(r) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

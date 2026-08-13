@@ -153,3 +153,16 @@ func TestContextUsedTokensFollowsTheTranscript(t *testing.T) {
 		t.Fatalf("gauge %d -> %d, want the appended turn counted", before, after)
 	}
 }
+
+func TestEstimatedVisibleRequestTokensLanguageAwareFallback(t *testing.T) {
+	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024}}
+	// Compact CJK: the 0.25 wire-char fallback under-sizes ~4x (1 rune ≈ 1
+	// token); the message-level language-aware estimate must win so an
+	// over-window resume replay folds before the first send.
+	content := strings.Repeat("压缩上下文超窗重放诊断测试", 1000) // 13000 runes
+	visible := []provider.Message{{Role: provider.RoleUser, Content: content}}
+	est := a.estimatedVisibleRequestTokens(visible)
+	if est < 12000 {
+		t.Fatalf("language-aware fallback not applied: est=%d want >= 12000", est)
+	}
+}
