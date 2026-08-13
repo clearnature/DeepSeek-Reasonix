@@ -198,21 +198,33 @@ func (a *Agent) calibratedPromptTokens(shape requestCalibrationShape) (int, bool
 	if shape.requestChars <= 0 {
 		return 0, false
 	}
-	if cal := a.sess.output.promptCalibration.Load(); cal != nil && cal.requestChars > 0 {
-		ratio := float64(cal.promptTokens) / float64(cal.requestChars)
-		if ratio > 0.05 && ratio < 2 {
-			trustedChars := shape.requestChars
-			excessCJKBytes := int64(0)
-			// A higher CJK share cannot safely reuse the aggregate ratio. Scale its
-			// represented share and price only the excess at the cold rate,
-			// preserving exact calibration for stable CJK sessions.
-			if shape.cjkRunes*cal.requestChars > cal.cjkRunes*shape.requestChars {
-				trustedCJKBytes := min(cal.cjkBytes*shape.requestChars/cal.requestChars, shape.cjkBytes)
-				excessCJKBytes = shape.cjkBytes - trustedCJKBytes
-				trustedChars -= excessCJKBytes
+	if cal := a.sess.output.promptCalibration.Load(); cal != nil {
+		chars := cal.requestChars
+		if chars <= 0 {
+			// Pre-request_chars persistence (bfb8029a8 initial shape): the
+			// compact ratio is all we have, so calibrate against it.
+			chars = cal.compactChars
+		}
+		if chars > 0 {
+			ratio := float64(cal.promptTokens) / float64(chars)
+			if ratio > 0.05 && ratio < 2 {
+				trustedChars := shape.requestChars
+				excessCJKBytes := int64(0)
+				// A higher CJK share cannot reuse the aggregate ratio: price only
+				// the excess at the cold rate. A calibration with no recorded CJK
+				// prices all new CJK cold instead of scaling a byte ratio across
+				// 3-byte runes.
+				if shape.cjkRunes*chars > cal.cjkRunes*shape.requestChars {
+					trustedCJKBytes := int64(0)
+					if cal.requestChars > 0 && cal.cjkBytes > 0 {
+						trustedCJKBytes = min(cal.cjkBytes*shape.requestChars/cal.requestChars, shape.cjkBytes)
+					}
+					excessCJKBytes = shape.cjkBytes - trustedCJKBytes
+					trustedChars -= excessCJKBytes
+				}
+				cold := math.Ceil(float64(excessCJKBytes) * fallbackTokPerChar)
+				return int(math.Ceil(float64(trustedChars)*ratio) + cold), true
 			}
-			cold := math.Ceil(float64(excessCJKBytes) * fallbackTokPerChar)
-			return int(math.Ceil(float64(trustedChars)*ratio) + cold), true
 		}
 	}
 	return 0, false
@@ -252,10 +264,8 @@ func isCJKRune(r rune) bool {
 // moves compact_ratio. Exhausted windows fail locally before HTTP 400.
 // useObserved admits the last observed prompt size over the wire-char
 // estimate (fresh agents lack calibration and the 0.25 fallback inflates
-// dense sessions ~2x). It is only valid for the main request: the summarizer
-// request has its own shape (no retained tail), and reusing the main prompt
-// size there over-reports overflow (observed 2026-08-12: est 1,385,656 →
-// degraded with 98 user turns dropped), so summary calls pass false.
+// dense sessions ~2x); summary calls pass false (8/12: est 1,385,656 →
+// degraded with 98 user turns dropped).
 func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (int, bool, error) {
 	if a == nil || a.contextWindow <= 0 || !sharesContextWindow(a.svc.prov) {
 		return 0, false, nil

@@ -36,15 +36,34 @@ func loadPersistedCalibration(modelRef string) *promptTokenCalibration {
 	}
 	var rec struct {
 		PromptTokens int   `json:"prompt_tokens"`
+		RequestChars int64 `json:"request_chars"`
 		CompactChars int64 `json:"compact_chars"`
+		CJKRunes     int64 `json:"cjk_runes"`
+		CJKBytes     int64 `json:"cjk_bytes"`
 	}
 	if err := json.Unmarshal(data, &rec); err != nil || rec.CompactChars <= 0 {
 		return nil
 	}
-	return &promptTokenCalibration{
+	// A tiny calibration sample (a 1-token title request) would price every
+	// char at its absurd ratio; reject it so the estimate falls back instead.
+	if rec.PromptTokens < 32 || rec.CompactChars < 32 {
+		return nil
+	}
+	cal := &promptTokenCalibration{
 		promptTokens: rec.PromptTokens,
 		compactChars: rec.CompactChars,
+		cjkRunes:     rec.CJKRunes,
+		cjkBytes:     rec.CJKBytes,
 	}
+	// Pre-request_chars files (bfb8029a8 initial shape) only carry the
+	// compact ratio; calibrate against compactChars so the restored
+	// calibration is used instead of silently falling back to the estimate.
+	if rec.RequestChars > 0 {
+		cal.requestChars = rec.RequestChars
+	} else {
+		cal.requestChars = rec.CompactChars
+	}
+	return cal
 }
 
 // persistCalibration writes the calibration atomically (tmp + rename).
@@ -62,11 +81,16 @@ func persistCalibration(modelRef string, cal *promptTokenCalibration) {
 	rec := struct {
 		Model        string  `json:"model"`
 		PromptTokens int     `json:"prompt_tokens"`
+		RequestChars int64   `json:"request_chars"`
 		CompactChars int64   `json:"compact_chars"`
+		CJKRunes     int64   `json:"cjk_runes"`
+		CJKBytes     int64   `json:"cjk_bytes"`
 		TokPerChar   float64 `json:"tok_per_char"`
 		UpdatedAt    string  `json:"updated_at"`
 	}{
-		Model: modelRef, PromptTokens: cal.promptTokens, CompactChars: cal.compactChars,
+		Model: modelRef, PromptTokens: cal.promptTokens,
+		RequestChars: cal.requestChars, CompactChars: cal.compactChars,
+		CJKRunes: cal.cjkRunes, CJKBytes: cal.cjkBytes,
 		TokPerChar: float64(cal.promptTokens) / float64(cal.compactChars),
 		UpdatedAt:  time.Now().Format(time.RFC3339),
 	}

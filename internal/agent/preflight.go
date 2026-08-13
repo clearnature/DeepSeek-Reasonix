@@ -143,7 +143,10 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		msgs, version = a.sess.conversation.snapshotMessagesVersion()
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, version, key)
-	if !valid && len(st.Projection.Messages) > 0 {
+	// Fail closed only when the transcript is present: a resume binding the
+	// sidecar before the conversation loaded must not drop a valid projection;
+	// modelVisible re-validates once the transcript is available.
+	if !valid && len(st.Projection.Messages) > 0 && len(msgs) > 0 {
 		// Keep blocked receipts / telemetry; drop unusable projection body.
 		st.Projection = ContextProjection{}
 	}

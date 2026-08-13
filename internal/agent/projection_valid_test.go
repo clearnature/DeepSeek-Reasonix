@@ -145,6 +145,43 @@ func TestLoadProjectionSidecarRebindsMatchingContentAcrossLineage(t *testing.T) 
 	}
 }
 
+// TestLoadProjectionSidecarKeepsBodyWithoutTranscript pins the resume-order
+// guard: binding the sidecar before the conversation finished loading must not
+// discard a valid projection body — modelVisible re-validates later (8/13:
+// a cold start re-reported a window-full session as 2.4M/1M after a projection
+// was dropped this way).
+func TestLoadProjectionSidecarKeepsBodyWithoutTranscript(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	msgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "task"},
+	}
+	if err := SaveCompactionState(path, CompactionState{
+		SchemaVersion:     compactionStateSchemaV1,
+		PromptCacheKey:    "ws|s|this-model",
+		TranscriptVersion: 1,
+		Projection: ContextProjection{
+			Messages:          []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
+			CoveredCount:      2,
+			CoveredPrefixHash: coveredPrefixHash(msgs, 2),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a := &Agent{agentConfig: agentConfig{workspaceID: "ws", modelRef: "this-model"}, sess: sessionRuntime{}}
+	a.LoadProjectionSidecar(path)
+	if len(a.sess.compactionState.Projection.Messages) == 0 {
+		t.Fatal("projection body dropped when transcript was not loaded yet")
+	}
+	// Once the real transcript is attached the projection is usable again.
+	a.sess.conversation = NewSession("sys")
+	a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: "task"})
+	if vis := a.modelVisibleMessages(); len(vis) != 1 || vis[0].Content != "summary" {
+		t.Fatalf("modelVisible after transcript attach = %+v, want the projection", vis)
+	}
+}
+
 func TestLoadProjectionSidecarDropsForeignCacheKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "s.jsonl")
