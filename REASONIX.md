@@ -82,6 +82,15 @@ make lint                           # golangci-lint at CI's pin + repolint
 go test ./internal/tool/builtin/ ./internal/boot/  # catches tool/boot test breaks
 ```
 
+## 合并后必做遥测四方审计
+
+合并涉及遥测文件（`internal/agent/*telemetry*.go`、`internal/stats/*`）后，
+**先做四方字段对照再提交**：`CompactionTelemetry` 结构 ↔ `emit` 的 detail
+键 ↔ `recordCompaction`/`setCompactionInt` 解析 ↔ `CompactionRecord` JSON
+tag——任一环缺 = 断链，一次补完（禁止零敲碎打）。失败路径必须落盘
+（`status=failed` + `err_type=`，禁止 return 吞 notice）。详见
+`docs/telemetry-audit-20260813.md`。
+
 `make lint` runs both gates CI runs, at the version in `.golangci-version`;
 `make lint-install` installs it. Do not skip it: a `modernize` finding never
 shows up in `go vet`, and the CI round trip that catches it instead costs ten
