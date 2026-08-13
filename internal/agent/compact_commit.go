@@ -74,7 +74,8 @@ func (a *Agent) summaryProjectionState(commit summaryProjectionCommit) Compactio
 		Projection: ContextProjection{
 			Messages: commit.projected, TranscriptVersion: commit.transcriptVersion,
 			ProjectionVersion: projectionVersion, CoveredCount: len(commit.canonical), CoveredPrefixHash: coveredHash,
-			SummaryHash: summaryHash, SourceTokens: commit.sourceTokens, ProjectionTokens: commit.projectionTokens,
+			SemanticPrefixHash: semanticPrefixHash(commit.canonical, len(commit.canonical)),
+			SummaryHash:        summaryHash, SourceTokens: commit.sourceTokens, ProjectionTokens: commit.projectionTokens,
 			ViewInputHash: commit.inputHash, ViewOutputHash: commit.outputHash, CreatedAt: now,
 		},
 		LastReceipt: receipt, UpdatedAt: now,

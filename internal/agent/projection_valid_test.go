@@ -350,3 +350,38 @@ func TestProjectionContentValidVersionDriftSamePrefix(t *testing.T) {
 		t.Fatalf("version drift with identical covered prefix must keep the projection valid")
 	}
 }
+
+func TestProjectionContentValidToleratesPruneRewrite(t *testing.T) {
+	base := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "user q"},
+		{Role: provider.RoleTool, Content: strings.Repeat("tool body ", 50)},
+		{Role: provider.RoleAssistant, Content: "assistant a"},
+	}
+	st := CompactionState{Projection: ContextProjection{
+		Messages:           []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
+		CoveredCount:       len(base),
+		CoveredPrefixHash:  coveredPrefixHash(base, len(base)),
+		SemanticPrefixHash: semanticPrefixHash(base, len(base)),
+		TranscriptVersion:  1,
+	}}
+	// prune/snip shortens tool results only: covered hash changes, semantic
+	// hash (non-tool) stays, projection must remain valid.
+	pruned := append([]provider.Message(nil), base...)
+	pruned[2] = provider.Message{Role: provider.RoleTool, Content: "tool (trimmed)"}
+	if !projectionContentValid(st, pruned, 1) {
+		t.Fatalf("prune rewrite (tool-only) must keep the projection valid")
+	}
+	// Real content change (user message edited) must invalidate.
+	edited := append([]provider.Message(nil), base...)
+	edited[1] = provider.Message{Role: provider.RoleUser, Content: "user q EDITED"}
+	if projectionContentValid(st, edited, 1) {
+		t.Fatalf("user content edit must invalidate the projection")
+	}
+	// Legacy sidecar without semantic hash stays fail-closed on covered drift.
+	legacy := st
+	legacy.Projection.SemanticPrefixHash = ""
+	if projectionContentValid(legacy, pruned, 1) {
+		t.Fatalf("legacy sidecar without semantic hash must reject covered drift")
+	}
+}
