@@ -152,7 +152,7 @@ type CompactionTelemetry struct {
 	SavedChars       int    `json:"saved_chars,omitempty"`
 	Mode             string `json:"mode"`
 	Native           bool   `json:"native"`
-	EstTokens        int    `json:"est_tokens"`      // decision estimate that crossed the fold trigger
+	EstTokens        int    `json:"est_tokens"` // decision estimate that crossed the fold trigger
 	SourceTokens     int    `json:"source_tokens"`
 	FoldTokens       int    `json:"fold_tokens"` // summarizer input after any shortening
 	Spans            int    `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split
@@ -160,6 +160,7 @@ type CompactionTelemetry struct {
 	UserTurnsKept    int    `json:"user_turns_kept"`
 	UserTurnsDropped int    `json:"user_turns_dropped"` // past the retention budget, now summary-only
 	InputTokens      int    `json:"input_tokens"`
+	ElapsedMs        int64  `json:"elapsed_ms,omitempty"` // summarizer stage wall time
 	OutputTokens     int    `json:"output_tokens"`
 	CacheHitTokens   int    `json:"cache_hit_tokens"`
 	CacheMissTokens  int    `json:"cache_miss_tokens"`

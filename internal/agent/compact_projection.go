@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
@@ -187,9 +188,11 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
+	start := time.Now()
 	res, err := a.foldToSummary(ctx, snap.visible[:plan.firstFold], prepared.fold, prepared.instructions)
 	summary := res.Text
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, a.decisionEstimateTokens(), res)
+	tele.ElapsedMs = time.Since(start).Milliseconds()
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)

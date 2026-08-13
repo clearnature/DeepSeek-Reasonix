@@ -132,6 +132,7 @@ type CompactionRecord struct {
 	UserKept   int     `json:"user_kept,omitempty"`
 	UserDrop   int     `json:"user_dropped,omitempty"`
 	PrefHash   string  `json:"pref_hash,omitempty"`
+	ElapsedMs  int64   `json:"elapsed_ms,omitempty"` // summarizer stage wall time
 	Status     string  `json:"status,omitempty"`
 	TokPerChar float64 `json:"tpc,omitempty"`
 	RequestID  string  `json:"provider_request_id,omitempty"`

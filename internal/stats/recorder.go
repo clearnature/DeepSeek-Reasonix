@@ -200,6 +200,10 @@ func (r *Recorder) recordCompaction(e event.Event) {
 			if n, err := strconv.Atoi(v); err == nil {
 				rec.EstTok = n
 			}
+		case "elapsed_ms":
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				rec.ElapsedMs = n
+			}
 		default:
 			setCompactionInt(&rec, k, v)
 		}
