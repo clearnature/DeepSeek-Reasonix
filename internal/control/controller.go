@@ -267,11 +267,12 @@ type Controller struct {
 
 	// mu guards the run state; every critical section under it is short and
 	// non-blocking.
-	mu        sync.Mutex
-	cancel    context.CancelFunc
-	running   bool
-	finishing bool // TurnDone is still being delivered; park a replacement turn
-	canceling bool
+	mu                sync.Mutex
+	cancel            context.CancelFunc
+	running           bool
+	finishing         bool // TurnDone is still being delivered; park a replacement turn
+	finishingBoundary turnFinishingBoundary
+	canceling         bool
 	// closed marks the controller as terminally torn down (close() ran). It
 	// seals turn admission: without it, a submit arriving AFTER close cleared
 	// the parked queue — but while a still-running turn's TurnDone delivery
@@ -1004,6 +1005,7 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	// Close has already sealed admission permanently, so a late completion must
 	// not resurrect a finishing state after teardown.
 	c.finishing = !c.closed
+	c.finishingBoundary.begin(c.finishing)
 	c.cancel = nil
 	c.canceling = false
 	// The foreground turn is over (a parked replacement re-stamps its own
@@ -1015,6 +1017,7 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	defer func() {
 		c.mu.Lock()
 		c.finishing = false
+		c.finishingBoundary.end()
 		if c.closed {
 			c.mu.Unlock()
 			return
@@ -2142,13 +2145,6 @@ func (c *Controller) Cancel() {
 	}
 }
 
-// Running reports whether a turn is currently in flight.
-func (c *Controller) Running() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.running || c.finishing
-}
-
 // beginRotation claims the session-rotation gate. It fails if a turn is running
 // or another rotation is already in progress, so the caller holds exclusive
 // rights to swap the executor session from the check here through endRotation.
@@ -2390,17 +2386,17 @@ func (c *Controller) newInteractiveGate() *permission.Gate {
 	default:
 		policy.Mode = permission.Ask
 	}
-	// A session allowlist (e.g. --allowed-tools) must never satisfy a tool that
-	// requires fresh human approval on every call — memory remember/forget, plan
-	// approval, sandbox escape, managed config write. SessionAllow is checked
-	// before Ask in Policy.Decide, so leaving those entries in would let
-	// `--allowed-tools remember` write memory with no prompt. Strip them so the
-	// forced Ask rules below stay authoritative.
+	// SessionAllow must not cover fresh-human tools: it is checked before Ask,
+	// so `--allowed-tools remember` would skip the prompt. Interactive Auto and
+	// YOLO treat remember/forget as ordinary policy decisions; Auto still
+	// preserves an explicit configured Ask rule, while YOLO bypasses it.
 	policy.SessionAllow = rulesWithoutFreshHumanApproval(policy.SessionAllow)
-	policy.Ask = append(policy.Ask,
-		permission.Rule{Tool: memoryRememberTool},
-		permission.Rule{Tool: memoryForgetTool},
-	)
+	if mode != ToolApprovalAuto && mode != ToolApprovalYolo {
+		policy.Ask = append(policy.Ask,
+			permission.Rule{Tool: memoryRememberTool},
+			permission.Rule{Tool: memoryForgetTool},
+		)
+	}
 	var approver permission.Approver = gateApprover{c}
 	if mode == ToolApprovalDontAsk {
 		approver = denyPermissionApprover{}
@@ -5629,6 +5625,7 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 		// foreground goroutine actually exits; clearing it here would report idle
 		// while tools and prompt waiters were still live.
 		c.finishing = false
+		c.finishingBoundary.end()
 		if cancel != nil {
 			c.canceling = true
 		}
@@ -5761,11 +5758,9 @@ func (c *Controller) SetToolApprovalMode(mode string) {
 }
 
 // ApplyToolApprovalMode is SetToolApprovalMode reporting which pending
-// approval prompt ids the new posture auto-allowed. Prompts NOT in the
-// returned set are still pending here — fresh user decisions (plan, memory,
-// sandbox escape) never drain, and auto keeps approvals an allow policy would
-// not cover — so a frontend must keep showing them instead of assuming the
-// posture switch resolved everything (#6432).
+// approval prompt ids the new posture auto-allowed. Plan, sandbox escape,
+// and config writes never drain; Auto keeps explicit memory asks but drains
+// fallback ones; YOLO drains both. Frontends must keep the rest (#6432).
 func (c *Controller) ApplyToolApprovalMode(mode string) []string {
 	mode = normalizeToolApprovalMode(mode)
 	// Capture mode-change recovery dismissals before approval drain so a
@@ -6334,12 +6329,9 @@ func (c *Controller) requestApprovalDecisionWithOptions(ctx context.Context, too
 	// runs synchronously and before the dialog is shown. Native Reasonix
 	// PermissionRequest hooks stay advisory-only (see claudePermissionBlocking).
 	//
-	// A hook's auto-allow must never stand in for a human-required decision:
-	// sandbox escapes, Reasonix config writes, memory remember/forget, and
-	// plan approval (RequiresFreshHumanApprovalTool) are deliberately excluded
-	// from YOLO/auto-approval and Guardian too, so a broadly-matched plugin
-	// hook returning "allow" can't silently rubber-stamp them. A deny still
-	// applies universally — refusing is always safe to honor automatically.
+	// Hook auto-allow cannot replace a fresh-human decision. Interactive
+	// YOLO may already have skipped remember/forget via preApproved. Deny
+	// still applies universally — refusing is always safe to honor.
 	if hookSubject, hookArgs, ok := permissionRequestHookPayload(tool, subject, args); ok {
 		if decision, _ := c.hooks.PermissionRequest(ctx, tool, hookSubject, hookArgs); decision != nil {
 			switch {

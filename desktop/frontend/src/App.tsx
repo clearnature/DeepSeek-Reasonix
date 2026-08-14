@@ -53,6 +53,7 @@ import { ClearContextCard } from "./components/ClearContextCard";
 import { RuntimeDecisionCard } from "./components/RuntimeDecisionCard";
 import { decisionSurfaceMockFromInput, type DecisionSurfaceKind as MockDecisionSurfaceKind } from "./lib/decisionSurfaceMock";
 const UndoRewindBanner = lazy(() => import("./components/UndoRewindBanner").then((module) => ({ default: module.UndoRewindBanner })));
+const ProjectTree = lazy(() => import("./components/ProjectTree").then((module) => ({ default: module.ProjectTree })));
 /** Footer decision surface kinds. Runtime blockers are explicit recovery choices. */
 type DecisionSurfaceKind = MockDecisionSurfaceKind | "extension_form";
 import { StatusBar } from "./components/StatusBar";
@@ -69,7 +70,6 @@ import { OnboardingOverlay } from "./components/OnboardingOverlay";
 import { dismissOnboarding, shouldOpenOnboarding } from "./lib/onboarding";
 import { AppChrome } from "./components/AppChrome";
 import { ShortcutsCheatsheet } from "./components/ShortcutsCheatsheet";
-import { ProjectTree } from "./components/ProjectTree";
 import { WorktreeBadge } from "./components/WorktreeBadge";
 import { HeartbeatPanel } from "./custom/features/heartbeat/HeartbeatPanel";
 import "./custom/features/heartbeat/heartbeat.css";
@@ -113,7 +113,6 @@ import {
 } from "./lib/types";
 import type { InvocationMetadataMap, StructuredInvocationSubmit } from "./lib/invocationDisplay";
 import { formatSelectionReference, type SelectedTextInsertRequest } from "./lib/selectedTextContext";
-import { workspaceTreeVisitId } from "./lib/workspaceTreeMemory";
 import { resolveTaskMonitorSession } from "./lib/taskMonitorNavigation";
 import {
   composerProfileFromMeta,
@@ -196,7 +195,7 @@ import { applyConfiguredBaseAppearance, applyThemePack, applyThemeScene, clearTh
 import { ThemeBackground } from "./components/ThemeBackground";
 import { applyTextSize, DEFAULT_TEXT_SIZE, getTextSize, nextTextSize } from "./lib/textSize";
 import { useViewportHeightVar, useWindowStatePersistence } from "./lib/windowState";
-import { availableWorkspacePanelWidth, resolveLiveWorkspacePanelWidth, resolveWorkspacePanelWidth, workspacePanelAriaMinWidth } from "./lib/workspaceLayout";
+import { resolveLiveWorkspacePanelWidth, resolveWorkspacePanelPlacement, workspacePanelAriaMinWidth } from "./lib/workspaceLayout";
 import { createRafResizeUpdater } from "./lib/resizeDrag";
 import { useGlobalShortcut } from "./lib/keyboardShortcuts";
 import { useMountTransition } from "./lib/useMountTransition";
@@ -290,7 +289,13 @@ const RemotePanel = lazy(() => import("./components/RemotePanel").then((module) 
 const TerminalPanel = lazy(() => import("./components/TerminalPanel").then((module) => ({ default: module.TerminalPanel })));
 const TaskMonitorPanel = lazy(() => import("./components/TaskMonitorPanel").then((module) => ({ default: module.TaskMonitorPanel })));
 const TeamPanel = lazy(() => import("./components/TeamPanel").then((module) => ({ default: module.TeamPanel })));
-const WorkspacePanel = lazy(() => import("./components/WorkspacePanel").then((module) => ({ default: module.WorkspacePanel })));
+const WorkspacePanel = lazy(async () => {
+  const [module] = await Promise.all([
+    import("./components/WorkspacePanel"),
+    import("./components/WorkspacePanelStability.css"),
+  ]);
+  return { default: module.WorkspacePanel };
+});
 
 const CHAT_MIN_WIDTH = 400;
 const CHAT_COMFORT_MIN_WIDTH = 560;
@@ -1606,32 +1611,18 @@ const [teamsOpen, setTeamsOpen] = useState(false);
     : RIGHT_DOCK_MIN_RENDER_WIDTH;
   const workspacePanelMinWidth = rightDockDetailActive ? RIGHT_DOCK_PREVIEW_MIN_WIDTH : rightDockTreeMinWidth;
   const chatReservedWidth = workspacePanelOpen && !workspacePanelMaximized ? CHAT_COMFORT_MIN_WIDTH : CHAT_MIN_WIDTH;
-  const workspacePanelAvailableWidth = availableWorkspacePanelWidth({
-    viewportWidth,
-    sidebarCollapsed,
-    sidebarWidth,
-    chatMinWidth: chatReservedWidth,
-    resizerWidth: WORKSPACE_RESIZER_WIDTH,
+  const {
+    renderWidth: workspacePanelRenderWidth,
+    overlay: workspacePanelOverlay,
+    renderable: workspacePanelRenderable,
+    gridOpen: workspacePanelGridOpen,
+  } = resolveWorkspacePanelPlacement({
+    viewportWidth, sidebarCollapsed, sidebarWidth, chatMinWidth: chatReservedWidth,
+    resizerWidth: WORKSPACE_RESIZER_WIDTH, open: workspacePanelOpen,
+    maximized: workspacePanelMaximized, preferredWidth: preferredWorkspacePanelWidth,
+    minWidth: workspacePanelMinWidth, minRenderWidth: rightDockMinRenderWidth,
+    liveWidth: liveWorkspacePanelRenderWidth,
   });
-
-  const resolvedWorkspacePanelWidth = resolveWorkspacePanelWidth({
-    open: workspacePanelOpen,
-    maximized: workspacePanelMaximized,
-    preferredWidth: preferredWorkspacePanelWidth,
-    minWidth: workspacePanelMinWidth,
-    availableWidth: workspacePanelAvailableWidth,
-  });
-
-  const storedWorkspacePanelRenderWidth = workspacePanelMaximized ? preferredWorkspacePanelWidth : resolvedWorkspacePanelWidth;
-  const workspacePanelRenderWidth = liveWorkspacePanelRenderWidth ?? storedWorkspacePanelRenderWidth;
-  // The terminal is an independent bottom drawer; workspace panel renderability
-  // no longer depends on terminal mode.
-  const workspacePanelRenderable =
-    workspacePanelOpen && (
-      workspacePanelMaximized ||
-      workspacePanelRenderWidth >= rightDockMinRenderWidth
-    );
-  const workspacePanelGridOpen = workspacePanelRenderable && !workspacePanelMaximized;
   const resolveLiveWorkspacePanelRenderWidth = useCallback(
     (preferredWidth: number, nextSidebarWidth = sidebarWidth) =>
       resolveLiveWorkspacePanelWidth({
@@ -1680,14 +1671,17 @@ const [teamsOpen, setTeamsOpen] = useState(false);
     state.sessionGen,
     workspaceControllerEpoch,
   ].join("\u0000");
-  // A topic may contain multiple saved sessions; the concrete session path is
-  // the runtime conversation identity, with topic/tab ids only as fallbacks.
+  // Workspace navigation belongs to the project, not to a single conversation.
+  // A session switch inside the same project must therefore retain the dock,
+  // tree and selection state.
   const workspaceTreeMemoryKey = [
     activeTab?.scope ?? "",
     activeTab?.workspaceRoot ?? state.meta?.cwd ?? "",
-    activeTab?.sessionPath || state.meta?.sessionPath || activeTab?.topicId || activeTabId || "",
   ].join("\u0000");
-  const workspaceTreeMemoryVisitId = workspaceTreeVisitId(workspaceTreeMemoryKey);
+  const restoreWorkspaceDockWidths = useCallback((treeWidth: number, previewWidth: number) => {
+    setRightDockTreeWidth(rightDockTreeWidthClamp(treeWidth));
+    setRightDockPreviewWidth(clampRightDockPreviewWidth(previewWidth));
+  }, [rightDockTreeWidthClamp]);
   const sidebarImDetailConnection = useMemo(
     () => sidebarImConnections.find((connection) => connection.id === sidebarImDetailConnectionId) ?? null,
     [sidebarImConnections, sidebarImDetailConnectionId],
@@ -2116,12 +2110,10 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   // a stale local dismissal cannot hide work that still blocks final readiness;
   // every new list starts collapsed while its header keeps showing live progress
   // and the current task; completed lists can then be dismissed. The dismissal
-  // key is still based on stable todo content/state so history reloads
-  // do not resurrect the same finished list under a different event id. The
-  // batch key ignores status changes so progress within the same task list does
-  // not look like a brand-new task batch. Dismissal and open state are scoped to
-  // the active session/topic/tab so different projects and sessions do not hide
-  // or reopen each other's todo panels.
+  // key is still based on stable todo content/state so history reloads do not
+  // resurrect the same finished list under a different event id. The batch key
+  // ignores status so progress in the same list is not a new batch. Dismissal
+  // is scoped per session/topic/tab and also persisted on the session sidecar.
   const todoEntry = useMemo(() => {
     for (let i = state.items.length - 1; i >= 0; i--) {
       const it = state.items[i];
@@ -2150,7 +2142,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   );
   const scopedTodoKey = useMemo(() => scopedTodoDismissalKey(todoScope, todoKey), [todoKey, todoScope]);
   const scopedTodoBatch = useMemo(() => scopedTodoBatchKey(todoScope, todoBatch), [todoBatch, todoScope]);
-  const showTodos = shouldShowTodoPanel(todoKey, dismissedTodo, todos);
+  const showTodos = shouldShowTodoPanel(todoKey, dismissedTodo, todos, { batchKey: todoBatch, batches: state.meta?.sessionPath === activeTab?.sessionPath ? state.meta?.dismissedTodoBatches : undefined });
   const dismissTodos = useCallback(() => {
     if (!scopedTodoKey) return;
     setDismissedTodoKeys((current) => {
@@ -2160,7 +2152,8 @@ const [teamsOpen, setTeamsOpen] = useState(false);
       saveDismissedTodoKeys(next);
       return next;
     });
-  }, [scopedTodoKey]);
+    if (activeTabId && todoBatch) void app.DismissTodoBatchForTab(activeTabId, todoBatch).catch(() => undefined);
+  }, [activeTabId, scopedTodoKey, todoBatch]);
 
   const sessionTitle = topicTitle(activeTab);
   const sessionHasContent = state.items.length > 0 || Boolean(state.live?.text || state.live?.reasoning);
@@ -4302,6 +4295,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
           sidebarCollapsed ? "layout--sidebar-collapsed" : "",
           sidebarResizing ? "layout--resizing layout--sidebar-resizing" : "",
           workspacePanelGridOpen ? "layout--workspace-open" : "",
+          workspacePanelOverlay ? "layout--workspace-overlay" : "",
           "layout--terminal-drawer-open",
           terminalPanelOpen ? "layout--terminal-drawer-expanded" : "",
           terminalResizing ? "layout--terminal-resizing" : "",
@@ -4433,30 +4427,30 @@ const [teamsOpen, setTeamsOpen] = useState(false);
           )}
 
           <section className="sidebar__section sidebar__section--projects">
-            <ProjectTree
-              activeScope={activeTab?.scope}
-              activeWorkspaceRoot={activeTab?.workspaceRoot}
-              activeTopicId={activeTab?.topicId}
-              activeSessionPath={activeTab?.sessionPath}
-              imTopicSources={imTopicSources}
-              onOpenTopic={handleOpenTopic}
-              onCreateTopic={(scope, workspaceRoot) => openBlankSession(scope, scope === "project" ? workspaceRoot : "")}
-              onCreateDeliveryWorktree={(workspaceRoot) => enqueueNavigation({ kind: "delivery-worktree", workspaceRoot })}
-              onTopicsChanged={refreshProjectsAndTabs}
-              onRenameTopic={renameTopic}
-              refreshSignal={projectRevision}
-              onAddProject={async () => {
-                await switchFolder();
-              }}
-              timeFilter={topicTimeFilter}
-              onTimeFilterChange={setTopicTimeFilter}
-              variant={sidebarWorkbench ? "workbench" : sidebarCreation ? "creation" : "classic"}
-              searchExpanded={!sidebarCreation || sidebarSearchOpen}
-              searchFocusSignal={sidebarSearchFocusSignal}
-              showShortcutBadges={showTopicBadges}
-              shortcutPlatform={desktopPlatform}
-              onVisibleTopicsChange={handleVisibleTopicsChange}
-            />
+            <Suspense fallback={null}><ProjectTree
+                activeScope={activeTab?.scope}
+                activeWorkspaceRoot={activeTab?.workspaceRoot}
+                activeTopicId={activeTab?.topicId}
+                activeSessionPath={activeTab?.sessionPath}
+                imTopicSources={imTopicSources}
+                onOpenTopic={handleOpenTopic}
+                onCreateTopic={(scope, workspaceRoot) => openBlankSession(scope, scope === "project" ? workspaceRoot : "")}
+                onCreateDeliveryWorktree={(workspaceRoot) => enqueueNavigation({ kind: "delivery-worktree", workspaceRoot })}
+                onTopicsChanged={refreshProjectsAndTabs}
+                onRenameTopic={renameTopic}
+                refreshSignal={projectRevision}
+                onAddProject={async (path) => {
+                  await switchFolder(path);
+                }}
+                timeFilter={topicTimeFilter}
+                onTimeFilterChange={setTopicTimeFilter}
+                variant={sidebarWorkbench ? "workbench" : sidebarCreation ? "creation" : "classic"}
+                searchExpanded={!sidebarCreation || sidebarSearchOpen}
+                searchFocusSignal={sidebarSearchFocusSignal}
+                showShortcutBadges={showTopicBadges}
+                shortcutPlatform={desktopPlatform}
+                onVisibleTopicsChange={handleVisibleTopicsChange}
+              /></Suspense>
           </section>
 
           {sidebarWorkbench ? (
@@ -4906,6 +4900,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                   actionHoverMenus={sidebarCreation && !hydratePlaceholderActive}
                   rewindSignal={rewindSignal}
                   revealSignal={transcriptRevealSignal}
+                  historyLayoutRevision={state.historyLayoutRevision}
                   hydrating={transcriptHydrating}
                   hasOlderHistory={state.historyHasOlder && !rewindState}
                   olderHistoryCount={state.historyStartTurn}
@@ -5211,6 +5206,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
             className={[
               "workbench-dock",
               `workbench-dock--${rightDockMode}`,
+              workspacePanelOverlay ? "workbench-dock--overlay" : "",
             ].join(" ")}
             aria-label={t("rightDock.workbench")}
           >
@@ -5293,7 +5289,9 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                     cwd={state.meta?.cwd}
                     workspaceScopeKey={workspaceScopeKey}
                     workspaceMemoryKey={workspaceTreeMemoryKey}
-                    workspaceMemoryVisitId={workspaceTreeMemoryVisitId}
+                    dockTreeWidth={rightDockTreeWidth}
+                    dockPreviewWidth={rightDockPreviewWidth}
+                    onRestoreDockWidths={restoreWorkspaceDockWidths}
                     maximized={workspacePanelMaximized}
                     panelWidth={workspacePanelRenderWidth}
                     onClose={() => setWorkspacePanel(false)}

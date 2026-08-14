@@ -4,7 +4,7 @@ import type { HistoryServerSearch } from "./searchSources";
 import type { Todo } from "./tools";
 import type { ContextMaintenanceInfo, WireContextMaintenance } from "./contextMaintenanceTypes";
 export type { ContextMaintenanceInfo, ContextMaintenanceReceipt, WireContextMaintenance } from "./contextMaintenanceTypes";
-export type { ProjectTopicKey, ProjectTopicPage, ProjectTopicPageRequest, ProjectTreeChangedV2, ProjectTreeSnapshot, SessionCatalogBindings, SessionCatalogStatus, SessionReference } from "./sessionCatalogTypes";
+export type { ProjectRuntimeTopic, ProjectTopicKey, ProjectTopicPage, ProjectTopicPageRequest, ProjectTreeChangedV2, ProjectTreeRuntimeSnapshot, ProjectTreeSnapshot, SessionCatalogBindings, SessionCatalogStatus, SessionReference } from "./sessionCatalogTypes";
 export type EventKind =
   | "turn_started"
   | "reasoning"
@@ -585,7 +585,7 @@ export interface DeliveryWorktreeOpenResult {
   tab: TabMeta;
 }
 
-export type ProjectTopicStatus = "thinking" | "streaming" | "waiting_confirmation" | "background_job" | "paused" | "error" | "diverged_recovery";
+export type ProjectTopicStatus = "thinking" | "streaming" | "waiting_confirmation" | "background_job" | "paused" | "awaiting_delivery" | "error" | "diverged_recovery";
 
 export interface TopicMeta {
   id: string;
@@ -937,7 +937,7 @@ export interface Meta {
   goal?: string;
   goalStatus?: GoalStatus;
   goalRuntime?: GoalRuntime;
-  canonicalTodos?: Todo[];
+  canonicalTodos?: Todo[]; dismissedTodoBatches?: string[];
 }
 
 export type CollaborationMode = "normal" | "plan" | "goal";

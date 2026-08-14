@@ -470,14 +470,14 @@ func (a *Agent) SetResponseLanguage(lang string) {
 	a.responseLanguage.Store(NormalizeResponseLanguage(lang))
 }
 
-// SetGate installs the per-call permission gate. Used by interactive CLI sessions to swap the
-// headless gate built in setup for an interactive one that prompts the user;
-// nil disables gating. Safe to call before the run loop starts.
+// SetGate installs the per-call permission gate. Interactive frontends also use
+// it to switch approval modes while a turn is running, so readers take an
+// atomic snapshot through agentServices. nil disables gating.
 func (a *Agent) SetGate(g Gate) {
 	if nilutil.IsNil(g) {
 		g = nil
 	}
-	a.svc.gate = g
+	a.svc.setGate(g)
 }
 
 // SetExtensions installs the extension dispatcher after construction. Boot
@@ -1281,14 +1281,6 @@ func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, read
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey
-	runLimitHostOwned := false
-	if limit, ok := runStepLimitFromContext(ctx); ok {
-		runMaxSteps = limit.steps
-		runLimitHostOwned = true
-		if limit.key != "" {
-			runMaxStepsKey = limit.key
-		}
-	}
 	a.recovery.runSeq.Add(1)
 	// All role settings participate in the workspace lease for the run; the
 	// exclusive write lock is still acquired lazily on the first real writer.
@@ -1340,7 +1332,6 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	}
 	state.runMaxSteps = runMaxSteps
 	state.runMaxStepsKey = runMaxStepsKey
-	state.runLimitHostOwned = runLimitHostOwned
 	state.workDurationMs = workDurationMs
 	return a.runToolLoop(ctx, state)
 }

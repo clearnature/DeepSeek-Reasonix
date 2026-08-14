@@ -569,3 +569,100 @@ func CanonicalSessionPathForTopic(sessions []SessionRecord, current string) stri
 	}
 	return canonical
 }
+
+// OrdinaryContinuePath returns a safe continuation when current is the ordinary
+// parent. Explicit recovery paths stay put so History can inspect them.
+func OrdinaryContinuePath(sessions []SessionRecord, current string) string {
+	canonical := CanonicalSessionPathForTopic(sessions, current)
+	if canonical == "" {
+		canonical = uniqueLinearRecoveryLeaf(sessions)
+	}
+	current = strings.TrimSpace(current)
+	if canonical == "" || current == canonical {
+		return ""
+	}
+	if current == "" {
+		return canonical
+	}
+	for _, session := range sessions {
+		if session.Path != current {
+			continue
+		}
+		if session.Recovered {
+			return ""
+		}
+		return canonical
+	}
+	return canonical
+}
+
+// uniqueLinearRecoveryLeaf selects the only monotonic descendant in a complete
+// parent chain. It is an open target only; content coverage still exclusively
+// controls adoption and cleanup.
+func uniqueLinearRecoveryLeaf(sessions []SessionRecord) string {
+	if len(sessions) < 2 {
+		return ""
+	}
+	byID := make(map[string]int, len(sessions))
+	root := -1
+	recovered := 0
+	for i, session := range sessions {
+		id := agent.BranchID(session.Path)
+		if id == "" {
+			return ""
+		}
+		if _, duplicate := byID[id]; duplicate {
+			return ""
+		}
+		byID[id] = i
+		if session.Recovered {
+			recovered++
+			continue
+		}
+		if root >= 0 {
+			return ""
+		}
+		root = i
+	}
+	if root < 0 || recovered == 0 {
+		return ""
+	}
+	children := make(map[string]int, recovered)
+	for i, session := range sessions {
+		if !session.Recovered {
+			continue
+		}
+		parentID := strings.TrimSpace(session.ParentID)
+		parent, ok := byID[parentID]
+		if parentID == "" || !ok {
+			return ""
+		}
+		if _, forked := children[parentID]; forked {
+			return ""
+		}
+		if session.TurnsState == TurnsValid && sessions[parent].TurnsState == TurnsValid && session.Turns < sessions[parent].Turns {
+			return ""
+		}
+		if session.LastActivityAt > 0 && sessions[parent].LastActivityAt > 0 && session.LastActivityAt < sessions[parent].LastActivityAt {
+			return ""
+		}
+		children[parentID] = i
+	}
+	seen := make(map[int]struct{}, recovered+1)
+	leaf := root
+	for {
+		if _, duplicate := seen[leaf]; duplicate {
+			return ""
+		}
+		seen[leaf] = struct{}{}
+		next, ok := children[agent.BranchID(sessions[leaf].Path)]
+		if !ok {
+			break
+		}
+		leaf = next
+	}
+	if len(seen) != len(sessions) || !sessions[leaf].Recovered {
+		return ""
+	}
+	return strings.TrimSpace(sessions[leaf].Path)
+}

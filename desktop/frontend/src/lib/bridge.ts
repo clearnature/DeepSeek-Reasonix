@@ -8,12 +8,14 @@ import { maybeShare } from "./queryCoalesce";
 import { makeMockSessionCatalogBindings } from "./sessionCatalogBridge";
 import { makeMockHistoryCatalogBindings, type HistoryCatalogBindings } from "./historyCatalogBridge";
 import { makeMockTaskCatalogBindings, type TaskCatalogBindings } from "./taskCatalogBridge";
+import { makeMockBlankProjectBindings, type BlankProjectBindings } from "./blankProjectBridge";
 import { t } from "./i18n";
 import { providerIsConfigured, providerRequiresKey, removeProviderAccessesForMock } from "./providerModels";
 import { DEFAULT_STATUS_BAR_ITEMS, normalizeStatusBarItems } from "./statusBarItems";
 import { registerTrustedThemeBackgroundURLs } from "./themePack";
 import { modeHasAutoApproveTools, modeWithAutoApproveTools, modeWithPlan, normalizeCollaborationMode, normalizeMode, normalizeTokenMode, normalizeToolApprovalMode } from "./types";
 import { decisionSurfaceMockFromInput, isLongDecisionOptionsMockInput } from "./decisionSurfaceMock";
+import { mockWorkspaceFile } from "./mockWorkspaceFile";
 import type {
   RemoteHostView,
   RemoteHostInput,
@@ -125,6 +127,7 @@ import type {
   WorkspaceView,
   SessionClearResult,
 } from "./types";
+import type { MarkdownImageView } from "./markdownImage";
 
 const GLOBAL_PROJECT_ORDER_KEY = "__global__";
 
@@ -143,8 +146,7 @@ function stripLegacyGoalBudgetFlags(arg: string): string {
 // Run `wails generate module` after adding/renaming a bound method on App, then
 // `pnpm typecheck` to verify the mock still satisfies the contract.
 //
-// Types for the new native-feel bindings — kept inline since they are
-// bridge-specific and only used in AppBindings / the dev mock.
+// Types for native-feel bindings, used only by AppBindings and the dev mock.
 interface NativeConfirmRequest {
   title: string;
   message: string;
@@ -162,13 +164,12 @@ interface DesktopWindowState {
   maximised: boolean;
 }
 
-// AppBindings is the hand-written contract between the React app and the Go
-// kernel. It uses local types (types.ts) so components don't import generated
-// model classes. _CheckGeneratedBindings catches drift: when a Go method is
+// AppBindings is the hand-written contract between React and Go. Components use
+// local types instead of generated model classes. _CheckGeneratedBindings catches drift: when a Go method is
 // added or renamed, the generated types shift, and a key present in GeneratedApp
 // but missing from AppBindings causes a type error here. Fix: add the new method
 // to AppBindings, then run `pnpm typecheck` to verify.
-export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindings, TaskCatalogBindings {
+export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings {
   Platform(): Promise<string>;
   MinimiseMainWindow(): Promise<void>;
   ToggleMaximiseMainWindow(): Promise<void>;
@@ -251,7 +252,6 @@ export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindi
   ResolvePlanDecisionTab(tabID: string, id: string, action: "start_execution" | "revise_plan" | "exit_plan"): Promise<void>;
   ResolveRecovery(id: string, action: string, feedback: string): Promise<void>;
   ResolveRecoveryTab(tabID: string, id: string, action: string, feedback: string): Promise<void>;
-  // Legacy no-ops: Auto Guard is always built into Auto.
   SetRecoveryCheckpointEnabled(enabled: boolean): Promise<void>;
   SetRecoveryCheckpointEnabledTab(tabID: string, enabled: boolean): Promise<void>;
   RecoveryCheckpointEnabled(): Promise<boolean>;
@@ -259,10 +259,10 @@ export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindi
   AnswerQuestion(id: string, answers: QuestionAnswer[]): Promise<void>;
   AnswerQuestionForTab(tabID: string, id: string, answers: QuestionAnswer[]): Promise<void>;
   ReplayPendingPrompts(): Promise<void>;
+  ReplayPendingPromptsForTab(tabID: string): Promise<void>;
   SetPlanMode(on: boolean): Promise<void>;
   SetMode(mode: string): Promise<void>;
-  // Resolves with the pending approval prompt ids the switch auto-allowed
-  // (drained); prompts not listed are still pending backend-side (#6432).
+  // Returns auto-allowed prompt ids; unlisted prompts remain pending (#6432).
   SetModeForTab(tabID: string, mode: string): Promise<string[] | void>;
   SetAutoApproveTools(on: boolean): Promise<void>;
   SetCollaborationMode(mode: string): Promise<void>;
@@ -368,7 +368,7 @@ TeamPanelViewForTab(tabID: string): Promise<unknown>;
   CloseTabWithPolicy(tabID: string, policy: "keep_running" | "stop_and_close"): Promise<void>;
   ToolResultForTab(tabID: string, toolID: string): Promise<{ args: string; output: string; execution?: import("./types").WireShellExecution } | null>;
   Meta(): Promise<Meta>;
-  MetaForTab(tabID: string): Promise<Meta>;
+  MetaForTab(tabID: string): Promise<Meta>; DismissTodoBatchForTab(tabID: string, batchKey: string): Promise<void>;
   Commands(): Promise<CommandInfo[]>;
   Capabilities(): Promise<CapabilitiesView>;
   MCPServers(): Promise<ServerView[]>;
@@ -424,6 +424,7 @@ TeamPanelViewForTab(tabID: string): Promise<unknown>;
   SearchFileRefsForTab(tabID: string, query: string): Promise<DirEntry[]>;
   ReadFile(rel: string): Promise<FilePreview>;
   ReadFileForTab(tabID: string, rel: string): Promise<FilePreview>;
+  ResolveMarkdownImageForTab(tabID: string, source: string): Promise<MarkdownImageView>;
   WorkspaceRevisionForTab(tabID: string): Promise<{ revisions: WorkspaceRevisions; watchState: "active" | "degraded" | "unavailable" }>;
   WorkspaceChanges(tabID: string): Promise<WorkspaceChangesView>;
   WorkspaceChangeDetail(tabID: string, path: string): Promise<WorkspaceChangeDetailView>;
@@ -561,6 +562,7 @@ TeamPanelViewForTab(tabID: string): Promise<unknown>;
   SetDesktopZoomFactor(factor: number): Promise<void>;
   GetDesktopZoomFactor(): Promise<number>;
   RestartApplication(): Promise<void>;
+  ReportDesktopWebViewReady(): Promise<void>;
   SetDesktopCheckUpdates(enabled: boolean): Promise<void>;
   SetDesktopUpdateChannel(channel: string): Promise<void>;
   SetDesktopTelemetry(enabled: boolean): Promise<void>;
@@ -927,7 +929,7 @@ export function onReady(cb: (tabId?: string) => void): () => void {
 
 export function onProjectTreeChanged(cb: () => void): () => void {
   if (realApp() && typeof window !== "undefined" && window.runtime) {
-    return window.runtime.EventsOn("project-tree:changed", () => cb());
+    return window.runtime.EventsOn("project-tree:changed", (payload?: unknown) => (payload as { reason?: unknown } | undefined)?.reason !== "runtime" && cb());
   }
   return () => {};
 }
@@ -1834,9 +1836,9 @@ function makeMockApp(): AppBindings {
       root: "~/projects/joyquant-db",
       projectColor: "blue",
       children: [
-        { key: "topic_dev_standard", kind: "topic", label: `● ${t("mock.topicDevStandard")}`, root: "~/projects/joyquant-db", topicId: "topic_dev_standard", projectColor: "blue", turns: 18, lastActivityAt: mockNow - 8 * 60_000, open: true, running: runningMock },
-        { key: "topic_db_maint", kind: "topic", label: t("mock.topicDbMaint"), root: "~/projects/joyquant-db", topicId: "topic_db_maint", projectColor: "blue", turns: 7, lastActivityAt: mockNow - 2 * 60 * 60_000 },
-        { key: "topic_env", kind: "topic", label: t("mock.topicEnv"), root: "~/projects/joyquant-db", topicId: "topic_env", projectColor: "blue", turns: 3, lastActivityAt: mockNow - 26 * 60 * 60_000 },
+        { key: "topic_dev_standard", kind: "topic", label: `● ${t("mock.topicDevStandard")}`, root: "~/projects/joyquant-db", topicId: "topic_dev_standard", projectColor: "blue", turns: 18, createdAt: mockNow - 3 * 24 * 60 * 60_000, lastActivityAt: mockNow - 8 * 60_000, open: true, running: runningMock },
+        { key: "topic_db_maint", kind: "topic", label: t("mock.topicDbMaint"), root: "~/projects/joyquant-db", topicId: "topic_db_maint", projectColor: "blue", turns: 7, createdAt: mockNow - 2 * 24 * 60 * 60_000, lastActivityAt: mockNow - 2 * 60 * 60_000 },
+        { key: "topic_env", kind: "topic", label: t("mock.topicEnv"), root: "~/projects/joyquant-db", topicId: "topic_env", projectColor: "blue", turns: 3, createdAt: mockNow - 24 * 60 * 60_000, lastActivityAt: mockNow - 26 * 60 * 60_000 },
       ],
     },
     {
@@ -2110,18 +2112,19 @@ function makeMockApp(): AppBindings {
 	        if (turnsOf[i] >= oldestTurn) { lo = i; break; }
 	      }
 	    }
-	    // Entry budget: the real backend keeps the newest suffix within the
-	    // entries cap, so oversized turns page toward older history instead of
-	    // returning thousands of rows at once.
+	    // Keep the newest suffix within the real backend's entry cap.
 	    const maxEntries = Math.max(1, Math.floor(req.entries || 120));
 	    if (before - lo > maxEntries) lo = before - maxEntries;
-	    const entries = messages.slice(lo, before).map((message, index) => ({
-	      entryId: `smock-${tabID}:r0:m${lo + index}:o0`,
-	      turn: turnsOf[lo + index],
-	      order: lo + index,
-	      message,
-	      refs: [],
-	    }));
+	    const entries = messages.slice(lo, before).map((message, index) => {
+	      const entryId = `smock-${tabID}:r0:m${lo + index}:o0`;
+	      const content = message.content ?? "";
+	      const lazyContent = benchMock && content.includes("ASYNC LAYOUT EXPANSION COMPLETE");
+	      return {
+	        entryId, turn: turnsOf[lo + index], order: lo + index,
+	        message: lazyContent ? { ...message, content: content.slice(0, 4 * 1024) } : message,
+	        refs: lazyContent ? [{ entryId, field: "content", size: content.length, chunks: 1, revision: 0, revKnown: false, digest: "" }] : [],
+	      };
+	    });
 	    const visibleTurns = entries.map((entry) => entry.turn).filter((value) => value > 0);
 	    return {
 	      entries,
@@ -2450,6 +2453,7 @@ function makeMockApp(): AppBindings {
   };
   return {
     ...makeMockSessionCatalogBindings(cloneProjectTree),
+    ...makeMockBlankProjectBindings(),
     async MinimiseMainWindow() {
       console.info("mock MinimiseMainWindow");
     },
@@ -3048,6 +3052,7 @@ function makeMockApp(): AppBindings {
           await withMockTabScope(_tabID, () => this.AnswerQuestion(id, answers));
         },
         async ReplayPendingPrompts() {},
+        async ReplayPendingPromptsForTab(_tabID) {},
         async ConfirmAction(req) {
           void req;
           return false;
@@ -3265,6 +3270,7 @@ async TeamPanelViewForTab() { return null; },
           if (!match) return out;
           const messages = await this.HistoryForTab(tabID);
           const message = messages[Number(match[1])];
+          if (benchMock && message?.content?.includes("ASYNC LAYOUT EXPANSION COMPLETE")) await delay(1_500);
           if (!message) return { ...out, stale: true };
           out.data = mockHistoryContentField(message, ref);
           out.chunks = 1;
@@ -3491,7 +3497,7 @@ async TeamPanelViewForTab() { return null; },
             goal: active?.goal ?? "",
             goalStatus: active?.goalStatus ?? (active?.goal ? "running" : "stopped"),
           };
-        },
+        }, async DismissTodoBatchForTab() {},
         async MetaForTab(tabID) {
           const tab = mockTabs.find((item) => item.id === tabID) ?? mockTabs.find((item) => item.active) ?? mockTabs[0];
           const toolApprovalMode = normalizeToolApprovalMode(tab?.toolApprovalMode, tab ? normalizeMode(tab.mode) : "normal", settings.autoApproveTools);
@@ -4021,22 +4027,13 @@ async TeamPanelViewForTab() { return null; },
       return this.SearchFileRefs(query);
     },
     async ReadFile(rel: string) {
-      const samples: Record<string, string> = {
-        "README.md": "# Reasonix\n\nBrowser-dev workspace preview.\n\n- Chat in the center\n- Browse files on the right\n- Keep sessions on the left\n",
-        "go.mod": "module reasonix\n\ngo 1.23\n",
-        "desktop/file.go": "package desktop\n\nfunc main() {\n\tprintln(\"workspace preview\")\n}\n",
-        "internal/event.go": "package internal\n\n// mock file used by the browser dev seam\n",
-      };
-      return {
-        path: rel,
-        body: samples[rel] ?? `// ${rel}\n\nMock file body from browser dev.`,
-        size: samples[rel]?.length ?? 42,
-        truncated: false,
-        binary: false,
-      };
+      return mockWorkspaceFile(rel);
     },
     async ReadFileForTab(_tabID: string, rel: string) {
       return this.ReadFile(rel);
+    },
+    async ResolveMarkdownImageForTab(_tabID: string, source: string) {
+      return { url: source, openHref: source };
     },
     async WorkspaceRevisionForTab(_tabID: string) {
       return { revisions: { content: 0, tree: 0, workingTree: 0, gitMeta: 0, session: 0 }, watchState: "active" as const };
@@ -4888,6 +4885,9 @@ async TeamPanelViewForTab() { return null; },
           return mockDesktopZoomFactor;
         },
         async RestartApplication() {
+          // no-op in mock
+        },
+        async ReportDesktopWebViewReady() {
           // no-op in mock
         },
         async SetDesktopCheckUpdates(enabled: boolean) {

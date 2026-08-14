@@ -13,11 +13,9 @@ import (
 	"io"
 	"log/slog"
 	"maps"
-	"mime"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	goruntime "runtime"
@@ -52,6 +50,7 @@ import (
 	"reasonix/internal/notify"
 	"reasonix/internal/plugin"
 	"reasonix/internal/pluginpkg"
+	"reasonix/internal/proc"
 	"reasonix/internal/provider"
 	"reasonix/internal/repair"
 	"reasonix/internal/sessioncatalog"
@@ -191,6 +190,7 @@ type App struct {
 	// may or may not hold a.mu, so it cannot re-lock). Never write it after
 	// startup.
 	projectTreeChangedHook func()
+	projectTreeRuntime     projectTreeRuntimeState
 
 	// singleSurfaceMu serializes open/reuse plus visible-tab pruning for the
 	// one-conversation layout so overlapping navigation cannot remove the tab
@@ -363,128 +363,14 @@ type App struct {
 	healthyUpdateTransactionID string
 	// startupReady records that the window reached domReady so LKG config
 	// snapshots and update health are only committed after a real UI boot.
-	startupReady atomic.Bool
+	startupReady     atomic.Bool
+	webView2Recovery *webView2RecoveryCoordinator
 }
 
 type skillRootsCache struct {
 	key   string
 	at    time.Time
 	roots []SkillRootView
-}
-
-// mediaTokenEntry holds metadata for a workspace media file served via temporary URL.
-type mediaTokenEntry struct {
-	absPath   string
-	filename  string
-	mime      string
-	kind      string
-	size      int64
-	modTime   time.Time
-	createdAt time.Time
-	expiresAt time.Time
-}
-
-// mediaTokenStore manages temporary tokens that grant access to workspace files
-// through the AssetServer middleware. Tokens expire after a fixed TTL and are
-// capped at a maximum count; creating a new token evicts the oldest entry when
-// the store is full.
-type mediaTokenStore struct {
-	mu    sync.Mutex
-	byTok map[string]*mediaTokenEntry
-	order []string // oldest first
-	maxN  int
-	ttl   time.Duration
-}
-
-const mediaTokenMax = 256
-
-func newMediaTokenStore() *mediaTokenStore {
-	return &mediaTokenStore{
-		byTok: map[string]*mediaTokenEntry{},
-		maxN:  mediaTokenMax,
-		ttl:   10 * time.Minute,
-	}
-}
-
-func (s *mediaTokenStore) cleanupLocked() {
-	now := time.Now()
-	for len(s.order) > 0 {
-		tok := s.order[0]
-		e := s.byTok[tok]
-		if e == nil {
-			s.order = s.order[1:]
-			continue
-		}
-		if !now.Before(e.expiresAt) {
-			delete(s.byTok, tok)
-			s.order = s.order[1:]
-			continue
-		}
-		break
-	}
-	for len(s.order) > s.maxN {
-		oldest := s.order[0]
-		delete(s.byTok, oldest)
-		s.order = s.order[1:]
-	}
-}
-
-func (s *mediaTokenStore) create(absPath, filename, mime, kind string, size int64, modTime time.Time) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.cleanupLocked()
-
-	tok := make([]byte, 16)
-	if _, err := rand.Read(tok); err != nil {
-		panic("crypto/rand.Read failed: " + err.Error())
-	}
-	token := hex.EncodeToString(tok)
-
-	now := time.Now()
-	s.byTok[token] = &mediaTokenEntry{
-		absPath:   absPath,
-		filename:  filename,
-		mime:      mime,
-		kind:      kind,
-		size:      size,
-		modTime:   modTime,
-		createdAt: now,
-		expiresAt: now.Add(s.ttl),
-	}
-	s.order = append(s.order, token)
-
-	// Trim oldest if the new token pushed us over the limit.
-	for len(s.order) > s.maxN {
-		oldest := s.order[0]
-		delete(s.byTok, oldest)
-		s.order = s.order[1:]
-	}
-
-	return token
-}
-
-func (s *mediaTokenStore) get(token string) *mediaTokenEntry {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	e := s.byTok[token]
-	if e == nil {
-		return nil
-	}
-	if time.Now().After(e.expiresAt) {
-		delete(s.byTok, token)
-		return nil
-	}
-	return e
-}
-
-func (a *App) ensureMediaTokenStore() *mediaTokenStore {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.mediaTokens == nil {
-		a.mediaTokens = newMediaTokenStore()
-	}
-	return a.mediaTokens
 }
 
 // jsProfilingMiddleware opts every asset response into the JS Self-Profiling
@@ -496,54 +382,6 @@ func (a *App) jsProfilingMiddleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Document-Policy", "js-profiling")
 			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// workspaceMediaMiddleware returns an HTTP middleware that intercepts
-// /__reasonix_workspace_media/{token}/{filename} requests and serves the
-// corresponding workspace file. All other paths pass through to the Wails
-// default asset handler unchanged.
-func (a *App) workspaceMediaMiddleware() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			prefix := "/__reasonix_workspace_media/"
-			if !strings.HasPrefix(r.URL.Path, prefix) {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			if r.Method != http.MethodGet && r.Method != http.MethodHead {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				return
-			}
-
-			rest := strings.TrimPrefix(r.URL.Path, prefix)
-			parts := strings.SplitN(rest, "/", 2)
-			if len(parts) == 0 || parts[0] == "" {
-				http.NotFound(w, r)
-				return
-			}
-			token := parts[0]
-
-			entry := a.ensureMediaTokenStore().get(token)
-			if entry == nil {
-				http.NotFound(w, r)
-				return
-			}
-
-			f, err := os.Open(entry.absPath)
-			if err != nil {
-				http.NotFound(w, r)
-				return
-			}
-			defer f.Close()
-
-			w.Header().Set("Content-Type", entry.mime)
-			w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": entry.filename}))
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("Cache-Control", "private, max-age=600")
-			http.ServeContent(w, r, entry.filename, entry.modTime, f)
 		})
 	}
 }
@@ -562,6 +400,7 @@ func NewApp() *App {
 		remoteWindows:       newRemoteWindowRegistry(),
 		remoteWindowOwnerID: newRemoteWindowOwnerID(),
 	}
+	a.webView2Recovery = newWebView2RecoveryCoordinator(a)
 	a.workspaceHub = newWorkspaceChangeHub(a)
 	a.terminals = newTerminalManager(a)
 	a.botBridge = a.newBotBridge()
@@ -592,6 +431,7 @@ func (a *App) startup(ctx context.Context) {
 	// OnStartup before its DBus single-instance handoff.
 	initializeLifecycleDiagnostics(a)
 	a.startWindowsWebView2StartupFallback(ctx)
+	a.webView2Recovery.startGuidance(ctx)
 	a.lifecycle.tracker.markAsync("ready")
 	if a.remoteWindowTicket != "" {
 		// Remote web window child: no local tabs, tray, heartbeat, providers,
@@ -1017,6 +857,7 @@ func (a *App) domReady(_ context.Context) {
 		a.domReadyRemoteWindow()
 		return
 	}
+	a.webView2Recovery.reportReady()
 
 	state, ok := loadWindowState()
 	if ok {
@@ -1074,6 +915,16 @@ func (a *App) domReady(_ context.Context) {
 	})
 }
 
+// ReportDesktopWebViewReady is the content-process heartbeat. OnDomReady proves
+// native navigation completed; this bound call additionally proves that React
+// and the Wails bridge are responsive after a renderer reload.
+func (a *App) ReportDesktopWebViewReady() {
+	if a == nil || a.webView2Recovery == nil {
+		return
+	}
+	a.webView2Recovery.reportReady()
+}
+
 func (a *App) commitPendingUpdateHealth() error {
 	if a == nil || strings.TrimSpace(a.healthyUpdateCreatedAt) == "" ||
 		strings.TrimSpace(a.healthyUpdateTransactionID) == "" {
@@ -1110,90 +961,6 @@ func (a *App) SubmitToTab(tabID, input string) error {
 		return err
 	}
 	return a.submitToTab(tabID, input, false)
-}
-
-// tabTurnAdmission owns both locks acquired while a foreground turn starts.
-// Call finish after invoking the controller; callers should also defer abort so
-// every early-return and recovered-panic path releases the admission exactly
-// once.
-type tabTurnAdmission struct {
-	app      *App
-	tab      *WorkspaceTab
-	released bool
-}
-
-func (admission *tabTurnAdmission) finish(ctrl control.SessionAPI) bool {
-	if admission == nil || admission.released {
-		return false
-	}
-	admission.released = true
-	tab := admission.tab
-	if tab != nil {
-		// Release even if a controller implementation panics while reporting its
-		// status. The caller's deferred abort sees released=true and cannot be the
-		// fallback once finish has taken ownership of the release.
-		defer admission.app.runtimeAdmissionMu.RUnlock()
-		defer tab.turnStartMu.Unlock()
-	}
-	started := ctrl != nil && ctrl.RuntimeStatus().Running
-	if !started && tab != nil && tab.sink != nil {
-		tab.sink.cancelTurnStart()
-	}
-	return started
-}
-
-func (admission *tabTurnAdmission) abort() {
-	admission.finish(nil)
-}
-
-// beginTabTurn locks the tab's foreground-turn admission gate and reserves the
-// event sink until TurnDone has completed all of its fan-out.
-func (a *App) beginTabTurn(tabID string, reclaim bool, submissionID ...string) (*tabTurnAdmission, control.SessionAPI, error) {
-	tab, ctrl := a.tabAndCtrlByID(tabID)
-	if a.tabIsReadOnly(tab) {
-		return nil, nil, readOnlyChannelErr()
-	}
-	if err := a.workspaceRuntimeAdmissionErr(tab, ctrl); err != nil {
-		return nil, nil, a.workspaceNotReadyErr(tab)
-	}
-	// Rebuild stale workspace bindings before admission so shutdown never waits
-	// behind filesystem or plugin I/O. The later re-check protects publication.
-	if err := a.ensureTabControllerWorkspace(tab); err != nil {
-		return nil, nil, err
-	}
-	// Runtime work-admission barrier: held (shared) from here until the turn is
-	// observably running and the returned admission token releases it, so an MCP
-	// MCP authorization or plugin uninstall holding the write side either waits out
-	// this admission or sees its work in the gated re-check. Never acquire
-	// runtimeRebuildMu while this read lock is held.
-	a.runtimeAdmissionMu.RLock()
-	abort := func() {
-		tab.turnStartMu.Unlock()
-		a.runtimeAdmissionMu.RUnlock()
-	}
-	tab.turnStartMu.Lock()
-	if a.tabIsReadOnly(tab) {
-		abort()
-		return nil, nil, readOnlyChannelErr()
-	}
-	if reclaim && a.botBridge != nil {
-		a.botBridge.reclaimFromDesktop(tab.ID)
-	}
-	ctrl = a.controllerForTab(tab)
-	if err := a.workspaceRuntimeAdmissionErr(tab, ctrl); err != nil {
-		abort()
-		return nil, nil, err
-	}
-	ctrl = a.controllerForTab(tab)
-	if err := a.workspaceRuntimeAdmissionErr(tab, ctrl); err != nil {
-		abort()
-		return nil, nil, err
-	}
-	if ctrl.RuntimeStatus().Running || (tab.sink != nil && !tab.sink.tryBeginTurn(submissionID...)) {
-		abort()
-		return nil, nil, control.ErrTurnRunning
-	}
-	return &tabTurnAdmission{app: a, tab: tab}, ctrl, nil
 }
 
 // submitToTab is the shared submit body. fromBridge marks submissions driven
@@ -1828,6 +1595,17 @@ func (a *App) ReplayPendingPrompts() {
 	}
 	a.mu.RUnlock()
 	for _, ctrl := range ctrls {
+		ctrl.ReplayPendingPrompts()
+	}
+}
+
+// ReplayPendingPromptsForTab re-emits only the prompt owned by tabID. Tab
+// switches use this scoped form so a background session's ask/approval cannot
+// depend on whichever tab happens to be backend-active when the replay RPC
+// arrives. ReplayPendingPrompts remains bound for reconnect compatibility.
+func (a *App) ReplayPendingPromptsForTab(tabID string) {
+	ctrl := a.ctrlByTabID(tabID)
+	if ctrl != nil {
 		ctrl.ReplayPendingPrompts()
 	}
 }
@@ -3797,25 +3575,7 @@ func (a *App) ResumeSessionPage(path string, limit int) (HistoryPage, error) {
 }
 
 func (a *App) ResumeSessionPageForTab(tabID, path string, limit int) (HistoryPage, error) {
-	tab, ctrl := a.tabAndCtrlByID(tabID)
-	if tab == nil || ctrl == nil {
-		return HistoryPage{}, fmt.Errorf("tab is not ready")
-	}
-	sessionPath, _, err := validateSessionPath(controllerSessionDir(ctrl), path)
-	if err != nil {
-		return HistoryPage{}, err
-	}
-	loaded, err := loadResumableSession(sessionPath)
-	if err != nil {
-		return HistoryPage{}, err
-	}
-	if sessionRuntimeKey(tab.currentSessionPath()) != sessionRuntimeKey(sessionPath) {
-		if err := a.rebindTabToLoadedSessionPath(tab, sessionPath, loaded); err != nil {
-			return HistoryPage{}, err
-		}
-	}
-	a.setTabReadOnly(tab.ID, false)
-	return a.HistoryPageForTab(tab.ID, 0, limit), nil
+	return a.resumeSessionPageForTab(tabID, path, limit)
 }
 
 // ResumeSessionForTab is the tab-scoped form of ResumeSession. A saved session
@@ -3826,8 +3586,8 @@ func (a *App) ResumeSessionForTab(tabID, path string) ([]HistoryMessage, error) 
 	if tab == nil || ctrl == nil {
 		return []HistoryMessage{}, fmt.Errorf("tab is not ready")
 	}
-	if canonical := a.resolveCanonicalSessionPath(path); canonical != "" {
-		path = canonical
+	if continued := a.continuePathForOpen(path); continued != "" {
+		path = continued
 	}
 	sessionPath, _, err := validateSessionPath(controllerSessionDir(ctrl), path)
 	if err != nil {
@@ -4281,11 +4041,11 @@ func (a *App) reattachDetachedSessionRuntimeForRebind(
 	applyRuntimeTab(tab, detached, sessionPath, a.ctx, a)
 	a.saveTabsLocked()
 	attachedCtrl := tab.Ctrl
+	attachedSink := tab.sink
+	attachedEpoch := a.runtimeEpochForTabLocked(tab)
 	a.mu.Unlock()
 
-	if attachedCtrl != nil {
-		attachedCtrl.ReplayPendingPrompts()
-	}
+	a.replayPendingPromptsAfterRuntimeAttach(tab.ID, attachedSink, attachedCtrl, attachedEpoch)
 	return oldCtrl, oldSink, oldLease, oldHostKey, true
 }
 
@@ -5717,13 +5477,8 @@ func (state *historyMessageConvertState) convertHistoryMessage(
 		})
 	}
 	if m.LocalOnly {
-		if steerText, isSteer := agent.SteerText(agent.UserMessageText(m)); isSteer {
-			return append(out, HistoryMessage{
-				Role:    "notice",
-				Content: agent.UnappliedSteerNotice(steerText),
-				Code:    event.NoticeCodeUnappliedSteer,
-				Level:   "warn",
-			})
+		if rows, handled := historySteerRows(agent.UserMessageText(m), true); handled {
+			return append(out, rows...)
 		}
 	}
 	if state.suppressCanonicalTurn {
@@ -5741,8 +5496,8 @@ func (state *historyMessageConvertState) convertHistoryMessage(
 		// regular user bubble or being filtered as synthetic (#4044).
 		// Check against the raw m.Content: resolveUserContent applies
 		// StripComposePrefixes which trims trailing whitespace.
-		if steerText, isSteer := agent.SteerText(agent.UserMessageText(m)); isSteer {
-			return append(out, HistoryMessage{Role: "notice", Content: "↪ " + steerText})
+		if rows, handled := historySteerRows(agent.UserMessageText(m), false); handled {
+			return append(out, rows...)
 		}
 		content = historyUserDisplayContent(m, resolveUserContent)
 		if control.IsSyntheticUserMessage(content) {
@@ -6759,6 +6514,8 @@ type Meta struct {
 	GoalRuntime *GoalRuntimeView `json:"goalRuntime,omitempty"`
 	// Nil means no authoritative snapshot; non-nil empty means clear the panel.
 	CanonicalTodos *[]evidence.TodoItem `json:"canonicalTodos,omitempty"`
+	// Closed completed todo fingerprints from this session and its lineage.
+	DismissedTodoBatches []string `json:"dismissedTodoBatches,omitempty"`
 }
 
 type GoalRuntimeView struct {
@@ -6858,30 +6615,31 @@ func (a *App) MetaForTab(tabID string) Meta {
 		sessionDigest = branchMeta.ContentDigest
 	}
 	return Meta{
-		Label:             snap.label,
-		Ready:             runtimeView.Phase == sessionRuntimeReady && snap.ctrl != nil,
-		Runtime:           runtimeView,
-		StartupErr:        snap.startupErr,
-		EventChannel:      eventChannel,
-		SessionPath:       sessionPath,
-		SessionRevision:   sessionRevision,
-		SessionDigest:     sessionDigest,
-		Cwd:               cwd,
-		WorkspaceRoot:     cwd,
-		WorkspaceName:     tabWorkspaceNameForScope(snap.scope, cwd),
-		WorkspacePath:     cwd,
-		GitBranch:         extras.gitBranch,
-		ImageInputEnabled: extras.imageInputEnabled,
-		AutoApproveTools:  autoApproveTools,
-		Bypass:            autoApproveTools,
-		CollaborationMode: collaborationMode,
-		ToolApprovalMode:  toolApprovalMode,
-		AgentPreset:       boot.NormalizeAgentPreset(tokenMode),
-		TokenMode:         tokenMode,
-		Goal:              goal,
-		GoalStatus:        goalStatus,
-		GoalRuntime:       goalRuntimeViewFromController(snap.ctrl),
-		CanonicalTodos:    ctrlTodos(snap.ctrl),
+		Label:                snap.label,
+		Ready:                runtimeView.Phase == sessionRuntimeReady && snap.ctrl != nil,
+		Runtime:              runtimeView,
+		StartupErr:           snap.startupErr,
+		EventChannel:         eventChannel,
+		SessionPath:          sessionPath,
+		SessionRevision:      sessionRevision,
+		SessionDigest:        sessionDigest,
+		Cwd:                  cwd,
+		WorkspaceRoot:        cwd,
+		WorkspaceName:        tabWorkspaceNameForScope(snap.scope, cwd),
+		WorkspacePath:        cwd,
+		GitBranch:            extras.gitBranch,
+		ImageInputEnabled:    extras.imageInputEnabled,
+		AutoApproveTools:     autoApproveTools,
+		Bypass:               autoApproveTools,
+		CollaborationMode:    collaborationMode,
+		ToolApprovalMode:     toolApprovalMode,
+		AgentPreset:          boot.NormalizeAgentPreset(tokenMode),
+		TokenMode:            tokenMode,
+		Goal:                 goal,
+		GoalStatus:           goalStatus,
+		GoalRuntime:          goalRuntimeViewFromController(snap.ctrl),
+		CanonicalTodos:       ctrlTodos(snap.ctrl),
+		DismissedTodoBatches: a.dismissedTodoBatchesForSession(sessionPath),
 	}
 }
 
@@ -10804,7 +10562,7 @@ var revealPath = defaultRevealPath
 func defaultRevealPath(path string) error {
 	switch goruntime.GOOS {
 	case "darwin":
-		return exec.Command("open", "-R", path).Start()
+		return proc.VisibleCommand("open", "-R", path).Start()
 	case "windows":
 		// explorer.exe lives in %SystemRoot%, which isn't always on PATH (the
 		// launch environment can strip it), so resolve it directly rather than
@@ -10817,13 +10575,13 @@ func defaultRevealPath(path string) error {
 		if root != "" {
 			explorer = filepath.Join(root, "explorer.exe")
 		}
-		return exec.Command(explorer, "/select,", path).Start()
+		return proc.VisibleCommand(explorer, "/select,", path).Start()
 	default:
 		dir := path
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			dir = filepath.Dir(path)
 		}
-		return exec.Command("xdg-open", dir).Start()
+		return proc.VisibleCommand("xdg-open", dir).Start()
 	}
 }
 
