@@ -900,8 +900,7 @@ func TestTaskToolBackgroundSalvagePublishesEvidenceForCollection(t *testing.T) {
 		finalText,
 	}}
 	task := NewTaskTool(sub, nil, reg, 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
-		WithTranscripts(NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort").
-		WithDeliveryProfile(true)
+		WithTranscripts(NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort")
 
 	jm := jobs.NewManager(event.Discard)
 	defer jm.Close()
@@ -985,8 +984,8 @@ func TestBackgroundEvidenceNotCommittedWhenTurnFails(t *testing.T) {
 		{{Type: provider.ChunkText, Text: "all set"}, {Type: provider.ChunkDone}},
 		{{Type: provider.ChunkText, Text: "all set"}, {Type: provider.ChunkDone}},
 	}}
-	a := New(prov, reg, NewSession(""), Options{DeliveryProfile: true, Jobs: jm}, event.Discard)
-	ctx := jobs.WithManager(WithParentSession(context.Background(), "parent-session"), jm)
+	a := New(prov, reg, NewSession(""), Options{Jobs: jm}, event.Discard)
+	ctx := withClosedLoopContext(jobs.WithManager(WithParentSession(context.Background(), "parent-session"), jm))
 	ctx = jobs.WithSession(ctx, "parent-session")
 
 	err := a.Run(ctx, "collect and finish the background task")
@@ -1053,8 +1052,8 @@ func TestFailedTurnBackgroundMutationForcesReadinessOnNextRunWithoutWait(t *test
 		{{Type: provider.ChunkText, Text: "sure, here you go"}, {Type: provider.ChunkDone}},
 		{{Type: provider.ChunkText, Text: "sure, here you go"}, {Type: provider.ChunkDone}},
 	}}
-	a := New(prov, reg, NewSession(""), Options{DeliveryProfile: true, Jobs: jm}, event.Discard)
-	ctx := jobs.WithManager(WithParentSession(context.Background(), "parent-session"), jm)
+	a := New(prov, reg, NewSession(""), Options{Jobs: jm}, event.Discard)
+	ctx := withClosedLoopContext(jobs.WithManager(WithParentSession(context.Background(), "parent-session"), jm))
 	ctx = jobs.WithSession(ctx, "parent-session")
 
 	var readiness *FinalReadinessError
@@ -1105,8 +1104,8 @@ func TestRestartRecoversPendingBackgroundMutationForcesReadinessWithoutWait(t *t
 		{{Type: provider.ChunkText, Text: "all set"}, {Type: provider.ChunkDone}},
 		{{Type: provider.ChunkText, Text: "all set"}, {Type: provider.ChunkDone}},
 	}}
-	a := New(prov, reg, NewSession(""), Options{DeliveryProfile: true, Jobs: second}, event.Discard)
-	ctx := jobs.WithManager(WithParentSession(context.Background(), "parent-session"), second)
+	a := New(prov, reg, NewSession(""), Options{Jobs: second}, event.Discard)
+	ctx := withClosedLoopContext(jobs.WithManager(WithParentSession(context.Background(), "parent-session"), second))
 	ctx = jobs.WithSession(ctx, "parent-session")
 
 	var readiness *FinalReadinessError

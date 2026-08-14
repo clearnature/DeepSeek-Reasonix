@@ -25,6 +25,7 @@ import (
 	"reasonix/internal/planmode"
 	"reasonix/internal/provider"
 	"reasonix/internal/sessiontemp"
+	"reasonix/internal/taskpolicy"
 	"reasonix/internal/tool"
 	"reasonix/internal/workspacelease"
 )
@@ -280,7 +281,6 @@ type TaskTool struct {
 	baseEffort                    string
 	identityProfile               func(modelRef, effort string) (string, string)
 	maxSubagentDepth              int
-	deliveryProfile               bool
 	autoBackgroundizeAfter        time.Duration
 	ablation                      ablation.Set
 	workspaceLease                *workspacelease.Owner
@@ -416,14 +416,6 @@ func (t *TaskTool) WithTranscriptIdentityResolver(resolve func(modelRef, effort 
 
 func (t *TaskTool) WithMaxSubagentDepth(depth int) *TaskTool {
 	t.maxSubagentDepth = NormalizeMaxSubagentDepth(depth)
-	return t
-}
-
-// WithDeliveryProfile propagates the parent's runtime delivery contract into
-// writer-capable sub-agents. Read-only sub-agents may receive the flag too, but
-// the mutation gate remains dormant for them.
-func (t *TaskTool) WithDeliveryProfile(enabled bool) *TaskTool {
-	t.deliveryProfile = enabled
 	return t
 }
 
@@ -986,7 +978,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			jobCtx = WithParentSession(jobCtx, parentSession)
 			jobCtx = evidence.WithLedger(jobCtx, backgroundEvidence)
 			defer run.Release()
-			defer func() { jobs.PublishEvidence(jobCtx, backgroundEvidence.Summary()) }()
+			defer publishBackgroundEvidence(jobCtx, backgroundEvidence, t.workspaceRoot)
 			defer func() {
 				if r := recover(); r != nil {
 					panicErr := fmt.Errorf("internal error: panic: %v\n%s", r, debug.Stack())
@@ -1909,14 +1901,22 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 		ReasoningLanguage:      ReasoningLanguageFromContext(ctx),
 		SubagentDepth:          childDepth,
 		MaxSubagentDepth:       t.maxDepth(),
-		DeliveryProfile:        t.deliveryProfile,
 		AutoBackgroundizeAfter: t.autoBackgroundizeAfter,
 		Ablation:               t.ablation,
+		WriteWorkspaceRoot:     t.workspaceRoot,
 		WorkspaceLease:         t.workspaceLease,
 		RecoveryGate:           t.recoveryGate,
 		RecoveryAgentID:        "subagent",
 		RecoveryTaskID:         recoveryTaskID,
 		MutationObserver:       mutationObserver,
+	}
+	// Writer children inherit the parent turn's frozen risk and closure floors.
+	// The parent publishes its policy into the run context; a child that never
+	// received it (direct unit construction) keeps its own derived policy.
+	if parent, ok := taskpolicy.FromContext(ctx); ok {
+		p := parent
+		opts.InheritedTaskPolicy = &p
+
 	}
 	return opts
 }
