@@ -2258,6 +2258,7 @@ export const zhTW: Record<DictKey, string> = {
   "context.time": "執行時間",
   "context.durationSeconds": "{seconds}秒",
   "context.durationMinutesSeconds": "{minutes}分{seconds}秒",
+	"context.durationHoursMinutes": "${hours}小時${minutes}分",
 
   // 崩潰兜底頁
   "crash.title": "Reasonix 遇到錯誤 —— 請截圖傳送",

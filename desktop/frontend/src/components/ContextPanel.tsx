@@ -35,7 +35,10 @@ function fmtDuration(ms: number, t: Translator): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   if (minutes <= 0) return t("context.durationSeconds", { seconds });
-  return t("context.durationMinutesSeconds", { minutes, seconds });
+  const hours = Math.floor(minutes / 60);
+  if (hours <= 0) return t("context.durationMinutesSeconds", { minutes, seconds });
+  const restMinutes = minutes % 60;
+  return t("context.durationHoursMinutes", { hours, minutes: restMinutes });
 }
 
 interface MetricTokenDisplay {
