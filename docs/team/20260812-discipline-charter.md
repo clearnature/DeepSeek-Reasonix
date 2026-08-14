@@ -40,7 +40,7 @@
 | B8 | 对抗自检 | 以 devil's advocate 攻击自己的方案 |
 | B9 | 防虚假完成 | 每个完成声明附带可验证证据（命令输出/diff/数字） |
 
-### C. 分支纪律（项目特定）
+### C. 分支纪律（项目特定——详见 docs/merge/merge-discipline.md §11，不重复表述）
 
 - **C1 main-v2 = 只读镜像**：只允许 `git fetch origin` + `git merge --ff-only origin/main-v2`
   更新；**绝不在 main-v2 上提交任何开发内容**（文档/代码都不行）。
@@ -117,6 +117,8 @@
 - 证据要求（按改动范围选择）：`make test`（go test ./...）、`make vet`、
   `make lint`（golangci-lint + repolint + wails pin）、`gofmt -l .` 清洁；
   性能/缓存特性跑对应 effect test；依赖方（拓扑扫描识别）无破坏。
+- **合并事务**：必须执行 `docs/merge/merge-discipline.md` §8.1 统一验证链
+  （gofmt→build→核心包测试→protocol-check→repolint→desktop tsc+wails）。
 - **FAIL 条件**：任一命令失败；依赖方回归未被处理。
 
 ### 验收项 5：对抗自检（devil's advocate）

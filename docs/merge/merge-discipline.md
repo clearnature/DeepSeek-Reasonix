@@ -133,6 +133,17 @@ go run ./cmd/remote-protocol-gen -check   # 验证
    cd desktop && CI=true ~/go/bin/wails build -tags webkit2_41 -ldflags "-X main.version=$(date +%Y%m%d-%H%M)"
    ```
 
+### 8.1 验证链与验收纪律对齐
+
+merge §8 的六步链与 `docs/team/20260812-discipline-charter.md` 验收项 4
+（回归）命令口径统一如下——合并事务必须完整执行，缺一步即驳回：
+
+```
+gofmt -l .（排除 desktop/.direnv）→ go build ./... → 核心包测试
+（provider/agent/control/config/tool/protocol）→ remote-protocol-gen -check
+→ repolint（完整退出码）→ desktop tsc + wails build
+```
+
 ## 9. 隐藏产物排查清单
 
 - 重复声明（`grep -c 'var xxx'`——合并可能带两遍）
@@ -158,3 +169,28 @@ CompactionTelemetry 结构 ↔ emit 的 detail 键 ↔ recordCompaction/setCompa
 ## 12. 0 文本冲突 ≠ 0 语义风险
 
 `git merge-tree` 报 0 冲突不代表安全——**同文件双方都改 = 逐字段核对**（主题 B 类：同域修复合并后跑守卫测试套件确认双修复并存）。合并前先读 `docs/merge/` 的风险分析（按主题矩阵核对点执行）。
+
+
+## 13. 验收纪律（合并事务必过——引用纪律团章程）
+
+合并事务的完成必须通过 `docs/team/20260812-discipline-charter.md`
+第二部分的**验收项 1-6**（每条附可验证证据，审查员不得无证据通过）：
+
+| 验收项 | 内容 | 合并事务的落点 |
+|---|---|---|
+| 1 | fable5 合规（执行队是否跳步） | 合并三件套（plan/execution/review）齐全 |
+| 2 | 幻觉检测（证据真实性） | 冲突清单/合并 diff 可复核（git diff/status） |
+| 3 | **缓存红线**（D1-D7：前缀字节/D2 只 append/D5 运行值不进 schema） | 发送侧改动先问"会不会改变前缀字节" |
+| 4 | 回归（验证链 §8.1） | 六步链完整执行 |
+| 5 | 对抗自检（devil's advocate） | 合并方案攻击点 ≥5 个（含语义丢失/隐藏产物） |
+| 6 | 防虚假完成（证据链完整性） | 每步附验证命令+结果 |
+
+**判定规则**（charter 第二部分）：
+- 验收项 3（缓存红线）FAIL → **无条件驳回**；
+- 验收项 2（幻觉检测）/1（跳步未裁决）/4（回归 FAIL）/5（blocking 缺陷）→ 驳回；
+- 非 blocking 缺陷 → 限期修复（驳回周期上限内）；修复后重验。
+
+**风险联动**（merge 三级预警 ↔ 验收项）：
+- 🟢 低风险：验收 1/2/6 必过 + 回归快检（build+定向测试）
+- 🟡 中风险（本地功能保护交叉分析命中）：全验收 1-6 + 隐藏产物排查（§9）+ 四方审计（§10）
+- 🔴 高风险（compact 核心/desktop 前端/third_party 换代）：全验收 1-6 + D 组缓存红线专项 + 双人复核（执行+独立纪律）
