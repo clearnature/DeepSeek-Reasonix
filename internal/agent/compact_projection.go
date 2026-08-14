@@ -80,6 +80,8 @@ func (a *Agent) snapshotExplicitCompression() explicitCompressionSnapshot {
 		if projected := modelVisibleFromProjection(state.Projection, canonical); len(projected) > 0 {
 			visible = projected
 		}
+	} else if degraded, ok := a.modelVisibleDegraded(state, canonical); ok {
+		visible = degraded
 	}
 	return explicitCompressionSnapshot{
 		canonical:         canonical,
@@ -508,6 +510,9 @@ func (a *Agent) visibleInputForFold(state CompactionState, canonical []provider.
 		if projected := modelVisibleFromProjection(state.Projection, canonical); len(projected) > 0 {
 			return projected
 		}
+	}
+	if degraded, ok := a.modelVisibleDegraded(state, canonical); ok {
+		return degraded
 	}
 	return canonical
 }

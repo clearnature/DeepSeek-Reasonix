@@ -29,7 +29,34 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 			return visible
 		}
 	}
+	// Third state: an invalid projection still splices digest + tail instead
+	// of a full-history replay (C1's original "folded digest + tail" intent).
+	if visible, ok := a.modelVisibleDegraded(st, msgs); ok {
+		return visible
+	}
 	return msgs
+}
+
+// modelVisibleDegraded builds the third-state view: a stale-but-intact
+// projection body is spliced with the canonical tail so a resumed session
+// keeps the small cache-stable digest prefix instead of the full canonical
+// replay. The next compaction rebuilds the projection (the degraded view
+// survives at most one turn).
+func (a *Agent) modelVisibleDegraded(st CompactionState, msgs []provider.Message) ([]provider.Message, bool) {
+	proj := st.Projection
+	if len(proj.Messages) == 0 || proj.CoveredCount <= 0 || proj.CoveredCount > len(msgs) {
+		return nil, false
+	}
+	visible := modelVisibleFromProjection(proj, msgs)
+	if len(visible) == 0 {
+		return nil, false
+	}
+	if a.contextWindow > 0 && sharesContextWindow(a.svc.prov) {
+		if est := a.estimatedPromptTokens(provider.ModelMessages(visible)); est >= a.hardInputCeiling() {
+			return nil, false
+		}
+	}
+	return visible, true
 }
 
 // projectionUsable requires the projection to validate and fit the window:
@@ -141,11 +168,18 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 			normalized, keyOK = key, true
 		}
 	}
-	if (key != "" && !keyOK) || !hasMaintenanceSignal {
+	if !hasMaintenanceSignal {
+		// No projection body at all: nothing to splice; the next request
+		// rebuilds from canonical.
 		a.sess.compactionState = CompactionState{}
 		a.sess.checkpointState = "none"
 		a.sess.compactionMu.Unlock()
 		return
+	}
+	if key != "" && !keyOK {
+		// Lineage mismatch with an intact body: keep it for the third-state
+		// degraded view (digest + tail); the next compaction rebuilds it.
+		a.sess.checkpointState = "degraded"
 	}
 	// Only rewrite legacy native-editing lineage keys; exact matches stay pure-read.
 	needsNormalization := false
@@ -160,13 +194,6 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		msgs, version = a.sess.conversation.snapshotMessagesVersion()
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, version, key)
-	// Fail closed only when the transcript can judge the covered prefix: a
-	// resume binding the sidecar before the conversation loaded (or with a
-	// partial UI slice) keeps the projection; modelVisible re-validates.
-	if !valid && len(st.Projection.Messages) > 0 && len(msgs) >= st.Projection.CoveredCount {
-		// Keep blocked receipts / telemetry; drop unusable projection body.
-		st.Projection = ContextProjection{}
-	}
 	a.sess.compactionState = st
 	if valid {
 		a.sess.checkpointState = "restored"
@@ -175,6 +202,11 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 				slog.Warn("agent: persist normalized projection lineage", "err", err)
 			}
 		}
+	} else if len(st.Projection.Messages) > 0 && len(msgs) >= st.Projection.CoveredCount {
+		// Third state: intact-but-invalidated body is kept for the degraded
+		// digest+tail view instead of a full-history replay; the next
+		// compaction rebuilds it.
+		a.sess.checkpointState = "degraded"
 	} else {
 		a.sess.checkpointState = "none"
 	}

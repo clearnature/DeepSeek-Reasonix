@@ -248,10 +248,13 @@ func TestLoadProjectionSidecarDropsForeignCacheKey(t *testing.T) {
 		WorkspaceID: "ws",
 		ModelRef:    "this-model",
 	}, event.Discard)
-	// New() already called LoadProjectionSidecar; mismatched content must drop
-	// the projection body and keep the sidecar file for the other model.
-	if len(a.sess.compactionState.Projection.Messages) != 0 {
-		t.Fatalf("foreign projection loaded: %+v", a.sess.compactionState.Projection)
+	// New() already called LoadProjectionSidecar; a mismatched content body is
+	// kept for the third-state degraded view (digest + tail), not a replay.
+	if len(a.sess.compactionState.Projection.Messages) == 0 {
+		t.Fatalf("foreign body dropped; third state cannot splice")
+	}
+	if a.sess.checkpointState != "degraded" {
+		t.Fatalf("checkpointState = %q, want degraded", a.sess.checkpointState)
 	}
 	if _, ok, err := LoadCompactionState(path); err != nil || !ok {
 		t.Fatalf("sidecar should remain on disk: ok=%v err=%v", ok, err)
@@ -426,5 +429,56 @@ func TestProjectionContentValidToleratesPruneRewrite(t *testing.T) {
 	legacy.Projection.SemanticPrefixHash = ""
 	if projectionContentValid(legacy, pruned, 1) {
 		t.Fatalf("legacy sidecar without semantic hash must reject covered drift")
+	}
+}
+
+// TestModelVisibleDegradedSplicesDigestTail covers the third state: a stale
+// projection body splices with the canonical tail instead of a full replay.
+func TestModelVisibleDegradedSplicesDigestTail(t *testing.T) {
+	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024}}
+	canonical := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "u1"},
+		{Role: provider.RoleUser, Content: "u2"},
+		{Role: provider.RoleAssistant, Content: "a1"},
+		{Role: provider.RoleUser, Content: "u3"},
+		{Role: provider.RoleAssistant, Content: "a2"},
+		{Role: provider.RoleUser, Content: "u4"},
+		{Role: provider.RoleAssistant, Content: "a3"},
+		{Role: provider.RoleUser, Content: "u5"},
+		{Role: provider.RoleAssistant, Content: "a4"},
+	}
+	st := CompactionState{Projection: ContextProjection{
+		Messages:          []provider.Message{{Role: provider.RoleSystem, Content: "digest"}},
+		CoveredCount:      4,
+		ProjectionVersion: 1,
+	}}
+	visible, ok := a.modelVisibleDegraded(st, canonical)
+	if !ok {
+		t.Fatalf("degraded splice rejected")
+	}
+	if len(visible) != 1+6 { // digest + canonical[4:]
+		t.Fatalf("degraded view len = %d, want 7 (digest + tail 6)", len(visible))
+	}
+	if visible[1].Content != "u3" {
+		t.Fatalf("tail splice wrong: visible[1] = %q, want u3", visible[1].Content)
+	}
+}
+
+// TestModelVisibleDegradedRejectsOverflowingCoverage: canonical shrank below
+// covered count (rewind) — the stale body must NOT be spliced.
+func TestModelVisibleDegradedRejectsOverflowingCoverage(t *testing.T) {
+	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024}}
+	canonical := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "u1"},
+		{Role: provider.RoleUser, Content: "u2"},
+	}
+	st := CompactionState{Projection: ContextProjection{
+		Messages:     []provider.Message{{Role: provider.RoleSystem, Content: "digest"}},
+		CoveredCount: 5,
+	}}
+	if _, ok := a.modelVisibleDegraded(st, canonical); ok {
+		t.Fatalf("degraded splice must be rejected when covered > len(canonical)")
 	}
 }
