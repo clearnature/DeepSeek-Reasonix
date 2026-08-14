@@ -140,6 +140,7 @@ export function useTranscriptVirtuosoScroll() {
   const followFrameRef = useRef<number | null>(null);
   const tailSettleFrameRef = useRef<number | null>(null);
   const resizeSettleFrameRef = useRef<number | null>(null);
+  const pinnedMetricsRef = useRef({ scrollHeight: 0, scrollTop: 0 });
   const [nativeScrollbarDragging, setNativeScrollbarDragging] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
@@ -302,6 +303,24 @@ export function useTranscriptVirtuosoScroll() {
 
   const atBottomStateChange = useCallback((atBottom: boolean) => {
     const element = scrollRef.current;
+    if (!atBottom && element && pinnedRef.current && isPinnedTranscriptLayoutGrowth({
+      pinned: pinnedRef.current,
+      previousScrollHeight: pinnedMetricsRef.current.scrollHeight,
+      previousScrollTop: pinnedMetricsRef.current.scrollTop,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    })) {
+      // A mounted row grew while the reader still owned the tail: Virtuoso can
+      // publish false before totalListHeightChanged asks us to follow the new
+      // extent. Preserve intent through that callback ordering race (a flicker
+      // at the tail on streamed output otherwise).
+      pinnedMetricsRef.current = { scrollHeight: element.scrollHeight, scrollTop: element.scrollTop };
+      dispatch({ type: "LAYOUT_HEIGHT_CHANGED" });
+      return;
+    }
+    if (element) {
+      pinnedMetricsRef.current = { scrollHeight: element.scrollHeight, scrollTop: element.scrollTop };
+    }
     dispatch({
       type: "AT_BOTTOM_CHANGED",
       atBottom,

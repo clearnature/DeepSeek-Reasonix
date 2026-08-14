@@ -308,6 +308,7 @@ export function Transcript({
     finishProgrammaticScroll,
   } = useTranscriptVirtuosoScroll();
   const virtuosoReadyRef = useRef(false);
+  const autoScrollFrame = useRef<number | null>(null);
   const layoutSurfaceKey = `${tabId ?? ""}:${revealSignal}`;
 
   const entranceRef = useTranscriptEntranceAnimation<HTMLDivElement>(tabId, revealSignal, items);
@@ -374,10 +375,18 @@ export function Transcript({
   }, [resetScroll, revealSignal, tabId]);
 
   // Row measurement and footer resize share the same coalesced height path.
+  // Coalesce to one rAF so a streamed row growth + footer shrink in the same
+  // frame cannot double-jump the viewport (upstream's unbuffered follow caused
+  // tail flicker; local P1 guard restored).
   useEffect(() => {
     if (!virtuosoReadyRef.current || !stick.current) return;
-    followGrowingTail();
-  }, [footerHeight, followGrowingTail, stick]);
+    if (autoScrollFrame.current !== null) return;
+    autoScrollFrame.current = requestAnimationFrame(() => {
+      autoScrollFrame.current = null;
+      if (!stick.current) return;
+      followGrowingTail();
+    });
+  }, [footerHeight, followGrowingTail, stick, live?.text?.length ?? 0, live?.reasoning?.length ?? 0]);
 
   // Footer chrome resize only. Item growth stays on followGrowingTail.
   useEffect(() => {
