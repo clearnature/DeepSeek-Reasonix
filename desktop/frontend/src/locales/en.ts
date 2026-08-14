@@ -3218,7 +3218,8 @@ export const en = {
   "context.time": "Runtime",
   "context.durationSeconds": "{seconds}s",
   "context.durationMinutesSeconds": "{minutes}m {seconds}s",
-	"context.durationHoursMinutes": "${hours}h ${minutes}m",
+	"context.durationDaysHoursMinutes": "${days}d ${hours}h ${minutes}m",
+	"context.durationHoursMinutesSeconds": "${hours}h ${minutes}m ${seconds}s",
 
   // crash page
   "crash.title": "Reasonix hit an error — send us the report, or copy it",

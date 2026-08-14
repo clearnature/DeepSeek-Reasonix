@@ -32,13 +32,14 @@ interface ContextPanelProps {
 function fmtDuration(ms: number, t: Translator): string {
   if (ms <= 0) return "-";
   const totalSeconds = Math.max(1, Math.round(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (minutes <= 0) return t("context.durationSeconds", { seconds });
-  const hours = Math.floor(minutes / 60);
-  if (hours <= 0) return t("context.durationMinutesSeconds", { minutes, seconds });
-  const restMinutes = minutes % 60;
-  return t("context.durationHoursMinutes", { hours, minutes: restMinutes });
+  if (days > 0) return t("context.durationDaysHoursMinutes", { days, hours, minutes });
+  if (hours > 0) return t("context.durationHoursMinutesSeconds", { hours, minutes, seconds });
+  if (minutes > 0) return t("context.durationMinutesSeconds", { minutes, seconds });
+  return t("context.durationSeconds", { seconds });
 }
 
 interface MetricTokenDisplay {
