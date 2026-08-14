@@ -1745,7 +1745,12 @@ func (a *App) ReportRenderingPerf(count int, maxMs int64, avgMs int64) {
 		return
 	}
 	path := filepath.Join(dir, time.Now().Format("2006-01-02")+".jsonl")
-	_ = os.WriteFile(path, []byte(row), 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	_, _ = f.WriteString(row)
+	_ = f.Close()
 }
 
 func (a *App) SetComposerProfileForTab(tabID, collaborationMode, toolApprovalMode, goal string) ([]string, error) {
