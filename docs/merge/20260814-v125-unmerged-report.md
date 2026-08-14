@@ -68,8 +68,10 @@ effectiveOutputBudget）防超窗；③ 与「宁可保守不超窗」+ 前缀�
 原完全漏掉 ServerSearch → 新增 ServerSearch Raw 计数（对齐 estimateMessagesTokens）
 + `TestOfficialMessagesTokensIncludesServerSearch` + 守卫套件通过。
 
-**状态**：⛔ 不吸收（上游假设错误）；本地补缺口完成；如需可向上游提 issue 修正
-WalkServerSearchEstimate 字段口径。
+**状态（2026-08-14 更新）**：✅ 改造吸收完成（c3cd09cd5）——吸收
+WalkServerSearchEstimate 遍历结构但**含 Raw**（上游排除——官方口径）；
+统一 4 处估算遍历 + 补全 Results Title/URL；测试方向与上游相反。
+不再向上游提 issue（本地已按官方口径实现）。
 
 ---
 
@@ -89,7 +91,7 @@ WalkServerSearchEstimate 字段口径。
 | 主题 | 数量 | 风险 | 状态 | 解锁条件 |
 |---|---|---|---|---|
 | A desktop 会话树/归档 | 15 | 🔴（#8739 同域） | hold | #8739 关闭 / v1.25.2 / 社区确认缓解 |
-| B 压缩估算 #8718 | 1 | 🔴（上游口径冲突） | ⛔ 不吸收 | 本地缺口已补（任务 2）；提上游 issue 修正字段口径 |
+| B 压缩估算 #8718 | 1 | 🔴（上游口径冲突） | ✅ 改造吸收（c3cd09cd5） | Walk 结构 + 计入 Raw（官方口径）+ 统一 4 处 |
 | C inbox #8701 | 1 | 🟡 | 待评估 | 2.1 差别识别（与 dev team inbox） |
 
 **原则**：主题合并模式下，17 个未合 = "合了风险大于收益"（A：数据丢失域未清；
