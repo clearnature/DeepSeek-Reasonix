@@ -134,6 +134,10 @@ type CompactionState struct {
 	LastReceipt        *ContextMaintenanceReceipt `json:"last_receipt,omitempty"`
 	BlockedInputHash   string                     `json:"blocked_input_hash,omitempty"`
 	BlockedReason      string                     `json:"blocked_reason,omitempty"`
+	// CompactionInflight: unix-ms start of the last pass. Nonzero on load
+	// means the pass crashed mid-compaction (orphan lock); cleared by every
+	// completing pass and by the load-time orphan detector.
+	CompactionInflight int64 `json:"compaction_inflight,omitempty"`
 	// NativeContextEditingAccepted latches the first successful native request.
 	// ContextEditingFallbackLocal persists the only allowed request-shape switch:
 	// an explicit unsupported response before that latch was set.
@@ -462,4 +466,25 @@ func formatSummaryMessage(summary string) provider.Message {
 			summary + "\n" +
 			summaryTagClose,
 	}
+}
+
+// markCompactionInflight stamps the orphan-lock start marker (best-effort).
+func (a *Agent) markCompactionInflight() {
+	st, ok, err := LoadCompactionState(a.sess.path)
+	if err != nil || !ok {
+		return
+	}
+	st.CompactionInflight = time.Now().UnixMilli()
+	_ = SaveCompactionState(a.sess.path, st)
+}
+
+// clearCompactionInflight removes the marker; the deferred end runs on every
+// completing path, so a crash leaves it for the load-time detector.
+func (a *Agent) clearCompactionInflight() {
+	st, ok, err := LoadCompactionState(a.sess.path)
+	if err != nil || !ok || st.CompactionInflight == 0 {
+		return
+	}
+	st.CompactionInflight = 0
+	_ = SaveCompactionState(a.sess.path, st)
 }

@@ -147,6 +147,11 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		a.resetCompactionState()
 		return
 	}
+	if st.CompactionInflight > 0 {
+		slog.Warn("agent: orphan compaction lock — previous pass was interrupted by a crash", "inflight_since_ms", st.CompactionInflight, "session", sessionPath)
+		st.CompactionInflight = 0
+		_ = SaveCompactionState(sessionPath, st)
+	}
 	a.sess.compactionMu.Lock()
 	key := a.currentPromptCacheKeyLocked()
 	normalized, keyOK := lineageKeyCompatible(st.PromptCacheKey, key)

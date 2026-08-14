@@ -392,6 +392,8 @@ func (a *Agent) compact(ctx context.Context, trigger, instructions string, force
 func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force, mustFree bool) (outcome CompactionOutcome, err error) {
 	a.sess.compactionRunMu.Lock()
 	defer a.sess.compactionRunMu.Unlock()
+	a.markCompactionInflight()
+	defer a.clearCompactionInflight()
 	activeTurn := a.activeTurnCreatedAt.Load()
 	if activeTurn != 0 && a.sess.compaction.lastTurn.Load() == activeTurn && trigger != CompactionTriggerManual {
 		return CompactionNoop, nil

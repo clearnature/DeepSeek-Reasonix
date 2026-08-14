@@ -8,9 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"os"
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
 	"reasonix/internal/tool"
+	"time"
 )
 
 func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
@@ -480,5 +482,32 @@ func TestModelVisibleDegradedRejectsOverflowingCoverage(t *testing.T) {
 	}}
 	if _, ok := a.modelVisibleDegraded(st, canonical); ok {
 		t.Fatalf("degraded splice must be rejected when covered > len(canonical)")
+	}
+}
+
+// TestOrphanCompactionLockClearedOnLoad: a sidecar with a nonzero
+// CompactionInflight (crash mid-compaction) must be detected and cleared at
+// load time so the next compaction pass can proceed.
+func TestOrphanCompactionLockClearedOnLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orphan.jsonl")
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := CompactionState{
+		CompactionInflight: time.Now().UnixMilli() - 60000,
+		LastReceipt:        &ContextMaintenanceReceipt{Status: "applied", Action: "summary"},
+	}
+	if err := SaveCompactionState(path, st); err != nil {
+		t.Fatal(err)
+	}
+	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024, workspaceID: "ws", modelRef: "this-model"}, sess: sessionRuntime{}}
+	a.LoadProjectionSidecar(path)
+	got, ok, err := LoadCompactionState(path)
+	if err != nil || !ok {
+		t.Fatalf("load after detect = %v, %v", ok, err)
+	}
+	if got.CompactionInflight != 0 {
+		t.Fatalf("orphan lock not cleared: inflight=%d", got.CompactionInflight)
 	}
 }
