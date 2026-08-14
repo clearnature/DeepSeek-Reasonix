@@ -18,7 +18,7 @@ import { getTranscriptStore } from "./transcriptStore";
 import { uiPerfTracker } from "./uiPerf";
 import { getLocale, t, type DictKey } from "./i18n";
 import { applyHydrateErrorState, hydratePlaceholderItems as resolveHydratePlaceholders } from "./hydrateErrorState";
-import { hasCachedLiveTurn, sameSessionPlaceholderItems, shouldApplyHydratedHistory } from "./hydrateHistoryApply";
+import { hasCachedLiveTurn, isStaleResidentProjection, sameSessionPlaceholderItems, shouldApplyHydratedHistory } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { sameTodoList } from "./todoVisibility";
 import type { SearchSource } from "./searchSources";
@@ -2981,7 +2981,8 @@ export function useController() {
         dispatchTo(tabId, { type: "local_notice", level: "warn", text: errText });
         addBreadcrumb("tab.hydrate", `history failed ${tabId} ms=${Date.now() - historyStartedAt}`); return;
       }
-      if (projection !== undefined && shouldApplyHydratedHistory(skipHistory, true, foregroundTurnActive(), statesRef.current.get(tabId))) {
+      const residentForHydrate = statesRef.current.get(tabId);
+      if (projection !== undefined && shouldApplyHydratedHistory(skipHistory, true, foregroundTurnActive(), residentForHydrate) && !isStaleResidentProjection(residentForHydrate, projection as never)) {
         if (deferResetUntilHistory && stillCurrent() && !foregroundTurnActive()) dispatchTo(tabId, { type: "reset" });
         dispatchTo(tabId, {
           type: "history_replace",

@@ -5,6 +5,8 @@ export type HydrateLiveState = {
   live?: unknown;
   currentAssistant?: unknown;
   pendingUser?: unknown;
+  historyRevision?: number;
+  historyDigest?: string;
   items: ReadonlyArray<{ kind: string; streaming?: boolean; status?: string }>;
 };
 
@@ -38,4 +40,34 @@ export function sameSessionPlaceholderItems<T>(
   const current = (prev?.meta?.sessionPath ?? "").trim();
   if (!target || !current || target !== current) return undefined;
   return prev?.items;
+}
+
+// A hydrated page candidate for the resident transcript.
+export type HydrateProjection = {
+  items: ReadonlyArray<unknown>;
+  revision?: number;
+  digest?: string;
+};
+
+function sameHydrateFingerprint(state: HydrateLiveState | undefined, projection: HydrateProjection | undefined): boolean {
+  if (!state || !projection) return false;
+  const revision = projection.revision ?? 0;
+  const digest = (projection.digest ?? "").trim();
+  if (revision > 0 && state.historyRevision === revision) return true;
+  if (digest !== "" && (state.historyDigest ?? "") === digest) return true;
+  return false;
+}
+
+// Reject a replace when the resident transcript is longer and the candidate
+// page carries the same fingerprint: the backend served a shorter
+// same-fingerprint page (e.g. after a failed clear / retry), and applying it
+// would roll the on-screen history back. #8731 — dev had only a load-side
+// gate (hasReusableCachedTranscript), this closes the apply-side race.
+export function isStaleResidentProjection(
+  state: HydrateLiveState | undefined,
+  projection: HydrateProjection | undefined,
+): boolean {
+  if (!state || !projection || state.items.length === 0) return false;
+  if (projection.items.length >= state.items.length) return false;
+  return sameHydrateFingerprint(state, projection);
 }
