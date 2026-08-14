@@ -106,7 +106,7 @@ const LiveAssistantMessage = memo(function LiveAssistantMessage({
     />
   );
 });
-const VIRTUAL_OVERSCAN_ROWS = 8;
+const VIRTUAL_OVERSCAN_ROWS = 12;
 
 type TranscriptVirtuosoContext = {
   tabId?: string;
