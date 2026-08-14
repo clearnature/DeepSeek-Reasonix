@@ -117,7 +117,23 @@ canonical（只增不减）
 - **B2 位置固定小 turns 窗口**：保留按「消息位置固定」而非「最新 N 条」——压缩后已保留部分字节不变。
 - 三个机制都正确解决了「压缩后发送前缀字节稳定」；**共同缺陷：covered_count 只写不读**——投影记录覆盖点，但 `planCompaction` 从不使用 → fold 永远取 canonical 全量中间 → 会话长到 canonical 超窗（实测 src=2666458：canonical 270 万 vs 投影 29.7 万）→ 压缩永久不可用。
 
-### 阶段 7：d912be5ca — 增量折叠根治（fold 有界）
+### 阶段 7.5：第三态 resume — 降级摘要+尾部视图（bd7b3588a，2026-08-14）
+
+- **背景**：C1 原始设计（8/4 洞见）="压缩时合并重放"（折叠摘要+尾部）；上游
+  01528449a（8/7）实现成"resume 无条件重放 canonical"——投影失效即退回全量
+  （1.57M）→ 每次正常重启付全量重放成本（8/14 实测：1.57M 重放 + 588K 冷
+  summarize 失败 ¥0.59）
+- **第三态**：modelVisibleMessages 三级化——投影有效 → 投影视图；失效但 body
+  完整 → 摘要 + canonical 尾部（不超窗才用）；否则 → 全量
+- **同步**：visibleInputForFold / snapshotExplicitCompression 三级化（折叠基于
+  降级视图——下一轮重建投影）；LoadProjectionSidecar lineage 失配保留 body +
+  checkpointState="degraded"；UI 标记 ProjectionDegraded
+- **守卫**：CoveredCount 越界（canonical 变短）/ 拼接超 hard ceiling 不降级；
+  失真由下一轮折叠重建修正（降级最多存活一轮）
+- **与上游分叉**（改造吸收模式——上游"投影 or 全量"二态 → 本地"投影 or 降级 or
+  全量"三态）
+
+## 阶段 7：d912be5ca — 增量折叠根治（fold 有界）
 
 - **增量折叠**：`compactToProjection` 先走 `tryIncrementalFold`→`incrementalFoldTarget`：
   - 条件：有效投影 + `0 < covered < len` + 投影 < 50% 窗口 + 非 manual/overflow + base 投影有呼吸空间。
