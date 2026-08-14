@@ -6,6 +6,10 @@ import {
   type TranscriptScrollEvent,
   type TranscriptScrollState,
 } from "../lib/transcriptScrollController";
+import {
+  isPinnedTranscriptViewportChange,
+  shouldKeepPinnedOnAtBottomFalse,
+} from "../lib/useTranscriptVirtuosoScroll";
 
 
 let passed = 0;

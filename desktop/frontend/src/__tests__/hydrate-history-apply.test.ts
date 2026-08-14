@@ -29,6 +29,20 @@ test("isStaleResidentProjection allows a same-length different fingerprint", () 
   assert.equal(isStaleResidentProjection(resident, { items: [{ kind: "assistant" }], revision: 2, digest: "d2" }), false);
 });
 
+
+let passed = 0;
+let failed = 0;
+
+function ok(value: boolean, label: string) {
+  if (value) {
+    process.stdout.write(`  PASS  ${label}\n`);
+    passed += 1;
+  } else {
+    process.stdout.write(`  FAIL  ${label}\n`);
+    failed += 1;
+  }
+}
+
 console.log("\nhydrate history apply");
 
 const mode = hydratedHistoryApplyMode;
