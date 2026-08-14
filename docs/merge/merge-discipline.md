@@ -141,7 +141,9 @@ merge §8 的六步链与 `docs/team/20260812-discipline-charter.md` 验收项 4
 ```
 gofmt -l .（排除 desktop/.direnv）→ go build ./... → 核心包测试
 （provider/agent/control/config/tool/protocol）→ remote-protocol-gen -check
-→ repolint（完整退出码）→ desktop tsc + wails build
+→ repolint（完整退出码）→ desktop tsc + 【前端 tsx 测试（desktop/frontend
+node_modules/.bin/tsx src/__tests__/——滚动/水合/历史加载等——tsc 不跑测试，
+冲突块采用可能丢 helper/import，必须 tsx 实测）】→ wails build
 ```
 
 ## 9. 隐藏产物排查清单
