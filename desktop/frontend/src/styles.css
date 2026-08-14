@@ -25570,6 +25570,10 @@ body > .mermaid-diagram--fullscreen {
   display: none;
 }
 
+.context-panel__mini-stat strong {
+  font-size: 11px;
+}
+
 .context-panel__mini-stat {
   min-height: 40px;
   min-width: 0;
