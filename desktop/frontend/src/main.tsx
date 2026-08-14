@@ -8,6 +8,7 @@ import { installWailsNonFileDragErrorSuppression } from "./lib/bridge";
 import { installBreadcrumbConsoleHook } from "./lib/breadcrumbs";
 import { installMessageSelectionCopy } from "./lib/messageSelectionCopy";
 import { installPerfDebugHook } from "./lib/perfDebug";
+import { startRenderingPerf } from "./lib/renderingPerf";
 import { LocaleProvider, preloadDetectedLocale } from "./lib/i18n";
 import { ToastProvider } from "./lib/toast";
 import { initFontFamily } from "./lib/fontFamily";
@@ -24,6 +25,7 @@ installGlobalCrashHandlers();
 installBreadcrumbConsoleHook();
 installPerformancePressureMonitor();
 installPerfDebugHook();
+startRenderingPerf();
 
 // Apply the saved appearance (auto/light/dark) before the first paint.
 function initTypographyPlatform() {

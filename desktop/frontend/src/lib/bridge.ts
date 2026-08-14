@@ -562,6 +562,7 @@ TeamPanelViewForTab(tabID: string): Promise<unknown>;
   SetDesktopCheckUpdates(enabled: boolean): Promise<void>;
   SetDesktopUpdateChannel(channel: string): Promise<void>;
   SetDesktopTelemetry(enabled: boolean): Promise<void>;
+  ReportRenderingPerf(count: number, maxMs: number, avgMs: number): Promise<void>;
   SetDesktopMetrics(enabled: boolean): Promise<void>;
   SetExpandThinking(on: boolean): Promise<void>;
   SetDesktopConversationWidth(width: string): Promise<void>;
@@ -4889,6 +4890,13 @@ async TeamPanelViewForTab() { return null; },
         },
         async SetDesktopMetrics(enabled: boolean) {
           settings.metrics = enabled;
+        },
+        async ReportRenderingPerf(count: number, maxMs: number, avgMs: number) {
+          try {
+            await app.ReportRenderingPerf(count, maxMs, avgMs);
+          } catch {
+            // best-effort diagnostic; never break the UI on a stats write
+          }
         },
     async SetDesktopConversationWidth(width: string) { settings.conversationWidth = width; },
     async SetReasoningDisplayMode(mode: "hidden" | "summary" | "auto" | "expanded") { if (!(["hidden", "summary", "auto", "expanded"] as string[]).includes(mode)) throw new Error("invalid reasoning display mode"); settings.reasoningDisplayMode = mode; settings.reasoningDisplayModeExplicit = true; },

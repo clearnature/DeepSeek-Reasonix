@@ -1730,6 +1730,24 @@ func (a *App) SetCollaborationMode(mode string) {
 // turn gate. Frontends use this before submit and after controller rebuilds so a
 // turn cannot observe collaboration, approval, and goal from different UI
 // generations.
+
+// ReportRenderingPerf records a rendering-performance sample (longtask
+// aggregation from the frontend) into the stats file so jank/flicker
+// complaints are diagnosable after the fact. Best-effort.
+func (a *App) ReportRenderingPerf(count int, maxMs int64, avgMs int64) {
+	if count <= 0 {
+		return
+	}
+	row := fmt.Sprintf("{\"ts\":%q,\"source\":\"desktop\",\"rendering\":{\"count\":%d,\"max_ms\":%d,\"avg_ms\":%d}}\n",
+		time.Now().Format(time.RFC3339Nano), count, maxMs, avgMs)
+	dir := config.StatsDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	path := filepath.Join(dir, time.Now().Format("2006-01-02")+".jsonl")
+	_ = os.WriteFile(path, []byte(row), 0o644)
+}
+
 func (a *App) SetComposerProfileForTab(tabID, collaborationMode, toolApprovalMode, goal string) ([]string, error) {
 	collaborationMode = normalizeCollaborationMode(collaborationMode)
 	toolApprovalMode = normalizeToolApprovalMode(toolApprovalMode)
