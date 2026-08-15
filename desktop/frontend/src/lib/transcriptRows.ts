@@ -610,6 +610,12 @@ export function estimateTranscriptRowSize(row: TranscriptRow | undefined): numbe
     case "compaction":
       return 36;
     case "answer":
+      // Long answers default to the folded preview (fixed ~160px). Cap the
+      // estimate so the virtualized scroll range matches the collapsed rows;
+      // expanded rows get corrected by Virtuoso's real measurement once.
+      if (isLongAnswer(row.item.text)) {
+        return Math.min(estimateTranscriptTextSize(row.item.text, 160), 200);
+      }
       return estimateTranscriptTextSize(row.item.text, 160);
     case "extension":
       return 160;
