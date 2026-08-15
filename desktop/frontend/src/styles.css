@@ -37931,6 +37931,9 @@ body > .mermaid-diagram--fullscreen {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-width: var(--maxw);
+  margin-left: auto;
+  margin-right: auto;
   padding: 8px 12px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
