@@ -433,7 +433,7 @@ func TestEffectiveOutputBudgetClipsSharedWindowRequest(t *testing.T) {
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 950_000})
 	a.setPromptTokenCalibration(950_000, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
 
-	got, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, true)
+	got, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, false)
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestCalibratedOutputBudgetIncludesReplayedReasoning(t *testing.T) {
 	if after < before+99_000 {
 		t.Fatalf("400K replayed reasoning was not calibrated: before=%d after=%d", before, after)
 	}
-	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, true)
+	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, false)
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -494,7 +494,7 @@ func TestCalibratedOutputBudgetKeepsCJKConservativeFloor(t *testing.T) {
 		t.Fatalf("calibrated estimate %d fell below mixed-script safety floor %d", calibrated, wantFloor)
 	}
 
-	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, true)
+	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, false)
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -537,7 +537,7 @@ func TestCalibratedResponsesBudgetIncludesNewOrdinaryReasoning(t *testing.T) {
 	if got := a.estimatedRequestTokens(current); got < 174_000 {
 		t.Fatalf("Responses ordinary reasoning estimate = %d, want newly replayed reasoning included", got)
 	}
-	if budget, clipped, err := a.effectiveOutputBudget(current, true); err != nil || !clipped || budget >= prov.budget {
+	if budget, clipped, err := a.effectiveOutputBudget(current, false); err != nil || !clipped || budget >= prov.budget {
 		t.Fatalf("Responses ordinary reasoning budget = %d clipped=%v err=%v, want a clipped budget", budget, clipped, err)
 	}
 }
@@ -559,7 +559,7 @@ func TestCalibratedResponsesBudgetIncludesNewReplayItems(t *testing.T) {
 	if got := a.estimatedRequestTokens(current); got < 174_000 {
 		t.Fatalf("Responses replay-item estimate = %d, want newly replayed item included", got)
 	}
-	if budget, clipped, err := a.effectiveOutputBudget(current, true); err != nil || !clipped || budget >= prov.budget {
+	if budget, clipped, err := a.effectiveOutputBudget(current, false); err != nil || !clipped || budget >= prov.budget {
 		t.Fatalf("Responses replay-item budget = %d clipped=%v err=%v, want a clipped budget", budget, clipped, err)
 	}
 }
@@ -618,7 +618,7 @@ func TestEffectiveOutputBudgetRejectsExhaustedSharedWindow(t *testing.T) {
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 1_045_000})
 	a.setPromptTokenCalibration(1_045_000, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
 
-	_, _, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, true)
+	_, _, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, false)
 	if !errors.Is(err, ErrCompactionRequired) {
 		t.Fatalf("effectiveOutputBudget error = %v, want ErrCompactionRequired", err)
 	}
@@ -683,6 +683,11 @@ func TestSetSessionResetsPerTranscriptUsageState(t *testing.T) {
 	active := requestCalibrationShape{requestChars: 900_000, compactChars: 850_000}
 	a.sess.output.activeReqShape.Store(&active)
 	a.setPromptTokenCalibration(200_000, requestCalibrationShape{requestChars: 1_000_000, compactChars: 950_000})
+	a.learnContextBudget(1_048_576, 384_000, true)
+	a.storeAdmission(contextAdmission{
+		WindowMode: provider.ContextWindowShared.String(), WindowTokens: 1_048_576,
+		PromptTokens: 810_882, LastRecovery: contextRecoveryLearnedRetry,
+	})
 	a.SetSession(NewSession("new"))
 
 	if got := a.sess.output.lastUsage.Load(); got != nil {
@@ -693,6 +698,15 @@ func TestSetSessionResetsPerTranscriptUsageState(t *testing.T) {
 	}
 	if got := a.sess.output.promptCalibration.Load(); got == nil {
 		t.Fatal("promptCalibration was dropped on session switch; the tokenizer ratio outlives the transcript")
+	}
+	if got := a.sess.output.learned.Load(); got == nil || got.windowTokens != 1_048_576 || got.completionBudget != 384_000 {
+		t.Fatalf("learned provider budget was dropped on session switch: %+v", got)
+	}
+	if got := a.sess.output.admission.Load(); got != nil {
+		t.Fatalf("context admission survived session switch: %+v", got)
+	}
+	if got := a.ContextMaintenanceSnapshot().ContextBudget; got != nil {
+		t.Fatalf("new transcript exposed the previous context budget: %+v", got)
 	}
 }
 

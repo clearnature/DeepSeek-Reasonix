@@ -49,7 +49,7 @@ func summaryInputTokens(msgs []provider.Message) int {
 // window check.
 func (a *Agent) guardedSummaryInputTokens(msgs []provider.Message) int {
 	raw := summaryInputTokens(msgs)
-	if !sharesContextWindow(a.svc.prov) || a.configuredOutputBudget(a.maxOutputTokens) <= 0 || len(msgs) == 0 {
+	if contextBudgetPolicyOf(a.svc.prov).WindowMode != provider.ContextWindowShared || len(msgs) == 0 {
 		return raw
 	}
 	return a.estimatedPromptTokens(msgs)
@@ -60,18 +60,22 @@ func (a *Agent) guardedSummaryInputTokens(msgs []provider.Message) int {
 // with the ~1.3x-hotter full-request estimate). Zero means the window
 // cannot host a useful summary request.
 func (a *Agent) summaryInputBudget(prefix []provider.Message, instructions string) int {
-	if a.contextWindow <= 0 {
+	if a.effectiveContextWindow() <= 0 && a.contextWindow <= 0 {
 		return 0
 	}
 	reserve := summaryOutputReserve
-	if sharesContextWindow(a.svc.prov) && a.configuredOutputBudget(a.maxOutputTokens) > 0 {
+	if contextBudgetPolicyOf(a.svc.prov).WindowMode == provider.ContextWindowShared {
 		reserve += outputBudgetReserve
+	}
+	window := a.effectiveContextWindow()
+	if window <= 0 {
+		window = a.contextWindow
 	}
 	// The summarizer sends the prefix as raw messages, so the budget must
 	// use the raw ruler the window checks reject with — a rendered-transcript
 	// estimate under-sizes it ~2x (2026-08-13 06:48 degraded).
 	prefixTokens := estimateMessagesTokens(prefix)
-	budget := a.contextWindow - reserve - prefixTokens - estimateTextTokens(summarySystemPrompt) - estimateTextTokens(instructions) - 256
+	budget := window - reserve - prefixTokens - estimateTextTokens(summarySystemPrompt) - estimateTextTokens(instructions) - 256
 	if budget < minSummarySpanTokens {
 		return 0
 	}

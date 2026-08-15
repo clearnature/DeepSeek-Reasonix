@@ -690,7 +690,7 @@ var curatedProviderPresets = []ProviderPreset{
 			Default:       "glm-5.2",
 			APIKeyEnv:     "OPENCODE_GO_API_KEY",
 			ContextWindow: 128000,
-			ModelOverrides: map[string]ProviderModelOverride{
+			ModelOverrides: withOpenCodeGoChatContextOverrides(map[string]ProviderModelOverride{
 				"deepseek-v4-flash": {
 					ReasoningProtocol: ReasoningProtocolDeepSeek,
 					SupportedEfforts:  []string{"disabled", "high", "max"},
@@ -715,9 +715,8 @@ var curatedProviderPresets = []ProviderPreset{
 					ReasoningProtocol: ReasoningProtocolOpenAI,
 					SupportedEfforts:  []string{"high", "max"},
 					DefaultEffort:     "max",
-					ContextWindow:     1_048_576,
 				},
-			},
+			}),
 		}},
 	},
 	opencodeGoAnthropicPreset,

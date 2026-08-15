@@ -563,6 +563,8 @@ type Messages struct {
 	WorkModeAlreadyOnFmt                   string
 	WorkModeSwitchingFmt                   string
 	WorkModeSwitchedFmt                    string
+	ProviderErrContextOverflowFmt          string // 400/413/422 shared-window overflow with numbers
+
 }
 
 // ProviderStatusMessage returns an actionable explanation for a known provider
