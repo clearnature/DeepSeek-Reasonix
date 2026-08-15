@@ -2874,6 +2874,7 @@ export const zh: Record<DictKey, string> = {
   "transcript.worked": "已工作",
   "transcript.workedDuration": "已工作 {duration}",
   "transcript.durationSeconds": "{s} 秒",
+	"transcript.expandAnswer": "展开完整回答",
   "transcript.durationMinutes": "{m} 分",
   "transcript.durationMinutesSeconds": "{m} 分 {s} 秒",
   "transcript.processed": "已处理",

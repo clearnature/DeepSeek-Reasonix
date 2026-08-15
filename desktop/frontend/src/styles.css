@@ -37924,3 +37924,42 @@ body > .mermaid-diagram--fullscreen {
     gap: 4px;
   }
 }
+
+/* Long-answer fold preview: fixed-height collapsed row for answers above
+   LONG_ANSWER_FOLD_THRESHOLD_CHARS — no markdown DOM, cheap to remount. */
+.transcript-long-answer-fold {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-subtle, transparent);
+  margin: 4px 0;
+  max-height: 160px;
+  overflow: hidden;
+}
+.transcript-long-answer-fold__preview {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-line-clamp: 4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.transcript-long-answer-fold__expand {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent, var(--fg));
+  cursor: pointer;
+}
+.transcript-long-answer-fold__expand:hover {
+  background: var(--bg-hover, rgba(128, 128, 128, 0.1));
+}

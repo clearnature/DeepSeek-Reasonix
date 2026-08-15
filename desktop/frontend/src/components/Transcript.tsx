@@ -26,6 +26,7 @@ import {
   historyEntryIdForRow,
   reconcileFoldEntries,
   estimateTranscriptRowSize,
+  isLongAnswer,
   userRowKey,
   EMPTY_FOLDS,
   NO_LIVE,
@@ -445,6 +446,10 @@ export function Transcript({
     setFolds((prev) => foldMapWithToggle(prev, segmentKey, currentlyOpen));
   }, [beginUserResize]);
 
+  const toggleFold = useCallback((key: string, currentlyOpen: boolean) => {
+    setFolds((prev) => foldMapWithToggle(prev, key, currentlyOpen));
+  }, []);
+
   const handleReasoningManualOpen = useCallback((segmentKey: string) => {
     beginUserResize();
     const running = segmentStates.find((segment) => segment.key === segmentKey)?.hasRunningWork ?? false;
@@ -659,6 +664,13 @@ export function Transcript({
           </div>
         );
       case "answer":
+        if (isLongAnswer(row.item.text)) {
+          const fold = folds.get(row.key);
+          const folded = fold ? !fold.open : true;
+          if (folded) {
+            return <LongAnswerFoldPreview text={row.item.text} onExpand={() => toggleFold(row.key, false)} />;
+          }
+        }
         return (
           <LiveAssistantMessage
             item={assistantAnswerOnly(row.item)}
@@ -791,6 +803,29 @@ export function Transcript({
     </TranscriptLayoutIntentProvider>
     </MarkdownImageTabContext.Provider>
     </InvocationMetadataContext.Provider>
+  );
+}
+
+// LongAnswerFoldPreview: a compact preview for assistant answers above
+// LONG_ANSWER_FOLD_THRESHOLD_CHARS. Fixed-height, no markdown parse, so the
+// row never rebuilds a giant DOM subtree on upward scroll; expand renders the
+// full answer through LiveAssistantMessage.
+function LongAnswerFoldPreview({ text, onExpand }: { text: string; onExpand: () => void }) {
+  const t = useT();
+  const preview = text.length > 400 ? text.slice(0, 400) : text;
+  return (
+    <div className="transcript-long-answer-fold">
+      <div className="transcript-long-answer-fold__preview">{preview}</div>
+      <button
+        type="button"
+        className="transcript-long-answer-fold__expand"
+        aria-expanded={false}
+        aria-controls={`answer-${preview.length}`}
+        onClick={onExpand}
+      >
+        {t("transcript.expandAnswer")}
+      </button>
+    </div>
   );
 }
 

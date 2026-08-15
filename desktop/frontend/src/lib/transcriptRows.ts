@@ -554,7 +554,16 @@ export function buildTranscriptRows(models: readonly TurnModel[], options: Build
 
 const TRANSCRIPT_ESTIMATED_LINE_CHARS = 88;
 const TRANSCRIPT_ESTIMATED_LINE_HEIGHT = 20;
+
+// Long assistant answers above this many characters default to a folded
+// preview row (fixed height + expand button) so upward scrolling never
+// rebuilds a multi-thousand-px markdown DOM subtree per frame.
+export const LONG_ANSWER_FOLD_THRESHOLD_CHARS = 2000;
 const TRANSCRIPT_MAX_ESTIMATED_TEXT_HEIGHT = 12_000;
+
+export function isLongAnswer(text: string | undefined): boolean {
+  return (text?.length ?? 0) > LONG_ANSWER_FOLD_THRESHOLD_CHARS;
+}
 
 function estimateTranscriptTextSize(text: string | undefined, minimum: number): number {
   if (!text) return minimum;

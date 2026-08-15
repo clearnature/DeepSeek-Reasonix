@@ -2871,6 +2871,7 @@ export const en = {
   "transcript.worked": "Worked",
   "transcript.workedDuration": "Worked {duration}",
   "transcript.durationSeconds": "{s}s",
+	"transcript.expandAnswer": "Show full answer",
   "transcript.durationMinutes": "{m}m",
   "transcript.durationMinutesSeconds": "{m}m {s}s",
   "transcript.processed": "Processed",
