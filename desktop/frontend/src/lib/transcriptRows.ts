@@ -610,6 +610,9 @@ export function estimateTranscriptRowSize(row: TranscriptRow | undefined): numbe
     case "compaction":
       return 36;
     case "answer":
+      if (isLongAnswer(row.item.text)) {
+        return Math.min(estimateTranscriptTextSize(row.item.text, 160), 200);
+      }
       return estimateTranscriptTextSize(row.item.text, 160);
     case "extension":
       return 160;

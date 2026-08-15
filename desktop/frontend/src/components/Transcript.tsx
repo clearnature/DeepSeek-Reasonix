@@ -26,6 +26,7 @@ import {
   historyEntryIdForRow,
   reconcileFoldEntries,
   estimateTranscriptRowSize,
+  isLongAnswer,
   userRowKey,
   EMPTY_FOLDS,
   NO_LIVE,
@@ -659,6 +660,18 @@ export function Transcript({
           </div>
         );
       case "answer":
+        if (isLongAnswer(row.item.text)) {
+          return <LongAnswerFold text={row.item.text} renderExpanded={() => (
+            <LiveAssistantMessage
+              item={assistantAnswerOnly(row.item)}
+              defaultExpanded={false}
+              expandWhileStreaming={false}
+              truncateStreamingReasoning={true}
+              creationMode={creationMode}
+              reasoningDisplay="hide"
+            />
+          )} />;
+        }
         return (
           <LiveAssistantMessage
             item={assistantAnswerOnly(row.item)}
@@ -791,6 +804,28 @@ export function Transcript({
     </TranscriptLayoutIntentProvider>
     </MarkdownImageTabContext.Provider>
     </InvocationMetadataContext.Provider>
+  );
+}
+
+// LongAnswerFold: self-contained fold for answers above
+// LONG_ANSWER_FOLD_THRESHOLD_CHARS. Owns its expanded state locally (no
+// global fold-map closure), so the expand button always works regardless of
+// virtualized row identity; state resets on unmount (acceptable — expansion
+// is a transient look, not a persistent preference).
+function LongAnswerFold({ text, renderExpanded }: { text: string; renderExpanded: () => ReactNode }) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  if (expanded) return <>{renderExpanded()}</>;
+  const preview = text.length > 400 ? text.slice(0, 400) : text;
+  return (
+    <div className="transcript-long-answer-fold" onClick={() => setExpanded(true)} role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(true); } }}>
+      <div className="transcript-long-answer-fold__preview">{preview}</div>
+      <button type="button" className="transcript-long-answer-fold__expand" aria-expanded={false}
+        onClick={(e) => { e.stopPropagation(); setExpanded(true); }}>
+        {t("transcript.expandAnswer")}
+      </button>
+    </div>
   );
 }
 
