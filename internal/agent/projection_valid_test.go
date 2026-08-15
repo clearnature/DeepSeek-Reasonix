@@ -35,18 +35,18 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 			CoveredPrefixHash: coveredPrefixHash(msgs, 3),
 		},
 	}
-	if !projectionValid(st, msgs, 2, "ws|sess|model") {
+	if !projectionValid(st, msgs, "ws|sess|model") {
 		t.Fatal("expected valid projection for matching prefix")
 	}
 	// Append-only growth still valid.
 	grown := append(append([]provider.Message(nil), msgs...), provider.Message{Role: provider.RoleAssistant, Content: "more"})
-	if !projectionValid(st, grown, 3, "ws|sess|model") {
+	if !projectionValid(st, grown, "ws|sess|model") {
 		t.Fatal("append-only growth should keep projection valid")
 	}
 	// Prefix edit invalidates.
 	edited := append([]provider.Message(nil), msgs...)
 	edited[1].Content = "task-EDITED"
-	if projectionValid(st, edited, 4, "ws|sess|model") {
+	if projectionValid(st, edited, "ws|sess|model") {
 		t.Fatal("edited covered prefix must invalidate projection")
 	}
 }
@@ -365,8 +365,8 @@ func TestCompactInstallsCoveredPrefixHash(t *testing.T) {
 	if st.PromptCacheKey != promptCacheKey("ws", BranchID(path), "m") {
 		t.Fatalf("PromptCacheKey = %q", st.PromptCacheKey)
 	}
-	msgs, ver := sess.snapshotMessagesVersion()
-	if !projectionValid(st, msgs, ver, st.PromptCacheKey) {
+	msgs, _ := sess.snapshotMessagesVersion()
+	if !projectionValid(st, msgs, st.PromptCacheKey) {
 		t.Fatal("fresh projection should validate")
 	}
 }
@@ -394,7 +394,7 @@ func TestProjectionContentValidVersionDriftSamePrefix(t *testing.T) {
 	}
 	// Version drifted (in-memory counter started at 2 after reload) but the
 	// covered prefix is byte-identical and nothing was appended.
-	if !projectionContentValid(st, msgs, 2) {
+	if !projectionContentValid(st, msgs) {
 		t.Fatalf("version drift with identical covered prefix must keep the projection valid")
 	}
 }
@@ -403,8 +403,8 @@ func TestProjectionContentValidToleratesPruneRewrite(t *testing.T) {
 	base := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
 		{Role: provider.RoleUser, Content: "user q"},
-		{Role: provider.RoleTool, Content: strings.Repeat("tool body ", 50)},
-		{Role: provider.RoleAssistant, Content: "assistant a"},
+		{Role: provider.RoleAssistant, Content: "assistant a", ToolCalls: []provider.ToolCall{{ID: "t1", Name: "read", Arguments: `{}`}}},
+		{Role: provider.RoleTool, Content: strings.Repeat("tool body ", 50), ToolCallID: "t1"},
 	}
 	st := CompactionState{Projection: ContextProjection{
 		Messages:           []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
@@ -416,20 +416,20 @@ func TestProjectionContentValidToleratesPruneRewrite(t *testing.T) {
 	// prune/snip shortens tool results only: covered hash changes, semantic
 	// hash (non-tool) stays, projection must remain valid.
 	pruned := append([]provider.Message(nil), base...)
-	pruned[2] = provider.Message{Role: provider.RoleTool, Content: "tool (trimmed)"}
-	if !projectionContentValid(st, pruned, 1) {
+	pruned[3] = provider.Message{Role: provider.RoleTool, Content: "tool (trimmed)", ToolCallID: "t1"}
+	if !projectionContentValid(st, pruned) {
 		t.Fatalf("prune rewrite (tool-only) must keep the projection valid")
 	}
 	// Real content change (user message edited) must invalidate.
 	edited := append([]provider.Message(nil), base...)
 	edited[1] = provider.Message{Role: provider.RoleUser, Content: "user q EDITED"}
-	if projectionContentValid(st, edited, 1) {
+	if projectionContentValid(st, edited) {
 		t.Fatalf("user content edit must invalidate the projection")
 	}
 	// Legacy sidecar without semantic hash stays fail-closed on covered drift.
 	legacy := st
 	legacy.Projection.SemanticPrefixHash = ""
-	if projectionContentValid(legacy, pruned, 1) {
+	if projectionContentValid(legacy, pruned) {
 		t.Fatalf("legacy sidecar without semantic hash must reject covered drift")
 	}
 }

@@ -50,16 +50,21 @@ func TestPreflightPruneThenFoldFitsWindow(t *testing.T) {
 		t.Fatalf("preflight must succeed after prune + bounded fold: %v", err)
 	}
 	st := a.sess.compactionState
-	if !projectionValid(st, sess.Messages, st.TranscriptVersion, a.currentPromptCacheKey()) {
+	if !projectionValid(st, sess.Messages, a.currentPromptCacheKey()) {
 		t.Fatal("no valid projection installed after preflight")
 	}
 	if est := estimateMessagesTokens(st.Projection.Messages); est >= a.contextWindow-minOutputBudget {
 		t.Fatalf("projection still over window after fold: est=%d window=%d", est, a.contextWindow)
 	}
-	// The projection must cover the whole canonical (the pruned view collapsed
-	// the stale tool results).
-	if st.Projection.CoveredCount != len(sess.Messages) {
-		t.Fatalf("covered = %d, want %d (full canonical)", st.Projection.CoveredCount, len(sess.Messages))
+	// #8923: CoveredCount freezes at the fold boundary; the verbatim tail
+	// splices from canonical[CoveredCount:] — the fold region's content is
+	// inside the digest+kept body, so the whole canonical is covered even
+	// though message counts differ (digest replaces the folded turns).
+	if st.Projection.CoveredCount <= 0 || st.Projection.CoveredCount > len(sess.Messages) {
+		t.Fatalf("covered = %d out of range (canonical %d)", st.Projection.CoveredCount, len(sess.Messages))
+	}
+	if tail := sess.Messages[st.Projection.CoveredCount:]; len(tail) == 0 {
+		t.Fatalf("no verbatim tail spliced after covered=%d (canonical %d)", st.Projection.CoveredCount, len(sess.Messages))
 	}
 }
 

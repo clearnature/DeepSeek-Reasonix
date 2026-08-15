@@ -20,11 +20,11 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	if a == nil || a.sess.conversation == nil {
 		return nil
 	}
-	msgs, version := a.sess.conversation.snapshotMessagesVersion()
+	msgs, _ := a.sess.conversation.snapshotMessagesVersion()
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
-	if a.projectionUsable(st, msgs, version) {
+	if a.projectionUsable(st, msgs, 0) {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
@@ -64,8 +64,8 @@ func (a *Agent) modelVisibleDegraded(st CompactionState, msgs []provider.Message
 // prune/snip rebuilt one, 8/13: 7.2K messages ≈ 2.2M) must not be sent; it
 // falls back to canonical so the request path folds it down. Sizing uses the
 // calibrated send-path estimate (the 1-rune ruler over-sizes CJK ~5x).
-func (a *Agent) projectionUsable(st CompactionState, msgs []provider.Message, version uint64) bool {
-	if !projectionValid(st, msgs, version, a.currentPromptCacheKey()) {
+func (a *Agent) projectionUsable(st CompactionState, msgs []provider.Message, _ uint64) bool {
+	if !projectionValid(st, msgs, a.currentPromptCacheKey()) {
 		return false
 	}
 	if a.contextWindow > 0 && sharesContextWindow(a.svc.prov) {
@@ -119,6 +119,26 @@ func (a *Agent) InvalidateProjection() {
 	}
 }
 
+// InvalidateProjectionIfStale keeps the projection when it still matches the
+// current transcript and performs the full invalidation otherwise. History
+// rewrites that only touch messages past CoveredCount keep their fold.
+func (a *Agent) InvalidateProjectionIfStale() {
+	if a == nil {
+		return
+	}
+	a.sess.compactionMu.Lock()
+	st := a.sess.compactionState
+	if len(st.Projection.Messages) > 0 && a.sess.conversation != nil {
+		msgs, _ := a.sess.conversation.snapshotMessagesVersion()
+		if projectionValid(st, msgs, a.currentPromptCacheKeyLocked()) {
+			a.sess.compactionMu.Unlock()
+			return
+		}
+	}
+	a.sess.compactionMu.Unlock()
+	a.InvalidateProjection()
+}
+
 // LoadProjectionSidecar loads the context sidecar into the agent. Corrupt or
 // incompatible state is dropped so the next request rebuilds from canonical.
 // Sidecars whose PromptCacheKey does not match the current agent lineage are
@@ -152,9 +172,14 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		st.CompactionInflight = 0
 		_ = SaveCompactionState(sessionPath, st)
 	}
+	var msgs, preRepair []provider.Message
+	if a.sess.conversation != nil {
+		msgs, preRepair = a.sess.conversation.projectionValidationMessages()
+	}
 	a.sess.compactionMu.Lock()
 	key := a.currentPromptCacheKeyLocked()
 	normalized, keyOK := lineageKeyCompatible(st.PromptCacheKey, key)
+	needsNormalization := false
 	// Keep receipt-only blocked/failed sidecars (no projection body) and legacy
 	// top-level BlockedInputHash so generation-scoped suppressions survive restart.
 	hasMaintenanceSignal := st.Projection.CoveredPrefixHash != "" ||
@@ -164,12 +189,12 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	if key != "" && !keyOK {
 		// Lineage key changed (upgrade, model/workspace switch). Rebind when
 		// the projection body still matches the canonical covered prefix.
-		var msgs []provider.Message
-		var version uint64
-		if a.sess.conversation != nil {
-			msgs, version = a.sess.conversation.snapshotMessagesVersion()
+		contentValid := projectionContentValid(st, msgs)
+		if !contentValid && migrateLegacyCoveredPrefixHash(&st, msgs, preRepair) {
+			contentValid = true
+			needsNormalization = true
 		}
-		if projectionContentValid(st, msgs, version) {
+		if contentValid {
 			normalized, keyOK = key, true
 		}
 	}
@@ -187,18 +212,18 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		a.sess.checkpointState = "degraded"
 	}
 	// Only rewrite legacy native-editing lineage keys; exact matches stay pure-read.
-	needsNormalization := false
 	if keyOK && key != "" && normalized != st.PromptCacheKey {
 		st.PromptCacheKey = normalized
 		needsNormalization = true
 	}
 	// Only mark restored when the projection still matches the transcript.
-	var msgs []provider.Message
-	var version uint64
-	if a.sess.conversation != nil {
-		msgs, version = a.sess.conversation.snapshotMessagesVersion()
+	if !projectionContentValid(st, msgs) && migrateLegacyCoveredPrefixHash(&st, msgs, preRepair) {
+		needsNormalization = true
 	}
-	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, version, key)
+	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
+	// Keep the intact body on invalidation: the third-state degraded view
+	// (digest + tail) depends on it — a full-history replay is what the
+	// digest splices avoid. The next compaction rebuilds the projection.
 	a.sess.compactionState = st
 	if valid {
 		a.sess.checkpointState = "restored"

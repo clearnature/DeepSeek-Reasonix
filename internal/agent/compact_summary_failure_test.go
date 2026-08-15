@@ -66,7 +66,7 @@ func prepareContext(ctx context.Context, a *Agent, trigger string) error {
 // foldRegionOf is the region the next compaction would hand the summarizer.
 func foldRegionOf(a *Agent) []provider.Message {
 	canonical, version := a.sess.conversation.snapshotMessagesVersion()
-	msgs := a.visibleInputForFold(a.sess.compactionState, canonical, version)
+	msgs, _ := a.visibleInputForFold(a.sess.compactionState, canonical, version)
 	head, start, ok := a.planFoldRegion(msgs, false)
 	if !ok {
 		return nil
@@ -267,8 +267,12 @@ func TestDegradedFoldKeepsAllUserMessages(t *testing.T) {
 			wantUsers++
 		}
 	}
+	// #8923 tail-splice: verbatim tail lives in the model-visible view
+	// (canonical[start:] spliced after the frozen body), not in
+	// Projection.Messages. Count the view the provider actually sees.
+	visible := modelVisibleFromProjection(a.sess.compactionState.Projection, sess.Messages)
 	projUsers := 0
-	for _, m := range a.sess.compactionState.Projection.Messages {
+	for _, m := range visible {
 		if m.Role == provider.RoleUser && !isCompactionSummary(m) {
 			projUsers++
 		}
