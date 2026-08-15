@@ -1532,6 +1532,7 @@ func (a *Agent) rebuildTodoState(msgs []provider.Message) {
 		}
 	}
 	a.setTodoState(todos)
+	a.consumeTodoOnlyReadinessMarkerIfResolved()
 }
 
 func successfulToolCallIDs(msgs []provider.Message) map[string]bool {
