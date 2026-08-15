@@ -396,9 +396,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	a.markCompactionInflight()
 	defer a.clearCompactionInflight()
 	activeTurn := a.activeTurnCreatedAt.Load()
-	if activeTurn != 0 && a.sess.compaction.lastTurn.Load() == activeTurn && trigger != CompactionTriggerManual {
-		return CompactionNoop, nil
-	}
 	canonical, transcriptVersion := a.sess.conversation.snapshotMessagesVersion()
 	// Silent exits (Noop/aborted) must still land in the stats file: a fold
 	// that found nothing is the "compacted but nothing happened" case that
@@ -417,6 +414,9 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	a.sess.compactionMu.Unlock()
 	msgs, onProjection := a.visibleInputForFold(stateSnapshot, canonical, transcriptVersion)
 	viewInputHash := providerVisibleFingerprint(provider.ModelMessages(msgs))
+	if a.sameTurnCompactionBlocked(activeTurn, trigger, mustFree, stateSnapshot, viewInputHash) {
+		return CompactionNoop, nil
+	}
 	if trigger != CompactionTriggerManual && stateSnapshot.LastReceipt != nil && stateSnapshot.LastReceipt.Status == "applied" && stateSnapshot.LastReceipt.Action == "summary" && stateSnapshot.LastReceipt.InputHash == viewInputHash {
 		return CompactionNoop, nil
 	}
