@@ -85,7 +85,6 @@ for (const path of localeChunks) {
   // write-access approval card adds four scoped actions and a home-risk
   // warning (~0.15 KiB gzip, +0.27% over the old 54.75 gate).
   const budget = name.startsWith("zh-TW-") ? 55.8 * 1024 : 55.0 * 1024;
- (feat(sandbox): add Codex-style on-demand write-access grants / 实现 Codex 式按需写入授权 (#8884))
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
