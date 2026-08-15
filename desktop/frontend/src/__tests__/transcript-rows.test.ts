@@ -7,6 +7,7 @@
 // the lazy-content entry id derivation.
 
 import {
+  isLongAnswer,
   buildTranscriptRows,
   buildTurnModels,
   defaultFoldOpen,
@@ -317,5 +318,13 @@ const keys = (rows: TranscriptRow[]) => rows.map((row) => row.key).join(",");
   ok(rows.every((row) => estimateTranscriptRowSize(row) > 0), "every row kind has a positive size estimate");
 }
 
+
+ok(isLongAnswer(undefined) === false, "isLongAnswer: undefined is not long");
+ok(isLongAnswer("x".repeat(1999)) === false, "isLongAnswer: 1999 chars stays open");
+ok(isLongAnswer("x".repeat(2000)) === false, "isLongAnswer: 2000 chars boundary stays open");
+ok(isLongAnswer("x".repeat(2001)) === true, "isLongAnswer: 2001 chars folds");
+ok(isLongAnswer("x".repeat(8000)) === true, "isLongAnswer: 8000 chars folds (worker path also folds)");
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
+
