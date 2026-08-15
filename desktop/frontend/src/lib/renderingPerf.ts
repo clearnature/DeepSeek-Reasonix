@@ -21,6 +21,9 @@ function flush(): void {
 }
 
 export function startRenderingPerf(): void {
+  // Startup ping: a count=0 sample proves the frontend→Go stats link works
+  // even when no longtask ever fires, so a later "0 rows" is unambiguous.
+  void app.ReportRenderingPerf(0, 0, 0);
   if (typeof PerformanceObserver === "undefined") return;
   let observer: PerformanceObserver;
   try {

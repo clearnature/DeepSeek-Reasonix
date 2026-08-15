@@ -1735,7 +1735,9 @@ func (a *App) SetCollaborationMode(mode string) {
 // aggregation from the frontend) into the stats file so jank/flicker
 // complaints are diagnosable after the fact. Best-effort.
 func (a *App) ReportRenderingPerf(count int, maxMs int64, avgMs int64) {
-	if count <= 0 {
+	// count=0 with zero aggregates is the startup ping (link proof); any
+	// other count<=0 is a no-op.
+	if count < 0 || (count == 0 && (maxMs != 0 || avgMs != 0)) {
 		return
 	}
 	row := fmt.Sprintf("{\"ts\":%q,\"source\":\"desktop\",\"rendering\":{\"count\":%d,\"max_ms\":%d,\"avg_ms\":%d}}\n",
