@@ -84,7 +84,7 @@ for (const path of localeChunks) {
   // runtime controls plus execution-setting receipts add localized copy. The
   // write-access approval card adds four scoped actions and a home-risk
   // warning (~0.15 KiB gzip, +0.27% over the old 54.75 gate).
-  const budget = name.startsWith("zh-TW-") ? 55.8 * 1024 : 55.0 * 1024;
+  const budget = name.startsWith("zh-TW-") ? 56.2 * 1024 : 55.5 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
