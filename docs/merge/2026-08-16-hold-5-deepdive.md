@@ -37,3 +37,11 @@
 | #8874 | ✅ 吸收 | 四方审计 + 失败落盘保持 |
 | #8924 | ⛔ hold | 上游修好 #8942/#8943 |
 | #8930 | ⏸ hold | #8866 观察期结束 |
+
+## 执行结果（2026-08-16 完成）
+
+- **#8923** ✅ 吸收（445c28db8）：上游 InvalidateProjectionIfStale/migrateLegacy/onProjection 边界 + 我们语义哈希/第三态/孤儿锁保留（上游清投影弃用、key 失配测试弃用）
+- **#8921** ✅ 吸收（0b4b23e63）：上游 contextAdmission/admitOutputBudget + 我们 useObserved（4 参——summarize false/主 true）+ summaryInputBudget 扣 prefix + jobs import 恢复
+- **#8874** ✅ 吸收（9cab85a3a）：上游 sameTurnCompactionBlocked（同轮进度门）+ 我们 BlockedInputHash（内容门）共存——四方审计无冲突
+- **验证**：agent 全量 28.5s + 前端（滚动 20/行 53/ContextBudgetCard 13）+ vet/repolint（1442）+ wails
+- **遥测**：失败落盘/status=failed/est 覆盖/校准链全保持（用户"不要丢点位"）
