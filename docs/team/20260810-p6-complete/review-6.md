@@ -140,7 +140,7 @@ review-2/4 的阻塞发现全部未闭环、执行队未在交付物中上报 �
   countInbox L684 恒 0、flushMailbox L743 短路。⇒ **仲裁 4 的核心交付「完成 → 积压聚合
   唤醒」在生产永不触发**；且生产 PostMail 走 ephemeral 分支（L648-653）只发即时 Notice、
   **mail 文本永不投递**（无 SendMessageForSession），teammate 间 mail 是「只通知不投递」。
-  （= review-4 F1，**未闭环**。）
+  （即 review-4 F1，**未闭环**。）
 - 风险：**低-中**（实现逻辑正确，生产接线不完整）。
 - 建议：二选一——(a) boot 接 inboxRoot（config 目录 + 落盘接线，另立跟踪项）；(b) 在
   boot 注释与事务文档**显式明示**「生产 mail 落盘/积压唤醒未接线，当前仅即时通知」，并禁止

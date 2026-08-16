@@ -42,8 +42,8 @@ type TeamTask struct {
 
 | 数据 | 现状 | 裁决 | 锚点 |
 |------|------|------|------|
-| `Owner`（= Assign 的 name） | ✅ 已有 | 保持 | L55 |
-| `Prompt`（= Assign 的 prompt） | ❌ 无 | **必须新增**。完成事件无用户输入，唯一输入源就是登记时快照的 prompt | Assign L165 `prompt` 参数 |
+| `Owner`（即 Assign 的 name） | ✅ 已有 | 保持 | L55 |
+| `Prompt`（即 Assign 的 prompt） | ❌ 无 | **必须新增**。完成事件无用户输入，唯一输入源就是登记时快照的 prompt | Assign L165 `prompt` 参数 |
 | `SessionID`（leader 会话） | ❌ 无 | **必须新增**。完成事件跑在 job goroutine 上，ctx 不可用；`Assign` 需要 `jobs.SessionFromContext` + `WithParentSession` + `WithForkSource` 才能启动续轮。**存 session id 字符串而非 ctx 对象**（ctx 是接口、不可序列化、可能带 deadline/values） | flushMailbox L225 `jobs.SessionFromContext(ctx)` 是现成来源；risk-review §2.5.2 的「存 leader 模板 ctx」方案不如存 id 干净 |
 | `CreatedAt` | ❌ 无 | **建议新增**（低成本）。等待/超时/重试决策（blocked 后 backoff 上限）与 /team-status 展示都需要 | — |
 | `Status` 初值 | 恒空串 | **必须补初值**：recordTask 写 `"running"`（implementation-plan T2 已定），终态由 OnJobDone 写、不可变 | L237 |

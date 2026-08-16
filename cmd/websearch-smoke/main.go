@@ -189,7 +189,7 @@ func main() {
 	fmt.Println("=== 省钱结论 ===")
 	saved := tokensA + tokensD
 	fmt.Printf("4 次提问实际 API 调用 %d 次（B/C 命中零调用）\n", 2)
-	fmt.Printf("命中节省 tokens: %d（=A+D 两轮真实消耗，B/C 完全免费）\n", saved)
+	fmt.Printf("命中节省 tokens: %d（即A+D 两轮真实消耗，B/C 完全免费）\n", saved)
 	fmt.Printf("若 100 个相似提问：只花 %d 次首查的钱，其余全部缓存命中\n", 2)
 }
 
