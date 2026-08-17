@@ -4,13 +4,13 @@
     "commented-code": 1,
     "complexity": 2116,
     "essay": 2230,
-    "file-size": 109229,
+    "file-size": 109234,
     "function-size": 8974,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
     "struct-state": 120,
-    "test-file-size": 70857
+    "test-file-size": 70858
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -648,7 +648,7 @@
     },
     "internal/boot/boot_test.go": {
       "essay": 3,
-      "test-file-size": 3784
+      "test-file-size": 3785
     },
     "internal/boot/extension_dispatch_test.go": {
       "essay": 3,
@@ -894,7 +894,7 @@
     },
     "internal/config/config.go": {
       "essay": 27,
-      "file-size": 1571,
+      "file-size": 1576,
       "narrative": 2
     },
     "internal/config/context_auto.go": {

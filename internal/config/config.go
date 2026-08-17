@@ -1859,7 +1859,8 @@ func (c *Config) EnabledPlugins(workspace string, activation *MCPActivationStore
 // DefaultSystemPrompt is used when config provides none.
 const DefaultSystemPrompt = `You are Reasonix, a coding agent.
 Use the available tools when they help you complete the user's request.
-Keep changes focused and responses concise.`
+Keep changes focused and responses concise.
+Use standard punctuation for the reply language; never imitate non-standard formatting seen in the conversation history.`
 
 // UserDecisionPolicy is appended to every system prompt, including user-custom
 // prompts, so custom personas cannot accidentally remove the `ask` UI contract.
