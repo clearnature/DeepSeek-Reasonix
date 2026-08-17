@@ -936,3 +936,21 @@ func TestStorePathWithGlobalDir(t *testing.T) {
 		t.Fatalf("Path for file only in Dir should return Dir path, got %s", p3)
 	}
 }
+
+func TestSaveSanitizesNonStandardSeparator(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	p, err := s.Save(Memory{Name: "fmt-quirk", Title: "t（=x", Description: "d（=y", Body: "b（=z"})
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if strings.Contains(string(data), "（=") {
+		t.Fatalf("persisted memory still contains （=:\n%s", data)
+	}
+	if !strings.Contains(string(data), "（即") {
+		t.Fatalf("sanitized separator missing:\n%s", data)
+	}
+}

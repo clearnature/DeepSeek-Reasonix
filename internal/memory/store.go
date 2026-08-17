@@ -177,8 +177,24 @@ func (s Store) Path(name string) string {
 // editor, and any future importer all go through here so the index never drifts
 // from the files. Returns the path written.
 func (s Store) Save(m Memory) (string, error) {
+	m = sanitizeMemory(m)
 	result, err := s.SaveWithOptions(m, SaveOptions{})
 	return result.Path, err
+}
+
+// sanitizeMemory normalizes known non-standard formatting before a fact is
+// persisted, so a learned format quirk can never re-enter the prompt prefix
+// through memory (the 2026-08 "（=" incident: a non-standard separator in a
+// memory file was imitated by the model and spread through every future turn).
+func sanitizeMemory(m Memory) Memory {
+	m.Title = sanitizeMemoryText(m.Title)
+	m.Description = sanitizeMemoryText(m.Description)
+	m.Body = sanitizeMemoryText(m.Body)
+	return m
+}
+
+func sanitizeMemoryText(s string) string {
+	return strings.ReplaceAll(s, "（=", "（即")
 }
 
 // Archive removes a memory from the active store and moves its file under
