@@ -1,10 +1,8 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 
 	"reasonix/internal/event"
@@ -24,8 +22,13 @@ func TestTargetedVerificationGapDoesNotArmRecovery(t *testing.T) {
 	if err := a.Run(context.Background(), "write docs/verify_v070.md and run the validation script"); err != nil {
 		t.Fatalf("targeted Run returned a readiness failure: %v", err)
 	}
+<<<<<<< HEAD
 	if policy, ok := a.TurnPolicy(); !ok || policy.ClosedLoop() {
 		t.Fatalf("targeted standard turn unexpectedly elevated to closed loop: %+v", policy)
+=======
+	if a.closedLoopActive() {
+		t.Fatal("ordinary targeted turn unexpectedly elevated to closed loop")
+>>>>>>> origin/main-v2
 	}
 	if a.PrepareDeliveryRecovery() {
 		t.Fatal("a soft targeted-verification gap must not create a recovery card")
@@ -36,7 +39,7 @@ func TestTargetedVerificationGapDoesNotArmRecovery(t *testing.T) {
 	}
 }
 
-func TestTargetedVerificationRecoverySurvivesAgentRebuild(t *testing.T) {
+func TestClosedLoopReadinessRecoveryStaysInMemory(t *testing.T) {
 	reg := evidenceRegistry()
 	first := &scriptedProvider{name: "standard", turns: [][]provider.Chunk{
 		{toolCallChunk("todo", "todo_write", `{"todos":[{"content":"Write verification notes","status":"in_progress"}]}`), {Type: provider.ChunkDone}},
@@ -50,15 +53,18 @@ func TestTargetedVerificationRecoverySurvivesAgentRebuild(t *testing.T) {
 	if err := a.Run(withClosedLoopContext(context.Background()), "write docs/verify_v070.md and run the validation script"); !errors.As(err, &readinessErr) {
 		t.Fatalf("first Run error = %v, want final readiness failure", err)
 	}
+	// Closed-loop failures stay in memory; durable recovery markers are for
+	// ordinary turns, which no longer fail solely because todos remain open.
 	var marker *provider.FinalReadinessRecovery
 	for _, message := range session.Snapshot() {
 		if message.FinalReadinessRecovery != nil {
 			marker = message.FinalReadinessRecovery
 		}
 	}
-	if marker == nil || bytes.Contains(marker.Checkpoint, []byte("sensitive-payload")) {
-		t.Fatal("recovery checkpoint missing or duplicated writer content")
+	if marker != nil {
+		t.Fatal("closed-loop readiness failure must not persist a recovery marker")
 	}
+<<<<<<< HEAD
 	path := filepath.Join(t.TempDir(), "readiness-recovery.jsonl")
 	if err := session.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -89,13 +95,17 @@ func TestTargetedVerificationRecoverySurvivesAgentRebuild(t *testing.T) {
 	writer, ok := reloaded.task.ledger.LatestSuccessfulWriterIndex()
 	if !ok || !reloaded.task.ledger.HasSuccessfulVerificationCommandAfter(writer) {
 		t.Fatal("reloaded recovery did not preserve write-before-verification ordering")
+=======
+	if !a.pending.finalReadinessRecovery {
+		t.Fatal("closed-loop readiness failure must keep the in-memory pending recovery flag")
+>>>>>>> origin/main-v2
 	}
 }
 
 func TestFinalReadinessRecoveryRejectsStaleMarkerAfterUserTurn(t *testing.T) {
 	reg := evidenceRegistry()
 	prov := &scriptedProvider{name: "standard", turns: [][]provider.Chunk{
-		{toolCallChunk("write", "write_file", `{"path":"README.md"}`), {Type: provider.ChunkDone}},
+		{toolCallChunk("write", "write_file", `{"path":"main.go"}`), {Type: provider.ChunkDone}},
 		{{Type: provider.ChunkText, Text: "done"}, {Type: provider.ChunkDone}},
 	}}
 	session := NewSession("sys")

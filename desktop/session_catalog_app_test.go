@@ -29,10 +29,7 @@ func installSessionCatalogForTest(t *testing.T, app *App, path, scope, workspace
 	}
 	app.sessionCatalog.Store(catalog)
 	t.Cleanup(func() {
-		app.sessionCatalog.CompareAndSwap(catalog, nil)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		_ = catalog.Close(ctx)
+		app.stopSessionCatalog(time.Second)
 	})
 }
 
@@ -665,7 +662,7 @@ func TestAuthoritativeBotStylePersistIndexesSessionImmediately(t *testing.T) {
 }
 
 type retargetRuntimeController struct {
-	control.SessionAPI
+	stubSessionAPI
 	status control.RuntimeStatus
 	path   string
 }

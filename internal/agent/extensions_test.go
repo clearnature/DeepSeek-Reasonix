@@ -1108,7 +1108,7 @@ func TestToolAfterFailurePolicy(t *testing.T) {
 // newCompactionAgent builds an agent whose session has a foldable middle
 // (large assistant turns) so CompactNow always finds a region, with the
 // summarizer scripted to answer "SUMMARY TEXT". The recent tail stays small so
-// the content-driven candidate lands well under compact_ratio and the 50% ceiling.
+// the content-driven candidate lands under compact_ratio.
 func newCompactionAgent(t *testing.T, d *dispatch.Dispatcher) (*mockProvider, *Agent) {
 	t.Helper()
 	mp := &mockProvider{name: "p", chunks: []provider.Chunk{
@@ -1127,6 +1127,7 @@ func newCompactionAgent(t *testing.T, d *dispatch.Dispatcher) (*mockProvider, *A
 	}, event.Discard)
 }
 
+<<<<<<< HEAD
 func TestCompactionPrepareReplaceGuidance(t *testing.T) {
 	client := &fakeDispatchClient{interceptFn: func(ev protocol.InterceptEvent, payload json.RawMessage) (protocol.InterceptResult, error) {
 		if ev == protocol.EventCompactionPrepare {
@@ -1183,6 +1184,8 @@ func TestCompactionPrepareReplaceMessages(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> origin/main-v2
 func TestCompactionPrepareBlock(t *testing.T) {
 	client := &fakeDispatchClient{interceptFn: func(ev protocol.InterceptEvent, _ json.RawMessage) (protocol.InterceptResult, error) {
 		if ev == protocol.EventCompactionPrepare {
@@ -1666,8 +1669,13 @@ func TestCompactionPrepareSlotOwnerConsulted(t *testing.T) {
 	if err := a.CompactNow(context.Background(), ""); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
+<<<<<<< HEAD
 	if sys := mp.requests[0].Messages[len(mp.requests[0].Messages)-1].Content; !strings.Contains(sys, "OWNER GUIDANCE") {
 		t.Fatalf("summarizer system prompt missing the owner's guidance:\n%.200q", sys)
+=======
+	if instruction := mp.requests[0].Messages[len(mp.requests[0].Messages)-1].Content; !strings.Contains(instruction, "OWNER GUIDANCE") {
+		t.Fatalf("final summary instruction missing the owner's guidance:\n%.200q", instruction)
+>>>>>>> origin/main-v2
 	}
 }
 
@@ -1702,9 +1710,15 @@ func TestCompactionPrepareSlotOwnerFinalSayAfterChain(t *testing.T) {
 	if calls != 2 {
 		t.Fatalf("owner consulted %d times, want 2 (chain, then strategy)", calls)
 	}
+<<<<<<< HEAD
 	sys := mp.requests[0].Messages[len(mp.requests[0].Messages)-1].Content
 	if !strings.Contains(sys, "OWNER GUIDANCE") || strings.Contains(sys, "CHAIN GUIDANCE") {
 		t.Fatalf("summarizer system prompt = %.200q, want the strategy ruling to win", sys)
+=======
+	instruction := mp.requests[0].Messages[len(mp.requests[0].Messages)-1].Content
+	if !strings.Contains(instruction, "OWNER GUIDANCE") || strings.Contains(instruction, "CHAIN GUIDANCE") {
+		t.Fatalf("final summary instruction = %.200q, want the strategy ruling to win", instruction)
+>>>>>>> origin/main-v2
 	}
 }
 

@@ -18,6 +18,10 @@ import (
 
 func newSubagentSkillOptionsFactory(
 	cfg config.AgentConfig,
+<<<<<<< HEAD
+=======
+	quoteCtx *event.QuoteContext,
+>>>>>>> origin/main-v2
 	gate agent.Gate,
 	keepPolicy agent.KeepPolicy,
 	maxDepth int,
@@ -28,7 +32,11 @@ func newSubagentSkillOptionsFactory(
 	home, stateRoot := userHomeDir(), config.MemoryUserDir()
 	return func(ctx context.Context, steps int, price *provider.Pricing, ctxWin, childDepth int) agent.Options {
 		return agent.Options{
+<<<<<<< HEAD
 			MaxSteps: steps, Temperature: cfg.Temperature, Pricing: price, UsageSource: event.UsageSourceSubagent,
+=======
+			MaxSteps: steps, Temperature: cfg.Temperature, Pricing: price, QuoteContext: quoteCtx, UsageSource: event.UsageSourceSubagent,
+>>>>>>> origin/main-v2
 			Gate: gate, ContextWindow: ctxWin, RecentKeep: cfg.RecentKeep,
 			SoftCompactRatio: cfg.SoftCompactRatio, ToolResultSnipRatio: cfg.ToolResultSnipRatio,
 			CompactRatio: cfg.CompactRatio, CompactForceRatio: cfg.CompactForceRatio, ContextEditing: cfg.ContextEditing,

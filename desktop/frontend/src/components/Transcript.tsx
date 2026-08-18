@@ -1,4 +1,4 @@
-import { forwardRef, memo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type WheelEvent as ReactWheelEvent } from "react";
+import { forwardRef, memo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type WheelEvent as ReactWheelEvent } from "react";
 import { Virtuoso, type Components, type ItemProps, type ListItem, type ListProps } from "react-virtuoso";
 import type { ControllerLiveStore, Item, LiveStream } from "../lib/useController";
 import type { CheckpointMeta } from "../lib/types";
@@ -7,7 +7,7 @@ import { useT } from "../lib/i18n";
 import { AssistantMessage, InvocationMetadataContext, TurnActions, UserMessage } from "./Message";
 import { ToolCard } from "./ToolCard";
 import { ExtensionCard } from "./ExtensionCard";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Loader2 } from "lucide-react";
 import { Welcome } from "./Welcome";
 import { ReadOnlyBatch } from "./ReadOnlyBatch";
 import { ToolGroup } from "./ToolGroup";
@@ -24,8 +24,6 @@ import {
   foldSegmentStates,
   historyEntryIdForRow,
   reconcileFoldEntries,
-  estimateTranscriptRowSize,
-  isLongAnswer,
   splitTranscriptLiveRows,
   userRowKey,
   EMPTY_FOLDS,
@@ -37,8 +35,9 @@ import {
   type TranscriptRow,
 } from "../lib/transcriptRows";
 import { getTranscriptStore } from "../lib/transcriptStore";
+import { createTranscriptMeasuredSizes, type TranscriptMeasuredSizes } from "../lib/transcriptMeasuredSizes";
 import { acquireMarkdownWorkerClient, releaseMarkdownWorkerClient } from "../lib/markdownWorkerClient";
-import { noteTranscriptRowCounts } from "../lib/sessionDiagnostics";
+import { noteTranscriptRecoveryTerminal, noteTranscriptRowCounts } from "../lib/sessionDiagnostics";
 import { useReasoningDisplayMode } from "../lib/reasoningDisplayPreference";
 import { InlineAssistantReasoning } from "./InlineAssistantReasoning";
 import { LiveTurnRegion } from "./LiveTurnRegion";
@@ -50,8 +49,8 @@ import { useTranscriptSelectableRows } from "../lib/useTranscriptSelectableRows"
 import { TranscriptSelectionOverlay } from "./TranscriptSelectionOverlay";
 import { useCreationTranscriptScrollbar } from "../lib/useCreationTranscriptScrollbar";
 import { useTranscriptScrollInteractions } from "../lib/useTranscriptScrollInteractions";
-import { hasTranscriptScrollableRange, TRANSCRIPT_AT_BOTTOM_THRESHOLD_PX, useTranscriptVirtuosoScroll } from "../lib/useTranscriptVirtuosoScroll";
-import { useTranscriptVirtuosoRecovery, type TranscriptRecoveryControl } from "../lib/useTranscriptVirtuosoRecovery";
+import { hasTranscriptScrollableRange, TRANSCRIPT_AT_BOTTOM_THRESHOLD_PX, useTranscriptScrollArbiter } from "../lib/useTranscriptScrollArbiter";
+import { useTranscriptLayoutIntegrity } from "../lib/useTranscriptLayoutIntegrity";
 import { TranscriptLayoutIntentProvider } from "./TranscriptLayoutIntentContext";
 import { MarkdownImageTabContext } from "./MarkdownImageContext";
 
@@ -117,6 +116,7 @@ type TranscriptVirtuosoContext = {
   scrollElement: HTMLDivElement | null;
   nativeScrollbarDragging: boolean;
   overlayRevision: string;
+  measuredSizes: TranscriptMeasuredSizes;
   /** The active turn's in-flow footer region; null when no turn is live. */
   liveRegion: null | {
     rows: readonly TranscriptRow[];
@@ -139,6 +139,13 @@ const TranscriptVirtuosoItem = forwardRef<HTMLDivElement, ItemProps<TranscriptRo
       if (entryId) getTranscriptStore().requestEntryFullContent(context.tabId, entryId);
     }, [context.tabId, entryId]);
     const knownSize = Number.parseFloat(String(props["data-known-size"] ?? ""));
+    useEffect(() => {
+      // Feed Virtuoso's own measurement back into the session cache so a
+      // future remount restarts from measured geometry, not static priors.
+      if (Number.isFinite(knownSize) && knownSize > 0) {
+        context.measuredSizes.record(String(item.key), item.kind, knownSize);
+      }
+    }, [context.measuredSizes, item.key, item.kind, knownSize]);
     const frozenStyle = context.nativeScrollbarDragging && Number.isFinite(knownSize) && knownSize > 0
       ? { ...style, boxSizing: "border-box" as const, height: knownSize, overflow: "hidden" as const }
       : style;
@@ -226,6 +233,7 @@ export function Transcript({
   footerHeight = 0,
   onPrompt,
   onDeliveryContinue,
+  onAcceptDelivery,
   onOpenChanges,
   onEditPrompt,
   onRewind,
@@ -239,7 +247,6 @@ export function Transcript({
   actionHoverMenus = false,
   rewindSignal = 0,
   revealSignal = 0,
-  historyLayoutRevision = 0,
   hydrating = false,
   hasOlderHistory = false,
   olderHistoryCount = 0,
@@ -255,6 +262,7 @@ export function Transcript({
   footerHeight?: number;
   onPrompt: (text: string) => void;
   onDeliveryContinue?: () => void;
+  onAcceptDelivery?: () => void;
   onOpenChanges?: () => void;
   onEditPrompt?: (turn: number, displayText: string, submitText?: string) => boolean | void | Promise<boolean | void>;
   onRewind?: (turn: number, scope: string) => void;
@@ -268,7 +276,6 @@ export function Transcript({
   actionHoverMenus?: boolean;
   rewindSignal?: number;
   revealSignal?: number;
-  historyLayoutRevision?: number;
   hydrating?: boolean;
   hasOlderHistory?: boolean;
   olderHistoryCount?: number;
@@ -300,10 +307,12 @@ export function Transcript({
     onNestedScrollIntent,
     onTouchStartIntent,
     onTouchMoveIntent,
+    onTouchEndIntent,
     onKeyScrollIntent,
     isAtBottom,
     scrollerRef,
     atBottomStateChange,
+    deliverScroll,
     scrollToBottom,
     followGrowingTail,
     beginUserResize,
@@ -313,9 +322,12 @@ export function Transcript({
     writeOffset,
     reset: resetScroll,
     finishProgrammaticScroll,
-  } = useTranscriptVirtuosoScroll({ liveTailActiveRef });
+    submitRecoveryRequest,
+    retryRecoveryRequest,
+    lastGoodAnchorRef,
+    captureStateSnapshot,
+  } = useTranscriptScrollArbiter({ liveTailActiveRef, onRecoveryTerminal: noteTranscriptRecoveryTerminal });
   const virtuosoReadyRef = useRef(false);
-  const autoScrollFrame = useRef<number | null>(null);
   const layoutSurfaceKey = `${tabId ?? ""}:${revealSignal}`;
 
   const entranceRef = useTranscriptEntranceAnimation<HTMLDivElement>(tabId, revealSignal, items);
@@ -376,31 +388,16 @@ export function Transcript({
   // starts at the bottom. Without this, stick.current from the previous tab
   // persists across React re-renders (Transcript is not keyed by tabId) and
   // disables auto-scroll when the user had scrolled up in the old tab (#4584).
-  useEffect(() => {
+  useLayoutEffect(() => {
     resetScroll();
     virtuosoReadyRef.current = false;
   }, [resetScroll, revealSignal, tabId]);
 
   // Row measurement and footer resize share the same coalesced height path.
-  // Coalesce to one rAF so a streamed row growth + footer shrink in the same
-  // frame cannot double-jump the viewport (upstream's unbuffered follow caused
-  // tail flicker; local P1 guard restored).
   useEffect(() => {
     if (!virtuosoReadyRef.current || !stick.current) return;
-    if (autoScrollFrame.current !== null) return;
-    autoScrollFrame.current = requestAnimationFrame(() => {
-      autoScrollFrame.current = null;
-      if (!stick.current) return;
-      followGrowingTail();
-    });
-  }, [footerHeight, followGrowingTail, stick, live?.text?.length ?? 0, live?.reasoning?.length ?? 0]);
-
-  // Footer chrome resize only. Item growth stays on followGrowingTail.
-  useEffect(() => {
-    if (!virtuosoReadyRef.current || !stick.current) return;
-    scrollToBottom();
-  }, [footerHeight, scrollToBottom, stick]);
-
+    followGrowingTail();
+  }, [footerHeight, followGrowingTail, stick]);
 
   // The live region grows from zero height and shrinks the history viewport
   // mid-stream; keep the tail pinned across that viewport resize.
@@ -527,6 +524,29 @@ export function Transcript({
     return map;
   }, [allRows]);
   const [selectableRows, liveSelectableRows] = useTranscriptSelectableRows(allRows, live);
+  const {
+    resetKey: virtuosoResetKey,
+    firstItemIndex,
+    restoreLocation,
+    restoreSnapshot,
+    handleItemsRendered: handleRecoveryItemsRendered,
+    scheduleBlankViewportCheck,
+    invalidateAnchors,
+    noteUserScrollIntent,
+    noteScrollActivity,
+  } = useTranscriptLayoutIntegrity({
+    surfaceKey: layoutSurfaceKey,
+    rows: virtualRows,
+    rowIndexByKey,
+    scrollRef,
+    pinnedRef: stick,
+    readyRef: virtuosoReadyRef,
+    scrollToBottom,
+    submitRecoveryRequest,
+    retryRecoveryRequest,
+    lastGoodAnchorRef,
+    captureStateSnapshot,
+  });
   const selectionRetention = useTranscriptSelectionRetention({
     tabId,
     revealSignal,
@@ -538,68 +558,50 @@ export function Transcript({
     writeOffset,
     cancelStreamingScroll: cancelStreamingAndFollow,
   });
-  // Recovery control is bridged through a ref: these intent wrappers are
-  // created before useTranscriptVirtuosoRecovery returns its API below. User
-  // scroll intent aborts in-flight anchor restores and holds layout rebuilds
-  // until the scroll goes quiet (#8657/#8688 follow-up).
-  const recoveryControlRef = useRef<TranscriptRecoveryControl | null>(null);
-  const notifyRecoveryScrollIntent = useCallback(() => {
-    recoveryControlRef.current?.noteUserScrollIntent();
-  }, []);
+  const clearTranscriptSelection = selectionRetention.clear;
+  // User scroll intent is reported to the layout-integrity hook (idle gating
+  // for the blank watchdog) and to the scroll arbiter itself, which preempts
+  // any in-flight recovery restore on its own intent events (#8657/#8688
+  // follow-up).
   const onWheelIntentWithRecovery = useCallback((event: ReactWheelEvent<HTMLElement>) => {
-    notifyRecoveryScrollIntent();
-    return onWheelIntent(event);
-  }, [notifyRecoveryScrollIntent, onWheelIntent]);
+    const accepted = onWheelIntent(event);
+    if (accepted) noteUserScrollIntent();
+    return accepted;
+  }, [noteUserScrollIntent, onWheelIntent]);
   const onTouchStartIntentWithRecovery = useCallback((event: ReactTouchEvent<HTMLElement>) => {
-    notifyRecoveryScrollIntent();
     onTouchStartIntent(event);
-  }, [notifyRecoveryScrollIntent, onTouchStartIntent]);
+  }, [onTouchStartIntent]);
   const onTouchMoveIntentWithRecovery = useCallback((event: ReactTouchEvent<HTMLElement>) => {
-    notifyRecoveryScrollIntent();
-    return onTouchMoveIntent(event);
-  }, [notifyRecoveryScrollIntent, onTouchMoveIntent]);
+    const accepted = onTouchMoveIntent(event);
+    if (accepted) noteUserScrollIntent();
+    return accepted;
+  }, [noteUserScrollIntent, onTouchMoveIntent]);
   const onKeyScrollIntentWithRecovery = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
-    notifyRecoveryScrollIntent();
-    return onKeyScrollIntent(event);
-  }, [notifyRecoveryScrollIntent, onKeyScrollIntent]);
+    const accepted = onKeyScrollIntent(event);
+    if (accepted) noteUserScrollIntent();
+    return accepted;
+  }, [noteUserScrollIntent, onKeyScrollIntent]);
   const onPointerDownIntentWithRecovery = useCallback((event: ReactPointerEvent<HTMLElement>) => {
-    notifyRecoveryScrollIntent();
-    return onPointerDownIntent(event);
-  }, [notifyRecoveryScrollIntent, onPointerDownIntent]);
+    const accepted = onPointerDownIntent(event);
+    if (accepted) noteUserScrollIntent();
+    return accepted;
+  }, [noteUserScrollIntent, onPointerDownIntent]);
   const scrollInteractions = useTranscriptScrollInteractions({
-    scrollRef,
+    scrollElement,
     cancelStreamingScroll: cancelStreamingAutoScroll,
     onWheelIntent: onWheelIntentWithRecovery,
     onTouchMoveIntent: onTouchMoveIntentWithRecovery,
+    onTouchEndIntent,
     onKeyScrollIntent: onKeyScrollIntentWithRecovery,
     onPointerDownIntent: onPointerDownIntentWithRecovery,
     onNestedScrollIntent,
     onScrollEnd: finishProgrammaticScroll,
     onSelectionPointerDown: selectionRetention.onPointerDownCapture,
   });
-  const {
-    resetKey: virtuosoResetKey,
-    firstItemIndex,
-    restoreLocation,
-    handleItemsRendered: handleRecoveryItemsRendered,
-    scheduleBlankViewportCheck,
-    invalidateAnchors,
-    noteUserScrollIntent,
-    noteScrollActivity,
-  } = useTranscriptVirtuosoRecovery({
-    surfaceKey: layoutSurfaceKey,
-    historyLayoutRevision,
-    rows: virtualRows,
-    rowIndexByKey,
-    scrollRef,
-    pinnedRef: stick,
-    virtuosoRef,
-    readyRef: virtuosoReadyRef,
-    scrollToBottom,
-    holdRevisionResets: liveSplit.liveActive,
-  });
-  recoveryControlRef.current = { noteUserScrollIntent, invalidateAnchors };
-  const heightEstimates = useMemo(() => virtualRows.map((row) => estimateTranscriptRowSize(row)), [virtualRows]);
+  // Measured-geometry cache: remounts restart from real row heights instead
+  // of static priors, so the size-tree collapse loses its blast radius.
+  const measuredSizes = useMemo(() => createTranscriptMeasuredSizes(), [layoutSurfaceKey]);
+  const heightEstimates = useMemo(() => measuredSizes.synthesize(virtualRows), [measuredSizes, virtualRows]);
   const overlayRevision = useMemo(
     () => virtualRows.map((row) => String(row.key)).join("|"),
     [virtualRows],
@@ -609,17 +611,23 @@ export function Transcript({
     entranceRef.current = node instanceof HTMLElement ? node as HTMLDivElement : null;
   }, [entranceRef, scrollerRef]);
   const handleTranscriptScroll = useCallback(() => {
+    deliverScroll();
     noteScrollActivity();
     if (creationMode) handleCreationScroll();
     scheduleBlankViewportCheck();
-  }, [creationMode, handleCreationScroll, noteScrollActivity, scheduleBlankViewportCheck]);
+  }, [creationMode, deliverScroll, handleCreationScroll, noteScrollActivity, scheduleBlankViewportCheck]);
   // ── JumpBar integration ───────────────────────────────────────────────────
   const handleJumpToQuestion = useCallback((question: QuestionAnchor) => {
     const index = rowIndexByKey.get(String(userRowKey(question.id)));
     if (index == null) return;
+    // WebView2 can lose the pointerup that ends a transcript text-selection
+    // gesture. An explicit navigator click owns the next viewport position,
+    // so clear that stale selection before asking the scroll arbiter to jump.
+    document.getSelection()?.removeAllRanges();
+    clearTranscriptSelection("question-navigation");
     invalidateAnchors();
-    scrollToDataIndex(firstItemIndex, index, "smooth");
-  }, [firstItemIndex, invalidateAnchors, rowIndexByKey, scrollToDataIndex]);
+    scrollToDataIndex(index, "smooth");
+  }, [clearTranscriptSelection, invalidateAnchors, rowIndexByKey, scrollToDataIndex]);
 
   // The jump-bottom click is explicit user intent: it outranks any in-flight
   // recovery anchor restore and ends a stale selection gesture whose
@@ -638,7 +646,7 @@ export function Transcript({
     const index = rowIndexByKey.get(String(userRowKey(lastQ.id)));
     if (index == null) return;
     invalidateAnchors();
-    scrollToDataIndex(firstItemIndex, index);
+    scrollToDataIndex(index);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rewindSignal]);
 
@@ -730,17 +738,6 @@ export function Transcript({
           </div>
         );
       case "answer":
-        if (isLongAnswer(row.item.text)) {
-          return <LongAnswerFold text={row.item.text} renderExpanded={() => (
-            <LiveAssistantMessage
-              item={assistantAnswerOnly(row.item)}
-              defaultExpanded={false}
-              expandWhileStreaming={false}
-              creationMode={creationMode}
-              reasoningDisplay="hide"
-            />
-          )} />;
-        }
         return (
           <LiveAssistantMessage
             item={assistantAnswerOnly(row.item)}
@@ -763,6 +760,7 @@ export function Transcript({
               : row.item.action === "open_changes"
                 ? onOpenChanges
                 : undefined}
+            onAccept={row.item.action === "continue_delivery" ? onAcceptDelivery : undefined}
           />
         );
       case "extension":
@@ -799,6 +797,7 @@ export function Transcript({
     loadingOlderHistory,
     olderHistoryCount,
     onDeliveryContinue,
+    onAcceptDelivery,
     onEditPrompt,
     onLoadOlderHistory,
     onOpenChanges,
@@ -888,6 +887,7 @@ export function Transcript({
     scrollElement,
     nativeScrollbarDragging,
     overlayRevision,
+    measuredSizes,
     liveRegion: showLiveRegion
       ? {
           rows: liveSplit.liveActive ? liveSplit.liveRows : heldLiveRows,
@@ -910,6 +910,7 @@ export function Transcript({
     liveSplit.liveActive,
     liveSplit.liveRows,
     loadingOlderHistory,
+    measuredSizes,
     nativeScrollbarDragging,
     olderHistoryCount,
     onLoadOlderHistory,
@@ -933,8 +934,14 @@ export function Transcript({
         <div
           className={`transcript transcript--empty${creationMode ? " transcript--creation-scrollbar" : ""}`}
           ref={(node) => handleScrollerRef(node)}
+          aria-busy={hydrating || undefined}
         >
-          {!hydrating && <Welcome onPrompt={onPrompt} variant={welcomeVariant} />}
+          {hydrating ? (
+            <div className="transcript__loading" role="status" aria-live="polite">
+              <Loader2 className="transcript__loading-icon" aria-hidden="true" />
+              <span>{t("common.loading")}</span>
+            </div>
+          ) : <Welcome onPrompt={onPrompt} variant={welcomeVariant} />}
         </div>
       ) : (
         <LiveStreamContext.Provider value={live}>
@@ -948,7 +955,11 @@ export function Transcript({
             components={hasOlderHistory ? TRANSCRIPT_VIRTUOSO_COMPONENTS_WITH_HEADER : TRANSCRIPT_VIRTUOSO_COMPONENTS}
             computeItemKey={(_index, row) => `${tabId ?? ""}:${String(row.key)}`}
             firstItemIndex={firstItemIndex}
-            initialTopMostItemIndex={restoreLocation}
+            // A captured state snapshot (measured tree + scrollTop) restores
+            // through the same initial-location stream as
+            // initialTopMostItemIndex, so the two never apply together.
+            restoreStateFrom={restoreSnapshot}
+            initialTopMostItemIndex={restoreSnapshot ? undefined : restoreLocation}
             // Do not set alignToBottom: Virtuoso's margin-top:auto plus
             // firstItemIndex paints a ghost first-user bubble and empty band
             // in short chats. The coordinator owns tail following.
@@ -966,6 +977,8 @@ export function Transcript({
             onWheelCapture={scrollInteractions.onWheelCapture}
             onTouchStartCapture={onTouchStartIntentWithRecovery}
             onTouchMoveCapture={scrollInteractions.onTouchMoveCapture}
+            onTouchEndCapture={scrollInteractions.onTouchEndCapture}
+            onTouchCancelCapture={scrollInteractions.onTouchEndCapture}
             onKeyDownCapture={scrollInteractions.onKeyDownCapture}
             onPointerDownCapture={scrollInteractions.onPointerDownCapture}
           />
@@ -1007,40 +1020,3 @@ export function Transcript({
     </InvocationMetadataContext.Provider>
   );
 }
-
-// LongAnswerFold: self-contained fold for answers above
-// LONG_ANSWER_FOLD_THRESHOLD_CHARS. Owns its expanded state locally (no
-// global fold-map closure), so the expand button always works regardless of
-// virtualized row identity; state resets on unmount (acceptable — expansion
-// is a transient look, not a persistent preference).
-function LongAnswerFold({ text, renderExpanded }: { text: string; renderExpanded: () => ReactNode }) {
-  const t = useT();
-  const [expanded, setExpanded] = useState(false);
-  if (expanded) return <>{renderExpanded()}</>;
-  const preview = text.length > 400 ? text.slice(0, 400) : text;
-  return (
-    <div className="transcript-long-answer-fold" onClick={() => setExpanded(true)} role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(true); } }}>
-      <div className="transcript-long-answer-fold__preview">{preview}</div>
-      <button type="button" className="transcript-long-answer-fold__expand" aria-expanded={false}
-        onClick={(e) => { e.stopPropagation(); setExpanded(true); }}>
-        {t("transcript.expandAnswer")}
-      </button>
-    </div>
-  );
-}
-
-// ── ProcessFoldHeader: the fold header row of one process segment ────────────
-// The fold body is NOT rendered here: an open fold contributes its body rows
-// to the virtual row model (they mount only when scrolled into view), a closed
-// fold builds no React subtree at all.
-
-
-// ── JumpBar, PhaseCard, NoticeCard, CompactionCard ────────────────────────────
-
-
-
-
-
-
-

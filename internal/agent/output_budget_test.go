@@ -364,11 +364,11 @@ func TestSessionSwapKeepsPromptCalibration(t *testing.T) {
 	}
 }
 
-func TestSharedWindowFoldUsesGuardedInputBudget(t *testing.T) {
+func TestSharedWindowFoldDoesNotPrivatelyShortenOversizedInput(t *testing.T) {
 	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true}
 	a := &Agent{agentConfig: agentConfig{contextWindow: 100_000}, svc: agentServices{prov: prov, sink: event.Discard}, sess: sessionRuntime{output: outputBudgetState{outputBudget: prov.budget}}}
-	// Oversized tool bodies are deterministically shortened for the single
-	// summarizer request (no multi-span). The guard must still fit one call.
+	// Manual summary input is not privately shortened. An unfittable request is
+	// rejected before the provider call.
 	toolBody := strings.Repeat("file line content here. ", 20_000) // ~480K chars
 	fold := []provider.Message{
 		{Role: provider.RoleUser, Content: "read large files"},
@@ -378,6 +378,7 @@ func TestSharedWindowFoldUsesGuardedInputBudget(t *testing.T) {
 		{Role: provider.RoleTool, ToolCallID: "2", Name: "read_file", Content: toolBody},
 	}
 
+<<<<<<< HEAD
 	if _, err := a.foldToSummary(context.Background(), nil, fold, ""); err != nil {
 		t.Fatalf("foldToSummary: %v", err)
 	}
@@ -399,6 +400,13 @@ func TestSharedWindowFoldUsesGuardedInputBudget(t *testing.T) {
 	}
 	if got := prov.last.MaxTokens; got < summaryOutputReserve {
 		t.Fatalf("summarizer MaxTokens = %d, below summaryOutputReserve %d", got, summaryOutputReserve)
+=======
+	if _, err := a.foldToSummary(context.Background(), fold, ""); !errors.Is(err, ErrCompactionRequired) {
+		t.Fatalf("foldToSummary = %v, want admission failure", err)
+	}
+	if prov.calls != 0 {
+		t.Fatalf("unfittable fold called provider %d times", prov.calls)
+>>>>>>> origin/main-v2
 	}
 }
 
@@ -408,9 +416,15 @@ func TestSharedWindowFoldRejectsUnshortenableOverBudgetInput(t *testing.T) {
 	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true}
 	a := &Agent{agentConfig: agentConfig{contextWindow: 100_000}, svc: agentServices{prov: prov, sink: event.Discard}, sess: sessionRuntime{output: outputBudgetState{outputBudget: prov.budget}}}
 	fold := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 200_000)}}
+<<<<<<< HEAD
 	_, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err == nil || !strings.Contains(err.Error(), "exceeds single-request budget") {
 		t.Fatalf("foldToSummary err = %v, want single-request budget failure", err)
+=======
+	_, err := a.foldToSummary(context.Background(), fold, "")
+	if !errors.Is(err, ErrCompactionRequired) {
+		t.Fatalf("foldToSummary err = %v, want context admission failure", err)
+>>>>>>> origin/main-v2
 	}
 	if prov.calls != 0 {
 		t.Fatalf("over-budget unshortenable fold still called summarizer %d times", prov.calls)

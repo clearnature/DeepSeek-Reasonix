@@ -58,9 +58,11 @@ type sessionPathRequest struct {
 }
 
 type pageCursor struct {
-	Pinned   int    `json:"p"`
-	Activity int64  `json:"a"`
-	TopicID  string `json:"t"`
+	Pinned      int    `json:"p"`
+	ManualOrder bool   `json:"m,omitempty"`
+	SortOrder   int64  `json:"o,omitempty"`
+	Activity    int64  `json:"a"`
+	TopicID     string `json:"t"`
 }
 
 func Open(ctx context.Context, opts Options) (*Catalog, error) {
@@ -305,6 +307,14 @@ func (c *Catalog) UpsertSession(ctx context.Context, record SessionRecord) error
 }
 
 func (c *Catalog) upsertSessions(ctx context.Context, records []SessionRecord, generations map[string]int64, reason string) error {
+	return c.upsertSessionsWithNotification(ctx, records, generations, reason, true)
+}
+
+func (c *Catalog) upsertSessionsWithoutNotification(ctx context.Context, records []SessionRecord, generations map[string]int64, reason string) error {
+	return c.upsertSessionsWithNotification(ctx, records, generations, reason, false)
+}
+
+func (c *Catalog) upsertSessionsWithNotification(ctx context.Context, records []SessionRecord, generations map[string]int64, reason string, notify bool) error {
 	if len(records) == 0 {
 		return nil
 	}
@@ -406,7 +416,11 @@ func (c *Catalog) upsertSessions(ctx context.Context, records []SessionRecord, g
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	c.publishRevision(revision, mapKeys(roots), reason)
+	if notify {
+		c.publishRevision(revision, mapKeys(roots), reason)
+	} else {
+		c.rememberRevision(revision)
+	}
 	c.refreshCounts(ctx)
 	return nil
 }
@@ -485,13 +499,17 @@ func bumpRevision(ctx context.Context, tx *sql.Tx) (uint64, error) {
 }
 
 func (c *Catalog) publishRevision(revision uint64, roots []string, reason string) {
+	c.rememberRevision(revision)
+	if c.opts.OnRevision != nil {
+		c.opts.OnRevision(revision, roots, reason)
+	}
+}
+
+func (c *Catalog) rememberRevision(revision uint64) {
 	c.revision.Store(revision)
 	c.statusMu.Lock()
 	c.status.Revision = revision
 	c.statusMu.Unlock()
-	if c.opts.OnRevision != nil {
-		c.opts.OnRevision(revision, roots, reason)
-	}
 }
 
 func mapKeys(values map[string]struct{}) []string {
@@ -501,6 +519,7 @@ func mapKeys(values map[string]struct{}) []string {
 	}
 	return out
 }
+<<<<<<< HEAD
 func (c *Catalog) ListTopics(ctx context.Context, req TopicPageRequest) (TopicPage, error) {
 	out := TopicPage{Items: []TopicRecord{}, Revision: c.revision.Load()}
 	req.Scope, req.WorkspaceRoot = normalizeScope(req.Scope, req.WorkspaceRoot)
@@ -622,6 +641,8 @@ func (c *Catalog) ListTopics(ctx context.Context, req TopicPageRequest) (TopicPa
 	return out, nil
 }
 
+=======
+>>>>>>> origin/main-v2
 func (c *Catalog) listTopicSessions(ctx context.Context, key TopicKey) ([]SessionRecord, error) {
 	out := []SessionRecord{}
 	var cursor *sessionPageCursor
@@ -673,7 +694,12 @@ func (c *Catalog) GetTopic(ctx context.Context, key TopicKey) (TopicRecord, bool
 	key.Scope, key.WorkspaceRoot = normalizeScope(key.Scope, key.WorkspaceRoot)
 	key.TopicID = strings.TrimSpace(key.TopicID)
 	item := TopicRecord{Sessions: []SessionRecord{}}
+<<<<<<< HEAD
 	err := c.db.QueryRowContext(ctx, `SELECT scope,workspace_root,topic_id,title,title_source,pinned,sort_order,
+=======
+	err := c.db.QueryRowContext(ctx, `SELECT scope,workspace_root,topic_id,title,title_source,pinned,
+		CASE WHEN metadata_present=1 THEN sort_order ELSE -1 END,
+>>>>>>> origin/main-v2
         turns,turns_state,created_at,last_activity_at,recovery_state,recovery_branch_count,
         recovery_unresolved_count,recovery_cleanup_eligible_count,health
         FROM catalog_topics WHERE scope=? AND workspace_root=? AND topic_id=?`,
@@ -734,6 +760,20 @@ func topicRepresentativePath(sessions []SessionRecord) string {
 // same cursor shape catalog.ListTopics emits.
 func EncodeTopicCursor(pinned int, lastActivityAt int64, topicID string) string {
 	return encodeCursor(pageCursor{Pinned: pinned, Activity: lastActivityAt, TopicID: topicID})
+}
+
+// EncodeOrderedTopicCursor builds a cursor for a workspace with explicit
+// manual topic ordering. A negative sortOrder places metadata-free/runtime
+// topics after every explicitly ranked topic in the same pinned bucket.
+func EncodeOrderedTopicCursor(pinned, sortOrder int, lastActivityAt int64, topicID string) string {
+	manualSortOrder := int64(sortOrder)
+	if sortOrder < 0 {
+		manualSortOrder = unrankedTopicSortOrder
+	}
+	return encodeCursor(pageCursor{
+		Pinned: pinned, ManualOrder: true, SortOrder: manualSortOrder,
+		Activity: lastActivityAt, TopicID: topicID,
+	})
 }
 
 func encodeCursor(cursor pageCursor) string {

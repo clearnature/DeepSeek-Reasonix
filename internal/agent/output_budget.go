@@ -395,8 +395,13 @@ func admissionSource(userMax int, policy provider.ContextBudgetPolicy, learnedWi
 // effectiveOutputBudget clips completion tokens at send time only; it never
 // moves compact_ratio. Calibrated exhausted windows fail locally; a cold
 // estimate that differs from the provider tokenizer uses bounded 400 recovery.
+<<<<<<< HEAD
 func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (int, bool, error) {
 	adm, err := a.admitOutputBudget(req, useObserved)
+=======
+func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
+	adm, err := a.admitOutputBudget(req)
+>>>>>>> origin/main-v2
 	if err != nil {
 		return 0, false, err
 	}
@@ -404,13 +409,20 @@ func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (i
 		if adm.ApplyMaxTokens && adm.EffectiveOutputTokens > 0 && !adm.Clipped {
 			return adm.EffectiveOutputTokens, false, nil
 		}
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main-v2
 		return 0, false, nil
 	}
 	return adm.EffectiveOutputTokens, true, nil
 }
 
+<<<<<<< HEAD
 func (a *Agent) admitOutputBudget(req provider.Request, useObserved bool) (contextAdmission, error) {
+=======
+func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error) {
+>>>>>>> origin/main-v2
 	adm := contextAdmission{
 		ReserveTokens: outputBudgetReserve,
 		LastRecovery:  a.lastAdmission().LastRecovery,
@@ -446,6 +458,7 @@ func (a *Agent) admitOutputBudget(req provider.Request, useObserved bool) (conte
 		return adm, nil
 	}
 	est := a.estimatedRequestTokens(req)
+<<<<<<< HEAD
 	// Admission trusts the last observed prompt size over the wire-char
 	// estimate: fresh agents lack calibration and the 0.25 fallback inflates
 	// dense sessions ~2x, falsely reporting shared-window overflow (8/12).
@@ -470,6 +483,17 @@ func (a *Agent) admitOutputBudget(req provider.Request, useObserved bool) (conte
 		a.storeAdmission(adm)
 		return adm, nil
 	}
+=======
+	adm.PromptTokens = est
+	physical := window - est - outputBudgetReserve
+	adm.PhysicalRemaining = physical
+	shared := policy.WindowMode == provider.ContextWindowShared
+	if !shared {
+		a.applyLimitMode(&adm, req.MaxTokens, policy, physical)
+		a.storeAdmission(adm)
+		return adm, nil
+	}
+>>>>>>> origin/main-v2
 	if physical <= 0 {
 		a.storeAdmission(adm)
 		return adm, fmt.Errorf("%w: estimated prompt %d leaves no shared-window output budget", ErrCompactionRequired, est)
@@ -516,11 +540,19 @@ func (a *Agent) admitOutputBudget(req provider.Request, useObserved bool) (conte
 	return adm, nil
 }
 
+<<<<<<< HEAD
 func (a *Agent) applyAdmissionToRequest(req *provider.Request, useObserved bool) error {
 	if a == nil || req == nil {
 		return nil
 	}
 	adm, err := a.admitOutputBudget(*req, useObserved)
+=======
+func (a *Agent) applyAdmissionToRequest(req *provider.Request) error {
+	if a == nil || req == nil {
+		return nil
+	}
+	adm, err := a.admitOutputBudget(*req)
+>>>>>>> origin/main-v2
 	if err != nil {
 		return err
 	}

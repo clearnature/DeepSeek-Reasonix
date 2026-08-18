@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -83,10 +84,15 @@ type mockDeepSeek struct {
 func (m *mockDeepSeek) handler(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 
-	// Compaction issues a tool-less summarize request whose system prompt is the
-	// summarizer prompt — answer it with a short summary and DON'T let it pollute
-	// the conversation-prefix bookkeeping.
+	// Compaction appends one final instruction to the ordinary cached prefix.
+	// Answer it with a short summary and do not let it replace conversation
+	// bookkeeping; the replayed prefix itself must match the prior request.
 	if isSummarizeRequest(body) {
+		msgs := decodeMessages(body)
+		replayed := msgs[:len(msgs)-1]
+		if len(m.prevMessages) > 0 && commonPrefixMsgs(m.prevMessages, replayed) != len(replayed) {
+			m.t.Errorf("summary request did not replay a byte-identical cached conversation prefix")
+		}
 		writeSSE(w, m.t,
 			streamChunk(deltaText("- goal: keep going\n- decisions: none\n- pending: continue")),
 			finishChunk("stop"),
@@ -232,6 +238,7 @@ func TestCacheHitClimbsWithoutCompaction(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 // TestCacheHitSurvivesTooSmallWindow covers a window too small to summarize one
 // turn. Maintenance must stop rewriting the same prefix and let cache hits
 // recover instead of collapsing after every tool result.
@@ -242,12 +249,18 @@ func TestCacheHitSurvivesTooSmallWindow(t *testing.T) {
 	// never reach this configuration, and the healthy-window tests cover
 	// the latch.
 	t.Skip("window below minOutputBudget is a synthetic configuration; latch covered by healthy-window tests")
+=======
+// A window too small to hold even the system and active tail cannot be repaired
+// by fabricating a mechanical digest.
+func TestTooSmallWindowReturnsCompactionRequired(t *testing.T) {
+>>>>>>> origin/main-v2
 	mock := &mockDeepSeek{t: t, withTools: true, reasoning: longReasoning, toolRounds: 30}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handler))
 	defer srv.Close()
 
 	a, sink := newAgent(t, srv.URL, mock.tools(), 900 /*window tok*/, 4 /*recentKeep*/)
 
+<<<<<<< HEAD
 	if err := a.Run(context.Background(), strings.Repeat("please consider this requirement. ", 6)); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -311,7 +324,12 @@ func TestCacheHitSurvivesTooSmallWindow(t *testing.T) {
 		if peak < 85 {
 			t.Errorf("cache peak after rewrite at request %d = %d%%, want ≥85%% before the next rewrite", start, peak)
 		}
+=======
+	if err := a.Run(context.Background(), strings.Repeat("please consider this requirement. ", 6)); !errors.Is(err, ErrCompactionRequired) {
+		t.Fatalf("Run = %v, want ErrCompactionRequired", err)
+>>>>>>> origin/main-v2
 	}
+	_ = sink
 }
 
 // TestReasoningRoundTripCost contrasts the hit-rate curve WITH vs WITHOUT the
@@ -421,6 +439,10 @@ func TestReleaseCacheHitGuard(t *testing.T) {
 
 	threshold := envInt("REASONIX_CACHE_GUARD_THRESHOLD", 90)
 	maxLowCases := envInt("REASONIX_CACHE_GUARD_MAX_LOW_CASES", 1)
+	for _, size := range []int{64 << 10, 256 << 10} {
+		verifyLargeToolOutputCacheContract(t, size)
+		t.Logf("CACHE_GUARD_RESULT: case=large-tool-%dk status=pass provider_bytes_max=%d", size>>10, maxToolOutputBytes)
+	}
 
 	cases := []struct {
 		name string
@@ -513,6 +535,82 @@ func TestReleaseCacheHitGuard(t *testing.T) {
 			t.Fatal(msg)
 		}
 	}
+}
+
+func TestLargeToolOutputCachePrefixContract(t *testing.T) {
+	visibleSizes := make([]int, 0, 2)
+	for _, size := range []int{64 << 10, 256 << 10} {
+		visibleSizes = append(visibleSizes, verifyLargeToolOutputCacheContract(t, size))
+	}
+	if visibleSizes[1]-visibleSizes[0] > 128 {
+		t.Fatalf("provider-visible growth tracks RawContent: 64KiB=%d 256KiB=%d", visibleSizes[0], visibleSizes[1])
+	}
+}
+
+func verifyLargeToolOutputCacheContract(t *testing.T, size int) int {
+	t.Helper()
+	callID := fmt.Sprintf("large-%d", size)
+	const rawSentinel = "UNIQUE-RAW-MIDDLE-SENTINEL"
+	raw := strings.Repeat("R", size/2) + rawSentinel + strings.Repeat("R", size/2-len(rawSentinel))
+	bounded, notice := truncateToolOutputFor(raw, "large_result", callID)
+	if notice == "" || len(bounded) > maxToolOutputBytes {
+		t.Fatalf("%d-byte result was not bounded: content=%d notice=%q", size, len(bounded), notice)
+	}
+	canonical := []provider.Message{
+		{Role: provider.RoleSystem, Content: systemPrompt},
+		{Role: provider.RoleUser, Content: "produce a large result"},
+		{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: callID, Name: "large_result", Arguments: `{}`}}},
+		{Role: provider.RoleTool, ToolCallID: callID, Name: "large_result", Content: bounded, RawContent: raw},
+	}
+	first := modelInputMessages(canonical)
+	firstWire := encodeProviderMessages(t, first)
+	if bytes.Contains(mustCacheJSON(t, firstWire), []byte(rawSentinel)) {
+		t.Fatal("provider-visible request contains RawContent sentinel")
+	}
+	if got := first[len(first)-1]; got.RawContent != "" || len(got.Content) > maxToolOutputBytes {
+		t.Fatalf("provider tool result is not bounded: content=%d raw=%d", len(got.Content), len(got.RawContent))
+	}
+
+	secondCanonical := append(append([]provider.Message(nil), canonical...), provider.Message{Role: provider.RoleUser, Content: "continue"})
+	second := modelInputMessages(secondCanonical)
+	secondWire := encodeProviderMessages(t, second)
+	if common := commonPrefixMsgs(firstWire, secondWire); common != len(firstWire) {
+		t.Fatalf("%d-byte result changed old provider prefix at message %d/%d", size, common, len(firstWire))
+	}
+
+	reg := tool.NewRegistry()
+	reg.Add(echoTool{})
+	beforeSchemas, afterSchemas := reg.Schemas(), reg.Schemas()
+	beforeShape := CaptureShape(systemPrompt, beforeSchemas, 0)
+	afterShape := CaptureShape(systemPrompt, afterSchemas, 0)
+	if !bytes.Equal(mustCacheJSON(t, beforeSchemas), mustCacheJSON(t, afterSchemas)) {
+		t.Fatal("large tool result changed provider tool schema bytes or order")
+	}
+	if diag := CompareShape(beforeShape, afterShape, nil, nil); diag.PrefixChanged {
+		t.Fatalf("large append-only result reported PrefixChanged: %+v", diag)
+	}
+	if canonical[len(canonical)-1].RawContent != raw {
+		t.Fatal("canonical RawContent was not retained")
+	}
+	return charsOf(firstWire)
+}
+
+func encodeProviderMessages(t *testing.T, msgs []provider.Message) []json.RawMessage {
+	t.Helper()
+	out := make([]json.RawMessage, len(msgs))
+	for i, msg := range msgs {
+		out[i] = append(json.RawMessage(nil), mustCacheJSON(t, msg)...)
+	}
+	return out
+}
+
+func mustCacheJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	b, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func cacheCurve(t *testing.T, mock *mockDeepSeek, turns int) []int {
@@ -628,6 +726,7 @@ func isSummarizeRequest(body []byte) bool {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	}
+<<<<<<< HEAD
 	// The summarizer request reuses the main-request prefix as its head, so
 	// the summary prompt now travels as the trailing user message — scan all
 	// messages instead of only msgs[0].
@@ -642,6 +741,10 @@ func isSummarizeRequest(body []byte) bool {
 		}
 	}
 	return false
+=======
+	_ = json.Unmarshal(msgs[len(msgs)-1], &m)
+	return m.Role == "user" && strings.Contains(m.Content, "Compact the preceding conversation prefix")
+>>>>>>> origin/main-v2
 }
 
 func commonPrefixMsgs(a, b []json.RawMessage) int {

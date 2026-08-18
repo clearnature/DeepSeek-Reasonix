@@ -6,22 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"reasonix/internal/event"
 	"reasonix/internal/provider"
 )
 
-// Summary input construction is internal to a summary transaction. The normal
-// model-visible view is never rewritten by these helpers; only the temporary
-// request fed to the summarizer is shortened.
-const (
-	summaryOutputReserve = summaryOutputMaxTokens // room reserved for the digest output
-	minSummarySpanTokens = 4000                   // below this a fold is too small to summarize usefully
-)
-
-const (
-	summaryTruncateMarker = "\n[... %d characters omitted; the original is retained in the canonical transcript ...]\n"
-	summaryOmittedMessage = "[... %d messages of this part omitted to fit the summarizer; the originals are retained in the canonical transcript ...]"
-)
+const summaryOutputReserve = summaryOutputMaxTokens
 
 // foldSummary is what compaction reports about turning a fold into a digest.
 // It is populated even when the call fails, so telemetry still records how
@@ -33,15 +21,14 @@ type foldSummary struct {
 	Usage      *provider.Usage
 	FoldTokens int
 	Spans      int
+	InputMode  string
 }
 
-// summaryInputTokens estimates what messages cost as summarizer input. The
-// rendered transcript is what actually rides in the request, so its per-message
-// framing is measured rather than assumed away.
 func summaryInputTokens(msgs []provider.Message) int {
-	return estimateTextTokens(renderTranscript(msgs))
+	return estimateMessagesTokens(msgs)
 }
 
+<<<<<<< HEAD
 // guardedSummaryInputTokens sizes what the summarizer request actually sends:
 // the real message list (tool-call arguments in full), not the flattened
 // transcript whose summarizeToolArgs truncates them — 8/13: a fold shortened
@@ -152,6 +139,33 @@ func (a *Agent) foldToSummary(ctx context.Context, prefix, fold []provider.Messa
 		return res, fmt.Errorf("summary input still exceeds single-request budget after shortening (%d > %d)", guardedTokens, budget)
 	}
 	return a.singleCallSummary(ctx, res, prefix, input, instructions)
+=======
+func (a *Agent) guardedSummaryInputTokens(msgs []provider.Message) int {
+	return a.estimatedVisibleRequestTokens(msgs)
+}
+
+func (a *Agent) summaryInputBudget(instructions string) int {
+	window := a.effectiveContextWindow()
+	if window <= 0 {
+		window = a.contextWindow
+	}
+	if window <= 0 {
+		return 0
+	}
+	return max(0, window-summaryOutputReserve-estimateTextTokens(compactionInstruction)-estimateTextTokens(instructions)-protocolReserveTokens)
+}
+
+// foldToSummary turns a fold region into one digest with exactly one provider
+// request. Pressure-time tool pruning is durable and happens before this call;
+// the summary request never performs a private second transformation.
+func (a *Agent) foldToSummary(ctx context.Context, fold []provider.Message, instructions string) (foldSummary, error) {
+	return a.foldToSummaryMode(ctx, fold, instructions, SummaryInputCachePrefix)
+}
+
+func (a *Agent) foldToSummaryMode(ctx context.Context, fold []provider.Message, instructions, inputMode string) (foldSummary, error) {
+	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: summaryInputTokens(fold), InputMode: inputMode}
+	return a.singleCallSummary(ctx, res, fold, instructions)
+>>>>>>> origin/main-v2
 }
 
 func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, prefix, fold []provider.Message, instructions string) (foldSummary, error) {
@@ -160,6 +174,7 @@ func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, prefix, 
 	return res, err
 }
 
+<<<<<<< HEAD
 // foldOrDegrade summarizes a fold and, when that fold is the only way out,
 // converts a summarizer failure into a mechanical one. The telemetry it returns
 // always reports the original failure, even when the fold recovered from it.
@@ -343,4 +358,13 @@ func (a *Agent) omitLowValueForSummary(fold []provider.Message, budget int) []pr
 	out = append(out, head...)
 	out = append(out, marker)
 	return append(out, tail...)
+=======
+func (a *Agent) foldSummaryWithTelemetry(ctx context.Context, trigger string, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
+	res, err := a.foldToSummaryMode(ctx, fold, instructions, inputMode)
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	if err != nil {
+		tele.Error = err.Error()
+	}
+	return res, tele, err
+>>>>>>> origin/main-v2
 }

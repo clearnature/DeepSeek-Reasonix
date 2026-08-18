@@ -143,8 +143,8 @@ func TestPinnedPrefixLen(t *testing.T) {
 		msgs []provider.Message
 		want int
 	}{
-		{"pins-system-and-small-task", 0, []provider.Message{sys, small, as, as}, 2},
-		{"summaries-are-not-pinned-A1-merge", 0, []provider.Message{sys, small, sum, sum, as}, 2},
+		{"pins-only-system-before-small-task", 0, []provider.Message{sys, small, as, as}, 1},
+		{"summaries-are-not-pinned-A1-merge", 0, []provider.Message{sys, small, sum, sum, as}, 1},
 		{"large-first-turn-stays-foldable", 0, []provider.Message{sys, big, as, as}, 1},
 		{"tiny-window-wont-pin", 10, []provider.Message{sys, small, as, as}, 1},
 		{"summary-is-not-the-task-turn", 0, []provider.Message{sys, sum, as}, 1},
@@ -158,6 +158,7 @@ func TestPinnedPrefixLen(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestKeepIndexesKeepsSiblingToolResultsForKeptError(t *testing.T) {
 	region := []provider.Message{
 		{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{
@@ -220,6 +221,8 @@ func TestKeepUserMarkedRequiresUserPrefixMarker(t *testing.T) {
 // TestCompactFallsBackToMechanicalFoldWhenSummaryFails: when the summarizer is
 // unreachable, /compact must still free context (fold mechanically) and surface a
 // card, not hang or abort leaving a full window.
+=======
+>>>>>>> origin/main-v2
 // TestSummarizeRespectsContextCancel: a stalled stream (open but never closing)
 // must unblock on context cancellation instead of pinning compaction forever.
 func TestSummarizeRespectsContextCancel(t *testing.T) {
@@ -305,12 +308,18 @@ func TestCompactInjectsFocusAndPreCompactHook(t *testing.T) {
 	if len(prov.got) == 0 || prov.got[0].Role != provider.RoleSystem {
 		t.Fatalf("summarizer wasn't asked with a system prompt: %+v", prov.got)
 	}
+<<<<<<< HEAD
 	sys := prov.got[len(prov.got)-1].Content
 	if !strings.Contains(sys, "focus on the auth refactor") {
 		t.Errorf("summary system prompt missing the /compact focus text: %q", sys)
+=======
+	instruction := prov.got[len(prov.got)-1].Content
+	if !strings.Contains(instruction, "focus on the auth refactor") {
+		t.Errorf("final summary instruction missing the /compact focus text: %q", instruction)
+>>>>>>> origin/main-v2
 	}
-	if !strings.Contains(sys, "KEEP-THE-MIGRATION-PLAN") {
-		t.Errorf("summary system prompt missing the PreCompact hook output: %q", sys)
+	if !strings.Contains(instruction, "KEEP-THE-MIGRATION-PLAN") {
+		t.Errorf("final summary instruction missing the PreCompact hook output: %q", instruction)
 	}
 }
 
@@ -661,9 +670,6 @@ func TestCompactTriggerIgnoresConfiguredOutputBudget(t *testing.T) {
 	}
 	if got := a.hardInputCeiling(); got != 100_000-protocolReserveTokens {
 		t.Fatalf("hard ceiling = %d, want window minus protocol reserve only", got)
-	}
-	if got := a.checkpointCeiling(); got != 50_000 {
-		t.Fatalf("checkpoint ceiling = %d, want 50000", got)
 	}
 }
 

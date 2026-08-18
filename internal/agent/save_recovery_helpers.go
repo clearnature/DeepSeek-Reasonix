@@ -106,10 +106,17 @@ func copyValidContextProjection(originalPath, targetPath string, msgs []provider
 	st, ok, err := LoadCompactionState(originalPath)
 	if err != nil {
 		return false, err
+<<<<<<< HEAD
+	}
+	if !ok {
+		return false, nil
+=======
+>>>>>>> origin/main-v2
 	}
 	if !ok {
 		return false, nil
 	}
+	migratePromotedCoveredPrefixHash(&st, msgs)
 	n := st.Projection.CoveredCount
 	if len(st.Projection.Messages) == 0 || n <= 0 || n > len(msgs) ||
 		st.Projection.CoveredPrefixHash == "" ||

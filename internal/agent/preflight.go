@@ -24,7 +24,11 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
+<<<<<<< HEAD
 	if a.projectionUsable(st, msgs, 0) {
+=======
+	if projectionValid(st, msgs, a.currentPromptCacheKey()) {
+>>>>>>> origin/main-v2
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
@@ -110,6 +114,7 @@ func (a *Agent) InvalidateProjection() {
 	a.sess.compactionState = CompactionState{}
 	a.sess.compactionMu.Unlock()
 	a.sess.compaction.stuck = false
+	a.sess.compaction.stuckInputHash = ""
 	a.sess.compaction.consecutive = 0
 	a.sess.compaction.failedTurn.Store(0)
 	a.sess.compaction.lastTurn.Store(0)
@@ -168,15 +173,22 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		a.resetCompactionState()
 		return
 	}
+<<<<<<< HEAD
 	if st.CompactionInflight > 0 {
 		slog.Warn("agent: orphan compaction lock — previous pass was interrupted by a crash", "inflight_since_ms", st.CompactionInflight, "session", sessionPath)
 		st.CompactionInflight = 0
 		_ = SaveCompactionState(sessionPath, st)
 	}
+=======
+>>>>>>> origin/main-v2
 	var msgs, preRepair []provider.Message
 	if a.sess.conversation != nil {
 		msgs, preRepair = a.sess.conversation.projectionValidationMessages()
 	}
+<<<<<<< HEAD
+=======
+	needsNormalization := migratePromotedCoveredPrefixHash(&st, msgs)
+>>>>>>> origin/main-v2
 	a.sess.compactionMu.Lock()
 	key := a.currentPromptCacheKeyLocked()
 	normalized, keyOK := lineageKeyCompatible(st.PromptCacheKey, key)
@@ -220,6 +232,14 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	// Only mark restored when the projection still matches the transcript.
 	if !projectionContentValid(st, msgs) && migrateLegacyCoveredPrefixHash(&st, msgs, preRepair) {
 		needsNormalization = true
+<<<<<<< HEAD
+=======
+	}
+	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
+	if !valid && len(st.Projection.Messages) > 0 {
+		// Keep blocked receipts / telemetry; drop unusable projection body.
+		st.Projection = ContextProjection{}
+>>>>>>> origin/main-v2
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
 	// Keep the intact body on invalidation: the third-state degraded view
@@ -294,6 +314,7 @@ func (a *Agent) BindSessionPath(path string, loadSidecar bool) {
 	a.sess.cacheState = CacheStateUnknown
 	a.sess.compactionMu.Unlock()
 	a.sess.compaction.stuck = false
+	a.sess.compaction.stuckInputHash = ""
 	a.sess.compaction.consecutive = 0
 	a.sess.compaction.failedTurn.Store(0)
 	a.sess.compaction.lastTurn.Store(0)

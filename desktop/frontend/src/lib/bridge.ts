@@ -9,14 +9,17 @@ import { makeMockSessionCatalogBindings } from "./sessionCatalogBridge";
 import { makeMockHistoryCatalogBindings, type HistoryCatalogBindings } from "./historyCatalogBridge";
 import { makeMockTaskCatalogBindings, type TaskCatalogBindings } from "./taskCatalogBridge";
 import { makeMockBlankProjectBindings, type BlankProjectBindings } from "./blankProjectBridge";
+import { makeMockQualityFloorBindings, type QualityFloorBindings } from "./deliveryFloorBridge";
 import { t } from "./i18n";
 import { providerIsConfigured, providerRequiresKey, removeProviderAccessesForMock } from "./providerModels";
 import { DEFAULT_STATUS_BAR_ITEMS, normalizeStatusBarItems } from "./statusBarItems";
 import { registerTrustedThemeBackgroundURLs } from "./themePack";
 import { modeHasAutoApproveTools, modeWithAutoApproveTools, modeWithPlan, normalizeCollaborationMode, normalizeMode, normalizeToolApprovalMode } from "./types";
+import { makeMockProjectTreeOrganizationBindings } from "./mockProjectTreeOrganization";
 import { decisionSurfaceMockFromInput, isLongDecisionOptionsMockInput } from "./decisionSurfaceMock";
 import { mockWorkspaceFile } from "./mockWorkspaceFile";
 import { mockAIRenameSession, type SessionTitleBindings } from "./mockSessionTitle";
+import { mockHistoryContentField, mockHistorySlice } from "./bridgeHistoryFixtures";
 import type {
   RemoteHostView,
   RemoteHostInput,
@@ -70,8 +73,6 @@ import type {
   ActiveWorkView,
   BackgroundRuntimeView,
   JobCancelBatchView,
-  JobOutputView,
-  JobPanelView,
   WorkspaceConflictView,
   MCPMarketplaceEntry,
   MCPServerInput,
@@ -89,6 +90,7 @@ import type {
   PluginInstallOptions,
   PluginView,
   ProjectNode,
+  ProjectTreeOrganizationBindings,
   RecoveryLineageView,
   RecoveryCleanupRequest,
   RecoveryCleanupResult,
@@ -128,6 +130,12 @@ import type {
   WorkspaceView,
   SessionClearResult,
 } from "./types";
+
+export interface DesktopShellStatusView {
+  trayState: "probing" | "ready" | "unavailable";
+  backgroundCloseAvailable: boolean;
+  reason?: string;
+}
 import type { MarkdownImageView } from "./markdownImage";
 const GLOBAL_PROJECT_ORDER_KEY = "__global__";
 
@@ -164,12 +172,9 @@ interface DesktopWindowState {
   maximised: boolean;
 }
 
-// AppBindings is the hand-written contract between React and Go. Components use
-// local types instead of generated model classes. _CheckGeneratedBindings catches drift: when a Go method is
-// added or renamed, the generated types shift, and a key present in GeneratedApp
-// but missing from AppBindings causes a type error here. Fix: add the new method
-// to AppBindings, then run `pnpm typecheck` to verify.
-export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, SessionTitleBindings {
+// AppBindings is the hand-written React-to-Go contract. _CheckGeneratedBindings
+// catches generated methods missing here; update this interface and typecheck.
+export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganizationBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, QualityFloorBindings, SessionTitleBindings {
   Platform(): Promise<string>;
   MinimiseMainWindow(): Promise<void>;
   ToggleMaximiseMainWindow(): Promise<void>;
@@ -246,6 +251,7 @@ export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindi
   Cancel(): Promise<void>;
   CancelTab(tabID: string): Promise<void>;
   CancelTabWithInboxItems(tabID: string, itemIDs: string[]): Promise<void>;
+  CancelTabWithInboxItemsResult?(tabID: string, itemIDs: string[]): Promise<{ discardedItemIds: string[]; warning?: string }>;
   Approve(id: string, allow: boolean, session: boolean, persist: boolean): Promise<void>;
   ApproveTab(tabID: string, id: string, allow: boolean, session: boolean, persist: boolean): Promise<void>;
   ResolvePlanDecision(id: string, action: "start_execution" | "revise_plan" | "exit_plan"): Promise<void>;
@@ -283,7 +289,6 @@ export interface AppBindings extends SessionCatalogBindings, HistoryCatalogBindi
   CompactForTab(tabID: string): Promise<void>;
   NewSession(): Promise<void>;
   NewSessionForTab(tabID: string): Promise<void>;
-TeamPanelViewForTab(tabID: string): Promise<unknown>;
   ClearSession(): Promise<SessionClearResult>;
   ClearSessionForTab(tabID: string): Promise<SessionClearResult>;
   History(): Promise<HistoryMessage[]>;
@@ -354,8 +359,6 @@ TeamPanelViewForTab(tabID: string): Promise<unknown>;
   CancelTaskForTab(tabID: string, taskID: string, expectedVersion: number, reason: string, idemKey: string): Promise<ControlResult>;
   RequeueTaskForTab(tabID: string, taskID: string, expectedVersion: number, idemKey: string): Promise<ControlResult>;
   OpenTaskSessionForTab(tabID: string, taskID: string): Promise<ControlResult>;
-  JobPanelJobsForTab(tabID: string): Promise<JobPanelView[]>;
-  JobOutputForTab(tabID: string, jobID: string): Promise<JobOutputView>;
   JobsForTab(tabID: string): Promise<JobView[]>;
   CancelJob(jobID: string): Promise<boolean>;
   CancelJobForTab(tabID: string, jobID: string): Promise<boolean>;
@@ -559,10 +562,10 @@ TeamPanelViewForTab(tabID: string): Promise<unknown>;
   GetDesktopZoomFactor(): Promise<number>;
   RestartApplication(): Promise<void>;
   ReportDesktopWebViewReady(): Promise<void>;
+  GetDesktopShellStatus(): Promise<DesktopShellStatusView>;
   SetDesktopCheckUpdates(enabled: boolean): Promise<void>;
   SetDesktopUpdateChannel(channel: string): Promise<void>;
   SetDesktopTelemetry(enabled: boolean): Promise<void>;
-  ReportRenderingPerf(count: number, maxMs: number, avgMs: number): Promise<void>;
   SetDesktopMetrics(enabled: boolean): Promise<void>;
   SetExpandThinking(on: boolean): Promise<void>;
   SetDesktopConversationWidth(width: string): Promise<void>;
@@ -695,8 +698,8 @@ interface WailsRuntime {
   WindowGetPosition?(): Promise<{ x: number; y: number }>;
   WindowIsMaximised?(): Promise<boolean>;
   ClipboardSetText?(text: string): Promise<boolean>;
-  // Native OS file drop (desktop only); useDropTarget gates delivery to elements
-  // carrying the --wails-drop-target CSS property. Absent in the browser dev mock.
+  ClipboardGetText?(): Promise<string>;
+  // Native OS file drop; useDropTarget gates delivery to --wails-drop-target elements. Absent in browser mocks.
   OnFileDrop?(cb: (x: number, y: number, paths: string[]) => void, useDropTarget: boolean): void;
   OnFileDropOff?(): void;
 }
@@ -933,7 +936,7 @@ export function onReady(cb: (tabId?: string) => void): () => void {
 
 export function onProjectTreeChanged(cb: () => void): () => void {
   if (realApp() && typeof window !== "undefined" && window.runtime) {
-    return window.runtime.EventsOn("project-tree:changed", (payload?: unknown) => (payload as { reason?: unknown } | undefined)?.reason !== "runtime" && cb());
+    return window.runtime.EventsOn("project-tree:changed", (payload?: unknown) => (payload as { reason?: unknown } | undefined)?.reason !== "runtime" && (payload as { reason?: unknown } | undefined)?.reason !== "catalog-v2" && cb());
   }
   return () => {};
 }
@@ -1290,6 +1293,9 @@ const mockProviderPresetTemplates: MockProviderPresetTemplate[] = [
   mockPreset("qwen-coding-plan-global-anthropic", "Qwen Coding Plan Global Anthropic", "Alibaba Cloud Qwen Coding Plan international Anthropic-compatible endpoint.", "QWEN_CODING_API_KEY", mockProviderTemplate({ name: "qwen-coding-plan-global-anthropic", kind: "anthropic", baseUrl: "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic", models: mockQwenPlanModels, visionModels: mockQwenPlanVisionModels, default: "qwen3.7-plus", apiKeyEnv: "QWEN_CODING_API_KEY", thinking: "adaptive" })),
   mockPreset("stepfun", "StepFun", "StepFun coding-plan OpenAI-compatible endpoint.", "STEPFUN_API_KEY", mockProviderTemplate({ name: "stepfun", kind: "openai", baseUrl: "https://api.stepfun.com/step_plan/v1", models: mockStepFunModels, default: "step-3.7-flash", apiKeyEnv: "STEPFUN_API_KEY", supportedEfforts: ["low", "medium", "high"], defaultEffort: "medium" })),
   mockPreset("stepfun-anthropic", "StepFun Anthropic", "StepFun coding-plan Anthropic-compatible endpoint.", "STEPFUN_API_KEY", mockProviderTemplate({ name: "stepfun-anthropic", kind: "anthropic", baseUrl: "https://api.stepfun.com/step_plan", models: mockStepFunModels, default: "step-3.7-flash", apiKeyEnv: "STEPFUN_API_KEY", thinking: "adaptive", supportedEfforts: ["low", "medium", "high"], defaultEffort: "medium" })),
+  mockPreset("stepfun-responses", "StepFun Responses API", "StepFun Responses API endpoint with reasoning effort and tool calls (step-3.7-flash).", "STEPFUN_API_KEY", mockProviderTemplate({ name: "stepfun-responses", kind: "responses", baseUrl: "https://api.stepfun.com/v1", models: ["step-3.7-flash"], default: "step-3.7-flash", apiKeyEnv: "STEPFUN_API_KEY", supportedEfforts: ["low", "medium", "high"], defaultEffort: "medium" })),
+  mockPreset("stepfun-api", "StepFun API Pay-as-you-go", "StepFun pay-as-you-go OpenAI-compatible API with vision on step-3.7-flash.", "STEPFUN_API_KEY", mockProviderTemplate({ name: "stepfun-api", kind: "openai", baseUrl: "https://api.stepfun.com/v1", models: mockStepFunModels, visionModels: ["step-3.7-flash"], default: "step-3.7-flash", apiKeyEnv: "STEPFUN_API_KEY", supportedEfforts: ["low", "medium", "high"], defaultEffort: "medium" })),
+  mockPreset("stepfun-api-anthropic", "StepFun API Anthropic Pay-as-you-go", "StepFun pay-as-you-go Anthropic-compatible Messages API with automatic prefix caching.", "STEPFUN_API_KEY", mockProviderTemplate({ name: "stepfun-api-anthropic", kind: "anthropic", baseUrl: "https://api.stepfun.com", models: mockStepFunModels, default: "step-3.7-flash", apiKeyEnv: "STEPFUN_API_KEY", thinking: "adaptive", supportedEfforts: ["low", "medium", "high"], defaultEffort: "medium" })),
   mockPreset("novita", "NovitaAI", "NovitaAI OpenAI-compatible multi-model gateway.", "NOVITA_API_KEY", mockProviderTemplate({ name: "novita", kind: "openai", baseUrl: "https://api.novita.ai/openai/v1", models: mockNovitaModels, default: "zai-org/glm-5.2", apiKeyEnv: "NOVITA_API_KEY" })),
   mockPreset("gmi", "GMI Cloud", "GMI Cloud direct multi-model OpenAI-compatible gateway.", "GMI_API_KEY", mockProviderTemplate({ name: "gmi", kind: "openai", baseUrl: "https://api.gmi-serving.com/v1", models: mockGMIModels, default: "zai-org/GLM-5.2-FP8", apiKeyEnv: "GMI_API_KEY", headers: { "User-Agent": "Reasonix" } })),
   mockPreset("vercel-ai-gateway", "Vercel AI Gateway", "Vercel AI Gateway via Anthropic-compatible Messages API.", "AI_GATEWAY_API_KEY", mockProviderTemplate({ name: "vercel-ai-gateway", kind: "anthropic", baseUrl: "https://ai-gateway.vercel.sh", models: mockVercelModels, visionModels: ["anthropic/claude-sonnet-4.6", "anthropic/claude-opus-4.8", "openai/gpt-5.4", "openai/gpt-5.4-pro", "moonshotai/kimi-k2.7-code"], default: "anthropic/claude-sonnet-4.6", apiKeyEnv: "AI_GATEWAY_API_KEY", authHeader: true, contextWindow: 1000000 })),
@@ -1832,6 +1838,8 @@ function makeMockApp(): AppBindings {
         { key: "topic_bench_tools", kind: "topic", label: "● bench:tools-38t", root: "~/projects/reasonix", topicId: "topic_bench_tools", projectColor: "blue", turns: 38, lastActivityAt: mockNow - 120_000, open: true },
         { key: "topic_bench_small", kind: "topic", label: "bench:small-6t", root: "~/projects/reasonix", topicId: "topic_bench_small", projectColor: "green", turns: 6, lastActivityAt: mockNow - 180_000 },
         { key: "topic_bench_giant_turn", kind: "topic", label: "bench:giant-turn", root: "~/projects/reasonix", topicId: "topic_bench_giant_turn", projectColor: "amber", turns: 1, lastActivityAt: mockNow - 240_000 },
+        { key: "topic_bench_reported_long_turn", kind: "topic", label: "bench:reported-long-turn", root: "~/projects/reasonix", topicId: "topic_bench_reported_long_turn", projectColor: "amber", turns: 1, lastActivityAt: mockNow - 300_000 },
+        { key: "topic_bench_storm", kind: "topic", label: "bench:storm-40t", root: "~/projects/reasonix", topicId: "topic_bench_storm", projectColor: "red", turns: 40, lastActivityAt: mockNow - 360_000 },
       ],
     },
   ] : [
@@ -2088,77 +2096,6 @@ function makeMockApp(): AppBindings {
 	      return turn >= startTurn && turn < endTurn;
 	    });
 	    return { messages: pageMessages, startTurn, endTurn, totalTurns, hasOlder: startTurn > 0 };
-	  };
-	  // Windowed sibling of mockHistoryPage: same turn windowing, but returns
-	  // entryId-keyed rows and an opaque older-cursor, mirroring the real
-	  // HistorySliceForTab contract closely enough for dev/tests.
-	  const mockHistorySlice = (tabID: string, messages: HistoryMessage[], req: HistorySliceRequest): HistorySlice => {
-	    const turnsOf: number[] = [];
-	    let turn = 0;
-	    for (const message of messages) {
-	      if (message.role === "user") turn += 1;
-	      turnsOf.push(turn);
-	    }
-	    let before = messages.length;
-	    if (req.cursor) {
-	      try {
-	        const decoded = JSON.parse(atob(req.cursor)) as { before?: number };
-	        if (typeof decoded.before === "number" && decoded.before >= 0 && decoded.before < before) before = decoded.before;
-	      } catch { /* unknown cursor: serve the latest page */ }
-	    }
-	    const empty: HistorySlice = { entries: [], nextCursor: "", hasOlder: false, totalTurns: turn, startTurn: 0, endTurn: 0, stale: false, revision: 0 };
-	    if (before <= 0 || messages.length === 0) return empty;
-	    const turns = Math.max(1, Math.floor(req.turns || 12));
-	    const newestTurn = turnsOf[before - 1];
-	    const oldestTurn = newestTurn > 0 ? Math.max(newestTurn - turns + 1, 1) : 0;
-	    let lo = 0;
-	    if (oldestTurn > 1) {
-	      lo = before;
-	      for (let i = 0; i < before; i += 1) {
-	        if (turnsOf[i] >= oldestTurn) { lo = i; break; }
-	      }
-	    }
-	    // Keep the newest suffix within the real backend's entry cap.
-	    const maxEntries = Math.max(1, Math.floor(req.entries || 120));
-	    if (before - lo > maxEntries) lo = before - maxEntries;
-	    const entries = messages.slice(lo, before).map((message, index) => {
-	      const entryId = `smock-${tabID}:r0:m${lo + index}:o0`;
-	      const content = message.content ?? "";
-	      const lazyContent = benchMock && content.includes("ASYNC LAYOUT EXPANSION COMPLETE");
-	      return {
-	        entryId, turn: turnsOf[lo + index], order: lo + index,
-	        message: lazyContent ? { ...message, content: content.slice(0, 4 * 1024) } : message,
-	        refs: lazyContent ? [{ entryId, field: "content", size: content.length, chunks: 1, revision: 0, revKnown: false, digest: "" }] : [],
-	      };
-	    });
-	    const visibleTurns = entries.map((entry) => entry.turn).filter((value) => value > 0);
-	    return {
-	      entries,
-	      nextCursor: lo > 0 ? btoa(JSON.stringify({ v: 1, before: lo })) : "",
-	      hasOlder: lo > 0,
-	      totalTurns: turn,
-	      startTurn: visibleTurns.length > 0 ? Math.min(...visibleTurns) : 0,
-	      endTurn: visibleTurns.length > 0 ? Math.max(...visibleTurns) : 0,
-	      stale: false,
-	      revision: 0,
-	    };
-	  };
-	  const mockHistoryContentField = (message: HistoryMessage, ref: HistoryContentRef): string => {
-	    switch (ref.field) {
-	      case "content": return message.content ?? "";
-	      case "reasoning": return message.reasoning ?? "";
-	      case "submitText": return message.submitText ?? "";
-	      case "detail": return message.detail ?? "";
-	      case "code": return message.code ?? "";
-	      case "summary": return message.summary ?? "";
-	      case "archive": return message.archive ?? "";
-	      case "toolResultError": return message.toolResultError ?? "";
-	      case "toolArguments": return (message.toolCalls ?? []).find((tc) => tc.id === ref.toolCallId)?.arguments ?? "";
-	      case "toolSubject": return (message.toolCalls ?? []).find((tc) => tc.id === ref.toolCallId)?.subject ?? "";
-	      case "toolSummary": return (message.toolCalls ?? []).find((tc) => tc.id === ref.toolCallId)?.summary ?? "";
-	      case "toolDiff": return (message.toolCalls ?? []).find((tc) => tc.id === ref.toolCallId)?.diff ?? "";
-	      default: return "";
-	    }
 	  };
 	  const mockRuntimeInjected = new Set<string>();
   const queueMockTopicRuntime = (tab: TabMeta) => {
@@ -2885,6 +2822,24 @@ function makeMockApp(): AppBindings {
           cacheMissTokens: 256,
           sessionCacheHitTokens: 1024,
           sessionCacheMissTokens: 256,
+          cost: 0.0064,
+          currency: "¥",
+          currencyCode: "CNY",
+          costComplete: true,
+          displayComplete: true,
+          displayStatus: "matched",
+          costQuote: {
+            original: { amount: "0.0064", currency: "CNY" },
+            selected: { amount: "0.0064", currency: "CNY" },
+            estimated: true,
+            costComplete: true,
+            displayComplete: true,
+            complete: true,
+            displayStatus: "matched",
+            aggregateMode: "single_currency",
+            rateBand: "off_peak",
+            ratedAt: "2026-08-17T00:30:00Z",
+          },
         },
       });
           emitMockTurnDone(submissionID);
@@ -2992,6 +2947,7 @@ function makeMockApp(): AppBindings {
         async CancelTabWithInboxItems(_tabID, _itemIDs) {
           await withMockTabScope(_tabID, () => this.Cancel());
         },
+        async CancelTabWithInboxItemsResult(_tabID, itemIDs) { await withMockTabScope(_tabID, () => this.Cancel()); return { discardedItemIds: [...itemIDs] }; },
         async Approve(_id, allow, session, persist) {
           if (!pendingApprovalPreview) return;
           pendingApprovalPreview = false;
@@ -3188,7 +3144,6 @@ function makeMockApp(): AppBindings {
         async CompactForTab() {},
         async NewSession() {},
         async NewSessionForTab() {},
-async TeamPanelViewForTab() { return null; },
         async ClearSession() { return { sessionPath: "", sessionGeneration: 0 }; },
         async ClearSessionForTab() { return { sessionPath: "", sessionGeneration: 0 }; },
     async Checkpoints() {
@@ -3268,7 +3223,7 @@ async TeamPanelViewForTab() { return null; },
           return turns;
         },
         async HistorySliceForTab(tabID: string, req: HistorySliceRequest) {
-          return mockHistorySlice(tabID, await this.HistoryForTab(tabID), req);
+          return mockHistorySlice(tabID, await this.HistoryForTab(tabID), req, benchMock);
         },
         async HistoryContentForTab(tabID: string, ref: HistoryContentRef, chunkIndex: number): Promise<HistoryContentChunk> {
           const out: HistoryContentChunk = { entryId: ref.entryId, field: ref.field, chunk: Math.max(0, chunkIndex), chunks: 1, data: "", done: true, stale: false };
@@ -3277,6 +3232,12 @@ async TeamPanelViewForTab() { return null; },
           const messages = await this.HistoryForTab(tabID);
           const message = messages[Number(match[1])];
           if (benchMock && message?.content?.includes("ASYNC LAYOUT EXPANSION COMPLETE")) await delay(1_500);
+          // Storm fixture: pace ref resolutions deterministically by entry
+          // index so opening the session produces a seconds-long patch storm
+          // instead of a single burst (#8657).
+          if (benchMock && (message?.content?.includes("BENCH STORM HYDRATION RESOLVED") || message?.reasoning?.includes("BENCH STORM HYDRATION RESOLVED"))) {
+            await delay(50 + (Number(match[1]) % 24) * 120);
+          }
           if (!message) return { ...out, stale: true };
           out.data = mockHistoryContentField(message, ref);
           out.chunks = 1;
@@ -3420,7 +3381,25 @@ async TeamPanelViewForTab() { return null; },
       if (index >= 0) mockProjectTree.splice(index, 1);
     },
         async ContextUsage() {
-          return { used: 42124, window: 128000, sessionTokens: 34479, compactRatio: 0.8 };
+          return {
+            used: 42124,
+            window: 128000,
+            sessionTokens: 34479,
+            compactRatio: 0.8,
+            sessionCost: 0.1287,
+            sessionCurrency: "CNY",
+            sessionCostQuote: {
+              original: { amount: "0.1287", currency: "CNY" },
+              selected: { amount: "0.1287", currency: "CNY" },
+              estimated: true,
+              costComplete: true,
+              displayComplete: true,
+              complete: true,
+              displayStatus: "matched",
+              aggregateMode: "single_currency",
+              rateBand: "mixed",
+            },
+          };
         },
         async ContextUsageForTab() {
           return this.ContextUsage();
@@ -4880,6 +4859,9 @@ async TeamPanelViewForTab() { return null; },
         async ReportDesktopWebViewReady() {
           // no-op in mock
         },
+        async GetDesktopShellStatus() {
+          return { trayState: "ready", backgroundCloseAvailable: true } as DesktopShellStatusView;
+        },
         async SetDesktopCheckUpdates(enabled: boolean) {
           settings.checkUpdates = enabled;
         },
@@ -4892,13 +4874,6 @@ async TeamPanelViewForTab() { return null; },
         },
         async SetDesktopMetrics(enabled: boolean) {
           settings.metrics = enabled;
-        },
-        async ReportRenderingPerf(count: number, maxMs: number, avgMs: number) {
-          try {
-            await app.ReportRenderingPerf(count, maxMs, avgMs);
-          } catch {
-            // best-effort diagnostic; never break the UI on a stats write
-          }
         },
     async SetDesktopConversationWidth(width: string) { settings.conversationWidth = width; },
     async SetReasoningDisplayMode(mode: "hidden" | "summary" | "auto" | "expanded") { if (!(["hidden", "summary", "auto", "expanded"] as string[]).includes(mode)) throw new Error("invalid reasoning display mode"); settings.reasoningDisplayMode = mode; settings.reasoningDisplayModeExplicit = true; },
@@ -4941,8 +4916,6 @@ async TeamPanelViewForTab() { return null; },
     async ListTasksForTab() { return []; },
     ...makeMockTaskCatalogBindings(),
     async ListTaskEventsForTab() { return []; },
-    async JobPanelJobsForTab() { return []; },
-    async JobOutputForTab() { return { id: "", output: "" }; },
     async StopTaskForTab() { return { schema_version: 1, command: "stop", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
     async CancelTaskForTab() { return { schema_version: 1, command: "cancel", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
     async RequeueTaskForTab() { return { schema_version: 1, command: "requeue", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
@@ -5065,6 +5038,7 @@ async TeamPanelViewForTab() { return null; },
     async DeliveryWorktreeAvailability(workspaceRoot: string) {
       return this.IsolatedWorktreeAvailability(workspaceRoot);
     },
+    ...makeMockQualityFloorBindings(() => mockTabs, (next) => { mockTabs = next; }),
     async SetAgentPreset(_preset: string) {},
     async SetAgentPresetForTab(_tabID: string, _preset: string) {},
     async SetTokenMode(_mode: string) {},
@@ -5356,6 +5330,7 @@ async TeamPanelViewForTab() { return null; },
     async SetTopicPinned(topicID: string, pinned: boolean) {
       setMockTopicPinned(topicID, pinned);
     },
+    ...makeMockProjectTreeOrganizationBindings(mockProjectTree),
     async SaveWindowState(_state) {
       // no-op in browser dev — no real window geometry to persist
     },
@@ -5380,6 +5355,17 @@ async TeamPanelViewForTab() { return null; },
         sessionCost: cost(0.018),
         sessionCurrency: currency,
         sessionCostUsd: cost(0.018),
+        sessionCostQuote: {
+          original: { amount: String(cost(0.018)), currency: "CNY" },
+          selected: { amount: String(cost(0.018)), currency: "CNY" },
+          estimated: true,
+          costComplete: true,
+          displayComplete: true,
+          complete: true,
+          displayStatus: "matched",
+          aggregateMode: "single_currency",
+          rateBand: "mixed",
+        },
         sources: {
           executor: {
             promptTokens: 24100,

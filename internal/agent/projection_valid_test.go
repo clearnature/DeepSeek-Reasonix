@@ -51,6 +51,44 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
+=======
+func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
+	msgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "task"},
+	}
+	hash := coveredPrefixHash(msgs, 2)
+	st := CompactionState{
+		TranscriptVersion: 1,
+		PromptCacheKey:    "ws|sess|model-a",
+		Projection: ContextProjection{
+			Messages:          []provider.Message{{Role: provider.RoleSystem, Content: "sys"}},
+			CoveredCount:      2,
+			CoveredPrefixHash: hash,
+			TranscriptVersion: 1,
+		},
+	}
+	if projectionValid(st, msgs, "ws|sess|model-b") {
+		t.Fatal("model/lineage key mismatch must invalidate projection")
+	}
+	if !projectionValid(st, msgs, "ws|sess|model-a") {
+		t.Fatal("matching key should be valid")
+	}
+	// Fail closed: blank stored key is rejected when current key is known.
+	st.PromptCacheKey = ""
+	if projectionValid(st, msgs, "ws|sess|model-a") {
+		t.Fatal("missing sidecar cache key must invalidate when lineage is known")
+	}
+	// Missing prefix hash is always rejected.
+	st.PromptCacheKey = "ws|sess|model-a"
+	st.Projection.CoveredPrefixHash = ""
+	if projectionValid(st, msgs, "ws|sess|model-a") {
+		t.Fatal("missing CoveredPrefixHash must invalidate projection")
+	}
+}
+
+>>>>>>> origin/main-v2
 func TestCoveredPrefixHashIncludesProviderVisibleFields(t *testing.T) {
 	base := []provider.Message{{
 		Role:               provider.RoleAssistant,

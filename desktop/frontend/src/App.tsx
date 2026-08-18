@@ -1,7 +1,8 @@
-import {
-lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { flushSync } from "react-dom";
 import { ShellExpandProvider, useShellExpand } from "./lib/shellExpand";
-import { Activity,
+import {
+  Activity,
   Command,
   Copy as RestoreIcon,
   Download,
@@ -30,7 +31,6 @@ import { Activity,
   Puzzle,
   X,
   TerminalSquare,
-  Users,
 } from "lucide-react";
 import { useToast } from "./lib/toast";
 import { useGoalActionHandler } from "./lib/goalAction";
@@ -106,6 +106,7 @@ import {
   type RemoteHostView,
   type SessionMeta,
   type SettingsView,
+  type QualityFloor,
   type TabMeta,
   type ToolApprovalMode,
   type WorkspaceConflictView,
@@ -179,6 +180,7 @@ import { hydrateDisplayMode } from "./lib/displayMode";
 import { DEFAULT_STATUS_BAR_ITEMS, normalizeStatusBarItems, type StatusBarItemId } from "./lib/statusBarItems";
 import { paletteSessionDisplayTitle, paletteSessionHint, paletteSessionKeywords, sessionActivityTime } from "./lib/session";
 import { enqueueNavigationRequest, type PendingNavigationRequest } from "./lib/openTopicCoalescing";
+import { guardBackendNavigationResult, settleNavigationSurfaceIntent } from "./lib/navigationSurfaceTransition";
 import {
   applyTheme,
   clearLegacyThemePreference,
@@ -196,9 +198,9 @@ import { ThemeBackground } from "./components/ThemeBackground";
 import { applyTextSize, DEFAULT_TEXT_SIZE, getTextSize, nextTextSize } from "./lib/textSize";
 import { useViewportHeightVar, useWindowStatePersistence } from "./lib/windowState";
 import { resolveLiveWorkspacePanelWidth, resolveWorkspacePanelPlacement, workspacePanelAriaMinWidth } from "./lib/workspaceLayout";
-import { createRafResizeUpdater } from "./lib/resizeDrag";
+import { createPointerResizeLifecycle, createRafResizeUpdater } from "./lib/resizeDrag";
 import { useGlobalShortcut } from "./lib/keyboardShortcuts";
-import { useMountTransition } from "./lib/useMountTransition";
+import { useWarmTerminalPanel } from "./lib/useWarmTerminalPanel";
 import { topicShortcutIndexFromEvent, useTopicShortcuts, type TopicShortcutEntry } from "./lib/topicShortcuts";
 import { composerDraftKeyForTab } from "./lib/composerDraftKey";
 import { continueDelivery } from "./lib/deliveryContinue";
@@ -207,7 +209,6 @@ import logoWordmark from "./assets/logo-wordmark.svg";
 // Hold reasoning UI until the authoritative desktop startup settings arrive;
 // this prevents a hidden preference from flashing content during first paint.
 setReasoningDisplayPending();
-const TERMINAL_CLOSE_TRANSITION_MS = 250;
 function noticePreviewMockEnabled(): boolean {
   const value = browserMockScenarioParam();
   return value === "notice" || value === "notices" || value === "notice-preview";
@@ -267,7 +268,14 @@ function NoticePreviewPanel() {
       <div style={{ maxWidth: 920, margin: "0 auto" }}>
         {noticePreviewItems().map((item) => {
           if (item.kind !== "notice") return null;
-          return <NoticeCard key={item.id} item={item} onAction={item.action ? () => undefined : undefined} />;
+          return (
+            <NoticeCard
+              key={item.id}
+              item={item}
+              onAction={item.action ? () => undefined : undefined}
+              onAccept={item.action === "continue_delivery" ? () => undefined : undefined}
+            />
+          );
         })}
       </div>
     </div>
@@ -281,7 +289,6 @@ const SettingsPanel = lazy(() => import("./components/SettingsPanelEntry").then(
 const RemotePanel = lazy(() => import("./components/RemotePanel").then((module) => ({ default: module.RemotePanel })));
 const TerminalPanel = lazy(() => import("./components/TerminalPanel").then((module) => ({ default: module.TerminalPanel })));
 const TaskMonitorPanel = lazy(() => import("./components/TaskMonitorPanel").then((module) => ({ default: module.TaskMonitorPanel })));
-const TeamPanel = lazy(() => import("./components/TeamPanel").then((module) => ({ default: module.TeamPanel })));
 const WorkspacePanel = lazy(async () => {
   const [module] = await Promise.all([
     import("./components/WorkspacePanel"),
@@ -1068,6 +1075,7 @@ export default function App() {
     drainExtensionNotifications,
     setCollaborationMode: setControllerCollaborationMode,
     setToolApprovalMode: setControllerToolApprovalMode,
+    setQualityFloor: setControllerQualityFloor,
     setComposerProfileForTab: setControllerComposerProfileForTab,
     setGoalForTab: setControllerGoalForTab,
     resumeGoalForTab: resumeControllerGoalForTab,
@@ -1105,6 +1113,7 @@ export default function App() {
     activateTopic,
     noteNavigationIntent,
     isNavigationIntentCurrent,
+    reassertVisibleTabAfterStaleNavigation,
     syncActiveTab,
     ensureBlankTab,
     ensureBlankSurface,
@@ -1116,6 +1125,13 @@ export default function App() {
   const userPlanModeByTabRef = useRef<UserPlanModeIntents>({});
   const [tabMetas, setTabMetas] = useState<TabMeta[]>([]);
   const [tabOrderIds, setTabOrderIds] = useState<string[]>([]);
+  const [navigationSurfaceIntent, setNavigationSurfaceIntent] = useState<number | null>(null);
+  const beginNavigationSurface = useCallback((intent: number) => {
+    flushSync(() => setNavigationSurfaceIntent(intent));
+  }, []);
+  const settleNavigationSurface = useCallback((intent: number) => {
+    setNavigationSurfaceIntent((current) => settleNavigationSurfaceIntent(current, intent));
+  }, []);
   const [tabRevealSignal, setTabRevealSignal] = useState(0);
   const [transcriptRevealSignal, setTranscriptRevealSignal] = useState(0);
   const startupSplashVisible = useOverlayStore((s) => s.startupSplashVisible);
@@ -1178,7 +1194,6 @@ export default function App() {
   const setSidebarWidth = useLayoutStore((s) => s.setSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [tasksOpen, setTasksOpen] = useState<false | "session" | "all">(false);
-const [teamsOpen, setTeamsOpen] = useState(false);
   const [liveSidebarWidth, setLiveSidebarWidth] = useState<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window === "undefined" ? 720 : window.innerHeight));
@@ -1200,12 +1215,6 @@ const [teamsOpen, setTeamsOpen] = useState(false);
     startTerminalEventBridge();
     const unsub = onEvent((e) => {
       if (e.kind === "turn_done") {
-        setDockRefreshKey((v) => v + 1);
-      }
-      // /compress-fast elides tool results without an API call: no turn_done
-      // arrives, but the model-visible context shrank — refresh the dock so
-      // the context gauge reflects the smaller projection.
-      if (e.kind === "compaction_done") {
         setDockRefreshKey((v) => v + 1);
       }
       if (shouldPlayAttentionChimeForEvent(e, attentionChimeEvents.current)) {
@@ -1251,10 +1260,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   const setRightDockMode = useLayoutStore((s) => s.setRightDockMode);
   const terminalPanelOpen = useLayoutStore((s) => s.terminalPanelOpen);
   const setTerminalPanelOpen = useLayoutStore((s) => s.setTerminalPanelOpen);
-  const { mounted: terminalContentVisible } = useMountTransition(
-    terminalPanelOpen,
-    TERMINAL_CLOSE_TRANSITION_MS,
-  );
+  const { mounted: terminalContentVisible, fitEnabled: terminalFitEnabled, prefetch: prefetchTerminalPanel } = useWarmTerminalPanel(terminalPanelOpen, terminalResizing);
   const terminalHeight = useLayoutStore((s) => s.terminalHeight);
   const setTerminalHeight = useLayoutStore((s) => s.setTerminalHeight);
   const [dockRefreshKey, setDockRefreshKey] = useState(0);
@@ -1300,12 +1306,14 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   const topicRenameCommitHandledRef = useRef(false);
   const appRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
+  const workspacePanelResizeFinishRef = useRef<(() => void) | null>(null);
   const sidebarTogglePressTimerRef = useRef<number | null>(null);
   const workspaceTogglePressTimerRef = useRef<number | null>(null);
 
   // Persist window geometry across launches.
   useWindowStatePersistence();
   useViewportHeightVar();
+  useEffect(() => () => workspacePanelResizeFinishRef.current?.(), []);
   useEffect(() => {
     document.documentElement.setAttribute("data-platform", desktopPlatform);
   }, [desktopPlatform]);
@@ -1711,7 +1719,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   const goal = composerProfile.goal;
   const collaborationMode = displayedComposerProfileCollaborationMode(composerProfile);
   const toolApprovalMode = composerProfile.toolApprovalMode;
-  const runtimeTransitioning = false;
+  const runtimeTransitioning = navigationSurfaceIntent !== null;
   const controllerReady =
     state.meta?.ready === true &&
     (!state.meta.runtime || state.meta.runtime.phase === "ready") &&
@@ -1731,6 +1739,8 @@ const [teamsOpen, setTeamsOpen] = useState(false);
     if (clearContextPending) return "clear_context";
     return null;
   }, [clearContextPending, pendingClose, state.approval, state.ask, state.extensionForm, workspaceConflict]);
+  const visibleDecisionSurface = runtimeTransitioning ? null : decisionSurface;
+  const composerSurfaceHidden = runtimeTransitioning || Boolean(decisionSurface);
   decisionSurfaceRef.current = decisionSurface;
   useEffect(() => {
     // Close composer menus/popovers when a decision takes over the footer.
@@ -1914,6 +1924,14 @@ const [teamsOpen, setTeamsOpen] = useState(false);
       void setControllerToolApprovalMode(m);
     },
     [activeTabId, patchActiveComposerProfile, setControllerToolApprovalMode, toolApprovalMode],
+  );
+  const applyQualityFloor = useCallback(
+    (floor: QualityFloor) => {
+      if (!activeTabId) return;
+      patchActiveComposerProfile({ qualityFloor: floor }, ["qualityFloor"]);
+      void setControllerQualityFloor(floor);
+    },
+    [activeTabId, patchActiveComposerProfile, setControllerQualityFloor],
   );
   const toggleYoloApprovalMode = useCallback(() => {
     if (!activeTabId) return;
@@ -2723,18 +2741,21 @@ const [teamsOpen, setTeamsOpen] = useState(false);
 
   const startWorkspacePanelResize = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
-      if (!workspacePanelOpen) return;
+      if (event.button !== 0 || !workspacePanelOpen) return;
       const layout = layoutRef.current;
       if (!layout) return;
       event.preventDefault();
+      workspacePanelResizeFinishRef.current?.();
       closeTransientOverlays();
       setWorkspacePanelResizing(true);
+      const separator = event.currentTarget;
+      const pointerId = event.pointerId;
       const startX = event.clientX;
       const startDockWidth = workspacePanelRenderWidth;
       let nextDockWidth = startDockWidth;
       const liveResize = createRafResizeUpdater({
         target: layout,
-        separator: event.currentTarget,
+        separator,
         cssVar: "--workspace-width",
         onApply: setLiveWorkspacePanelRenderWidth,
       });
@@ -2748,22 +2769,23 @@ const [teamsOpen, setTeamsOpen] = useState(false);
         }
         liveResize.schedule(resolveLiveWorkspacePanelRenderWidth(nextDockWidth));
       };
-      const onDone = () => {
-        liveResize.flush();
-        setSavedWorkspacePanelWidth(nextDockWidth);
-        setLiveWorkspacePanelRenderWidth(null);
-        setWorkspacePanelResizing(false);
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onDone);
-        window.removeEventListener("pointercancel", onDone);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      };
+      const lifecycle = createPointerResizeLifecycle({
+        separator,
+        pointerId,
+        onMove,
+        onFinish: () => {
+          liveResize.flush();
+          setSavedWorkspacePanelWidth(nextDockWidth);
+          setLiveWorkspacePanelRenderWidth(null);
+          setWorkspacePanelResizing(false);
+          workspacePanelResizeFinishRef.current = null;
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+        },
+      });
+      workspacePanelResizeFinishRef.current = lifecycle.finish;
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onDone);
-      window.addEventListener("pointercancel", onDone);
     },
     [closeTransientOverlays, resolveLiveWorkspacePanelRenderWidth, rightDockDetailActive, rightDockTreeWidthClamp, setSavedWorkspacePanelWidth, workspacePanelOpen, workspacePanelRenderWidth],
   );
@@ -3078,16 +3100,17 @@ const [teamsOpen, setTeamsOpen] = useState(false);
     }
   }, [activeTabId, addWorkspaceTextToComposer, showToast, t]);
 
-  const addSelectedTextToComposer = useCallback((text: string) => {
+  const addSelectedTextToComposer = useCallback((text: string, source?: SelectedTextInsertRequest["source"]) => {
     const selected = text.trim();
     if (!activeTabId || !selected) return;
     selectedTextRequestIdRef.current += 1;
     setSelectedTextRequestsByTab((current) => ({
       ...current,
-      [activeTabId]: { id: selectedTextRequestIdRef.current, text: selected },
+      [activeTabId]: { id: selectedTextRequestIdRef.current, text: selected, ...(source ? { source } : {}) },
     }));
   }, [activeTabId]);
 
+  const addTerminalSelectionToComposer = useCallback((text: string) => addSelectedTextToComposer(text, "terminal"), [addSelectedTextToComposer]);
   const addWorkspaceCodeToComposer = useCallback((path: string, code: string) => {
     if (!activeTabId || !code.trim()) return;
     if (workspaceInsertTarget === "planRevision" && state.approval?.tool === "exit_plan_mode") {
@@ -3123,32 +3146,52 @@ const [teamsOpen, setTeamsOpen] = useState(false);
       // can wait behind an older tab switch. That immediately invalidates any
       // in-flight blank/topic completion from a previous user intent.
       const navigationIntentSeq = noteNavigationIntent();
+      beginNavigationSurface(navigationIntentSeq);
       return enqueueNavigationRequest(
         { seqRef: tabSwitchSeqRef, runningRef: tabSwitchRunningRef, pendingRef: tabSwitchPendingRef },
         { tabId, optimisticTab, navigationIntentSeq },
         async (request) => {
-          if (!isNavigationIntentCurrent(request.navigationIntentSeq)) return;
-          await switchTab(request.tabId, request.optimisticTab, request.navigationIntentSeq);
-          if (!isNavigationIntentCurrent(request.navigationIntentSeq)) return;
-          await refreshTabMetas(
-            () => isNavigationIntentCurrent(request.navigationIntentSeq),
-            { afterMutation: true },
-          );
+          try {
+            if (!isNavigationIntentCurrent(request.navigationIntentSeq)) return;
+            await switchTab(request.tabId, request.optimisticTab, request.navigationIntentSeq);
+            if (!isNavigationIntentCurrent(request.navigationIntentSeq)) return;
+            await refreshTabMetas(
+              () => isNavigationIntentCurrent(request.navigationIntentSeq),
+              { afterMutation: true },
+            );
+          } finally {
+            settleNavigationSurface(request.navigationIntentSeq);
+          }
         },
       );
     },
-    [isNavigationIntentCurrent, noteNavigationIntent, refreshTabMetas, switchTab],
+    [beginNavigationSurface, isNavigationIntentCurrent, noteNavigationIntent, refreshTabMetas, settleNavigationSurface, switchTab],
   );
 
   const revealBackgroundRuntime = useCallback(async (tabId: string): Promise<void> => {
+    const navigationIntentSeq = noteNavigationIntent();
+    beginNavigationSurface(navigationIntentSeq);
     try {
       const meta = await app.RevealBackgroundRuntime(tabId);
-      await switchTab(meta.id, meta);
-      await refreshTabMetas(undefined, { afterMutation: true });
+      if (!await guardBackendNavigationResult({
+        intent: navigationIntentSeq,
+        targetTabId: meta.id,
+        kind: "tab.reveal-background",
+        isIntentCurrent: isNavigationIntentCurrent,
+        reassert: reassertVisibleTabAfterStaleNavigation,
+      })) return;
+      await switchTab(meta.id, meta, navigationIntentSeq);
+      if (!isNavigationIntentCurrent(navigationIntentSeq)) return;
+      await refreshTabMetas(
+        () => isNavigationIntentCurrent(navigationIntentSeq),
+        { afterMutation: true },
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err), "error");
+      if (isNavigationIntentCurrent(navigationIntentSeq)) showToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      settleNavigationSurface(navigationIntentSeq);
     }
-  }, [refreshTabMetas, showToast, switchTab]);
+  }, [beginNavigationSurface, isNavigationIntentCurrent, noteNavigationIntent, reassertVisibleTabAfterStaleNavigation, refreshTabMetas, settleNavigationSurface, showToast, switchTab]);
 
   const handleTabChange = useCallback((id: string) => {
     closeTransientOverlays();
@@ -3215,28 +3258,47 @@ const [teamsOpen, setTeamsOpen] = useState(false);
 
   const revealWorkspaceWriter = useCallback(async () => {
     if (!activeTabId) return;
+    const navigationIntentSeq = noteNavigationIntent();
+    beginNavigationSurface(navigationIntentSeq);
     try {
       const meta = await app.RevealWorkspaceWriterForTab(activeTabId);
+      if (!await guardBackendNavigationResult({
+        intent: navigationIntentSeq,
+        targetTabId: meta.id,
+        kind: "tab.reveal-workspace-writer",
+        isIntentCurrent: isNavigationIntentCurrent,
+        reassert: reassertVisibleTabAfterStaleNavigation,
+      })) return;
       setWorkspaceConflict(null);
-      await switchTab(meta.id, meta);
-      await refreshTabMetas(undefined, { afterMutation: true });
+      await switchTab(meta.id, meta, navigationIntentSeq);
+      if (!isNavigationIntentCurrent(navigationIntentSeq)) return;
+      await refreshTabMetas(
+        () => isNavigationIntentCurrent(navigationIntentSeq),
+        { afterMutation: true },
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err), "error");
+      if (isNavigationIntentCurrent(navigationIntentSeq)) showToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      settleNavigationSurface(navigationIntentSeq);
     }
-  }, [activeTabId, refreshTabMetas, showToast, switchTab]);
+  }, [activeTabId, beginNavigationSurface, isNavigationIntentCurrent, noteNavigationIntent, reassertVisibleTabAfterStaleNavigation, refreshTabMetas, settleNavigationSurface, showToast, switchTab]);
 
   const continueInDeliveryWorktree = useCallback(async () => {
     const root = state.meta?.workspaceRoot || state.meta?.workspacePath || state.meta?.cwd;
     if (!root) return;
     cancel();
     setWorkspaceConflict(null);
+    const navigationIntentSeq = noteNavigationIntent();
+    beginNavigationSurface(navigationIntentSeq);
     try {
-      await createIsolatedWorktree(root);
+      await createIsolatedWorktree(root, navigationIntentSeq);
       await refreshTabMetas(undefined, { afterMutation: true });
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err), "error");
+      if (isNavigationIntentCurrent(navigationIntentSeq)) showToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      settleNavigationSurface(navigationIntentSeq);
     }
-  }, [cancel, createIsolatedWorktree, refreshTabMetas, showToast, state.meta?.cwd, state.meta?.workspacePath, state.meta?.workspaceRoot]);
+  }, [beginNavigationSurface, cancel, createIsolatedWorktree, isNavigationIntentCurrent, noteNavigationIntent, refreshTabMetas, settleNavigationSurface, showToast, state.meta?.cwd, state.meta?.workspacePath, state.meta?.workspaceRoot]);
 
   const handleTabsClose = useCallback(async (ids: string[], nextActiveTabId?: string) => {
     closeTransientOverlays();
@@ -3331,6 +3393,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   // (desktopLayoutStyle is available here; sidebarCreation is declared later.)
   const creationEmptyHero =
     desktopLayoutStyle === "creation" &&
+    !runtimeTransitioning &&
     !sidebarImDetailConnection &&
     !sessionHasContent &&
     !transcriptHydrating &&
@@ -3344,7 +3407,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
     for (let i = state.items.length - 1; i >= 0; i--) {
       const item = state.items[i];
       if (item.kind === "notice" && item.text.startsWith("↪ ")) {
-        return { key: item.id, text: item.text.slice(2) };
+        return { key: item.id, itemId: item.inboxItemId, text: item.text.slice(2) };
       }
     }
     return null;
@@ -3707,12 +3770,19 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   }, [activateTopic, createIsolatedWorktree, ensureBlankSurface, ensureBlankTab, isNavigationIntentCurrent, openChannelSession, openGlobalTab, openProjectTab, openTopicSession, refreshHistoryView, resumeSession, seedActiveTabMeta, showToast, singleSurfaceLayout, t]);
 
   const enqueueNavigationWithIntent = useCallback((input: DesktopNavigationIntent, navigationIntentSeq: number): Promise<void> => {
+    beginNavigationSurface(navigationIntentSeq);
     return enqueueNavigationRequest(
       { seqRef: navigationSeqRef, runningRef: navigationRunningRef, pendingRef: navigationPendingRef },
       { ...input, navigationIntentSeq } as DesktopNavigationInput,
-      runNavigationRequest,
+      async (request) => {
+        try {
+          await runNavigationRequest(request);
+        } finally {
+          settleNavigationSurface(request.navigationIntentSeq);
+        }
+      },
     );
-  }, [runNavigationRequest]);
+  }, [beginNavigationSurface, runNavigationRequest, settleNavigationSurface]);
 
   const enqueueNavigation = useCallback((input: DesktopNavigationIntent): Promise<void> => {
     // Invalidate any in-flight activation's stale apply at ENQUEUE time. The
@@ -3765,19 +3835,29 @@ const [teamsOpen, setTeamsOpen] = useState(false);
     // switches tabs while the task/session lookup is pending, its completion is
     // stale and must not enqueue a newer navigation request.
     const navigationIntentSeq = noteNavigationIntent();
-    const session = await resolveTaskMonitorSession({
-      tabID,
-      taskID,
-      intentSeq: navigationIntentSeq,
-      isIntentCurrent: isNavigationIntentCurrent,
-      openTaskSessionForTab: (sourceTabID, sourceTaskID) => app.OpenTaskSessionForTab(sourceTabID, sourceTaskID),
-      listSessionsForTab: async (sourceTabID) => asArray(await app.ListSessionsForTab(sourceTabID)),
-      sessionIDFromPath: taskSessionIDFromPath,
-    });
-    if (!session) return false;
+    beginNavigationSurface(navigationIntentSeq);
+    let session: SessionMeta | null;
+    try {
+      session = await resolveTaskMonitorSession({
+        tabID,
+        taskID,
+        intentSeq: navigationIntentSeq,
+        isIntentCurrent: isNavigationIntentCurrent,
+        openTaskSessionForTab: (sourceTabID, sourceTaskID) => app.OpenTaskSessionForTab(sourceTabID, sourceTaskID),
+        listSessionsForTab: async (sourceTabID) => asArray(await app.ListSessionsForTab(sourceTabID)),
+        sessionIDFromPath: taskSessionIDFromPath,
+      });
+    } catch (error) {
+      settleNavigationSurface(navigationIntentSeq);
+      throw error;
+    }
+    if (!session) {
+      settleNavigationSurface(navigationIntentSeq);
+      return false;
+    }
     await enqueueNavigationWithIntent({ kind: "resume-session", session }, navigationIntentSeq);
     return isNavigationIntentCurrent(navigationIntentSeq);
-  }, [enqueueNavigationWithIntent, isNavigationIntentCurrent, noteNavigationIntent, singleSurfaceLayout, state.running, t]);
+  }, [beginNavigationSurface, enqueueNavigationWithIntent, isNavigationIntentCurrent, noteNavigationIntent, settleNavigationSurface, singleSurfaceLayout, state.running, t]);
 
   // Command palette: ⌘K / Ctrl+K opens a fuzzy navigator over commands and
   // recent sessions. Sessions are snapshotted on open so the list is stable
@@ -4037,13 +4117,25 @@ const [teamsOpen, setTeamsOpen] = useState(false);
   // Workspace: open the folder chooser and switch projects. The hook resets the
   // transcript and refreshes meta on a pick. A cancel is a no-op.
   const switchFolder = useCallback(async (path?: string) => {
-    const picked = path === undefined ? await pickWorkspace() : await switchWorkspace(path);
-    if (picked) {
-      setProjectRevision((value) => value + 1);
-      await refreshTabMetas(undefined, { afterMutation: true });
+    const navigationIntentSeq = noteNavigationIntent();
+    beginNavigationSurface(navigationIntentSeq);
+    try {
+      const picked = path === undefined
+        ? await pickWorkspace(navigationIntentSeq)
+        : await switchWorkspace(path, navigationIntentSeq);
+      if (!isNavigationIntentCurrent(navigationIntentSeq)) return picked;
+      if (picked) {
+        setProjectRevision((value) => value + 1);
+        await refreshTabMetas(
+          () => isNavigationIntentCurrent(navigationIntentSeq),
+          { afterMutation: true },
+        );
+      }
+      return picked;
+    } finally {
+      settleNavigationSurface(navigationIntentSeq);
     }
-    return picked;
-  }, [pickWorkspace, switchWorkspace, refreshTabMetas]);
+  }, [beginNavigationSurface, isNavigationIntentCurrent, noteNavigationIntent, pickWorkspace, refreshTabMetas, settleNavigationSurface, switchWorkspace]);
 
   const refreshProjectsAndTabs = useCallback(async () => {
     setProjectRevision((value) => value + 1);
@@ -4622,6 +4714,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                     type="button"
                     aria-label={t("rightDock.terminal")}
                     aria-pressed={terminalPanelOpen}
+                    onPointerEnter={prefetchTerminalPanel} onFocus={prefetchTerminalPanel}
                     onClick={toggleTerminalPanel}
                   >
                     <TerminalSquare size={14} />
@@ -4659,27 +4752,6 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                     <PanelRight size={15} />
                   </button>
                 </Tooltip>
-              )}
-<Tooltip label="Team">
-                <button
-                  className={`topicbar__action-btn topicbar__action-btn--icon topicbar__action-btn--utility${teamsOpen ? " topicbar__action-btn--active" : ""}`}
-                  type="button"
-                  aria-label="Team"
-                  aria-expanded={teamsOpen}
-                  onClick={() => setTeamsOpen((open) => !open)}
-                >
-                  <Users size={14} />
-                </button>
-              </Tooltip>
-              {teamsOpen && (
-                <div className="teampanel-popover" role="dialog" aria-label="Team panel">
-                  <Suspense fallback={null}>
-                    <TeamPanel
-                      key={`${activeTab?.id || activeTabId || "none"}:${activeTab?.workspaceRoot || "global"}`}
-                      tabID={activeTab?.id || activeTabId || ""}
-                    />
-                  </Suspense>
-                </div>
               )}
               {tasksOpen && (
                 <div className="taskmonitor-popover" role="dialog" aria-label={t("summary.session")}>
@@ -4759,7 +4831,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
           />
 
           <main className="main">
-            {sidebarImDetailConnection ? (
+            {sidebarImDetailConnection && !runtimeTransitioning ? (
               <SidebarImConnectionDetail
                 connection={sidebarImDetailConnection}
                 onClose={() => setSidebarImDetailConnectionId("")}
@@ -4772,13 +4844,14 @@ const [teamsOpen, setTeamsOpen] = useState(false);
             ) : (
               <>
                 <Transcript
-                  items={displayItems}
-                  live={state.live}
+                  items={runtimeTransitioning ? [] : displayItems}
+                  live={runtimeTransitioning ? undefined : state.live}
                   liveStore={liveStore}
                   tabId={activeTabId}
                   footerHeight={footerHeight}
                   onPrompt={handleTranscriptPrompt}
                   onDeliveryContinue={() => void handleDeliveryContinue()}
+                  onAcceptDelivery={() => void app.AcceptDeliveryToTab(activeTabIdRef.current ?? "")}
                   onOpenChanges={() => openRightDockMode("changed")}
                   onEditPrompt={handleEditPrompt}
                   onRewind={handleMessageAction}
@@ -4789,25 +4862,24 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                   turnStartAt={state.turnStartAt}
                   welcomeVariant={sidebarCreation ? "creation" : "default"}
                   creationMode={sidebarCreation}
-                  actionHoverMenus={sidebarCreation && !hydratePlaceholderActive}
+                  actionHoverMenus={sidebarCreation && !hydratePlaceholderActive && !runtimeTransitioning}
                   rewindSignal={rewindSignal}
                   revealSignal={transcriptRevealSignal}
-                  historyLayoutRevision={state.historyLayoutRevision}
-                  hydrating={transcriptHydrating}
-                  hasOlderHistory={state.historyHasOlder && !rewindState}
+                  hydrating={runtimeTransitioning || transcriptHydrating}
+                  hasOlderHistory={!runtimeTransitioning && state.historyHasOlder && !rewindState}
                   olderHistoryCount={state.historyStartTurn}
                   loadingOlderHistory={state.historyOlderLoading}
                   onLoadOlderHistory={() => activeTabId && loadOlderHistory(activeTabId)}
                   invocationMetadata={activeTabId ? invocationMetadataByTab[activeTabId] : undefined}
                 />
-                {state.hydrateError ? <div className="history-load-error" role="alert"><span>{state.hydrateError}</span><button type="button" className="btn btn--small" onClick={() => void retrySessionHistory(activeTabId)}>{t("common.retry")}</button></div> : null}
+                {!runtimeTransitioning && state.hydrateError ? <div className="history-load-error" role="alert"><span>{state.hydrateError}</span><button type="button" className="btn btn--small" onClick={() => void retrySessionHistory(activeTabId)}>{t("common.retry")}</button></div> : null}
               </>
             )}
           </main>
 
           {!sidebarImDetailConnection && (
-          <footer className={["footer", terminalPanelOpen && !sidebarCreation ? "footer--compact" : "", decisionSurface ? "footer--decision" : ""].filter(Boolean).join(" ")} ref={footerRef}>
-            {showTodos && (
+          <footer className={["footer", terminalPanelOpen && !sidebarCreation ? "footer--compact" : "", visibleDecisionSurface ? "footer--decision" : ""].filter(Boolean).join(" ")} ref={footerRef}>
+            {!runtimeTransitioning && showTodos && (
               <TodoPanel
                 key={scopedTodoBatch}
                 stateKey={scopedTodoBatch}
@@ -4815,7 +4887,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                 onDismiss={dismissTodos}
               />
             )}
-            {rewindState && (
+            {!runtimeTransitioning && rewindState && (
               <Suspense fallback={null}><UndoRewindBanner
                 meta={{
                   turns: rewindState.turnDiff,
@@ -4842,7 +4914,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                 }}
               /></Suspense>
             )}
-            {decisionSurface === "tool_approval" || decisionSurface === "plan_approval"
+            {visibleDecisionSurface === "tool_approval" || visibleDecisionSurface === "plan_approval"
               ? state.approval && (
               <ApprovalModal
                 key={`${activeTabId ?? ""}:${state.approval.id}`}
@@ -4886,7 +4958,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                 toolApprovalMode={toolApprovalMode}
               />
               )
-            : decisionSurface === "ask"
+            : visibleDecisionSurface === "ask"
               ? state.ask && (
               <AskCard
                 key={`${activeTabId ?? ""}:${state.ask.id}`}
@@ -4898,7 +4970,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                 }}
               />
               )
-            : decisionSurface === "extension_form"
+            : visibleDecisionSurface === "extension_form"
               ? state.extensionForm && (
               <ExtensionFormDialog
                 key={`${activeTabId ?? ""}:${state.extensionForm.pluginId}:${state.extensionForm.surfaceId}`}
@@ -4908,7 +4980,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                 onCancel={() => void cancelExtensionForm()}
               />
               )
-            : decisionSurface === "workspace_conflict" && workspaceConflict ? (
+            : visibleDecisionSurface === "workspace_conflict" && workspaceConflict ? (
               <RuntimeDecisionCard
                 id="workspace-conflict"
                 title={t("runtime.workspaceConflictTitle")}
@@ -4937,7 +5009,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                 }}
               />
             )
-            : decisionSurface === "close_active" && pendingClose ? (
+            : visibleDecisionSurface === "close_active" && pendingClose ? (
               <RuntimeDecisionCard
                 id="close-active"
                 title={t("runtime.closeTitle")}
@@ -4961,7 +5033,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                 }}
               />
             )
-            : decisionSurface === "clear_context" ? (
+            : visibleDecisionSurface === "clear_context" ? (
               <ClearContextCard
                 onCancel={cancelClearContext}
                 onConfirm={() => {
@@ -4974,12 +5046,12 @@ const [teamsOpen, setTeamsOpen] = useState(false);
             <div
               className={[
                 "composer-decision-host",
-                decisionSurface ? "composer-decision-host--hidden" : "",
+                composerSurfaceHidden ? "composer-decision-host--hidden" : "",
                 creationEmptyHero ? "composer-decision-host--creation-hero" : "",
               ].filter(Boolean).join(" ")}
-              hidden={Boolean(decisionSurface) || undefined}
-              inert={decisionSurface ? true : undefined}
-              aria-hidden={decisionSurface ? true : undefined}
+              hidden={composerSurfaceHidden || undefined}
+              inert={composerSurfaceHidden ? true : undefined}
+              aria-hidden={composerSurfaceHidden ? true : undefined}
             >
             {creationEmptyHero && (
               <h2 className="welcome-creation__headline">{t("welcome.creation.title")}</h2>
@@ -4988,6 +5060,9 @@ const [teamsOpen, setTeamsOpen] = useState(false);
               running={state.running || rewindCommitting}
               collaborationMode={collaborationMode}
               toolApprovalMode={toolApprovalMode}
+              qualityFloor={composerProfile.qualityFloor}
+              floorInferred={(activeTab?.floorInferred ?? false) && !composerProfile.pending.qualityFloor}
+              onSetQualityFloor={applyQualityFloor}
               turnPhase={state.turnPhase}
               goal={goal}
               goalStatus={state.meta?.goalStatus}
@@ -5035,12 +5110,14 @@ const [teamsOpen, setTeamsOpen] = useState(false);
               workspaceScopeKey={workspaceScopeKey}
               fileRefRefreshKey={composerFileRefRefreshKey}
               guidanceConsumedKey={latestGuidanceConsumed?.key}
+              guidanceConsumedItemId={latestGuidanceConsumed?.itemId}
               guidanceConsumedText={latestGuidanceConsumed?.text}
               guidanceQueuePreviewItems={guidanceQueueMockItems}
               showContextWindowRing={sidebarCreation}
               heroMode={creationEmptyHero}
               context={state.context}
               turnCost={state.turnCost}
+              turnRateBand={state.turnRateBand}
               currency={state.sessionCurrency}
               cacheHitTokens={state.usage?.cacheHitTokens}
               cacheMissTokens={state.usage?.cacheMissTokens}
@@ -5142,6 +5219,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                     sessionTurns={sessionTurns}
                     turnTokens={state.turnTotalTokens}
                     turnCost={state.turnCost}
+                    turnRateBand={state.turnRateBand}
                     balance={state.balance}
                     sessionGen={state.sessionGen}
                     refreshKey={dockRefreshKey + state.contextPanelSeq}
@@ -5187,6 +5265,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
           <aside
             className="terminal-drawer"
             aria-label={t("terminal.title")}
+            aria-hidden={!terminalPanelOpen} inert={!terminalPanelOpen ? true : undefined}
           >
             {terminalContentVisible && (
               <Suspense fallback={<div className="terminal-empty"><span className="terminal-empty__spinner" />{t("terminal.loading")}</div>}>
@@ -5194,11 +5273,13 @@ const [teamsOpen, setTeamsOpen] = useState(false);
                   tabId={activeTabId ?? ""}
                   cwd={state.meta?.cwd}
                   readOnly={Boolean(activeTab?.readOnly)}
+                  open={terminalPanelOpen} fitEnabled={terminalFitEnabled}
                   onClose={() => {
                     setTerminalPanelOpen(false);
                     saveTerminalPanelOpen(false);
                   }}
                   onAddOutput={(sessionId) => void addTerminalOutputToComposer(sessionId)}
+                  onAddToChat={addTerminalSelectionToComposer}
                 />
               </Suspense>
             )}
@@ -5241,6 +5322,7 @@ const [teamsOpen, setTeamsOpen] = useState(false);
             lastTurnOutputEstimated={state.lastTurnOutputEstimated}
             lastRequestTps={state.lastRequestTps}
             turnCost={state.turnCost}
+            turnRateBand={state.turnRateBand}
             cost={state.sessionCost}
             currency={state.sessionCurrency}
             modelLabel={state.meta?.label}

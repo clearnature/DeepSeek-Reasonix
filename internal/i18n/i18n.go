@@ -564,6 +564,12 @@ type Messages struct {
 	WorkModeSwitchingFmt                   string
 	WorkModeSwitchedFmt                    string
 	ProviderErrContextOverflowFmt          string // 400/413/422 shared-window overflow with numbers
+	ReadinessContinuing                    string // host is automatically finishing known readiness gaps
+	RateBandPeak                           string
+	RateBandOffPeak                        string
+	RateBandMixed                          string
+	ChatStatusCostLabel                    string
+	QualityFloorApplied                    string
 
 }
 

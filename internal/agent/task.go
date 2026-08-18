@@ -24,9 +24,9 @@ import (
 	"reasonix/internal/permission"
 	"reasonix/internal/planmode"
 	"reasonix/internal/provider"
+	"reasonix/internal/runtimepolicy"
 	"reasonix/internal/sandbox"
 	"reasonix/internal/sessiontemp"
-	"reasonix/internal/taskpolicy"
 	"reasonix/internal/tool"
 	"reasonix/internal/workspacelease"
 )
@@ -265,6 +265,7 @@ func (readOnlyBash) ReadOnly() bool { return true }
 type TaskTool struct {
 	prov                          provider.Provider
 	pricing                       *provider.Pricing
+	quoteContext                  *event.QuoteContext
 	parentReg                     *tool.Registry
 	maxSteps                      int
 	contextWindow                 int
@@ -317,6 +318,7 @@ type TaskTool struct {
 type TaskToolOptions struct {
 	Provider                              provider.Provider
 	Pricing                               *provider.Pricing
+	QuoteContext                          *event.QuoteContext
 	ParentRegistry                        *tool.Registry
 	MaxSteps                              int
 	ContextWindow                         int
@@ -347,6 +349,7 @@ func NewTaskToolWithOptions(opts TaskToolOptions) *TaskTool {
 		sysPrompt = DefaultTaskSystemPrompt
 	}
 	return &TaskTool{
+<<<<<<< HEAD
 		prov:                   opts.Provider,
 		pricing:                opts.Pricing,
 		parentReg:              opts.ParentRegistry,
@@ -364,6 +367,25 @@ func NewTaskToolWithOptions(opts TaskToolOptions) *TaskTool {
 		resolveProvider:        opts.ResolveProvider,
 		autoBackgroundizeAfter: opts.AutoBackgroundizeAfter,
 		maxSubagentDepth:       DefaultMaxSubagentDepth,
+=======
+		prov:             opts.Provider,
+		pricing:          opts.Pricing,
+		quoteContext:     opts.QuoteContext,
+		parentReg:        opts.ParentRegistry,
+		maxSteps:         opts.MaxSteps,
+		contextWindow:    opts.ContextWindow,
+		recentKeep:       opts.RecentKeep,
+		compactRatio:     opts.CompactRatio,
+		temperature:      opts.Temperature,
+		archiveDir:       opts.ArchiveDir,
+		keepPolicy:       opts.KeepPolicy,
+		sysPrompt:        sysPrompt,
+		gate:             opts.Gate,
+		subagentModel:    opts.SubagentModel,
+		subagentEffort:   opts.SubagentEffort,
+		resolveProvider:  opts.ResolveProvider,
+		maxSubagentDepth: DefaultMaxSubagentDepth,
+>>>>>>> origin/main-v2
 	}
 }
 
@@ -1424,6 +1446,9 @@ func (t *restrictedCapabilityProxy) check(args json.RawMessage) error {
 	if id == "" {
 		return fmt.Errorf("capability_id is required")
 	}
+	if id == sessionToolResultCapabilityID {
+		return nil
+	}
 	if !t.allowed[id] {
 		return fmt.Errorf("capability %q is outside this subagent's allowed-tools", id)
 	}
@@ -1464,55 +1489,6 @@ func (t *restrictedCapabilityProxy) Execute(ctx context.Context, args json.RawMe
 		return filterCapabilityListResult(out, t.servers), nil
 	}
 	return out, nil
-}
-
-// emptyCapabilityListResult is the fail-closed list payload: no server metadata.
-func emptyCapabilityListResult(note string) string {
-	if strings.TrimSpace(note) == "" {
-		note = "list is filtered to this subagent's allowed MCP servers."
-	}
-	b, err := json.MarshalIndent(map[string]any{
-		"servers": []listServerInfo{},
-		"note":    note,
-	}, "", "  ")
-	if err != nil {
-		return `{"servers":[],"note":"list is filtered to this subagent's allowed MCP servers."}`
-	}
-	return string(b)
-}
-
-// filterCapabilityListResult keeps only servers in the allowlist for restricted
-// proxies. Empty allowlist or unreadable payloads fail closed (empty server
-// list) so discovery never leaks the full configured MCP inventory.
-func filterCapabilityListResult(raw string, servers map[string]bool) string {
-	const baseNote = "list is filtered to this subagent's allowed MCP servers."
-	if len(servers) == 0 {
-		return emptyCapabilityListResult(baseNote + " No allowed MCP servers were resolved from the profile allowlist.")
-	}
-	var payload struct {
-		Servers []listServerInfo `json:"servers"`
-		Note    string           `json:"note"`
-	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return emptyCapabilityListResult(baseNote + " List payload was unreadable; returning no servers (fail-closed).")
-	}
-	filtered := make([]listServerInfo, 0, len(payload.Servers))
-	for _, s := range payload.Servers {
-		if servers[strings.TrimSpace(s.Name)] {
-			filtered = append(filtered, s)
-		}
-	}
-	payload.Servers = filtered
-	if payload.Note == "" {
-		payload.Note = baseNote
-	} else if !strings.Contains(payload.Note, "Filtered to this subagent") {
-		payload.Note = payload.Note + " Filtered to this subagent's allowed MCP servers."
-	}
-	b, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return emptyCapabilityListResult(baseNote + " Failed to encode filtered list (fail-closed).")
-	}
-	return string(b)
 }
 
 // validMCPServerCapabilityID accepts mcp-server:<non-empty-name> only.
@@ -1608,10 +1584,7 @@ func newSubagentCapabilityFrontend(parent *tool.Registry, runtime *MCPCapability
 	if !ok {
 		return nil
 	}
-	if uc, ok := inner.(*UseCapabilityTool); ok {
-		return uc.CloneForAgent(nil, nil)
-	}
-	return inner
+	return cloneCapabilityFrontend(inner)
 }
 
 // mcpCapabilityAllowlist converts profile/call tool names into capability IDs
@@ -1820,6 +1793,7 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 	return prov, pricing, ctxWin, nil
 }
 
+<<<<<<< HEAD
 // subagentAskerKey carries the leader's Asker to a spawned sub-agent so its
 // `ask` reaches the leader's approval chain instead of the headless fallback.
 type subagentAskerKey struct{}
@@ -1841,6 +1815,9 @@ func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *too
 		ctx = withSubagentAsker(ctx, asker)
 	}
 	slog.Info("subagent asker ctx", "model", modelRef, "callctx_asker", func() bool { _, _, a, ok := CallContext(ctx); return ok && a != nil }())
+=======
+func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver, writeRoots *sandbox.WritableRootSet) (string, error) {
+>>>>>>> origin/main-v2
 	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
 	if writeRoots != nil {
 		opts.WriteRoots = writeRoots
@@ -1879,6 +1856,10 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 		MaxSteps:                 maxSteps,
 		Temperature:              t.temperature,
 		Pricing:                  pricing,
+<<<<<<< HEAD
+=======
+		QuoteContext:             t.quoteContext,
+>>>>>>> origin/main-v2
 		UsageSource:              event.UsageSourceSubagent,
 		Gate:                     t.gate,
 		ContextWindow:            ctxWin,
@@ -1890,7 +1871,10 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 		ReasoningLanguage:        ReasoningLanguageFromContext(ctx),
 		SubagentDepth:            childDepth,
 		MaxSubagentDepth:         t.maxDepth(),
+<<<<<<< HEAD
 		AutoBackgroundizeAfter:   t.autoBackgroundizeAfter,
+=======
+>>>>>>> origin/main-v2
 		Ablation:                 t.ablation,
 		WorkspaceLease:           t.workspaceLease,
 		RecoveryGate:             t.recoveryGate,
@@ -1904,10 +1888,18 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 	// Writer children inherit the parent turn's frozen risk and closure floors.
 	// The parent publishes its policy into the run context; a child that never
 	// received it (direct unit construction) keeps its own derived policy.
+<<<<<<< HEAD
 	if parent, ok := taskpolicy.FromContext(ctx); ok {
 		p := parent
 		opts.InheritedTaskPolicy = &p
 
+=======
+	if inherited, ok := runtimepolicy.InheritedFromContext(ctx); ok {
+		copy := inherited
+		opts.InheritedExecution = &copy
+	} else if constraints, ok := runtimepolicy.FromContext(ctx); ok {
+		opts.InheritedExecution = &runtimepolicy.InheritedExecutionContext{Constraints: constraints}
+>>>>>>> origin/main-v2
 	}
 	return opts
 }

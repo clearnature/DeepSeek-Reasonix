@@ -7,7 +7,6 @@ import (
 	"reasonix/internal/completion"
 	"reasonix/internal/event"
 	"reasonix/internal/taskcontract"
-	"reasonix/internal/taskpolicy"
 )
 
 // emitTurnPhase publishes a content-free host phase for the active turn.
@@ -52,19 +51,12 @@ func (a *Agent) emitCompletionSummary(c *taskcontract.Contract, report completio
 		}
 	}
 	review := "none"
-	if a.turn.policySet {
-		switch a.turn.policy.Review {
-		case taskpolicy.ReviewNone:
-			review = "none"
-		default:
-			if a.task.ledger != nil {
-				if mut, ok := a.task.ledger.LatestSuccessfulMutationIndex(); ok {
-					if a.task.ledger.HasSuccessfulReviewAfter(mut) {
-						review = "passed"
-					} else if a.turn.policy.RequiresIndependentReview() {
-						review = "unavailable"
-					}
-				}
+	if a.task.ledger != nil {
+		if mut, ok := a.task.ledger.LatestSuccessfulMutationIndex(); ok {
+			if a.task.ledger.HasSuccessfulReviewAfter(mut) {
+				review = "passed"
+			} else if a.requiresIndependentReview() {
+				review = "unavailable"
 			}
 		}
 	}
@@ -85,7 +77,11 @@ func (a *Agent) emitCompletionSummary(c *taskcontract.Contract, report completio
 		}
 	}
 	gaps = completionGapKinds(gaps, report)
+<<<<<<< HEAD
 	constraintDegraded := a.turn.policySet && (a.turn.policy.Constraints.ForbidTests || len(a.turn.policy.Constraints.AllowedChecks) > 0)
+=======
+	constraintDegraded := a.turn.constraints.ForbidTests || len(a.turn.constraints.AllowedChecks) > 0
+>>>>>>> origin/main-v2
 	summaryVerdict := verdict.String()
 	switch verdict {
 	case taskcontract.VerdictComplete:
@@ -103,7 +99,7 @@ func (a *Agent) emitCompletionSummary(c *taskcontract.Contract, report completio
 			// Preset is a deprecated wire-compat field: it is pinned to the
 			// historical default so one-version-old clients keep parsing. New
 			// surfaces read the verdict/check/review/gap fields instead.
-			Preset:             string(agentpreset.Balanced),
+			Preset:             string(agentpreset.Standard),
 			Verdict:            summaryVerdict,
 			Mutations:          mutations,
 			ChecksPassed:       passed,

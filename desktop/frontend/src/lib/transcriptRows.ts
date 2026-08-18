@@ -11,7 +11,7 @@
 // "expanded"), and preference switches applying to folds already on screen.
 
 import { isHostRecoveryGuidance } from "./hostRecoverySteer";
-
+import { estimateTranscriptTextHeight } from "./transcriptRowEstimates";
 import { isBatchedReadOnlyTool, isSteerNoticeText, type ExtensionItem, type Item } from "./useController";
 import { appendTurnActionCopyText } from "./turnActionCopy";
 import { isCreationGroupableTool, toolGroupKind, type ToolGroupKind } from "../components/ToolGroup";
@@ -608,39 +608,6 @@ export function splitTranscriptLiveRows(
 
 // ── Measurement / identity helpers ────────────────────────────────────────────
 
-const TRANSCRIPT_ESTIMATED_LINE_CHARS = 88;
-const TRANSCRIPT_ESTIMATED_LINE_HEIGHT = 20;
-
-// Long assistant answers above this many characters default to a folded
-// preview row (fixed height + expand button) so upward scrolling never
-// rebuilds a multi-thousand-px markdown DOM subtree per frame.
-export const LONG_ANSWER_FOLD_THRESHOLD_CHARS = 2000;
-const TRANSCRIPT_MAX_ESTIMATED_TEXT_HEIGHT = 12_000;
-
-export function isLongAnswer(text: string | undefined): boolean {
-  return (text?.length ?? 0) > LONG_ANSWER_FOLD_THRESHOLD_CHARS;
-}
-
-function estimateTranscriptTextSize(text: string | undefined, minimum: number): number {
-  if (!text) return minimum;
-  const wrappedLines = Math.ceil(text.length / TRANSCRIPT_ESTIMATED_LINE_CHARS);
-  const cappedLines = Math.ceil(
-    (TRANSCRIPT_MAX_ESTIMATED_TEXT_HEIGHT - 44) / TRANSCRIPT_ESTIMATED_LINE_HEIGHT,
-  );
-  if (wrappedLines >= cappedLines) return TRANSCRIPT_MAX_ESTIMATED_TEXT_HEIGHT;
-  let explicitLines = 1;
-  for (let index = 0; index < text.length; index += 1) {
-    if (text.charCodeAt(index) !== 10) continue;
-    explicitLines += 1;
-    if (explicitLines >= cappedLines) return TRANSCRIPT_MAX_ESTIMATED_TEXT_HEIGHT;
-  }
-  const lines = Math.max(explicitLines, wrappedLines);
-  return Math.min(
-    TRANSCRIPT_MAX_ESTIMATED_TEXT_HEIGHT,
-    Math.max(minimum, 44 + lines * TRANSCRIPT_ESTIMATED_LINE_HEIGHT),
-  );
-}
-
 /** Ballpark row heights; Virtuoso replaces them with real measurements on mount. */
 export function estimateTranscriptRowSize(row: TranscriptRow | undefined): number {
   if (!row) return 48;
@@ -648,11 +615,11 @@ export function estimateTranscriptRowSize(row: TranscriptRow | undefined): numbe
     case "older-history":
       return 44;
     case "user":
-      return estimateTranscriptTextSize(row.item.text, 88);
+      return estimateTranscriptTextHeight(row.item.text, 88);
     case "process-header":
       return 28;
     case "reasoning":
-      return estimateTranscriptTextSize(row.item.reasoning, 96);
+      return estimateTranscriptTextHeight(row.item.reasoning, 96);
     case "tool":
       return 96;
     case "tool-batch":
@@ -666,10 +633,7 @@ export function estimateTranscriptRowSize(row: TranscriptRow | undefined): numbe
     case "compaction":
       return 36;
     case "answer":
-      if (isLongAnswer(row.item.text)) {
-        return Math.min(estimateTranscriptTextSize(row.item.text, 160), 200);
-      }
-      return estimateTranscriptTextSize(row.item.text, 160);
+      return estimateTranscriptTextHeight(row.item.text, 160);
     case "extension":
       return 160;
     case "turn-actions":

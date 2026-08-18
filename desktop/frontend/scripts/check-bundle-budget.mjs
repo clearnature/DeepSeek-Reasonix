@@ -83,19 +83,20 @@ for (const path of localeChunks) {
   // Task Monitor, billing, indexed history, Task Center, Extension UI, and
   // runtime controls plus execution-setting receipts add localized copy. The
   // write-access approval card adds four scoped actions and a home-risk
-  // warning (~0.15 KiB gzip, +0.27% over the old 54.75 gate).
+  // warning (~0.15 KiB gzip, +0.27% over the old 54.75 gate). Context
+  // compaction settings add 40 bytes gzip of policy guidance to simplified
+  // Chinese, while scheduled billing adds compact rate-band labels/tooltips.
+  // The three StepFun presets add localized names/descriptions (~0.1 KiB
+  // gzip); the two pay-as-you-go presets add the same again. The delivery
+  // floor segmented control adds two labels plus one explanatory tooltip,
+  // measured at 23 B gzip for zh and 8 B for zh-TW. Retain all with the
+  // smallest 0.1 KiB ratchet increments.
   const budget = name.startsWith("zh-TW-") ? 56.2 * 1024 : 55.5 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
 const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
   .reduce((total, path) => total + statSync(path).size, 0);
-// Native Web Animations and frame-batched scrolling avoid an eager animation
-// runtime. Goal request observability plus transcript scroll arbitration,
-// logical selection state/DOM adapters, native input-session ownership,
-// durable inbox recovery, indexed catalogs, Task Center, structured billing,
-// startup config warnings, hover-revealed turn-action labels, and compact
-// execution-setting receipts add small always-available contracts. Keep the
 // The maintained Virtuoso engine adds 49.1 KiB raw (2.2%) over the previous
 // 2268.7 KiB gate. Retain 1% headroom to bound hash/minifier drift.
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, 2_341 * 1024);

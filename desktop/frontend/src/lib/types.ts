@@ -5,7 +5,7 @@ import type { Todo } from "./tools";
 import type { ContextBudgetInfo, ContextMaintenanceInfo, WireContextMaintenance } from "./contextMaintenanceTypes";
 import type { WireApproval } from "./approvalTypes";
 export type { ContextBudgetInfo, ContextMaintenanceInfo, ContextMaintenanceReceipt, WireContextMaintenance } from "./contextMaintenanceTypes";
-export type { ProjectRuntimeTopic, ProjectTopicKey, ProjectTopicPage, ProjectTopicPageRequest, ProjectTreeChangedV2, ProjectTreeRuntimeSnapshot, ProjectTreeSnapshot, SessionCatalogBindings, SessionCatalogStatus, SessionReference } from "./sessionCatalogTypes";
+export type { ProjectGroupsSnapshot, ProjectRuntimeTopic, ProjectTopicKey, ProjectTopicPage, ProjectTopicPageRequest, ProjectTreeChangedV2, ProjectTreeOrganizationBindings, ProjectTreeRuntimeSnapshot, ProjectTreeSnapshot, SessionCatalogBindings, SessionCatalogStatus, SessionGroup, SessionReference } from "./sessionCatalogTypes";
 export type EventKind =
   | "turn_started"
   | "reasoning"
@@ -167,6 +167,8 @@ export interface CostQuote {
   usageSource?: string;
   pricingFingerprint?: string;
   rateDate?: string;
+  rateBand?: "peak" | "off_peak" | "mixed" | string;
+  ratedAt?: string;
   incompleteReason?: string;
   legacyEstimate?: boolean;
   catalogSource?: string;
@@ -352,6 +354,8 @@ export interface WireEvent {
   completion?: WireCompletionSummary;
   tabId?: string; // Go's tabEventSink tags events for the correct per-tab reducer.
   runtimeEpoch?: string;
+  /** Unix milliseconds recorded by the desktop host when this turn began. */
+  turnStartedAt?: number;
   sessionHitTokens?: number;
   sessionMissTokens?: number;
   sessionCost?: number;
@@ -442,6 +446,8 @@ export interface TabMeta {
   ready: boolean;
   runtime?: SessionRuntimeView;
   running: boolean;
+  /** Unix milliseconds for the currently active foreground turn. */
+  turnStartedAt?: number;
   pendingPrompt?: boolean;
   backgroundJobs?: number;
   cancelRequested?: boolean;
@@ -450,8 +456,9 @@ export interface TabMeta {
   collaborationMode?: CollaborationMode;
   toolApprovalMode?: ToolApprovalMode;
   tokenMode?: TokenMode;
-  /** Canonical role setting (light|balanced|delivery). Prefer over tokenMode. */
-  agentPreset?: AgentPreset;
+  agentPreset?: AgentPreset; // canonical role; prefer qualityFloor
+  qualityFloor?: QualityFloor; // absent means standard
+  floorInferred?: boolean; // facts, not user choice, put the session at delivery
   goal?: string;
   goalStatus?: GoalStatus;
   recovered?: boolean;
@@ -504,6 +511,7 @@ export interface ProjectNode {
   running?: boolean;
   status?: ProjectTopicStatus;
   pinned?: boolean;
+  sortOrder?: number;
   recovered?: boolean;
   recoveryReason?: string;
   recoveryDigest?: string;
@@ -513,6 +521,7 @@ export interface ProjectNode {
   recoveryUnresolvedCount?: number;
   recoveryCleanupEligibleCount?: number;
   isolatedWorktree?: boolean;
+  runtimeOnly?: boolean;
   children?: ProjectNode[];
 }
 
@@ -918,8 +927,9 @@ export interface Meta {
   collaborationMode?: CollaborationMode;
   toolApprovalMode?: ToolApprovalMode;
   tokenMode?: TokenMode;
-  /** Canonical role setting (light|balanced|delivery). Prefer over tokenMode. */
-  agentPreset?: AgentPreset;
+  agentPreset?: AgentPreset; // canonical role; prefer qualityFloor
+  qualityFloor?: QualityFloor; // absent means standard
+  floorInferred?: boolean; // facts, not user choice, put the session at delivery
   goal?: string;
   goalStatus?: GoalStatus;
   goalRuntime?: GoalRuntime;
@@ -928,11 +938,12 @@ export interface Meta {
 
 export type CollaborationMode = "normal" | "plan" | "goal";
 export type ToolApprovalMode = "ask" | "auto" | "yolo";
-// TokenMode is the dual-write wire value for Agent role settings (角色设定).
-// Canonical product ids are light|balanced|delivery; economy/full remain one
-// compatibility version of persisted/API values.
+// TokenMode is the dual-write wire value for the session quality floor.
+// The floor itself is standard|delivery; light and its aliases fold to
+// standard, and full/economy remain one compatibility version of old values.
 export type TokenMode = "full" | "economy" | "delivery" | "light" | "balanced";
 export type AgentPreset = "light" | "balanced" | "delivery";
+export type QualityFloor = "standard" | "delivery";
 export type GoalStatus = "running" | "complete" | "blocked" | "stopped";
 // Optional Goal runtime summary; absent for old hosts or when no goal is active.
 export interface GoalRuntime {
@@ -2363,28 +2374,4 @@ export interface TaskEvent {
   runtime_state?: RuntimeState;
   error_code?: string;
   error_summary?: string;
-}
-
-// JobPanelView is one background job as the task panel renders it: identity,
-// status, the stalled hint, and a bounded non-consuming tail. It is a strict
-// projection of the desktop bridge's JobPanelJobsForTab (desktop/app.go
-// JobPanelView) — capturing it never consumes readOffset/resultRead, so
-// polling the panel cannot steal model output from wait/bash_output (P2 red
-// line). `status` is the job lifecycle state ("running" | "completed" |
-// "failed" | ...); `stalled` only ever decorates a running job.
-export interface JobPanelView {
-  id: string;
-  kind: string; // "bash" | "test" | ...
-  label: string;
-  status: string;
-  stalled: boolean;
-  tail: string; // bounded rune-safe snapshot tail (backend caps at 4KiB)
-}
-
-// JobOutputView is one job's bounded output for the task panel detail view.
-// The output rides the same non-consuming snapshot tail as the list, so
-// opening a job detail never consumes the model's wait/bash_output stream.
-export interface JobOutputView {
-  id: string;
-  output: string;
 }

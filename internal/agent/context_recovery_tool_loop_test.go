@@ -32,6 +32,10 @@ type repeatedOverflowProvider struct {
 	overflows    int
 	summaries    int
 	rejectedAt   map[int]bool
+<<<<<<< HEAD
+=======
+	requestsAt   map[int]int
+>>>>>>> origin/main-v2
 	maxToolCalls int
 }
 
@@ -49,13 +53,21 @@ func (p *repeatedOverflowProvider) Stream(_ context.Context, req provider.Reques
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+<<<<<<< HEAD
 	if len(req.Tools) == 0 {
+=======
+	if len(req.Messages) > 0 && strings.Contains(req.Messages[len(req.Messages)-1].Content, "Compact the preceding conversation prefix") {
+>>>>>>> origin/main-v2
 		p.summaries++
 		return chunks(
 			provider.Chunk{Type: provider.ChunkText, Text: "- goal: finish the tool loop\n- pending: continue"},
 			provider.Chunk{Type: provider.ChunkDone},
 		), nil
 	}
+<<<<<<< HEAD
+=======
+	p.requestsAt[p.toolCalls]++
+>>>>>>> origin/main-v2
 
 	if (p.toolCalls == 3 || p.toolCalls == 6) && !p.rejectedAt[p.toolCalls] {
 		p.rejectedAt[p.toolCalls] = true
@@ -94,8 +106,13 @@ func chunks(items ...provider.Chunk) <-chan provider.Chunk {
 	return ch
 }
 
+<<<<<<< HEAD
 func TestToolLoopRecoversFromTwoHardOverflowsInOneTurn(t *testing.T) {
 	prov := &repeatedOverflowProvider{rejectedAt: make(map[int]bool), maxToolCalls: 9}
+=======
+func TestToolLoopRetriesOnlyAfterOverflowMaintenanceProgress(t *testing.T) {
+	prov := &repeatedOverflowProvider{rejectedAt: make(map[int]bool), requestsAt: make(map[int]int), maxToolCalls: 9}
+>>>>>>> origin/main-v2
 	reg := tool.NewRegistry()
 	reg.Add(overflowLoopTool{output: strings.Repeat("large deterministic tool output. ", 700)})
 
@@ -112,8 +129,14 @@ func TestToolLoopRecoversFromTwoHardOverflowsInOneTurn(t *testing.T) {
 		MaxOutputTokens: 1024,
 	}, sink)
 
+<<<<<<< HEAD
 	if err := a.Run(context.Background(), "keep using the tool until the provider says the task is done"); err != nil {
 		t.Fatalf("Run after repeated context overflows: %v", err)
+=======
+	err := a.Run(context.Background(), "keep using the tool until the provider says the task is done")
+	if err == nil {
+		t.Fatal("overflow without new projection progress unexpectedly retried")
+>>>>>>> origin/main-v2
 	}
 
 	prov.mu.Lock()
@@ -121,10 +144,18 @@ func TestToolLoopRecoversFromTwoHardOverflowsInOneTurn(t *testing.T) {
 	if prov.overflows != 2 {
 		t.Fatalf("provider overflows = %d, want 2", prov.overflows)
 	}
+<<<<<<< HEAD
 	if prov.toolCalls != prov.maxToolCalls {
 		t.Fatalf("tool calls = %d, want %d", prov.toolCalls, prov.maxToolCalls)
 	}
 	if prov.summaries < 2 || applied < 2 {
 		t.Fatalf("summaries=%d applied=%d, want at least two progress-making recoveries", prov.summaries, applied)
+=======
+	if prov.requestsAt[3] != 2 || prov.requestsAt[6] != 1 {
+		t.Fatalf("requests at overflow points = %v, want one retry after progress and none without progress", prov.requestsAt)
+	}
+	if prov.summaries > 1 || applied > 1 {
+		t.Fatalf("summaries=%d applied=%d, want no repeated summary without new projection input", prov.summaries, applied)
+>>>>>>> origin/main-v2
 	}
 }

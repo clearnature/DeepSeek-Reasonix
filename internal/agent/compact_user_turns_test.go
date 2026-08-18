@@ -51,23 +51,19 @@ func noticeMentioning(events []event.Event, substr string) (event.Event, bool) {
 // A turn past the budget is the one case where compaction still hands a user's
 // own words to the summarizer. That has to be visible: the projection reads as
 // complete either way, so silence here is indistinguishable from success.
-func TestCompactionReportsDroppedUserTurns(t *testing.T) {
+func TestCompactionFoldsAllOldUserTurnsWithoutKeepNotice(t *testing.T) {
 	oversize := strings.Repeat("constraint detail. ", 500) // ~2375 tokens, past the per-turn ceiling
 	events := compactWithSink(t, retentionSession(oversize))
 
-	notice, ok := noticeMentioning(events, "[[keep]]")
-	if !ok {
-		t.Fatalf("a dropped user turn was not reported; events=%+v", noticeTexts(events))
-	}
-	if notice.Level != event.LevelWarn {
-		t.Errorf("dropped-turn notice level = %v, want warn", notice.Level)
+	if _, ok := noticeMentioning(events, "[[keep]]"); ok {
+		t.Fatalf("deprecated keep notice was emitted; events=%+v", noticeTexts(events))
 	}
 	tele, ok := noticeMentioning(events, "user_dropped=")
 	if !ok {
 		t.Fatal("compaction telemetry carries no user-turn retention counts")
 	}
-	if !strings.Contains(tele.Detail, "user_dropped=1") {
-		t.Errorf("telemetry detail = %q, want user_dropped=1", tele.Detail)
+	if !strings.Contains(tele.Detail, "user_dropped=2") {
+		t.Errorf("telemetry detail = %q, want user_dropped=2", tele.Detail)
 	}
 }
 
@@ -83,6 +79,7 @@ func TestCompactionSilentWhenEveryUserTurnKept(t *testing.T) {
 	if !ok {
 		t.Fatal("compaction telemetry carries no user-turn retention counts")
 	}
+<<<<<<< HEAD
 	if !strings.Contains(tele.Detail, "user_dropped=0") {
 		t.Errorf("telemetry detail = %q, want user_dropped=0", tele.Detail)
 	}
@@ -112,6 +109,10 @@ func TestSubagentInheritsUserTurnRetention(t *testing.T) {
 	}, 0, 0)
 	if retention.Kept != 1 || len(kept) != 1 {
 		t.Fatalf("kept=%d retention=%+v, want the parent's instruction held verbatim", len(kept), retention)
+=======
+	if !strings.Contains(tele.Detail, "user_dropped=2") {
+		t.Errorf("telemetry detail = %q, want user_dropped=2", tele.Detail)
+>>>>>>> origin/main-v2
 	}
 }
 

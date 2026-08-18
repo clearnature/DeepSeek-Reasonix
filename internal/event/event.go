@@ -162,13 +162,15 @@ const (
 	StreamAttemptCommit  StreamAttemptAction = "commit"
 )
 
-// RetryScope distinguishes connection+header retries from body-phase stream
-// retries. Older clients ignore the empty/unknown value.
+// RetryScope distinguishes connection+header retries, body-phase stream
+// retries, and host-classified protocol recovery. Older clients ignore an
+// unknown value and still render the generic retry state.
 type RetryScope string
 
 const (
-	RetryScopeHeaders RetryScope = "headers"
-	RetryScopeStream  RetryScope = "stream"
+	RetryScopeHeaders  RetryScope = "headers"
+	RetryScopeStream   RetryScope = "stream"
+	RetryScopeProtocol RetryScope = "protocol"
 )
 
 // StreamAttemptInfo carries host-local bookkeeping for one sampling attempt.
@@ -611,6 +613,33 @@ type ReadinessAuditSink interface {
 	RecordReadinessAudit(evidence.ReadinessAudit)
 }
 
+// AnchorSafetyAudit is a content-free shadow decision for an anchor-based
+// writer. It contains only bounded enums/counts; paths, anchors, source text,
+// and digests never leave the host-side observation ledger.
+type AnchorSafetyAudit struct {
+	Mode                  string
+	TaskMode              string
+	RangeLines            int
+	ObservationAge        int
+	LegacyAllowed         bool
+	ShadowAllowed         bool
+	Reason                string
+	SameBatchReadRejected bool
+}
+
+type AnchorSafetyAuditSink interface {
+	RecordAnchorSafetyAudit(AnchorSafetyAudit)
+}
+
+func RecordAnchorSafetyAudit(s Sink, a AnchorSafetyAudit) {
+	if nilutil.IsNil(s) {
+		return
+	}
+	if as, ok := s.(AnchorSafetyAuditSink); ok {
+		as.RecordAnchorSafetyAudit(a)
+	}
+}
+
 // TurnCompletionSink is an optional sink capability for synchronous controller
 // entry points that do not publish a TurnDone UI event. It keeps accounting
 // independent from frontend event lifecycles without synthesizing an event that
@@ -653,6 +682,10 @@ const (
 	ProtocolRecoveryMissingReasoningRetryReplaced   ProtocolRecoveryKind = "missing_reasoning_retry_replaced_response"
 	ProtocolRecoveryMissingReasoningRetrySuppressed ProtocolRecoveryKind = "missing_reasoning_retry_suppressed"
 	ProtocolRecoveryMissingReasoningFallback        ProtocolRecoveryKind = "missing_reasoning_fallback_used"
+	ProtocolRecoveryReasoningOverflowDetected       ProtocolRecoveryKind = "reasoning_overflow_detected"
+	ProtocolRecoveryClientToolRejected              ProtocolRecoveryKind = "client_tool_rejected_unreplayable_reasoning"
+	ProtocolRecoveryServerSearchSalvaged            ProtocolRecoveryKind = "server_search_history_salvaged"
+	ProtocolRecoveryHistoryRepaired                 ProtocolRecoveryKind = "unreplayable_history_repaired"
 )
 
 type ProtocolRecoveryAudit struct {
@@ -774,7 +807,7 @@ type DelegationAdmissionAudit struct {
 	Tool    string
 	Verdict string // "allow" | "deny"
 	Reason  string // e.g. "local_fix_no_external_need"
-	Intent  string // taskintent class of the turn
+	Intent  string // compatibility field; no longer classified from prompt text
 }
 
 // DelegationAdmissionSink is an optional sink capability; implementations

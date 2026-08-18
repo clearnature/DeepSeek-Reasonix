@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"encoding/json"
-	"fmt"
 	"strings"
 
 	"reasonix/internal/completion"
@@ -11,7 +9,6 @@ import (
 	"reasonix/internal/instruction"
 	"reasonix/internal/plancontract"
 	"reasonix/internal/taskcontract"
-	"reasonix/internal/taskintent"
 )
 
 // buildShadowContract replays a finished turn's receipts into a task
@@ -20,6 +17,7 @@ import (
 // are what the work agreed to, and todo titles are only a restatement of the
 // steps. Without a plan the todo list stands in, as it always did.
 func buildShadowContract(input string, receipts []evidence.Receipt, plan *plancontract.Plan, projectChecks ...instruction.VerifyCheck) *taskcontract.Contract {
+<<<<<<< HEAD
 	var c *taskcontract.Contract
 	switch {
 	case plan != nil:
@@ -30,19 +28,35 @@ func buildShadowContract(input string, receipts []evidence.Receipt, plan *planco
 	default:
 		c = taskcontract.New(input)
 	}
+=======
+	return buildShadowContractWithPolicy(input, receipts, plan, false, false, false, "", projectChecks...)
+}
+
+func buildShadowContractWithPolicy(
+	input string,
+	receipts []evidence.Receipt,
+	plan *plancontract.Plan,
+	goalActive bool,
+	testsForbidden bool,
+	requireFullVerification bool,
+	workspaceRoot string,
+	projectChecks ...instruction.VerifyCheck,
+) *taskcontract.Contract {
+	_ = input
+>>>>>>> origin/main-v2
 	var todos []evidence.TodoItem
 	for _, r := range receipts {
 		if len(r.Todos) > 0 {
 			todos = r.Todos
 		}
 	}
-	// Todo titles restate the plan's steps, so they only become requirements
-	// when no plan supplied the real acceptance criteria.
-	if plan == nil {
-		for i, todo := range todos {
-			c.AddRequirement(fmt.Sprintf("t%d", i+1), todo.Content, true)
+	var checks []string
+	for _, check := range projectChecks {
+		if command := strings.TrimSpace(check.Command); command != "" {
+			checks = append(checks, command)
 		}
 	}
+<<<<<<< HEAD
 	for _, check := range projectChecks {
 		if command := strings.TrimSpace(check.Command); command != "" {
 			c.AddCheck(command)
@@ -104,7 +118,24 @@ func criterionEvidenceKind(kind string) taskcontract.EvidenceKind {
 		return taskcontract.EvidenceMutation
 	default:
 		return taskcontract.EvidenceRead
+=======
+	var planPtr *taskcontract.PlanFacts
+	if plan != nil {
+		facts := planFacts(*plan)
+		planPtr = &facts
+>>>>>>> origin/main-v2
 	}
+	return taskcontract.Rebuild(taskcontract.RebuildFacts{
+		Plan:                    planPtr,
+		Todos:                   todos,
+		ProjectChecks:           checks,
+		Receipts:                receipts,
+		TestsForbidden:          testsForbidden,
+		RequireFullVerification: requireFullVerification,
+		WorkspaceRoot:           workspaceRoot,
+		HasApprovedPlan:         plan != nil,
+		HasActiveGoal:           goalActive,
+	})
 }
 
 func contractShadowAudit(c *taskcontract.Contract) event.ContractShadowAudit {
@@ -121,7 +152,7 @@ func contractShadowAudit(c *taskcontract.Contract) event.ContractShadowAudit {
 		}
 	}
 	return event.ContractShadowAudit{
-		Intent:                intentName(c.Intent),
+		Intent:                "",
 		Requirements:          len(c.Requirements),
 		RequirementsSatisfied: reqDone,
 		Checks:                len(c.Checks),
@@ -133,21 +164,6 @@ func contractShadowAudit(c *taskcontract.Contract) event.ContractShadowAudit {
 	}
 }
 
-func intentName(i taskintent.Intent) string {
-	switch i {
-	case taskintent.Advisory:
-		return "advisory"
-	case taskintent.ObservableRead:
-		return "observable_read"
-	case taskintent.Mutation:
-		return "mutation"
-	case taskintent.PersistentAction:
-		return "persistent_action"
-	default:
-		return "conversation"
-	}
-}
-
 // LiveContract is the contract as it stands right now: the same pure replay the
 // turn ends with, run against the receipts recorded so far. Rebuilding beats
 // keeping incremental state because one code path serves the per-round view and
@@ -156,7 +172,20 @@ func (a *Agent) LiveContract() *taskcontract.Contract {
 	if a == nil || a.task.ledger == nil {
 		return nil
 	}
+<<<<<<< HEAD
 	return buildShadowContract(a.turn.turnInput, a.task.ledger.Receipts(), a.planContractSnapshot(), a.projectChecks...)
+=======
+	return buildShadowContractWithPolicy(
+		a.turn.turnInput,
+		a.task.ledger.Receipts(),
+		a.planContractSnapshot(),
+		a.turn.deliveryScopeActive,
+		a.turn.constraints.ForbidTests,
+		a.turn.constraints.RequireFullVerification,
+		a.writeWorkspaceRoot,
+		a.projectChecks...,
+	)
+>>>>>>> origin/main-v2
 }
 
 // observeContractRound records the contract after one tool round, so a
@@ -177,7 +206,20 @@ func (a *Agent) emitTurnShadows(input string) {
 	if a.task.ledger == nil {
 		return
 	}
+<<<<<<< HEAD
 	c := buildShadowContract(input, a.task.ledger.Receipts(), a.planContractSnapshot(), a.projectChecks...)
+=======
+	c := buildShadowContractWithPolicy(
+		input,
+		a.task.ledger.Receipts(),
+		a.planContractSnapshot(),
+		a.turn.deliveryScopeActive,
+		a.turn.constraints.ForbidTests,
+		a.turn.constraints.RequireFullVerification,
+		a.writeWorkspaceRoot,
+		a.projectChecks...,
+	)
+>>>>>>> origin/main-v2
 	// Prefer the live contract when present so Suppressed/Partial state is not
 	// lost in the pure replay path.
 	if live := a.LiveContract(); live != nil && (live.HasSuppressed() || len(live.Requirements) > 0 || len(live.Checks) > 0) {

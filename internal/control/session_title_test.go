@@ -11,9 +11,36 @@ import (
 )
 
 type sessionTitleProviderStub struct {
+<<<<<<< HEAD
 	out      string
 	err      error
 	requests []provider.Request
+=======
+	out          string
+	reasoning    string
+	finishReason string
+	err          error
+	requests     []provider.Request
+}
+
+type sessionTitleResolverStub struct {
+	descriptors []provider.Descriptor
+	provider    provider.Provider
+	resolve     func(provider.Selection) (provider.Provider, error)
+	selections  []provider.Selection
+}
+
+func (r *sessionTitleResolverStub) Catalog() []provider.Descriptor {
+	return append([]provider.Descriptor(nil), r.descriptors...)
+}
+
+func (r *sessionTitleResolverStub) Resolve(selection provider.Selection) (provider.Provider, error) {
+	r.selections = append(r.selections, selection)
+	if r.resolve != nil {
+		return r.resolve(selection)
+	}
+	return r.provider, nil
+>>>>>>> origin/main-v2
 }
 
 func (p *sessionTitleProviderStub) Name() string { return "session-title-stub" }
@@ -23,10 +50,23 @@ func (p *sessionTitleProviderStub) Stream(_ context.Context, req provider.Reques
 	if p.err != nil {
 		return nil, p.err
 	}
+<<<<<<< HEAD
 	ch := make(chan provider.Chunk, 2)
 	if p.out != "" {
 		ch <- provider.Chunk{Type: provider.ChunkText, Text: p.out}
 	}
+=======
+	ch := make(chan provider.Chunk, 4)
+	if p.reasoning != "" {
+		ch <- provider.Chunk{Type: provider.ChunkReasoning, Text: p.reasoning}
+	}
+	if p.out != "" {
+		ch <- provider.Chunk{Type: provider.ChunkText, Text: p.out}
+	}
+	if p.finishReason != "" {
+		ch <- provider.Chunk{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: p.finishReason}}
+	}
+>>>>>>> origin/main-v2
 	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
@@ -57,7 +97,11 @@ func TestGenerateSessionTitleUsesBoundedNoToolRequest(t *testing.T) {
 		t.Fatalf("requests = %d", len(prov.requests))
 	}
 	req := prov.requests[0]
+<<<<<<< HEAD
 	if len(req.Tools) != 0 || req.MaxTokens != 128 || len(req.Messages) != 2 {
+=======
+	if len(req.Tools) != 0 || req.MaxTokens != 512 || req.EffortOverride != "low" || len(req.Messages) != 2 {
+>>>>>>> origin/main-v2
 		t.Fatalf("request = %+v", req)
 	}
 	if req.Messages[0].Content != sessionTitleSystemPrompt {
@@ -65,6 +109,41 @@ func TestGenerateSessionTitleUsesBoundedNoToolRequest(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
+=======
+func TestGenerateSessionTitleDisablesAdvertisedReasoning(t *testing.T) {
+	thinking := &sessionTitleProviderStub{reasoning: "The transcript is about", finishReason: "length"}
+	disabled := &sessionTitleProviderStub{out: "Short title", finishReason: "stop"}
+	resolver := &sessionTitleResolverStub{
+		descriptors: []provider.Descriptor{{
+			Ref:     "test/title-model",
+			Efforts: []string{"disabled", "high", "max"},
+		}},
+		resolve: func(selection provider.Selection) (provider.Provider, error) {
+			if selection.Effort != nil && *selection.Effort == "disabled" {
+				return disabled, nil
+			}
+			return thinking, nil
+		},
+	}
+	ctrl := New(Options{
+		ModelRef:         "test/title-model",
+		Sink:             event.Discard,
+		ProviderResolver: resolver,
+	})
+	if _, err := ctrl.GenerateSessionTitle(context.Background(), "User: diagnose an empty generated title"); err != nil {
+		t.Fatalf("GenerateSessionTitle: %v", err)
+	}
+	if len(resolver.selections) != 1 {
+		t.Fatalf("provider resolutions = %d, want 1", len(resolver.selections))
+	}
+	effort := resolver.selections[0].Effort
+	if effort == nil || *effort != "disabled" {
+		t.Fatalf("title effort = %v, want disabled", effort)
+	}
+}
+
+>>>>>>> origin/main-v2
 func TestGenerateSessionTitleBoundsTranscriptAndOutput(t *testing.T) {
 	prov := &sessionTitleProviderStub{out: strings.Repeat("long title ", 20)}
 	ctrl := sessionTitleTestController(prov, event.Discard)

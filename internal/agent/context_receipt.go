@@ -15,7 +15,7 @@ func (a *Agent) contextMaintenanceInputHash(visible []provider.Message) string {
 	if a == nil {
 		return ""
 	}
-	seed := a.currentPromptCacheKey() + "\n" + providerVisibleFingerprint(provider.ModelMessages(visible))
+	seed := a.currentPromptCacheKey() + "\n" + providerVisibleFingerprint(modelInputMessages(visible))
 	sum := sha256.Sum256([]byte(seed))
 	return hex.EncodeToString(sum[:])
 }
@@ -135,17 +135,27 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 }
 
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
+<<<<<<< HEAD
 	t.TokPerChar = a.tokPerChar()
 	detail := fmt.Sprintf("trigger=%s mode=%s status=%s cache=%s est=%d src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d tpc=%.3f elapsed_ms=%d reason=%s user_kept=%d user_dropped=%d pref_hash=%s results=%d saved_chars=%d",
 		t.Trigger, t.Mode, t.Status, t.CacheState, t.EstTokens, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
+=======
+	detail := fmt.Sprintf("trigger=%s mode=%s summary_input=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d",
+		t.Trigger, t.Mode, t.SummaryInputMode, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
+>>>>>>> origin/main-v2
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount,
 		t.TokPerChar, t.ElapsedMs, t.Reason, t.UserTurnsKept, t.UserTurnsDropped, t.PrefixHash, t.Results, t.SavedChars)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}
 	if t.Error != "" {
+<<<<<<< HEAD
 		// Errors must reach the stats file too (Recorder persists err_type); a
 		// degraded fold still freed the context, so it is not a failure.
+=======
+		// CompactionModeDegraded remains readable for legacy telemetry, although
+		// new summarizer failures never install a degraded projection.
+>>>>>>> origin/main-v2
 		if t.Mode != CompactionModeDegraded {
 			slog.Warn("agent: compaction failed", "detail", detail+" err_type="+t.Error)
 		}

@@ -9,8 +9,12 @@ import (
 )
 
 type contextRecoveryBudget struct {
+<<<<<<< HEAD
 	budgetRetries  int
 	compactRetries int
+=======
+	retries int
+>>>>>>> origin/main-v2
 }
 
 func (a *Agent) recoverContextLimit(ctx context.Context, frozen samplingRequest, err error, budget *contextRecoveryBudget) (samplingRequest, bool, string) {
@@ -35,13 +39,21 @@ func (a *Agent) recoverContextLimit(ctx context.Context, frozen samplingRequest,
 		prompt = a.estimatedRequestTokens(frozen.req)
 	}
 	physical := window - prompt - outputBudgetReserve
+<<<<<<< HEAD
 	if physical > 0 && budget.budgetRetries == 0 {
+=======
+	if physical > 0 && budget.retries == 0 {
+>>>>>>> origin/main-v2
 		next := freezeProviderRequest(frozen.req)
 		next.MaxTokens = physical
 		if frozen.req.MaxTokens > 0 && frozen.req.MaxTokens < physical {
 			next.MaxTokens = frozen.req.MaxTokens
 		}
+<<<<<<< HEAD
 		budget.budgetRetries++
+=======
+		budget.retries++
+>>>>>>> origin/main-v2
 		// Publish the request that will actually be retried, not the stale
 		// pre-error admission. The Context Panel reads this atomic snapshot while
 		// the turn is still active and after it completes.
@@ -66,7 +78,12 @@ func (a *Agent) recoverContextLimit(ctx context.Context, frozen samplingRequest,
 		a.sess.output.activeReqShape.Store(&shape)
 		return samplingRequest{req: next}, true, contextRecoveryLearnedRetry
 	}
+<<<<<<< HEAD
 	if budget.compactRetries == 0 {
+=======
+	if physical <= 0 && budget.retries == 0 {
+		startProjectionVersion := a.currentProjectionVersion()
+>>>>>>> origin/main-v2
 		if _, perr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
 			Trigger: CompactionTriggerOverflow,
 			Force:   true,
@@ -74,16 +91,31 @@ func (a *Agent) recoverContextLimit(ctx context.Context, frozen samplingRequest,
 			a.setLastRecovery(contextRecoveryFailed)
 			return samplingRequest{}, false, contextRecoveryFailed
 		}
+<<<<<<< HEAD
+=======
+		if a.currentProjectionVersion() <= startProjectionVersion {
+			a.setLastRecovery(contextRecoveryFailed)
+			return samplingRequest{}, false, contextRecoveryFailed
+		}
+>>>>>>> origin/main-v2
 		rebuilt, rerr := a.buildSamplingRequest(ctx, CompactionTriggerPressure)
 		if rerr != nil {
 			a.setLastRecovery(contextRecoveryFailed)
 			return samplingRequest{}, false, contextRecoveryFailed
 		}
+<<<<<<< HEAD
 		if aerr := a.applyAdmissionToRequest(&rebuilt.req, true); aerr != nil {
 			a.setLastRecovery(contextRecoveryFailed)
 			return samplingRequest{}, false, contextRecoveryFailed
 		}
 		budget.compactRetries++
+=======
+		if aerr := a.applyAdmissionToRequest(&rebuilt.req); aerr != nil {
+			a.setLastRecovery(contextRecoveryFailed)
+			return samplingRequest{}, false, contextRecoveryFailed
+		}
+		budget.retries++
+>>>>>>> origin/main-v2
 		a.setLastRecovery(contextRecoveryCompacted)
 		a.emitContextRecoveryNotice(contextRecoveryCompacted, limit, rebuilt.req.MaxTokens)
 		shape := a.requestCalibrationShape(rebuilt.req)
