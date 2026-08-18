@@ -175,16 +175,12 @@ func ServerSearchFromResponsesItem(raw json.RawMessage) *ServerSearchCall {
 }
 
 // WalkServerSearchEstimate visits the token-bearing fields of a search call.
-// Unlike the upstream #8718 version (which excludes Raw — Anthropic counts
-// replayed search results toward input tokens), this walks Raw too so
-// estimates match the official billing surface.
 func WalkServerSearchEstimate(search ServerSearchCall, visit func(string)) {
 	if visit == nil {
 		return
 	}
 	visit(search.ID)
 	visit(search.Query)
-	visit(string(search.Raw))
 	for _, hit := range search.Results {
 		visit(hit.Title)
 		visit(hit.URL)

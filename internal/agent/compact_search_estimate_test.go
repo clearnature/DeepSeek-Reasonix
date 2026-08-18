@@ -8,7 +8,7 @@ import (
 	"reasonix/internal/provider"
 )
 
-func TestEstimateMessagesTokensIncludesEncryptedSearchRaw(t *testing.T) {
+func TestEstimateMessagesTokensOmitsEncryptedSearchRaw(t *testing.T) {
 	visible := provider.ServerSearchCall{
 		ID: "s1", Query: "q",
 		Results: []provider.ServerSearchHit{{Title: "T", URL: "https://a.example"}},
@@ -25,10 +25,10 @@ func TestEstimateMessagesTokensIncludesEncryptedSearchRaw(t *testing.T) {
 		Content:      "answer",
 		ServerSearch: []provider.ServerSearchCall{visible},
 	}}
-	if got, want := estimateMessagesTokens(withRaw), estimateMessagesTokens(withoutRaw); got <= want {
-		t.Fatalf("estimateMessagesTokens with raw = %d, without = %d — Raw counts toward input (Anthropic billing)", got, want)
+	if got, want := estimateMessagesTokens(withRaw), estimateMessagesTokens(withoutRaw); got != want {
+		t.Fatalf("estimateMessagesTokens with raw = %d, without = %d", got, want)
 	}
-	if estimateSamplingRequestInputTokens(provider.Request{Messages: withRaw}) <= estimateSamplingRequestInputTokens(provider.Request{Messages: withoutRaw}) {
-		t.Fatal("interrupted-usage estimate must count encrypted search raw (Anthropic billing)")
+	if estimateSamplingRequestInputTokens(provider.Request{Messages: withRaw}) != estimateSamplingRequestInputTokens(provider.Request{Messages: withoutRaw}) {
+		t.Fatal("interrupted-usage estimate counted encrypted search raw")
 	}
 }
