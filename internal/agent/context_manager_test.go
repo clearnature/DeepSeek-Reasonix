@@ -199,8 +199,6 @@ func TestFailedSummaryReceiptTracksLatestViewHash(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-=======
 // A successful summary that still lands above the soft trigger pauses only
 // that exact provider-visible view. Once new messages change the input hash,
 // maintenance must be allowed to try the newly foldable region instead of
@@ -243,7 +241,6 @@ func TestStuckLatchDoesNotBlockChangedInput(t *testing.T) {
 	}
 }
 
->>>>>>> origin/main-v2
 func TestFailedSummaryReceiptBacksOffChangedViewsWithinActiveTurn(t *testing.T) {
 	const window = 10_000
 	sess := &Session{Messages: []provider.Message{

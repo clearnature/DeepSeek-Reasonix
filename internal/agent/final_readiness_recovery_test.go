@@ -22,13 +22,8 @@ func TestTargetedVerificationGapDoesNotArmRecovery(t *testing.T) {
 	if err := a.Run(context.Background(), "write docs/verify_v070.md and run the validation script"); err != nil {
 		t.Fatalf("targeted Run returned a readiness failure: %v", err)
 	}
-<<<<<<< HEAD
-	if policy, ok := a.TurnPolicy(); !ok || policy.ClosedLoop() {
-		t.Fatalf("targeted standard turn unexpectedly elevated to closed loop: %+v", policy)
-=======
 	if a.closedLoopActive() {
 		t.Fatal("ordinary targeted turn unexpectedly elevated to closed loop")
->>>>>>> origin/main-v2
 	}
 	if a.PrepareDeliveryRecovery() {
 		t.Fatal("a soft targeted-verification gap must not create a recovery card")
@@ -64,41 +59,8 @@ func TestClosedLoopReadinessRecoveryStaysInMemory(t *testing.T) {
 	if marker != nil {
 		t.Fatal("closed-loop readiness failure must not persist a recovery marker")
 	}
-<<<<<<< HEAD
-	path := filepath.Join(t.TempDir(), "readiness-recovery.jsonl")
-	if err := session.Save(path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	loaded, err := LoadSession(path)
-	if err != nil {
-		t.Fatalf("LoadSession: %v", err)
-	}
-
-	recoveryProvider := &scriptedProvider{name: "standard-reloaded", turns: [][]provider.Chunk{
-		{toolCallChunk("recognized-check", "bash", `{"command":"git diff --check"}`), {Type: provider.ChunkDone}},
-		{toolCallChunk("signoff", "complete_step", `{"step":"Write verification notes","result":"done","evidence":[{"kind":"verification","summary":"diff check passed","command":"git diff --check"}]}`), {Type: provider.ChunkDone}},
-		{toolCallChunk("todo-done", "todo_write", `{"todos":[{"content":"Write verification notes","status":"completed"}]}`), {Type: provider.ChunkDone}},
-		{{Type: provider.ChunkText, Text: "checks complete"}, {Type: provider.ChunkDone}},
-	}}
-	reloaded := New(recoveryProvider, reg, loaded, Options{}, event.Discard)
-	if !reloaded.PrepareFinalReadinessRecovery() || reloaded.PrepareFinalReadinessRecovery() {
-		t.Fatal("rebuilt recovery authorization was not one-shot")
-	}
-	if err := reloaded.Run(context.Background(), "continue the remaining checks"); err != nil {
-		t.Fatalf("reloaded recovery Run: %v", err)
-	}
-	for _, message := range loaded.Snapshot() {
-		if message.FinalReadinessRecovery != nil && message.FinalReadinessRecovery.Pending {
-			t.Fatal("started recovery left its durable action pending")
-		}
-	}
-	writer, ok := reloaded.task.ledger.LatestSuccessfulWriterIndex()
-	if !ok || !reloaded.task.ledger.HasSuccessfulVerificationCommandAfter(writer) {
-		t.Fatal("reloaded recovery did not preserve write-before-verification ordering")
-=======
 	if !a.pending.finalReadinessRecovery {
 		t.Fatal("closed-loop readiness failure must keep the in-memory pending recovery flag")
->>>>>>> origin/main-v2
 	}
 }
 

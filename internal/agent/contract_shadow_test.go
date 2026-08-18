@@ -57,11 +57,7 @@ func TestBuildShadowContractIncludesProjectChecksInCompletionEvidence(t *testing
 	missing := buildShadowContract("fix the parser", []evidence.Receipt{
 		{ToolName: "edit_file", Mutation: true, Write: true, Success: true, Paths: []string{"parser.go"}},
 	}, nil, check)
-<<<<<<< HEAD
-	if len(missing.Checks) != 2 || missing.Checks[1].Status != taskcontract.Pending {
-=======
 	if len(missing.Checks) == 0 || missing.Checks[len(missing.Checks)-1].Status != taskcontract.Pending {
->>>>>>> origin/main-v2
 		t.Fatalf("missing project-check contract = %+v, want pending project check", missing.Checks)
 	}
 
@@ -69,11 +65,7 @@ func TestBuildShadowContractIncludesProjectChecksInCompletionEvidence(t *testing
 		{ToolName: "edit_file", Mutation: true, Write: true, Success: true, Paths: []string{"parser.go"}},
 		{ToolName: "bash", Command: "go test ./...", Success: true},
 	}, nil, check)
-<<<<<<< HEAD
-	if passed.Checks[1].Status != taskcontract.Satisfied {
-=======
 	if passed.Checks[len(passed.Checks)-1].Status != taskcontract.Satisfied {
->>>>>>> origin/main-v2
 		t.Fatalf("passed project-check contract = %+v, want satisfied project check", passed.Checks)
 	}
 }

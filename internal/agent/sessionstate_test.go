@@ -155,17 +155,10 @@ func TestSetSessionRestartsTheConversationState(t *testing.T) {
 	if a.sess.missingReasoning != (missingReasoningWatch{}) {
 		t.Errorf("missingReasoning = %+v, want the incident to end with its conversation", a.sess.missingReasoning)
 	}
-<<<<<<< HEAD
-	if a.sess.compaction.stuck || a.sess.compaction.consecutive != 0 ||
-		a.sess.compaction.failedTurn.Load() != 0 || a.sess.compaction.lastTurn.Load() != 0 {
-		t.Errorf("compaction progress = stuck:%t consecutive:%d failedTurn:%d lastTurn:%d, want it restarted",
-			a.sess.compaction.stuck, a.sess.compaction.consecutive,
-=======
 	if a.sess.compaction.stuck || a.sess.compaction.stuckInputHash != "" || a.sess.compaction.consecutive != 0 ||
 		a.sess.compaction.failedTurn.Load() != 0 || a.sess.compaction.lastTurn.Load() != 0 {
 		t.Errorf("compaction progress = stuck:%t hash:%q consecutive:%d failedTurn:%d lastTurn:%d, want it restarted",
 			a.sess.compaction.stuck, a.sess.compaction.stuckInputHash, a.sess.compaction.consecutive,
->>>>>>> origin/main-v2
 			a.sess.compaction.failedTurn.Load(), a.sess.compaction.lastTurn.Load())
 	}
 	if a.sess.cacheState != CacheStateUnknown {

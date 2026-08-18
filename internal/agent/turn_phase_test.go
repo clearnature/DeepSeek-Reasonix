@@ -70,13 +70,6 @@ func TestCompletionSummaryEmittedOnMutationContract(t *testing.T) {
 	if len(sink.summaries) != 1 || !slices.Contains(sink.summaries[0].GapKinds, "unreviewed_change") {
 		t.Fatalf("completion summaries = %+v, want host-reported unreviewed change", sink.summaries)
 	}
-<<<<<<< HEAD
-}
-
-func containsString(values []string, want string) bool {
-	return slices.Contains(values, want)
-=======
->>>>>>> origin/main-v2
 }
 
 func containsString(values []string, want string) bool {

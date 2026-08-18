@@ -38,11 +38,7 @@ func TestAdmitOutputBudgetClipsIssue8909AndScreenshot(t *testing.T) {
 			}
 			msgs := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("x", 3_000_000)}}
 			a.setPromptTokenCalibration(tc.prompt, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
-<<<<<<< HEAD
-			adm, err := a.admitOutputBudget(provider.Request{Messages: msgs, MaxTokens: tc.requested}, true)
-=======
 			adm, err := a.admitOutputBudget(provider.Request{Messages: msgs, MaxTokens: tc.requested})
->>>>>>> origin/main-v2
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -64,11 +60,7 @@ func TestAdmitOutputBudgetUsesOfficialAutoWhenConfigIsZero(t *testing.T) {
 	msgs := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("x", 3_000_000)}}
 	a.setPromptTokenCalibration(810_882, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
 	req := provider.Request{Messages: msgs, MaxTokens: 0}
-<<<<<<< HEAD
-	if err := a.applyAdmissionToRequest(&req, true); err != nil {
-=======
 	if err := a.applyAdmissionToRequest(&req); err != nil {
->>>>>>> origin/main-v2
 		t.Fatal(err)
 	}
 	if req.MaxTokens != 229_502 {
@@ -85,11 +77,7 @@ func TestAdmitOutputBudgetOmitsWhenSafeHasRoom(t *testing.T) {
 	}}
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov}}
 	req := provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}}
-<<<<<<< HEAD
-	if err := a.applyAdmissionToRequest(&req, true); err != nil {
-=======
 	if err := a.applyAdmissionToRequest(&req); err != nil {
->>>>>>> origin/main-v2
 		t.Fatal(err)
 	}
 	if req.MaxTokens != 0 {
@@ -106,11 +94,7 @@ func TestAdmitOutputBudgetAlwaysSendsOpenCodeLimit(t *testing.T) {
 	}}
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov}}
 	req := provider.Request{Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}}, MaxTokens: 0}
-<<<<<<< HEAD
-	if err := a.applyAdmissionToRequest(&req, true); err != nil {
-=======
 	if err := a.applyAdmissionToRequest(&req); err != nil {
->>>>>>> origin/main-v2
 		t.Fatal(err)
 	}
 	if req.MaxTokens != 131_072 {
@@ -127,11 +111,7 @@ func TestAdmitOutputBudgetNegativeOmitsInsteadOfInject(t *testing.T) {
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov}}
 	msgs := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("x", 3_000_000)}}
 	a.setPromptTokenCalibration(810_882, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
-<<<<<<< HEAD
-	_, err := a.admitOutputBudget(provider.Request{Messages: msgs, MaxTokens: -1}, true)
-=======
 	_, err := a.admitOutputBudget(provider.Request{Messages: msgs, MaxTokens: -1})
->>>>>>> origin/main-v2
 	if !errors.Is(err, ErrCompactionRequired) {
 		t.Fatalf("negative omit err = %v, want compaction", err)
 	}
@@ -160,11 +140,7 @@ func TestGuardedSummaryUsesSharedPolicyWhenAutoBudgetIsZero(t *testing.T) {
 	prov := &policyWindowProvider{policy: provider.ContextBudgetPolicy{WindowMode: provider.ContextWindowShared, LimitMode: provider.OutputLimitOmitWhenSafe}}
 	a := &Agent{agentConfig: agentConfig{contextWindow: 100_000}, svc: agentServices{prov: prov, sink: event.Discard}}
 	fold := []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 80_000)}}
-<<<<<<< HEAD
-	if budget := a.summaryInputBudget(nil, ""); budget <= 0 {
-=======
 	if budget := a.summaryInputBudget(""); budget <= 0 {
->>>>>>> origin/main-v2
 		t.Fatalf("shared auto-zero summary budget = %d", budget)
 	}
 	if got := a.guardedSummaryInputTokens(fold); got <= 0 {

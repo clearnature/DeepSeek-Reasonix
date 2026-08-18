@@ -8,11 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"os"
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
 	"reasonix/internal/tool"
-	"time"
 )
 
 func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
@@ -51,8 +49,6 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-=======
 func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
 	msgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
@@ -88,7 +84,6 @@ func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
 	}
 }
 
->>>>>>> origin/main-v2
 func TestCoveredPrefixHashIncludesProviderVisibleFields(t *testing.T) {
 	base := []provider.Message{{
 		Role:               provider.RoleAssistant,
@@ -185,86 +180,6 @@ func TestLoadProjectionSidecarRebindsMatchingContentAcrossLineage(t *testing.T) 
 	}
 }
 
-// TestLoadProjectionSidecarKeepsBodyWithoutTranscript pins the resume-order
-// guard: binding the sidecar before the conversation finished loading must not
-// discard a valid projection body — modelVisible re-validates later (8/13:
-// a cold start re-reported a window-full session as 2.4M/1M after a projection
-// was dropped this way).
-func TestLoadProjectionSidecarKeepsBodyWithoutTranscript(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "s.jsonl")
-	msgs := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "task"},
-		{Role: provider.RoleAssistant, Content: "a1"},
-		{Role: provider.RoleUser, Content: "q2"},
-	}
-	if err := SaveCompactionState(path, CompactionState{
-		SchemaVersion:     compactionStateSchemaV1,
-		PromptCacheKey:    "ws|s|this-model",
-		TranscriptVersion: 1,
-		Projection: ContextProjection{
-			Messages:          []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
-			CoveredCount:      4,
-			CoveredPrefixHash: coveredPrefixHash(msgs, 4),
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// Transcript entirely missing: keep the projection body.
-	a := &Agent{agentConfig: agentConfig{workspaceID: "ws", modelRef: "this-model"}, sess: sessionRuntime{}}
-	a.LoadProjectionSidecar(path)
-	if len(a.sess.compactionState.Projection.Messages) == 0 {
-		t.Fatal("projection body dropped when transcript was not loaded yet")
-	}
-	// Partial UI-provided slice (resumeWithFreshSystemPrompt fallback path):
-	// shorter than CoveredCount, so it cannot judge the covered prefix —
-	// keep the projection instead of dropping it.
-	partial := &Agent{agentConfig: agentConfig{workspaceID: "ws", modelRef: "this-model"}, sess: sessionRuntime{}}
-	partial.sess.conversation = NewSession("sys")
-	partial.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: "task"})
-	partial.LoadProjectionSidecar(path)
-	if len(partial.sess.compactionState.Projection.Messages) == 0 {
-		t.Fatal("projection body dropped when transcript was only partially loaded")
-	}
-	// Once the full transcript is attached the projection is usable again.
-	a.sess.conversation = NewSession("sys")
-	for _, m := range msgs[1:] {
-		a.sess.conversation.Add(m)
-	}
-	if vis := a.modelVisibleMessages(); len(vis) != 1 || vis[0].Content != "summary" {
-		t.Fatalf("modelVisible after transcript attach = %+v, want the projection", vis)
-	}
-}
-
-// TestProjectionUsableRejectsOverflowingBody pins the window-fit guard: a
-// projection whose body alone overflows the physical ceiling (a prune/snip
-// rebuilt full-history one) must not be sent — modelVisible falls back to
-// canonical so the request path folds it down (8/13: 7.2K messages ≈ 2.2M).
-func TestProjectionUsableRejectsOverflowingBody(t *testing.T) {
-	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true}
-	huge := provider.Message{Role: provider.RoleUser, Content: strings.Repeat("字", 1_200_000)} // 1.2M CJK runes
-	projMsgs := []provider.Message{huge, huge}                                                 // official est ≈ 1.44M
-	sess := &Session{Messages: append([]provider.Message{{Role: provider.RoleSystem, Content: "sys"}}, projMsgs...)}
-	a := New(prov, tool.NewRegistry(), sess, Options{
-		SessionPath:   filepath.Join(t.TempDir(), "s.jsonl"),
-		ContextWindow: 1_048_576,
-		WorkspaceID:   "ws",
-		ModelRef:      "m",
-	}, event.Discard)
-	a.sess.compactionState.Projection = ContextProjection{
-		Messages:          projMsgs,
-		CoveredCount:      2,
-		CoveredPrefixHash: coveredPrefixHash(sess.Messages, 2),
-	}
-	if a.projectionUsable(a.sess.compactionState, sess.Messages, 0) {
-		t.Fatal("overflowing projection body accepted as usable")
-	}
-	if vis := a.modelVisibleMessages(); len(vis) != 3 {
-		t.Fatalf("modelVisible = %d messages, want canonical fallback (3)", len(vis))
-	}
-}
-
 func TestLoadProjectionSidecarDropsForeignCacheKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "s.jsonl")
@@ -288,13 +203,10 @@ func TestLoadProjectionSidecarDropsForeignCacheKey(t *testing.T) {
 		WorkspaceID: "ws",
 		ModelRef:    "this-model",
 	}, event.Discard)
-	// New() already called LoadProjectionSidecar; a mismatched content body is
-	// kept for the third-state degraded view (digest + tail), not a replay.
-	if len(a.sess.compactionState.Projection.Messages) == 0 {
-		t.Fatalf("foreign body dropped; third state cannot splice")
-	}
-	if a.sess.checkpointState != "degraded" {
-		t.Fatalf("checkpointState = %q, want degraded", a.sess.checkpointState)
+	// New() already called LoadProjectionSidecar; mismatched content must drop
+	// the projection body and keep the sidecar file for the other model.
+	if len(a.sess.compactionState.Projection.Messages) != 0 {
+		t.Fatalf("foreign projection loaded: %+v", a.sess.compactionState.Projection)
 	}
 	if _, ok, err := LoadCompactionState(path); err != nil || !ok {
 		t.Fatalf("sidecar should remain on disk: ok=%v err=%v", ok, err)
@@ -335,7 +247,7 @@ func TestSummarizeOnceDoesNotRetry(t *testing.T) {
 		usage2:   &provider.Usage{PromptTokens: 11, CompletionTokens: 3, TotalTokens: 14, RequestCount: 1},
 	}
 	a := New(fp, tool.NewRegistry(), NewSession("sys"), Options{}, event.Discard)
-	_, _, err := a.summarizeOnce(context.Background(), nil, []provider.Message{
+	_, _, err := a.summarizeOnce(context.Background(), []provider.Message{
 		{Role: provider.RoleUser, Content: "fold me"},
 	}, "")
 	if err == nil {
@@ -406,146 +318,5 @@ func TestCompactInstallsCoveredPrefixHash(t *testing.T) {
 	msgs, _ := sess.snapshotMessagesVersion()
 	if !projectionValid(st, msgs, st.PromptCacheKey) {
 		t.Fatal("fresh projection should validate")
-	}
-}
-
-// TestProjectionContentValidVersionDriftSamePrefix pins the resume-after-replay
-// case: covered prefix bytes identical but the version counter drifted (event
-// replay does not restore it). With no append (n == len) the projection must
-// stay valid so the first turn folds incrementally (8/13: full fold 3.3% hit
-// vs incremental 99.4%).
-func TestProjectionContentValidVersionDriftSamePrefix(t *testing.T) {
-	msgs := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "task"},
-		{Role: provider.RoleAssistant, Content: "plan"},
-		{Role: provider.RoleUser, Content: "continue"},
-	}
-	n := len(msgs)
-	st := CompactionState{
-		TranscriptVersion: 1, // persisted before the restart
-		Projection: ContextProjection{
-			CoveredCount:      n,
-			CoveredPrefixHash: coveredPrefixHash(msgs, n),
-			Messages:          msgs,
-		},
-	}
-	// Version drifted (in-memory counter started at 2 after reload) but the
-	// covered prefix is byte-identical and nothing was appended.
-	if !projectionContentValid(st, msgs) {
-		t.Fatalf("version drift with identical covered prefix must keep the projection valid")
-	}
-}
-
-func TestProjectionContentValidToleratesPruneRewrite(t *testing.T) {
-	base := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "user q"},
-		{Role: provider.RoleAssistant, Content: "assistant a", ToolCalls: []provider.ToolCall{{ID: "t1", Name: "read", Arguments: `{}`}}},
-		{Role: provider.RoleTool, Content: strings.Repeat("tool body ", 50), ToolCallID: "t1"},
-	}
-	st := CompactionState{Projection: ContextProjection{
-		Messages:           []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
-		CoveredCount:       len(base),
-		CoveredPrefixHash:  coveredPrefixHash(base, len(base)),
-		SemanticPrefixHash: semanticPrefixHash(base, len(base)),
-		TranscriptVersion:  1,
-	}}
-	// prune/snip shortens tool results only: covered hash changes, semantic
-	// hash (non-tool) stays, projection must remain valid.
-	pruned := append([]provider.Message(nil), base...)
-	pruned[3] = provider.Message{Role: provider.RoleTool, Content: "tool (trimmed)", ToolCallID: "t1"}
-	if !projectionContentValid(st, pruned) {
-		t.Fatalf("prune rewrite (tool-only) must keep the projection valid")
-	}
-	// Real content change (user message edited) must invalidate.
-	edited := append([]provider.Message(nil), base...)
-	edited[1] = provider.Message{Role: provider.RoleUser, Content: "user q EDITED"}
-	if projectionContentValid(st, edited) {
-		t.Fatalf("user content edit must invalidate the projection")
-	}
-	// Legacy sidecar without semantic hash stays fail-closed on covered drift.
-	legacy := st
-	legacy.Projection.SemanticPrefixHash = ""
-	if projectionContentValid(legacy, pruned) {
-		t.Fatalf("legacy sidecar without semantic hash must reject covered drift")
-	}
-}
-
-// TestModelVisibleDegradedSplicesDigestTail covers the third state: a stale
-// projection body splices with the canonical tail instead of a full replay.
-func TestModelVisibleDegradedSplicesDigestTail(t *testing.T) {
-	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024}}
-	canonical := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "u1"},
-		{Role: provider.RoleUser, Content: "u2"},
-		{Role: provider.RoleAssistant, Content: "a1"},
-		{Role: provider.RoleUser, Content: "u3"},
-		{Role: provider.RoleAssistant, Content: "a2"},
-		{Role: provider.RoleUser, Content: "u4"},
-		{Role: provider.RoleAssistant, Content: "a3"},
-		{Role: provider.RoleUser, Content: "u5"},
-		{Role: provider.RoleAssistant, Content: "a4"},
-	}
-	st := CompactionState{Projection: ContextProjection{
-		Messages:          []provider.Message{{Role: provider.RoleSystem, Content: "digest"}},
-		CoveredCount:      4,
-		ProjectionVersion: 1,
-	}}
-	visible, ok := a.modelVisibleDegraded(st, canonical)
-	if !ok {
-		t.Fatalf("degraded splice rejected")
-	}
-	if len(visible) != 1+6 { // digest + canonical[4:]
-		t.Fatalf("degraded view len = %d, want 7 (digest + tail 6)", len(visible))
-	}
-	if visible[1].Content != "u3" {
-		t.Fatalf("tail splice wrong: visible[1] = %q, want u3", visible[1].Content)
-	}
-}
-
-// TestModelVisibleDegradedRejectsOverflowingCoverage: canonical shrank below
-// covered count (rewind) — the stale body must NOT be spliced.
-func TestModelVisibleDegradedRejectsOverflowingCoverage(t *testing.T) {
-	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024}}
-	canonical := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "u1"},
-		{Role: provider.RoleUser, Content: "u2"},
-	}
-	st := CompactionState{Projection: ContextProjection{
-		Messages:     []provider.Message{{Role: provider.RoleSystem, Content: "digest"}},
-		CoveredCount: 5,
-	}}
-	if _, ok := a.modelVisibleDegraded(st, canonical); ok {
-		t.Fatalf("degraded splice must be rejected when covered > len(canonical)")
-	}
-}
-
-// TestOrphanCompactionLockClearedOnLoad: a sidecar with a nonzero
-// CompactionInflight (crash mid-compaction) must be detected and cleared at
-// load time so the next compaction pass can proceed.
-func TestOrphanCompactionLockClearedOnLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orphan.jsonl")
-	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	st := CompactionState{
-		CompactionInflight: time.Now().UnixMilli() - 60000,
-		LastReceipt:        &ContextMaintenanceReceipt{Status: "applied", Action: "summary"},
-	}
-	if err := SaveCompactionState(path, st); err != nil {
-		t.Fatal(err)
-	}
-	a := &Agent{agentConfig: agentConfig{contextWindow: 1024 * 1024, workspaceID: "ws", modelRef: "this-model"}, sess: sessionRuntime{}}
-	a.LoadProjectionSidecar(path)
-	got, ok, err := LoadCompactionState(path)
-	if err != nil || !ok {
-		t.Fatalf("load after detect = %v, %v", ok, err)
-	}
-	if got.CompactionInflight != 0 {
-		t.Fatalf("orphan lock not cleared: inflight=%d", got.CompactionInflight)
 	}
 }

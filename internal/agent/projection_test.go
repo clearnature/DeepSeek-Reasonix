@@ -632,18 +632,7 @@ func TestCompactKeepsPriorDigests(t *testing.T) {
 		t.Fatalf("rolling summary lost prior fact: %+v", proj)
 	}
 	// Prior digest body was part of the fold sent to the summarizer.
-<<<<<<< HEAD
-	found := false
-	for _, m := range prov.got {
-		if strings.Contains(m.Content, "orion_prod_42") {
-			found = true
-			break
-		}
-	}
-	if !found {
-=======
 	if !strings.Contains(joinContents(prov.got), "orion_prod_42") {
->>>>>>> origin/main-v2
 		t.Fatalf("prior digest not folded into summarizer input: %+v", prov.got)
 	}
 }
@@ -790,14 +779,7 @@ func TestCompactFoldsSingleLargeMessage(t *testing.T) {
 	if !hasCompactionSummary(proj) || !strings.Contains(joinContents(proj), "large file contents") {
 		t.Fatalf("single large message was not summarized into projection: %+v", proj)
 	}
-	gotLarge := false
-	for _, m := range prov.got {
-		if strings.Contains(m.Content, "large output line") {
-			gotLarge = true
-			break
-		}
-	}
-	if !gotLarge {
+	if len(prov.got) == 0 || !strings.Contains(prov.got[1].Content, "large output line") {
 		t.Fatalf("summarizer did not receive the large message: %+v", prov.got)
 	}
 }

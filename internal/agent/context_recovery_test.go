@@ -180,11 +180,7 @@ func TestContextLimitRecoveryPublishesUnknownGatewayBudget(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-func TestContextLimitRecoveryStopsAfterBudgetAndCompact(t *testing.T) {
-=======
 func TestContextLimitRecoveryRetriesOriginalRequestOnlyOnce(t *testing.T) {
->>>>>>> origin/main-v2
 	limit := issue8909Limit()
 	limit.PromptTokens = 1_040_000
 	limit.CompletionTokens = 20_000
@@ -207,14 +203,11 @@ func TestContextLimitRecoveryRetriesOriginalRequestOnlyOnce(t *testing.T) {
 	if provider.AsContextLimitError(got.err) == nil && !errors.Is(got.err, ErrCompactionRequired) {
 		t.Fatalf("terminal err = %v", got.err)
 	}
-<<<<<<< HEAD
-=======
 	prov.mu.Lock()
 	defer prov.mu.Unlock()
 	if got := len(prov.reqs); got != 2 {
 		t.Fatalf("provider requests = %d, want initial request plus one retry", got)
 	}
->>>>>>> origin/main-v2
 }
 
 func TestContextBudgetLearnAndSnapshotRace(t *testing.T) {
@@ -245,17 +238,6 @@ func TestThreeStateMaxOutputTokens(t *testing.T) {
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov}}
 	msgs := []provider.Message{{Role: provider.RoleUser, Content: "hi"}}
 	pos := provider.Request{Messages: msgs, MaxTokens: 8192}
-<<<<<<< HEAD
-	if err := a.applyAdmissionToRequest(&pos, true); err != nil || pos.MaxTokens != 8192 {
-		t.Fatalf("positive cap = %d err=%v", pos.MaxTokens, err)
-	}
-	zero := provider.Request{Messages: msgs, MaxTokens: 0}
-	if err := a.applyAdmissionToRequest(&zero, true); err != nil || zero.MaxTokens != 0 {
-		t.Fatalf("auto omit = %d err=%v", zero.MaxTokens, err)
-	}
-	neg := provider.Request{Messages: msgs, MaxTokens: -1}
-	if err := a.applyAdmissionToRequest(&neg, true); err != nil || neg.MaxTokens != -1 {
-=======
 	if err := a.applyAdmissionToRequest(&pos); err != nil || pos.MaxTokens != 8192 {
 		t.Fatalf("positive cap = %d err=%v", pos.MaxTokens, err)
 	}
@@ -265,7 +247,6 @@ func TestThreeStateMaxOutputTokens(t *testing.T) {
 	}
 	neg := provider.Request{Messages: msgs, MaxTokens: -1}
 	if err := a.applyAdmissionToRequest(&neg); err != nil || neg.MaxTokens != -1 {
->>>>>>> origin/main-v2
 		t.Fatalf("explicit omit = %d err=%v", neg.MaxTokens, err)
 	}
 }

@@ -139,10 +139,7 @@ func TestRefoldIntoBodyKeepsUnfoldedBodyTail(t *testing.T) {
 		t.Fatal("re-compact made no summary request")
 	}
 	visible := a.modelVisibleMessages()
-<<<<<<< HEAD
-=======
 	summaryInput := joinContents(prov.got[len(prov.got)-1].Messages)
->>>>>>> origin/main-v2
 	for i := range 10 {
 		want := fmt.Sprintf("marker turn %d", i)
 		found := false
@@ -152,13 +149,8 @@ func TestRefoldIntoBodyKeepsUnfoldedBodyTail(t *testing.T) {
 				break
 			}
 		}
-<<<<<<< HEAD
-		if !found {
-			t.Fatalf("%q was kept in the projection body but vanished after the re-fold", want)
-=======
 		if !found && !strings.Contains(summaryInput, want) {
 			t.Fatalf("%q reached neither the retained tail nor the summary input", want)
->>>>>>> origin/main-v2
 		}
 	}
 }
