@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	"reasonix/internal/event"
 	"reasonix/internal/provider"
 )
 
@@ -15,14 +14,9 @@ import (
 // fold stopped reducing, how many ran back to back, and which retries already
 // ran in the active turn. The fields are cleared together on lineage resets.
 type compactionProgress struct {
-<<<<<<< HEAD
-	stuck       bool // a fold landed above the trigger, so pressure retries are pointless
-	consecutive int  // back-to-back folds since one last helped
-=======
 	stuck          bool   // a fold landed above the trigger, so the same-view pressure retry is pointless
 	stuckInputHash string // provider-visible view covered by stuck; changed input may retry
 	consecutive    int    // back-to-back folds since one last helped
->>>>>>> origin/main-v2
 	// failedTurn backs off changed-view retries within one active tool loop.
 	// A later user turn may retry, while hard-ceiling recovery bypasses it.
 	failedTurn atomic.Int64
@@ -93,7 +87,9 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	}
 	visible := a.modelVisibleMessages()
 	// Threshold uses the stable pre-interceptor request shape (messages + tools
-	// + role projection); interceptor expansion past hard still overflows.
+	// + role projection). Extension interceptors run only on the real sampling
+	// request so side-effecting plugins are not double-invoked; if they expand
+	// the prompt past the hard ceiling, overflow recovery still fires.
 	est := a.estimatedVisibleRequestTokens(visible)
 	prepared := PreparedContext{
 		Messages:          append([]provider.Message(nil), visible...),
@@ -110,14 +106,8 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 		prepared.InputTokens = est
 	}
 	inputHash := a.contextMaintenanceInputHash(visible)
-<<<<<<< HEAD
-	// Receipts back off sub-critical retries only: at a physical recovery point
-	// (overflow, or a view at/above the hard ceiling) the fold must still run —
-	// degradeFoldSummary guarantees mustFree progress.
-=======
 	// Receipts back off sub-critical retries only. Physical overflow may retry
 	// maintenance once, but a failed summary never fabricates fallback content.
->>>>>>> origin/main-v2
 	if blocked, _ := a.contextMaintenanceBlocked(inputHash); blocked && policy.Trigger != CompactionTriggerManual &&
 		policy.Trigger != CompactionTriggerOverflow && est < hard {
 		return prepared, nil
@@ -125,10 +115,6 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	if est < fold {
 		a.sess.compaction.consecutive = 0
 		a.sess.compaction.stuck = false
-<<<<<<< HEAD
-		a.sess.compaction.failedTurn.Store(0)
-	}
-=======
 		a.sess.compaction.stuckInputHash = ""
 		a.sess.compaction.failedTurn.Store(0)
 	}
@@ -139,7 +125,6 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 		a.sess.compaction.stuckInputHash = ""
 		a.sess.compaction.consecutive = 0
 	}
->>>>>>> origin/main-v2
 	if a.sess.compaction.stuck && policy.Trigger == CompactionTriggerPressure && est < hard {
 		return prepared, nil
 	}
@@ -147,12 +132,6 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	forceFold := policy.Force || policy.Trigger == CompactionTriggerManual || policy.Trigger == CompactionTriggerOverflow || est >= hard
 	if est < fold && !forceFold {
 		return prepared, nil
-	}
-	if est > a.contextWindow && a.sess.cacheState != "" && a.svc.sink != nil {
-		// Resume replay past the window: the C1 gate let it through warm, but
-		// it must fold before the first send. Land the decision for diagnosis.
-		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "resume telemetry",
-			Detail: fmt.Sprintf("state=%s idle_min=0 decision=compact-first est=%d", a.sess.cacheState, est)})
 	}
 
 	if policy.Trigger == CompactionTriggerPressure || policy.Trigger == CompactionTriggerOverflow {
@@ -234,28 +213,6 @@ func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContex
 		inputHash = a.contextMaintenanceInputHash(result.Messages)
 	}
 
-<<<<<<< HEAD
-	result := m.currentPrepared()
-	if result.InputTokens < fold {
-		// A fold that landed under the trigger proves compaction reduces again;
-		// a stale stuck latch must not suppress the next pressure round.
-		a.sess.compaction.stuck = false
-		a.sess.compaction.consecutive = 0
-		a.sess.compaction.failedTurn.Store(0)
-	}
-	if policy.Trigger == CompactionTriggerManual {
-		return result, nil
-	}
-	if result.InputTokens >= fold {
-		reason := fmt.Sprintf("summary result remains above fold trigger (%d >= %d)", result.InputTokens, fold)
-		a.recordContextMaintenanceBlocked(a.contextMaintenanceInputHash(result.Messages), policy.Trigger, "summary", reason)
-		a.sess.compaction.stuck = true
-		a.sess.compaction.consecutive++
-		if policy.Trigger == CompactionTriggerOverflow || result.InputTokens >= hard {
-			return PreparedContext{}, fmt.Errorf("%w: %s", ErrCompactionRequired, reason)
-		}
-		slog.Info("agent: context maintenance paused below hard ceiling", "reason", reason)
-=======
 	reason := fmt.Sprintf("summary result remains above fold trigger after %d attempts (%d >= %d)", maxSummaries, result.InputTokens, fold)
 	blockedInputHash := a.contextMaintenanceInputHash(result.Messages)
 	a.recordContextMaintenanceBlocked(blockedInputHash, policy.Trigger, "summary", reason)
@@ -264,7 +221,6 @@ func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContex
 	a.sess.compaction.consecutive += maxSummaries
 	if policy.Trigger == CompactionTriggerOverflow || result.InputTokens >= hard {
 		return PreparedContext{}, fmt.Errorf("%w: %s", ErrCompactionRequired, reason)
->>>>>>> origin/main-v2
 	}
 	slog.Info("agent: context maintenance paused below hard ceiling", "reason", reason)
 	return result, nil
@@ -285,12 +241,6 @@ func (m ContextManager) currentPrepared() PreparedContext {
 // estimatedVisibleRequestTokens sizes the pre-interceptor sampling shape:
 // ModelMessages + role projection + tool schemas. Extension interceptors are
 // intentionally omitted here (see prepareOnce) to avoid double side effects.
-// decisionEstimateTokens is the estimate that crosses the fold trigger in
-// Prepare; recorded so a pass can be audited against the actual prompt.
-func (a *Agent) decisionEstimateTokens() int {
-	return a.estimatedVisibleRequestTokens(a.modelVisibleMessages())
-}
-
 func (a *Agent) estimatedVisibleRequestTokens(visible []provider.Message) int {
 	if a == nil {
 		return 0
@@ -300,43 +250,10 @@ func (a *Agent) estimatedVisibleRequestTokens(visible []provider.Message) int {
 	if a.svc.tools != nil {
 		tools = a.svc.tools.Schemas()
 	}
-	req := provider.Request{
+	return a.estimatedRequestTokens(provider.Request{
 		Messages:    msgs,
 		Tools:       tools,
 		MaxTokens:   a.maxOutputTokens,
 		Temperature: provider.OptionalTemperature(a.temperature),
-	}
-	shape := a.requestCalibrationShape(req)
-	if calibrated, ok := a.calibratedPromptTokens(shape); ok {
-		return calibrated
-	}
-	// No calibration yet (fresh fork or resume first turn): the 0.25 wire-char
-	// fallback under-sizes CJK (0.25 × 3-byte runes = phantom 0.75/rune). Use
-	// official ratios (CJK 0.6, ASCII 0.3); 1.0 mis-triggered 8/13 (316K est
-	// ≥ 850K).
-	if containsCJKText(msgs) {
-		return officialMessagesTokens(msgs)
-	}
-	return a.estimatedRequestTokens(req)
-}
-
-// containsCJKText reports whether any visible message carries CJK runes, the
-// only case where the conservative 1-rune-per-token estimate is appropriate
-// before provider calibration exists.
-func containsCJKText(msgs []provider.Message) bool {
-	for _, m := range msgs {
-		for _, r := range m.Content {
-			if isCJKRune(r) {
-				return true
-			}
-		}
-		for _, tc := range m.ToolCalls {
-			for _, r := range tc.Arguments {
-				if isCJKRune(r) {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	})
 }

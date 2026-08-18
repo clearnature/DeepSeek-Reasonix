@@ -24,60 +24,12 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
-<<<<<<< HEAD
-	if a.projectionUsable(st, msgs, 0) {
-=======
 	if projectionValid(st, msgs, a.currentPromptCacheKey()) {
->>>>>>> origin/main-v2
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
 	}
-	// Third state: an invalid projection still splices digest + tail instead
-	// of a full-history replay (C1's original "folded digest + tail" intent).
-	if visible, ok := a.modelVisibleDegraded(st, msgs); ok {
-		return visible
-	}
 	return msgs
-}
-
-// modelVisibleDegraded builds the third-state view: a stale-but-intact
-// projection body is spliced with the canonical tail so a resumed session
-// keeps the small cache-stable digest prefix instead of the full canonical
-// replay. The next compaction rebuilds the projection (the degraded view
-// survives at most one turn).
-func (a *Agent) modelVisibleDegraded(st CompactionState, msgs []provider.Message) ([]provider.Message, bool) {
-	proj := st.Projection
-	if len(proj.Messages) == 0 || proj.CoveredCount <= 0 || proj.CoveredCount > len(msgs) {
-		return nil, false
-	}
-	visible := modelVisibleFromProjection(proj, msgs)
-	if len(visible) == 0 {
-		return nil, false
-	}
-	if a.contextWindow > 0 && sharesContextWindow(a.svc.prov) {
-		if est := a.estimatedPromptTokens(provider.ModelMessages(visible)); est >= a.hardInputCeiling() {
-			return nil, false
-		}
-	}
-	return visible, true
-}
-
-// projectionUsable requires the projection to validate and fit the window:
-// a full-history projection that already overflows the physical ceiling (a
-// prune/snip rebuilt one, 8/13: 7.2K messages ≈ 2.2M) must not be sent; it
-// falls back to canonical so the request path folds it down. Sizing uses the
-// calibrated send-path estimate (the 1-rune ruler over-sizes CJK ~5x).
-func (a *Agent) projectionUsable(st CompactionState, msgs []provider.Message, _ uint64) bool {
-	if !projectionValid(st, msgs, a.currentPromptCacheKey()) {
-		return false
-	}
-	if a.contextWindow > 0 && sharesContextWindow(a.svc.prov) {
-		if est := a.estimatedPromptTokens(provider.ModelMessages(st.Projection.Messages)); est >= a.hardInputCeiling() {
-			return false
-		}
-	}
-	return true
 }
 
 func (a *Agent) currentProjectionVersion() uint64 {
@@ -173,26 +125,14 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		a.resetCompactionState()
 		return
 	}
-<<<<<<< HEAD
-	if st.CompactionInflight > 0 {
-		slog.Warn("agent: orphan compaction lock — previous pass was interrupted by a crash", "inflight_since_ms", st.CompactionInflight, "session", sessionPath)
-		st.CompactionInflight = 0
-		_ = SaveCompactionState(sessionPath, st)
-	}
-=======
->>>>>>> origin/main-v2
 	var msgs, preRepair []provider.Message
 	if a.sess.conversation != nil {
 		msgs, preRepair = a.sess.conversation.projectionValidationMessages()
 	}
-<<<<<<< HEAD
-=======
 	needsNormalization := migratePromotedCoveredPrefixHash(&st, msgs)
->>>>>>> origin/main-v2
 	a.sess.compactionMu.Lock()
 	key := a.currentPromptCacheKeyLocked()
 	normalized, keyOK := lineageKeyCompatible(st.PromptCacheKey, key)
-	needsNormalization := false
 	// Keep receipt-only blocked/failed sidecars (no projection body) and legacy
 	// top-level BlockedInputHash so generation-scoped suppressions survive restart.
 	hasMaintenanceSignal := st.Projection.CoveredPrefixHash != "" ||
@@ -211,18 +151,11 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 			normalized, keyOK = key, true
 		}
 	}
-	if !hasMaintenanceSignal {
-		// No projection body at all: nothing to splice; the next request
-		// rebuilds from canonical.
+	if (key != "" && !keyOK) || !hasMaintenanceSignal {
 		a.sess.compactionState = CompactionState{}
 		a.sess.checkpointState = "none"
 		a.sess.compactionMu.Unlock()
 		return
-	}
-	if key != "" && !keyOK {
-		// Lineage mismatch with an intact body: keep it for the third-state
-		// degraded view (digest + tail); the next compaction rebuilds it.
-		a.sess.checkpointState = "degraded"
 	}
 	// Only rewrite legacy native-editing lineage keys; exact matches stay pure-read.
 	if keyOK && key != "" && normalized != st.PromptCacheKey {
@@ -232,19 +165,12 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	// Only mark restored when the projection still matches the transcript.
 	if !projectionContentValid(st, msgs) && migrateLegacyCoveredPrefixHash(&st, msgs, preRepair) {
 		needsNormalization = true
-<<<<<<< HEAD
-=======
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
 	if !valid && len(st.Projection.Messages) > 0 {
 		// Keep blocked receipts / telemetry; drop unusable projection body.
 		st.Projection = ContextProjection{}
->>>>>>> origin/main-v2
 	}
-	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
-	// Keep the intact body on invalidation: the third-state degraded view
-	// (digest + tail) depends on it — a full-history replay is what the
-	// digest splices avoid. The next compaction rebuilds the projection.
 	a.sess.compactionState = st
 	if valid {
 		a.sess.checkpointState = "restored"
@@ -253,11 +179,6 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 				slog.Warn("agent: persist normalized projection lineage", "err", err)
 			}
 		}
-	} else if len(st.Projection.Messages) > 0 && len(msgs) >= st.Projection.CoveredCount {
-		// Third state: intact-but-invalidated body is kept for the degraded
-		// digest+tail view instead of a full-history replay; the next
-		// compaction rebuilds it.
-		a.sess.checkpointState = "degraded"
 	} else {
 		a.sess.checkpointState = "none"
 	}

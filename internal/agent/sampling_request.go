@@ -80,11 +80,7 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 	if err != nil {
 		return samplingRequest{}, err
 	}
-<<<<<<< HEAD
-	if err := a.applyAdmissionToRequest(&frozen.req, true); err != nil {
-=======
 	if err := a.applyAdmissionToRequest(&frozen.req); err != nil {
->>>>>>> origin/main-v2
 		// One-shot physical overflow recovery. Do not loop.
 		startProjectionVersion := a.currentProjectionVersion()
 		if _, perr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
@@ -92,22 +88,15 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 			Force:   true,
 		}); perr != nil {
 			return samplingRequest{}, err
-<<<<<<< HEAD
-=======
 		}
 		if a.currentProjectionVersion() <= startProjectionVersion {
 			return samplingRequest{}, err
->>>>>>> origin/main-v2
 		}
 		rebuilt, rerr := a.buildSamplingRequest(ctx, CompactionTriggerPressure)
 		if rerr != nil {
 			return samplingRequest{}, rerr
 		}
-<<<<<<< HEAD
-		if aerr := a.applyAdmissionToRequest(&rebuilt.req, true); aerr != nil {
-=======
 		if aerr := a.applyAdmissionToRequest(&rebuilt.req); aerr != nil {
->>>>>>> origin/main-v2
 			return samplingRequest{}, aerr
 		}
 		shape := a.requestCalibrationShape(rebuilt.req)
@@ -123,29 +112,11 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 	// CreatedAt is durable UI metadata, not model input. Strip it from the
 	// transport copy so wall-clock differences never invalidate the provider's
 	// prompt-cache prefix (and custom providers cannot accidentally send it).
-	// Admission uses the last real usage observation when one exists: the
-	// calibrated estimate runs hot on CJK/tool-dense sessions (975k vs 602k
-	// measured 2026-08-10), forcing summarizer passes before the 80% trigger.
-	policy := ContextPreparePolicy{Trigger: trigger}
-	if u := a.LastUsage(); u != nil {
-		if pt := u.LatestPromptTokens(); pt > 0 {
-			policy.ObservedInputTokens = pt
-		}
-	}
-	prepared, err := a.contextManager().Prepare(ctx, policy)
+	prepared, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: trigger})
 	if err != nil {
 		return samplingRequest{}, err
 	}
-<<<<<<< HEAD
-	a.lastEstTokens = prepared.InputTokens
-	requestMessages := append([]provider.Message(nil), provider.ModelMessages(prepared.Messages)...)
-	requestMessages = a.providerProjectionMessages(requestMessages)
-	for i := range requestMessages {
-		requestMessages[i].CreatedAt = 0
-	}
-=======
 	requestMessages := a.normalizeModelRequestMessages(prepared.Messages)
->>>>>>> origin/main-v2
 	// context.prepare: extensions may rewrite the message copy feeding THIS
 	// request. The session log is never touched — the replacement is
 	// ephemeral, so the next request starts from the unmodified history.

@@ -91,8 +91,6 @@ func (w pathBoundWriter) DeclareWriteAccess(args json.RawMessage) (tool.WriteAcc
 	return tool.WriteAccessDeclaration{}, nil
 }
 
-<<<<<<< HEAD
-=======
 func (w pathBoundWriter) ResolveAnchoredTextTarget(ctx context.Context, args json.RawMessage) (tool.AnchoredTextTargetInfo, error) {
 	resolver, ok := w.inner.(tool.AnchoredTextTarget)
 	if !ok {
@@ -101,7 +99,6 @@ func (w pathBoundWriter) ResolveAnchoredTextTarget(ctx context.Context, args jso
 	return resolver.ResolveAnchoredTextTarget(ctx, args)
 }
 
->>>>>>> origin/main-v2
 func (w pathBoundWriter) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	paths, err := extractWritePathsFromArgs(w.inner.Name(), w.workDir, args)
 	if err != nil {

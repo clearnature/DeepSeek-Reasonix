@@ -117,10 +117,7 @@ func newAgentServices(
 		prov:                  prov,
 		tools:                 tools,
 		pricing:               opts.Pricing,
-<<<<<<< HEAD
-=======
 		quoteContext:          opts.QuoteContext,
->>>>>>> origin/main-v2
 		sink:                  sink,
 		gate:                  gate,
 		extensions:            opts.Extensions,

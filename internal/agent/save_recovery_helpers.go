@@ -106,12 +106,6 @@ func copyValidContextProjection(originalPath, targetPath string, msgs []provider
 	st, ok, err := LoadCompactionState(originalPath)
 	if err != nil {
 		return false, err
-<<<<<<< HEAD
-	}
-	if !ok {
-		return false, nil
-=======
->>>>>>> origin/main-v2
 	}
 	if !ok {
 		return false, nil

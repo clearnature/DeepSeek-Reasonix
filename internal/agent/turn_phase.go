@@ -77,11 +77,7 @@ func (a *Agent) emitCompletionSummary(c *taskcontract.Contract, report completio
 		}
 	}
 	gaps = completionGapKinds(gaps, report)
-<<<<<<< HEAD
-	constraintDegraded := a.turn.policySet && (a.turn.policy.Constraints.ForbidTests || len(a.turn.policy.Constraints.AllowedChecks) > 0)
-=======
 	constraintDegraded := a.turn.constraints.ForbidTests || len(a.turn.constraints.AllowedChecks) > 0
->>>>>>> origin/main-v2
 	summaryVerdict := verdict.String()
 	switch verdict {
 	case taskcontract.VerdictComplete:

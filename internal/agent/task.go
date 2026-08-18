@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -30,23 +29,6 @@ import (
 	"reasonix/internal/tool"
 	"reasonix/internal/workspacelease"
 )
-
-// foregroundTaskKey marks a context as running a foreground (sync) task
-// sub-agent — the only context where backgroundize signals and the automatic
-// threshold are honored (main agent/background/planner never set it, so they
-// never return the handoff sentinel only RunProfileSpec captures).
-type foregroundTaskKey struct{}
-
-// WithForegroundTask stamps a context as a foreground task sub-agent.
-func WithForegroundTask(ctx context.Context) context.Context {
-	return context.WithValue(ctx, foregroundTaskKey{}, true)
-}
-
-// foregroundTaskFromContext reports whether the run loop may hand off.
-func foregroundTaskFromContext(ctx context.Context) bool {
-	v, _ := ctx.Value(foregroundTaskKey{}).(bool)
-	return v
-}
 
 // withSubagentSessionTemp installs a fresh session-private temporary directory
 // Manager for one sub-agent run. The returned release must be deferred by the
@@ -120,28 +102,29 @@ const subagentToolBoundarySummary = "Recursive agent/skill tools are exposed onl
 
 // maxConcurrentBackgroundTasks is the legacy writer-background fallback used
 // only when a TaskTool has no session scheduler (tests). Production boots
-// inject MaxParallelWriters via SubagentScheduler. The cap mirrors the
-// scheduler's absolute ceiling so a no-scheduler burst (P13 team concurrency
-// tests, custom assemblies) is not artificially limited to 3.
-const maxConcurrentBackgroundTasks = MaxSubagentConcurrencyLimit
+// inject MaxParallelWriters via SubagentScheduler.
+const maxConcurrentBackgroundTasks = DefaultMaxParallelWriters
 
 // AlwaysHiddenSubagentTools returns the tool names excluded from every
-// subagent's registry regardless of allowlist or delegation depth (unlike
-// subagentRecursiveTools, which depends on remaining depth). That covers
-// subagentAlwaysHiddenTools and subagentJobTools — both registry variants
-// strip the job tools unconditionally. Host tool pickers for a subagent
-// profile should exclude these: selecting them is silently ignored.
+// subagent's registry regardless of an explicit allowlist or delegation
+// depth (unlike subagentRecursiveTools, which depends on remaining depth).
+// That covers both subagentAlwaysHiddenTools and subagentJobTools —
+// SubagentToolRegistryForDepth and its read-only variant strip the job tools
+// unconditionally too. Host UIs offering a tool picker for a subagent
+// profile's allowed-tools should exclude these from the offered choices —
+// selecting them would be silently ignored at runtime.
 func AlwaysHiddenSubagentTools() []string {
 	names := append([]string(nil), subagentAlwaysHiddenTools...)
 	return append(names, subagentJobTools...)
 }
 
-// SubagentMetaTools returns the tool names spawned agents should not inherit
-// unless a call site deliberately opts into a different boundary; they can
-// spawn or author more agent work, so excluding them preserves one layer of
-// delegation without a spawn-count cap. read_skill stays listed so guardian
-// and planner surfaces keep byte-identical provider-visible tool sets — only
-// the sub-agent depth cap deliberately stopped stripping it.
+// SubagentMetaTools returns the tool names that spawned agents should not inherit
+// from the parent registry unless a future call site deliberately opts into a
+// different boundary. They can spawn or author more agent work, so excluding them
+// preserves one layer of delegation without adding a spawn-count cap.
+// read_skill stays listed here so the guardian and planner surfaces, which
+// exclude these names, keep their provider-visible tool sets byte-identical —
+// only the sub-agent depth cap deliberately stopped stripping it.
 func SubagentMetaTools() []string {
 	out := append([]string(nil), subagentRecursiveTools...)
 	out = append(out, "read_skill")
@@ -284,7 +267,6 @@ type TaskTool struct {
 	baseEffort                    string
 	identityProfile               func(modelRef, effort string) (string, string)
 	maxSubagentDepth              int
-	autoBackgroundizeAfter        time.Duration
 	ablation                      ablation.Set
 	workspaceLease                *workspacelease.Owner
 	// scheduler is the session-scoped concurrency + write-claim controller.
@@ -334,9 +316,6 @@ type TaskToolOptions struct {
 	SubagentModel                         string
 	SubagentEffort                        string
 	ResolveProvider                       func(string, string) (provider.Provider, *provider.Pricing, int, error)
-	// AutoBackgroundizeAfter is inherited by foreground task sub-agents so the
-	// P4 auto-handoff threshold applies to them, not just the parent.
-	AutoBackgroundizeAfter time.Duration
 }
 
 // NewTaskToolWithOptions is the internal standard constructor for TaskTool.
@@ -349,25 +328,6 @@ func NewTaskToolWithOptions(opts TaskToolOptions) *TaskTool {
 		sysPrompt = DefaultTaskSystemPrompt
 	}
 	return &TaskTool{
-<<<<<<< HEAD
-		prov:                   opts.Provider,
-		pricing:                opts.Pricing,
-		parentReg:              opts.ParentRegistry,
-		maxSteps:               opts.MaxSteps,
-		contextWindow:          opts.ContextWindow,
-		recentKeep:             opts.RecentKeep,
-		compactRatio:           opts.CompactRatio,
-		temperature:            opts.Temperature,
-		archiveDir:             opts.ArchiveDir,
-		keepPolicy:             opts.KeepPolicy,
-		sysPrompt:              sysPrompt,
-		gate:                   opts.Gate,
-		subagentModel:          opts.SubagentModel,
-		subagentEffort:         opts.SubagentEffort,
-		resolveProvider:        opts.ResolveProvider,
-		autoBackgroundizeAfter: opts.AutoBackgroundizeAfter,
-		maxSubagentDepth:       DefaultMaxSubagentDepth,
-=======
 		prov:             opts.Provider,
 		pricing:          opts.Pricing,
 		quoteContext:     opts.QuoteContext,
@@ -385,7 +345,6 @@ func NewTaskToolWithOptions(opts TaskToolOptions) *TaskTool {
 		subagentEffort:   opts.SubagentEffort,
 		resolveProvider:  opts.ResolveProvider,
 		maxSubagentDepth: DefaultMaxSubagentDepth,
->>>>>>> origin/main-v2
 	}
 }
 
@@ -525,8 +484,7 @@ func (t *TaskTool) Schema() json.RawMessage {
   "run_in_background":{"type":"boolean","description":"Run the sub-agent asynchronously: returns a job id immediately and keeps working across turns. Collect its final answer with wait, and you'll be notified when it finishes. Use for long, independent sub-tasks you don't need to block on right now."},
   "model":{"type":"string","description":"Optional model override for the sub-agent (a configured provider/model name). Precedence: persistent profile config, this argument, profile frontmatter, global subagent default, parent model."},
   "effort":{"type":"string","description":"Optional reasoning effort for the sub-agent (e.g. high, max). Same precedence as model."},
-  "continue_from":{"type":"string","description":"Continue a prior compatible subagent transcript in the current conversation context. Pass only the 'sa_...' value from the prior result's 'Subagent reference: ...' line. If the ref belongs to an ancestor conversation, the framework continues a current-conversation copy."},
-  "fork":{"type":"boolean","description":"Fork this conversation into a background sub-agent: the child inherits the parent system prompt and committed history as a read-only prefix, so its first request can reuse the parent's provider prompt cache. Mutually exclusive with continue_from and fork_from. Runs in the background fire-and-forget: the result is never delivered back automatically — collect it with wait."}
+  "continue_from":{"type":"string","description":"Continue a prior compatible subagent transcript in the current conversation context. Pass only the 'sa_...' value from the prior result's 'Subagent reference: ...' line. If the ref belongs to an ancestor conversation, the framework continues a current-conversation copy."}
 },
 "required":["prompt"]
 }`)
@@ -638,7 +596,7 @@ func (r *ReadOnlyTaskTool) Execute(ctx context.Context, args json.RawMessage) (s
 	// Every entry point compiles to a spec and runs through RunProfileSpec, so a
 	// boundary added there cannot be missed by one caller. read_only_task keeps
 	// its own promise of no durable side effects through Ephemeral.
-	spec, err := r.task.buildTaskSpec(ctx, p.Prompt, p.Description, "", nil, p.Tools, p.MaxSteps, p.Model, p.Effort, "", "", false, false, true)
+	spec, err := r.task.buildTaskSpec(ctx, p.Prompt, p.Description, "", nil, p.Tools, p.MaxSteps, p.Model, p.Effort, "", "", false, true)
 	if err != nil {
 		return "", err
 	}
@@ -672,7 +630,6 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		Effort          string   `json:"effort"`
 		ContinueFrom    string   `json:"continue_from"`
 		ForkFrom        string   `json:"fork_from"`
-		Fork            bool     `json:"fork"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("invalid args: %w", err)
@@ -681,7 +638,7 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("prompt is required")
 	}
 
-	spec, err := t.buildTaskSpec(ctx, p.Prompt, p.Description, p.Profile, p.WritePaths, p.Tools, p.MaxSteps, p.Model, p.Effort, p.ContinueFrom, p.ForkFrom, p.RunInBackground, p.Fork, false)
+	spec, err := t.buildTaskSpec(ctx, p.Prompt, p.Description, p.Profile, p.WritePaths, p.Tools, p.MaxSteps, p.Model, p.Effort, p.ContinueFrom, p.ForkFrom, p.RunInBackground, false)
 	if err != nil {
 		return "", err
 	}
@@ -689,24 +646,14 @@ func (t *TaskTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 }
 
 // buildTaskSpec resolves profile, tools, model/effort, and write claims for a
-// single task/fleet item. forceReadOnly forces the read-only registry. fork
-// inherits the parent conversation prefix into a fire-and-forget background
-// sub-agent and is mutually exclusive with continueFrom/forkFrom.
-func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profile string, writePaths, tools []string, maxSteps int, model, effort, continueFrom, forkFrom string, background, fork, forceReadOnly bool) (ProfileExecSpec, error) {
-	if fork && (strings.TrimSpace(continueFrom) != "" || strings.TrimSpace(forkFrom) != "") {
-		return ProfileExecSpec{}, fmt.Errorf("fork is mutually exclusive with continue_from and fork_from; pass only fork")
-	}
+// single task/fleet item. forceReadOnly forces the read-only registry.
+func (t *TaskTool) buildTaskSpec(ctx context.Context, prompt, description, profile string, writePaths, tools []string, maxSteps int, model, effort, continueFrom, forkFrom string, background, forceReadOnly bool) (ProfileExecSpec, error) {
 	spec := ProfileExecSpec{
 		Task:    TaskSpec{Objective: prompt, Description: description},
 		Worker:  WorkerSpec{Kind: "task", Name: "task", SystemPrompt: t.sysPrompt},
 		Grant:   CapabilityGrant{CallTools: tools},
-		Context: ContextRequest{ContinueFrom: strings.TrimSpace(continueFrom), ForkFrom: strings.TrimSpace(forkFrom), Fork: fork, Silent: true},
+		Context: ContextRequest{ContinueFrom: strings.TrimSpace(continueFrom), ForkFrom: strings.TrimSpace(forkFrom)},
 		Sched:   SchedulerPolicy{MaxSteps: maxSteps, RunInBackground: background, Nested: SubagentDepth(ctx) > 0},
-	}
-	if fork {
-		// P5 fire-and-forget default: silent envelope. P6 teammates and any
-		// other non-silent fork callers flip Silent=false afterwards.
-		spec.Context.Silent = true
 	}
 	profile = strings.TrimSpace(profile)
 	readOnly := forceReadOnly
@@ -785,25 +732,12 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	if t == nil {
 		return "", fmt.Errorf("task tool is not configured")
 	}
-	// P5 fork: the child inherits the parent prefix and always runs as a
-	// fire-and-forget background job — the parent turn must not block on it.
-	// Flipping RunInBackground here routes the whole run through the existing
-	// background job path (slot acquisition, checkpoint writer, save lifecycle).
-	if spec.Context.Fork {
-		spec.Sched.RunInBackground = true
-	}
 	// Per-child progress tracker: converts the child's reasoning/text/notice/
 	// retrying into reserved ToolProgress previews and guarantees exactly one
 	// terminal status (completed/cancelled/failed). The background job owns
 	// finish after handoff; every other exit finishes here, including
 	// validation errors and panics.
-	// The sink rides the spec (job workers have no CallContext): the leader's
-	// Recorder-wrapped sink keeps sub-agent usage in the daily stats file.
-	runSink := subSink(ctx)
-	if spec.Task.Sink != nil {
-		runSink = spec.Task.Sink
-	}
-	trk := newSubagentProgressTracker(ctx, runSink)
+	trk := newSubagentProgressTracker(ctx, subSink(ctx))
 	backgroundHandoff := false
 	defer func() {
 		if backgroundHandoff {
@@ -846,15 +780,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 	modelRef, effortRef := spec.Worker.Model, spec.Worker.Effort
 	usageModelRef := t.usageModelRef(modelRef, effortRef)
 	parentID, _, _, _ := CallContext(ctx)
-	var run *SubagentRun
-	if spec.Context.Fork {
-		// P5 fork branch: capture the parent prefix (T1) and prefill a fresh
-		// sub-agent session with it (PrepareParentFork), so the child's first
-		// request shares the parent's provider cache prefix.
-		run, err = t.prepareTranscriptForkWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name)
-	} else {
-		run, err = t.prepareTranscriptRunWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Context.ContinueFrom, spec.Context.ForkFrom, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name)
-	}
+	run, err := t.prepareTranscriptRunWithPrompt(ctx, subReg, modelRef, effortRef, spec.Context.parentSession(ctx), parentID, spec.Context.ContinueFrom, spec.Context.ForkFrom, spec.Worker.SystemPrompt, spec.Worker.Kind, spec.Worker.Name)
 	if err != nil {
 		return "", err
 	}
@@ -890,27 +816,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		turn := t.mutationObserver.OwnershipTurn()
 		mutationObserver = t.mutationObserver.CloneForSubagent(recoveryTaskID, turn, backgroundWriter)
 	}
-	// runSessionMode runs the sub-agent session. resume marks the
-	// foreground→background handoff's second leg: the in-memory session already
-	// carries the task prompt, so the run is marked WithResumeSession and
-	// beginRunTurn skips re-appending it (prefix-stable continuation). The
-	// handoff is the only caller that sets resume.
-	runSessionMode := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered, resume bool) (string, error) {
-		// Job workers rebuild their ctx from the manager root, so inject the
-		// leader's asker here (inside the worker ctx) — the child's `ask`
-		// then reaches the approval chain instead of the nil-asker fallback.
-		if spec.Task.Asker != nil {
-			runCtx = withSubagentAsker(runCtx, spec.Task.Asker)
-		}
-		if spec.Context.Fork {
-			// P5/P6.1 execution gate: schema stays writer-capable (cache
-			// prefix), executions are gated — read-only by default; a
-			// writable teammate (P6.1 enhancement 1) opts out via the gate.
-			runCtx = WithForkReadOnlyGate(runCtx, forkReadOnlyGate{writable: spec.Context.Writable})
-		}
-		if resume {
-			runCtx = WithResumeSession(runCtx)
-		}
+	runSession := func(runCtx context.Context, sink event.Sink, writerAlreadyRegistered bool) (string, error) {
 		if mutationObserver != nil && backgroundWriter && !writerAlreadyRegistered {
 			turn := mutationObserver.OwnershipTurn()
 			if err := mutationObserver.RegisterWriter(recoveryTaskID, "background_subagent", turn); err != nil {
@@ -971,15 +877,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		// Emit queued before the job goroutine can start so the status slot
 		// never regresses to a stale queued after running.
 		trk.queued()
-		// P5 fork default is fire-and-forget: the job completes silently (no
-		// P1 completion envelope), so it runs through StartSilentForSession
-		// while wait/bash_output/steer stay usable. P6 teammates clear Silent
-		// so their result rides the P1 envelope back to the leader.
-		startJob := jm.StartForSession
-		if spec.Context.Fork && spec.Context.Silent {
-			startJob = jm.StartSilentForSession
-		}
-		job := startJob(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
+		job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
 			if writerRegistered {
 				defer mutationObserver.UnregisterWriter(recoveryTaskID)
 			}
@@ -1005,7 +903,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			}
 			defer releaseSlot()
 			trk.running()
-			answer, err := runSessionMode(jobCtx, trk.wrap(), writerRegistered, false)
+			answer, err := runSession(jobCtx, trk.wrap(), writerRegistered)
 			if err != nil {
 				return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
 			}
@@ -1023,13 +921,7 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 			queuedNote = " It may wait in the session queue until a concurrency/write slot is free."
 		}
 		if run != nil && run.Ref != "" {
-			if spec.Context.Fork {
-				return fmt.Sprintf("Started background fork %q (%s).%s\n%s\nIt runs across turns and inherits this conversation's committed history as its prompt-cache prefix. Fire-and-forget: it completes silently — you are NOT notified — so poll it with wait (or bash_output) when you want the result; steer is available via the steer message flow.", job.ID, label, queuedNote, FormatSubagentReference(run)), nil
-			}
 			return fmt.Sprintf("Started background task %q (%s).%s\n%s\nIt runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote, FormatSubagentReference(run)), nil
-		}
-		if spec.Context.Fork {
-			return fmt.Sprintf("Started background fork %q (%s).%s It runs across turns and inherits this conversation's committed history as its prompt-cache prefix. Fire-and-forget: it completes silently — you are NOT notified — so poll it with wait (or bash_output) when you want the result; steer is available via the steer message flow.", job.ID, label, queuedNote), nil
 		}
 		return fmt.Sprintf("Started background task %q (%s).%s It runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote), nil
 	}
@@ -1041,28 +933,8 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		return "", err
 	}
 	defer releaseSlot()
-	// On a backgroundize handoff the job goroutine is the single owner of the
-	// run handle (it defers run.Release inside its closure); the foreground
-	// must not release concurrently or the two goroutines would race on
-	// SubagentRun.release. backgroundHandoff is flipped by the handoff.
-	defer func() {
-		if !backgroundHandoff {
-			run.Release()
-		}
-	}()
-	answer, err := runSessionMode(WithForegroundTask(ctx), trk.wrap(), false, false)
-	if errors.Is(err, errBackgroundizeRequested) {
-		// P4 handoff: the foreground run loop returned the sentinel at an
-		// iteration boundary with the committed session intact. Move the same
-		// in-memory run to a background job on this goroutine — the foreground
-		// run loop has fully returned, so StartForSession starts the job's
-		// resumed run strictly after the foreground stack unwound (no double
-		// writer on the session). The outer defers (releaseSlot, run.Release)
-		// still run as we return (releaseSlot frees the foreground slot so the
-		// job can acquire it; the run-handle defer is skipped once handoff
-		// flips, because the job goroutine is the sole owner of run.Release).
-		return t.backgroundizeForeground(ctx, spec, trk, run, &backgroundHandoff, subReg, modelRef, effortRef, acquireReq, recoveryTaskID, mutationObserver, runSessionMode)
-	}
+	defer run.Release()
+	answer, err := runSession(ctx, trk.wrap(), false)
 	if err != nil {
 		return "", errors.Join(err, t.transcripts.SaveFailed(run))
 	}
@@ -1073,101 +945,6 @@ func (t *TaskTool) RunProfileSpec(ctx context.Context, spec ProfileExecSpec) (re
 		return FormatSubagentRunResult(answer, run, false), nil
 	}
 	return GuardSubagentHostDecisionText(answer), nil
-}
-
-// backgroundizeForeground performs the foreground→background handoff at the
-// run loop's serialized point: the foreground run has fully returned, so this
-// goroutine registers the job (MarkRunning → StartForSession) and hands the
-// same in-memory Session to the job's resumed run (resume=true, which skips
-// re-appending the task prompt). handoff flips the outer RunProfileSpec defer
-// so the tracker is finished only by the job goroutine.
-func (t *TaskTool) backgroundizeForeground(ctx context.Context, spec ProfileExecSpec, trk *subagentProgressTracker, run *SubagentRun, handoff *bool, subReg *tool.Registry, modelRef, effortRef string, acquireReq AcquireRequest, recoveryTaskID string, mutationObserver *checkpoint.MutationObserver, runSessionMode func(context.Context, event.Sink, bool, bool) (string, error)) (string, error) {
-	jm, ok := jobs.FromContext(ctx)
-	if !ok {
-		trk.finish(ctx.Err(), fmt.Errorf("background execution is not available in this context"))
-		return "", fmt.Errorf("background execution is not available in this context")
-	}
-	label := firstNonEmpty(spec.Task.Description, spec.Worker.Name, "task")
-	if t.transcripts != nil && run != nil && run.Ref != "" {
-		if err := t.transcripts.MarkRunning(run); err != nil {
-			trk.finish(ctx.Err(), err)
-			return "", err
-		}
-	}
-	// The foreground run never registered a checkpoint writer (it was not a
-	// background writer); register now so the resumed background run is
-	// tracked exactly like a natively-backgrounded task.
-	writerRegistered := false
-	if mutationObserver != nil && !spec.Grant.ReadOnly {
-		turn := mutationObserver.OwnershipTurn()
-		if err := mutationObserver.RegisterWriter(recoveryTaskID, "background_subagent", turn); err != nil {
-			trk.finish(ctx.Err(), err)
-			return "", errors.Join(err, t.transcripts.SaveFailed(run))
-		}
-		writerRegistered = true
-	}
-	parentSession := spec.Context.parentSession(ctx)
-	backgroundEvidence := evidence.NewLedger()
-	slotReq := acquireReq
-	// Emit queued before the job goroutine can start so the status slot never
-	// regresses to a stale queued after running.
-	trk.queued()
-	job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
-		// The resumed run derives from jobCtx only: the background job must
-		// outlive the parent turn (the model already confirmed "started
-		// background task"), so a normal turn end must not cancel it. Kill or
-		// Close on the job (kill_shell, the P2 panel stop) still propagate
-		// through jobCtx.
-		runCtx, cancelRun := context.WithCancel(jobCtx)
-		defer cancelRun()
-		// The handoff consumed the foreground signal; the resumed run must not
-		// re-checkpoint (it would immediately re-trigger the sentinel).
-		runCtx = WithoutBackgroundizeSignal(runCtx)
-		runCtx = WithParentSession(runCtx, parentSession)
-		runCtx = evidence.WithLedger(runCtx, backgroundEvidence)
-		if writerRegistered {
-			defer mutationObserver.UnregisterWriter(recoveryTaskID)
-		}
-		defer run.Release()
-		defer func() { jobs.PublishEvidence(runCtx, backgroundEvidence.Summary()) }()
-		defer func() {
-			if r := recover(); r != nil {
-				panicErr := fmt.Errorf("internal error: panic: %v\n%s", r, debug.Stack())
-				result = FormatSubagentRunResult("", run, true)
-				err = errors.Join(panicErr, t.transcripts.SaveFailed(run))
-			}
-			// The job owns the terminal status: the parent tool call has
-			// already returned its job id by now.
-			trk.finish(runCtx.Err(), err)
-		}()
-		// Queue for a concurrency/write slot inside the job so the parent tool
-		// call returns a job id immediately.
-		releaseSlot, slotErr := t.acquireSlot(runCtx, slotReq)
-		if slotErr != nil {
-			return FormatSubagentRunResult("", run, true), errors.Join(slotErr, t.transcripts.SaveFailed(run))
-		}
-		defer releaseSlot()
-		trk.running()
-		answer, err := runSessionMode(runCtx, trk.wrap(), writerRegistered, true)
-		if err != nil {
-			return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
-		}
-		if err := t.transcripts.SaveCompleted(run); err != nil {
-			return FormatSubagentRunResult("", run, true), errors.Join(err, t.transcripts.SaveFailed(run))
-		}
-		return FormatSubagentRunResult(answer, run, false), nil
-	})
-	// Hand the tracker to the job goroutine: the outer RunProfileSpec defer
-	// must not finish (and close) it while the job still runs.
-	*handoff = true
-	queuedNote := ""
-	if t.scheduler != nil {
-		queuedNote = " It may wait in the session queue until a concurrency/write slot is free."
-	}
-	if run != nil && run.Ref != "" {
-		return fmt.Sprintf("Started background task %q (%s) — moved from the foreground.%s\n%s\nIt runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote, FormatSubagentReference(run)), nil
-	}
-	return fmt.Sprintf("Started background task %q (%s) — moved from the foreground.%s It runs across turns; collect its final answer with wait (or wait will return it once done), and you'll be notified when it finishes.", job.ID, label, queuedNote), nil
 }
 
 func (t *TaskTool) acquireSlot(ctx context.Context, req AcquireRequest) (func(), error) {
@@ -1233,62 +1010,6 @@ func (t *TaskTool) prepareTranscriptRunWithPrompt(ctx context.Context, subReg *t
 	return t.transcripts.PrepareFresh(spec)
 }
 
-// prepareTranscriptForkWithPrompt 准备 fork 子代理的转录运行（P5 fork 分支）：
-// 从工具执行上下文的父 Agent（WithForkSource 挂载，T0-A）取父会话前缀
-// （captureForkPrefix，T1），交给 transcripts.PrepareParentFork 预填进全新
-// SubagentRun 的 session。首请求 = 前缀 + 新 user 消息，与父已发送字节
-// byte-identical（命中父已建 provider 缓存的前提，plan §一.1/§五）。
-func (t *TaskTool) prepareTranscriptForkWithPrompt(ctx context.Context, subReg *tool.Registry, modelRef, effortRef, parentSession, parentID, systemPrompt, kind, name string) (*SubagentRun, error) {
-	parentSession = strings.TrimSpace(parentSession)
-	if t.transcripts == nil {
-		return nil, fmt.Errorf("subagent transcript store is required")
-	}
-	if systemPrompt == "" {
-		systemPrompt = t.sysPrompt
-	}
-	if kind == "" {
-		kind = "task"
-	}
-	if name == "" {
-		name = "task"
-	}
-	if parentSession == "" {
-		return nil, fmt.Errorf("subagent fork requires a persisted session; none is active in this run")
-	}
-	parent, ok := ForkSourceFromContext(ctx)
-	if !ok || parent == nil {
-		return nil, fmt.Errorf("fork requires a parent agent in the tool execution context")
-	}
-	// T3 递归 guard：fork-of-fork 只允许到 max_subagent_depth 上限。
-	if err := checkForkDepthGuard(ctx, t.maxDepth()); err != nil {
-		return nil, err
-	}
-	// 捕获只在内存中完成：零发送、父 Session 零改动（T1 红线）。
-	prefix := captureForkPrefix(parent, ctx)
-	if len(prefix) == 0 {
-		return nil, fmt.Errorf("fork prefix is empty; the parent conversation has no committed history to inherit")
-	}
-	// T3 大小 guard：父历史 ≤ 子上下文窗口 80%，否则拒绝（破前缀即丢缓存）。
-	if err := checkForkSizeGuard(t.contextWindow, prefix); err != nil {
-		return nil, err
-	}
-	identityModel, identityEffort := t.effectiveIdentity(modelRef, effortRef)
-	spec := SubagentSpec{
-		Kind:             kind,
-		Name:             name,
-		WorkspaceRoot:    t.workspaceRoot,
-		ParentSession:    parentSession,
-		ParentToolCallID: parentID,
-		SystemPrompt:     systemPrompt,
-		Registry:         subReg,
-		ToolContext:      childToolIdentityContext(ctx),
-		Model:            identityModel,
-		Effort:           identityEffort,
-		ResumedFrom:      "",
-	}
-	return t.transcripts.PrepareParentFork(prefix, spec)
-}
-
 func childToolIdentityContext(ctx context.Context) context.Context {
 	ctx = tool.WithoutGoalTurnRecorder(ctx)
 	ctx = memory.WithoutQueue(ctx)
@@ -1332,7 +1053,7 @@ func (t *TaskTool) effectiveEffortIdentity(effort string) string {
 // buildSubReg returns the sub-agent's tool set: the named whitelist (minus
 // unavailable sub-agent tools), or every parent tool except those tools.
 func (t *TaskTool) buildSubReg(names []string, childDepth int) *tool.Registry {
-	return wrapAskGates(SubagentToolRegistryForDepthWithRuntime(t.parentReg, names, childDepth, t.maxDepth(), t.capabilityRuntime))
+	return SubagentToolRegistryForDepthWithRuntime(t.parentReg, names, childDepth, t.maxDepth(), t.capabilityRuntime)
 }
 
 func (t *TaskTool) maxDepth() int {
@@ -1793,31 +1514,7 @@ func (t *TaskTool) resolveSubSessionRuntime(modelRef, effort string) (provider.P
 	return prov, pricing, ctxWin, nil
 }
 
-<<<<<<< HEAD
-// subagentAskerKey carries the leader's Asker to a spawned sub-agent so its
-// `ask` reaches the leader's approval chain instead of the headless fallback.
-type subagentAskerKey struct{}
-
-func withSubagentAsker(ctx context.Context, a Asker) context.Context {
-	return context.WithValue(ctx, subagentAskerKey{}, a)
-}
-
-func subagentAskerFromContext(ctx context.Context) (Asker, bool) {
-	a, ok := ctx.Value(subagentAskerKey{}).(Asker)
-	return a, ok
-}
-
 func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver, writeRoots *sandbox.WritableRootSet) (string, error) {
-	// Sub-agents inherit the leader's asker so `ask` is answered per the
-	// parent's permission mode (ask=human, auto=auto-approve, yolo=decide)
-	// rather than silently falling back to a model assumption.
-	if _, _, asker, ok := CallContext(ctx); ok && asker != nil {
-		ctx = withSubagentAsker(ctx, asker)
-	}
-	slog.Info("subagent asker ctx", "model", modelRef, "callctx_asker", func() bool { _, _, a, ok := CallContext(ctx); return ok && a != nil }())
-=======
-func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver, writeRoots *sandbox.WritableRootSet) (string, error) {
->>>>>>> origin/main-v2
 	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
 	if writeRoots != nil {
 		opts.WriteRoots = writeRoots
@@ -1834,9 +1531,6 @@ func (t *TaskTool) runSubSession(ctx context.Context, prompt string, subReg *too
 }
 
 func (t *TaskTool) runReadOnlySubSession(ctx context.Context, prompt string, subReg *tool.Registry, sink event.Sink, maxSteps int, prov provider.Provider, pricing *provider.Pricing, ctxWin int, sess *Session, childDepth int, recoveryTaskID, modelRef string, mutationObserver *checkpoint.MutationObserver) (string, error) {
-	if _, _, asker, ok := CallContext(ctx); ok && asker != nil {
-		ctx = withSubagentAsker(ctx, asker)
-	}
 	opts := t.subagentOptions(ctx, maxSteps, pricing, ctxWin, childDepth, recoveryTaskID, mutationObserver)
 	opts.ModelRef = modelRef
 	// Capture the pristine task before host framing is prepended: delivery
@@ -1856,10 +1550,7 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 		MaxSteps:                 maxSteps,
 		Temperature:              t.temperature,
 		Pricing:                  pricing,
-<<<<<<< HEAD
-=======
 		QuoteContext:             t.quoteContext,
->>>>>>> origin/main-v2
 		UsageSource:              event.UsageSourceSubagent,
 		Gate:                     t.gate,
 		ContextWindow:            ctxWin,
@@ -1871,10 +1562,6 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 		ReasoningLanguage:        ReasoningLanguageFromContext(ctx),
 		SubagentDepth:            childDepth,
 		MaxSubagentDepth:         t.maxDepth(),
-<<<<<<< HEAD
-		AutoBackgroundizeAfter:   t.autoBackgroundizeAfter,
-=======
->>>>>>> origin/main-v2
 		Ablation:                 t.ablation,
 		WorkspaceLease:           t.workspaceLease,
 		RecoveryGate:             t.recoveryGate,
@@ -1888,18 +1575,11 @@ func (t *TaskTool) subagentOptions(ctx context.Context, maxSteps int, pricing *p
 	// Writer children inherit the parent turn's frozen risk and closure floors.
 	// The parent publishes its policy into the run context; a child that never
 	// received it (direct unit construction) keeps its own derived policy.
-<<<<<<< HEAD
-	if parent, ok := taskpolicy.FromContext(ctx); ok {
-		p := parent
-		opts.InheritedTaskPolicy = &p
-
-=======
 	if inherited, ok := runtimepolicy.InheritedFromContext(ctx); ok {
 		copy := inherited
 		opts.InheritedExecution = &copy
 	} else if constraints, ok := runtimepolicy.FromContext(ctx); ok {
 		opts.InheritedExecution = &runtimepolicy.InheritedExecutionContext{Constraints: constraints}
->>>>>>> origin/main-v2
 	}
 	return opts
 }
@@ -2075,40 +1755,9 @@ func RunSubAgentWithSession(ctx context.Context, prov provider.Provider, reg *to
 	// Nested reasoning stays isolated; the parent consumes only final Content.
 	// Require it so a reasoning-only stop cannot fall back to older tool text.
 	opts.RequireVisibleFinal = true
-	// P5 fork (T3): the fork branch stamps the read-only execution gate on the
-	// run context; install it on the child's Options here — the only override
-	// point shared by both the writer and read-only child paths. Every other
-	// sub-agent keeps the gate its spawner already configured.
-	if g, ok := forkReadOnlyGateFromContext(ctx); ok && g != nil {
-		opts.Gate = g
-	}
 	sub := New(prov, reg, sess, opts, sink)
-	// Fork children inherit the parent's admission calibration so their first
-	// request is not mis-sized by the cold wire-char fallback (shared
-	// contexts otherwise report false overflow and recompact every fork).
-	if parent, ok := ForkSourceFromContext(ctx); ok {
-		if usage, cal, ok := captureForkInheritance(parent, opts.ModelRef); ok {
-			sub.sess.output.lastUsage.Store(usage)
-			sub.sess.output.promptCalibration.Store(cal)
-		}
-	}
-	// Sub-agents inherit the leader's asker so their `ask` is answered per the
-	// parent's permission mode instead of silently falling back.
-	if asker, ok := subagentAskerFromContext(ctx); ok {
-		sub.SetAsker(asker)
-		slog.Info("subagent asker injected", "model", opts.ModelRef)
-	} else {
-		slog.Info("subagent asker absent", "model", opts.ModelRef)
-	}
 	sub.SetPlanMode(planWorkflow)
 	if err := sub.Run(ctx, prompt); err != nil {
-		if errors.Is(err, errBackgroundizeRequested) {
-			// P4: pass the sentinel through unwrapped so RunProfileSpec can
-			// recognize the foreground→background handoff. Wrapping it as a
-			// sub-agent failure here would fail the task instead of moving it
-			// to the background.
-			return "", err
-		}
 		// Still merge any partial child evidence so parent gates see real writes.
 		mergeChildEvidence(ctx, sub)
 		if answer, ok := salvageReadinessExhaustedAnswer(sub, sess, opts, err); ok {

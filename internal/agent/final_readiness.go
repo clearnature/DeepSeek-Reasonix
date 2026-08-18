@@ -153,117 +153,20 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	if a.planMode.Load() {
 		return out
 	}
-<<<<<<< HEAD
-	a.escalatePolicyFromEvidence()
-	closedLoop, qualityGated := a.finalReadinessPolicyState()
-	// An unfinished todo is a direct contradiction of a final answer, not a
-	// quality-evidence gap. Keep blocking it even on ordinary targeted turns.
-=======
->>>>>>> origin/main-v2
 	incomplete, hasTodos := a.task.ledger.IncompleteLatestTodos()
 	if !hasTodos && a.task.ledger.HasAnySuccessfulReceipt() {
 		incomplete, hasTodos = a.incompleteCanonicalTodos()
 	}
-<<<<<<< HEAD
-	if hasTodos && len(incomplete) > 0 && a.task.ledger.HasSuccessfulTodoProgressReceipt() {
-		out.applies = true
-		out.incompleteTodos = len(incomplete)
-		missing = append(missing, finalReadinessIncompleteTodos(incomplete))
-=======
 	if msg := a.capabilityGateFailure(); msg != "" {
 		out.applies = true
 		out.continuationUnsafe = true
 		out.missingCapabilities++
 		missing = append(missing, msg)
->>>>>>> origin/main-v2
 	}
 	writer, hasWriter := a.task.ledger.LatestSuccessfulWriterIndex()
 	if mutation, ok := a.task.ledger.LatestSuccessfulMutationIndex(); ok {
 		writer, hasWriter = mutation, true
 	}
-<<<<<<< HEAD
-	deliveryMutation := false
-	deliveryVerificationOnly := false
-	checkpoint := a.task.checkpoint
-	checkpointApplies := a.turn.deliveryScopeActive && checkpoint.ScopeID == a.task.scopeID
-	if closedLoop {
-		if mutation, ok := a.task.ledger.LatestSuccessfulMutationIndex(); ok {
-			writer, hasWriter = mutation, true
-			deliveryMutation = true
-		} else if checkpointApplies && checkpoint.PendingMutation {
-			// The mutation happened before a controller rebuild/restart. Treat it as
-			// the baseline so this run can satisfy verification/review/sign-off
-			// without manufacturing another write.
-			writer, hasWriter = -1, true
-			deliveryMutation = true
-		} else if checkpointApplies && checkpoint.MutationObserved {
-			deliveryMutation = true
-		}
-		workObserved := a.task.ledger.HasSuccessfulWorkReceipt() || (checkpointApplies && checkpoint.WorkObserved)
-		if a.turn.deliveryTaskExpected && !a.turn.deliveryPersistentExpected && !workObserved {
-			out.missingActionEvidence++
-			missing = append(missing, "perform host-observable work for this technical task before answering")
-		}
-		if a.turn.deliveryPersistentExpected && !a.task.ledger.HasSuccessfulToolReceipt("remember") {
-			out.missingMutation++
-			missing = append(missing, "save the requested durable memory with the remember tool before answering")
-		}
-		if a.turn.deliveryMutationExpected && !deliveryMutation {
-			out.missingMutation++
-			missing = append(missing, "the request requires a state change, but no successful mutation was observed")
-		}
-		if !hasWriter && a.task.ledger.HasSuccessfulVerificationCommand() {
-			writer, hasWriter = -1, true
-			deliveryVerificationOnly = true
-		}
-		// Required/preferred capability gates apply before the no-writer fast
-		// path below: a user-required Skill/MCP must not be skippable by
-		// answering from ordinary reads alone.
-		if msg := a.capabilityGateFailure(); msg != "" {
-			out.applies = true
-			out.missingCapabilities++
-			missing = append(missing, msg)
-		}
-		if a.turn.deliveryPersistentExpected && !a.turn.deliveryMutationExpected && !a.task.ledger.HasSuccessfulMutationOtherThan("remember") {
-			// A durable-memory-only request has its own concrete receipt contract.
-			// It must not inherit code-delivery todo/test/diff/review ceremonies;
-			// any unrelated mutation falls through to the full contract below.
-			out.applies = true
-			if len(missing) > 0 {
-				out.reason = strings.Join(missing, "; ")
-			}
-			return out
-		}
-	}
-	if !hasWriter {
-		if len(missing) > 0 {
-			if a.loopGuardAllowsFinal() && !atomicMutationMissing {
-				return out
-			}
-			out.reason = strings.Join(missing, "; ")
-		}
-		return out
-	}
-	// Targeted standard turns report missing checks without opening a recovery
-	// card. Hard readiness remains for high-assurance and Goal execution.
-	if !qualityGated {
-		if len(missing) > 0 {
-			if a.loopGuardAllowsFinal() && !atomicMutationMissing {
-				return finalReadinessCheck{}
-			}
-			out.reason = strings.Join(missing, "; ")
-		}
-		return out
-	}
-	hasProjectChecks := len(a.projectChecks) > 0
-	hasTodoReceipt := a.task.ledger.HasSuccessfulTodoWrite()
-	if !closedLoop && !hasProjectChecks && !hasTodoReceipt && len(missing) == 0 {
-		return finalReadinessCheck{}
-	}
-	out.applies = true
-	if closedLoop {
-		missing = a.appendClosedLoopReadiness(&out, missing, writer, deliveryMutation, checkpointApplies, checkpoint)
-=======
 	// Incomplete todos contradict closed-loop delivery only. In open turns they
 	// are cross-turn work plans and must not trigger the recovery ceremony.
 	if a.closedLoopActive() && hasWriter && hasTodos && len(incomplete) > 0 {
@@ -271,7 +174,6 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 		out.continuationHighConfidence = true
 		out.incompleteTodos = len(incomplete)
 		missing = append(missing, finalReadinessIncompleteTodos(incomplete))
->>>>>>> origin/main-v2
 	}
 	for _, check := range a.projectChecks {
 		if !hasWriter {
@@ -359,22 +261,6 @@ func (a *Agent) finalReadinessCheckFor() finalReadinessCheck {
 	return a.applyPartialCheckWaiver(out)
 }
 
-<<<<<<< HEAD
-// finalReadinessPolicyState keeps Goal mutation closure runtime-only, preserving
-// provider-visible prompt bytes and the explicit EvidenceNone test escape hatch.
-func (a *Agent) finalReadinessPolicyState() (closedLoop, qualityGated bool) {
-	_, goalMutationObserved := a.task.ledger.LatestSuccessfulMutationIndex()
-	closedLoop = a.closedLoopActive() ||
-		(a.turn.deliveryScopeActive && goalMutationObserved && a.turn.policy.Evidence != taskpolicy.EvidenceNone)
-	return closedLoop, closedLoop || a.turn.deliveryScopeActive || !a.turn.policySet
-}
-
-func (a *Agent) appendClosedLoopReadiness(out *finalReadinessCheck, missing []string, writer int, deliveryMutation, checkpointApplies bool, checkpoint evidence.DeliveryCheckpoint) []string {
-	a.emitTurnPhase(event.TurnPhaseVerifying)
-	if !(a.turn.deliveryCriteriaEstablished || (checkpointApplies && checkpoint.CriteriaEstablished)) {
-		out.missingAcceptanceCriteria++
-		missing = append(missing, "establish concrete acceptance criteria with todo_write before changing state")
-=======
 func obligationGap(o taskcontract.Obligation) string {
 	switch o.Kind {
 	case taskcontract.ObligationTargetedVerify, taskcontract.ObligationFullVerify:
@@ -395,7 +281,6 @@ func obligationGap(o taskcontract.Obligation) string {
 		return "keep an in-progress todo for this write"
 	default:
 		return string(o.Kind)
->>>>>>> origin/main-v2
 	}
 }
 

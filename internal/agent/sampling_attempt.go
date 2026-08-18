@@ -26,9 +26,6 @@ func (a *Agent) runSamplingAttempt(ctx context.Context, turn int, sink event.Sin
 }
 
 func (a *Agent) samplingAttemptSinks() (*deferredStreamSink, event.Sink) {
-<<<<<<< HEAD
-	if provider.WarnOnMissingToolCallReasoning(a.svc.prov) {
-=======
 	// Buffer when missing reasoning can reject or replace the attempt. Protocols
 	// that adopt an empty fallback without retry must keep streaming live because
 	// their first response always wins.
@@ -38,7 +35,6 @@ func (a *Agent) samplingAttemptSinks() (*deferredStreamSink, event.Sink) {
 		warnOnMissing
 	if replaySensitive && (!provider.AllowsEmptyReasoningFallback(a.svc.prov) ||
 		warnOnMissing) {
->>>>>>> origin/main-v2
 		streamSink := newReasoningAwareStreamSink(a.svc.sink)
 		return streamSink, streamSink
 	}

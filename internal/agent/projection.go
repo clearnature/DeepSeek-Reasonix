@@ -48,18 +48,10 @@ const (
 	CompactionModeSnip       = "snip"
 )
 
-<<<<<<< HEAD
-// Compaction telemetry status labels.
-const (
-	CompactionStatusInstalled = "installed"
-	CompactionStatusNoop      = "noop"
-	CompactionStatusAborted   = "aborted"
-=======
 const (
 	SummaryInputCachePrefix        = "cache_prefix"
 	SummaryInputExtensionRewritten = "extension_rewritten"
 	SummaryInputNonPrefix          = "non_prefix"
->>>>>>> origin/main-v2
 )
 
 // ContextProjection is the model-visible view of a session. The canonical
@@ -74,13 +66,9 @@ type ContextProjection struct {
 	// CoveredPrefixHash fingerprints provider-visible canonical[:CoveredCount]
 	// so append-only growth can be distinguished from prefix edits/rewrites.
 	CoveredPrefixHash string `json:"covered_prefix_hash,omitempty"`
-	// SemanticPrefixHash fingerprints covered non-tool messages: prune/snip
-	// only shorten tool results, so this stays stable and the projection body
-	// remains usable; real content changes invalidate it.
-	SemanticPrefixHash string `json:"semantic_prefix_hash,omitempty"`
-	SummaryHash        string `json:"summary_hash,omitempty"`
-	SourceTokens       int    `json:"source_tokens,omitempty"`
-	ProjectionTokens   int    `json:"projection_tokens,omitempty"`
+	SummaryHash       string `json:"summary_hash,omitempty"`
+	SourceTokens      int    `json:"source_tokens,omitempty"`
+	ProjectionTokens  int    `json:"projection_tokens,omitempty"`
 	// ViewInputHash/ViewOutputHash make free maintenance idempotent across
 	// retries and resume. They fingerprint the visible view, not canonical
 	// storage, so a projection can evolve without rewriting the transcript.
@@ -141,10 +129,6 @@ type CompactionState struct {
 	LastReceipt        *ContextMaintenanceReceipt `json:"last_receipt,omitempty"`
 	BlockedInputHash   string                     `json:"blocked_input_hash,omitempty"`
 	BlockedReason      string                     `json:"blocked_reason,omitempty"`
-	// CompactionInflight: unix-ms start of the last pass. Nonzero on load
-	// means the pass crashed mid-compaction (orphan lock); cleared by every
-	// completing pass and by the load-time orphan detector.
-	CompactionInflight int64 `json:"compaction_inflight,omitempty"`
 	// NativeContextEditingAccepted latches the first successful native request.
 	// ContextEditingFallbackLocal persists the only allowed request-shape switch:
 	// an explicit unsupported response before that latch was set.
@@ -156,34 +140,21 @@ type CompactionState struct {
 // CompactionTelemetry is the structured observability record for one
 // compaction attempt. Sensitive transcript content is intentionally omitted.
 type CompactionTelemetry struct {
-	Trigger    string  `json:"trigger"`
-	Reason     string  `json:"reason,omitempty"` // fold admission: manual|overflow|force|fold
-	CacheState string  `json:"cache_state"`
-	Status     string  `json:"status,omitempty"` // installed | noop | aborted; "" on legacy paths
-	TokPerChar float64 `json:"tpc,omitempty"`    // usage-calibrated token/char at fold time; 0 until calibrated
-	// Results/SavedChars describe a prune/snip pass (mode=snip): how many stale
-	// tool results were elided and roughly how many characters were saved.
-	Results          int    `json:"results,omitempty"`
-	SavedChars       int    `json:"saved_chars,omitempty"`
-	Mode             string `json:"mode"`
-	Native           bool   `json:"native"`
-	EstTokens        int    `json:"est_tokens"` // decision estimate that crossed the fold trigger
-	SourceTokens     int    `json:"source_tokens"`
-	FoldTokens       int    `json:"fold_tokens"` // summarizer input after any shortening
-	Spans            int    `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split
-	ProjectionTokens int    `json:"projection_tokens"`
-	UserTurnsKept    int    `json:"user_turns_kept"`
-	UserTurnsDropped int    `json:"user_turns_dropped"` // past the retention budget, now summary-only
-	InputTokens      int    `json:"input_tokens"`
-	ElapsedMs        int64  `json:"elapsed_ms,omitempty"` // summarizer stage wall time
-	OutputTokens     int    `json:"output_tokens"`
-	CacheHitTokens   int    `json:"cache_hit_tokens"`
-	CacheMissTokens  int    `json:"cache_miss_tokens"`
-	CacheWriteTokens int    `json:"cache_write_tokens"`
-	// PrefixHash fingerprints the summarizer's prefix (msgs[:head]) so two
-	// compaction passes can be compared: a stable hash with low hit rate means
-	// the provider never saw those bytes (prefix drift), not TTL expiry.
-	PrefixHash        string `json:"prefix_hash,omitempty"`
+	Trigger           string `json:"trigger"`
+	CacheState        string `json:"cache_state"`
+	Mode              string `json:"mode"`
+	Native            bool   `json:"native"`
+	SourceTokens      int    `json:"source_tokens"`
+	FoldTokens        int    `json:"fold_tokens"` // summarizer input after any shortening
+	Spans             int    `json:"spans"`       // summarizer calls the fold needed; 1 unless it was split
+	ProjectionTokens  int    `json:"projection_tokens"`
+	UserTurnsKept     int    `json:"user_turns_kept"`
+	UserTurnsDropped  int    `json:"user_turns_dropped"` // past the retention budget, now summary-only
+	InputTokens       int    `json:"input_tokens"`
+	OutputTokens      int    `json:"output_tokens"`
+	CacheHitTokens    int    `json:"cache_hit_tokens"`
+	CacheMissTokens   int    `json:"cache_miss_tokens"`
+	CacheWriteTokens  int    `json:"cache_write_tokens"`
 	RequestCount      int    `json:"request_count"`
 	ProviderRequestID string `json:"provider_request_id,omitempty"`
 	SummaryInputMode  string `json:"summary_input_mode,omitempty"`
@@ -280,23 +251,14 @@ func summaryContentHash(summary string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-<<<<<<< HEAD
-// coveredPrefixHash fingerprints the provider-visible prefix of msgs[:n].
-// ModelMessages strips local fields and SanitizeToolPairing applies the same
-// deterministic repair used on the wire, keeping hashes stable when LoadSession
-// persists an equivalent repair while still detecting real prefix edits.
-=======
 // coveredPrefixHash fingerprints the current model-visible prefix of msgs[:n].
 // Tool Content is the stable bounded provider representation; RawContent is
 // local-only. SanitizeToolPairing applies the same deterministic repair used on
 // the wire, keeping hashes stable when LoadSession repairs a transcript.
->>>>>>> origin/main-v2
 func coveredPrefixHash(msgs []provider.Message, n int) string {
 	if n <= 0 || n > len(msgs) {
 		return ""
 	}
-<<<<<<< HEAD
-=======
 	visible := modelInputMessages(msgs[:n])
 	return providerVisibleFingerprint(provider.SanitizeToolPairing(visible))
 }
@@ -307,13 +269,10 @@ func boundedCoveredPrefixHash(msgs []provider.Message, n int) string {
 	if n <= 0 || n > len(msgs) {
 		return ""
 	}
->>>>>>> origin/main-v2
 	visible := provider.ModelMessages(msgs[:n])
 	return providerVisibleFingerprint(provider.SanitizeToolPairing(visible))
 }
 
-<<<<<<< HEAD
-=======
 // promotedCoveredPrefixHash reproduces the temporary v3 behavior that promoted
 // full tool RawContent into every provider request.
 func promotedCoveredPrefixHash(msgs []provider.Message, n int) string {
@@ -403,7 +362,6 @@ func migratePromotedCoveredPrefixHash(st *CompactionState, msgs []provider.Messa
 	return true
 }
 
->>>>>>> origin/main-v2
 // legacyCoveredPrefixHash reproduces the v1.25.2 fingerprint. It is used only
 // to migrate a sidecar whose persisted pre-repair transcript is still available;
 // new checkpoints always use coveredPrefixHash.
@@ -414,26 +372,6 @@ func legacyCoveredPrefixHash(msgs []provider.Message, n int) string {
 	return providerVisibleFingerprint(provider.ModelMessages(msgs[:n]))
 }
 
-<<<<<<< HEAD
-// semanticPrefixHash fingerprints the non-tool messages of canonical[:n]. A
-// prune/rewrite that only shortens tool results keeps this hash stable, so the
-// projection body stays usable; real content changes invalidate it.
-func semanticPrefixHash(msgs []provider.Message, n int) string {
-	if n <= 0 || n > len(msgs) {
-		return ""
-	}
-	nonTool := make([]provider.Message, 0, n)
-	for _, m := range msgs[:n] {
-		if m.Role == provider.RoleTool {
-			continue
-		}
-		nonTool = append(nonTool, m)
-	}
-	return providerVisibleFingerprint(provider.ModelMessages(nonTool))
-}
-
-=======
->>>>>>> origin/main-v2
 // migrateLegacyCoveredPrefixHash upgrades a v1.25.2 sidecar after LoadSession
 // performed a deterministic provider-visible repair. It is deliberately strict:
 // the stored legacy hash must match the exact pre-repair disk prefix, and that
@@ -448,15 +386,9 @@ func migrateLegacyCoveredPrefixHash(st *CompactionState, current, preRepair []pr
 	if stored == "" || legacyCoveredPrefixHash(preRepair, n) != stored {
 		return false
 	}
-<<<<<<< HEAD
-	preRepairWireHash := coveredPrefixHash(preRepair, n)
-	currentHash := coveredPrefixHash(current, n)
-	if currentHash == "" || preRepairWireHash != currentHash {
-=======
 	preRepairWireHash := boundedCoveredPrefixHash(preRepair, n)
 	currentHash := coveredPrefixHash(current, n)
 	if currentHash == "" || preRepairWireHash != boundedCoveredPrefixHash(current, n) {
->>>>>>> origin/main-v2
 		return false
 	}
 	st.Projection.CoveredPrefixHash = currentHash
@@ -559,26 +491,11 @@ func projectionContentValid(st CompactionState, msgs []provider.Message) bool {
 		return false
 	}
 	if coveredPrefixHash(msgs, n) != st.Projection.CoveredPrefixHash {
-		// Covered content changed: keep only when non-tool messages are
-		// untouched (prune/snip shorten tool results; the summary body stays
-		// approximately valid). The next compaction rebuilds it.
-		if st.Projection.SemanticPrefixHash == "" {
-			return false
-		}
-		if semanticPrefixHash(msgs, n) != st.Projection.SemanticPrefixHash {
-			return false
-		}
+		return false
 	}
-<<<<<<< HEAD
-	// TranscriptVersion is a process-local CAS generation that resets on load;
-	// the covered prefix hash is the durable identity. A version drift alone
-	// (replay does not restore the counter) with identical covered content
-	// keeps the projection valid (8/13: full fold 3.3% vs incremental 99.4%).
-=======
 	// TranscriptVersion is a process-local CAS generation that resets on load.
 	// The covered prefix hash is the durable identity across append-only growth
 	// and exact tail truncation.
->>>>>>> origin/main-v2
 	return true
 }
 
@@ -638,25 +555,4 @@ func formatSummaryMessage(summary string) provider.Message {
 			summary + "\n" +
 			summaryTagClose,
 	}
-}
-
-// markCompactionInflight stamps the orphan-lock start marker (best-effort).
-func (a *Agent) markCompactionInflight() {
-	st, ok, err := LoadCompactionState(a.sess.path)
-	if err != nil || !ok {
-		return
-	}
-	st.CompactionInflight = time.Now().UnixMilli()
-	_ = SaveCompactionState(a.sess.path, st)
-}
-
-// clearCompactionInflight removes the marker; the deferred end runs on every
-// completing path, so a crash leaves it for the load-time detector.
-func (a *Agent) clearCompactionInflight() {
-	st, ok, err := LoadCompactionState(a.sess.path)
-	if err != nil || !ok || st.CompactionInflight == 0 {
-		return
-	}
-	st.CompactionInflight = 0
-	_ = SaveCompactionState(a.sess.path, st)
 }

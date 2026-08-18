@@ -5,26 +5,6 @@ import "reasonix/internal/provider"
 // ContextMaintenanceSnapshot is a read-only view of the current provider-bound
 // context. It separates present composition from cumulative summary-call cost.
 type ContextMaintenanceSnapshot struct {
-<<<<<<< HEAD
-	// ProjectionDegraded reports a third-state resume: the projection body was
-	// kept for the digest+tail view after a lineage mismatch (not "restored").
-	ProjectionDegraded bool
-	CanonicalTokens    int
-	ProjectedTokens    int
-	SummaryTokens      int
-	LastSavedTokens    int
-	SnipTrigger        int
-	FoldTrigger        int
-	ForceTrigger       int
-	TriggerTokens      int
-	CheckpointState    string
-	HardInputCeiling   int
-	Headroom           int
-	ProjectionVersion  uint64
-	Blocked            bool
-	LastReceipt        *ContextMaintenanceReceipt
-	ContextBudget      *ContextBudgetSnapshot
-=======
 	CanonicalTokens   int
 	ProjectedTokens   int
 	SummaryTokens     int
@@ -40,7 +20,6 @@ type ContextMaintenanceSnapshot struct {
 	Blocked           bool
 	LastReceipt       *ContextMaintenanceReceipt
 	ContextBudget     *ContextBudgetSnapshot
->>>>>>> origin/main-v2
 }
 
 // ContextBudgetSnapshot is the optional send-time admission view for the
@@ -72,7 +51,6 @@ func (a *Agent) ContextMaintenanceSnapshot() ContextMaintenanceSnapshot {
 	a.sess.compactionMu.Lock()
 	state := a.sess.compactionState
 	checkpointState := a.sess.checkpointState
-	projectionDegraded := checkpointState == "degraded"
 	a.sess.compactionMu.Unlock()
 	visible := canonical
 	valid := projectionValid(state, canonical, a.currentPromptCacheKey())
@@ -89,14 +67,13 @@ func (a *Agent) ContextMaintenanceSnapshot() ContextMaintenanceSnapshot {
 		uiCheckpoint = stateCheckpointState(checkpointState, state)
 	}
 	snapshot := ContextMaintenanceSnapshot{
-		CanonicalTokens:    a.estimatedVisibleRequestTokens(canonical),
-		ProjectedTokens:    a.estimatedVisibleRequestTokens(visible),
-		FoldTrigger:        trigger,
-		TriggerTokens:      trigger,
-		CheckpointState:    uiCheckpoint,
-		HardInputCeiling:   a.hardInputCeiling(),
-		ProjectionVersion:  state.Projection.ProjectionVersion,
-		ProjectionDegraded: projectionDegraded,
+		CanonicalTokens:   a.estimatedVisibleRequestTokens(canonical),
+		ProjectedTokens:   a.estimatedVisibleRequestTokens(visible),
+		FoldTrigger:       trigger,
+		TriggerTokens:     trigger,
+		CheckpointState:   uiCheckpoint,
+		HardInputCeiling:  a.hardInputCeiling(),
+		ProjectionVersion: state.Projection.ProjectionVersion,
 	}
 	for _, msg := range visible {
 		if isCompactionSummary(msg) {

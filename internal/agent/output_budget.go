@@ -13,11 +13,7 @@ import (
 const outputBudgetReserve = 8 * 1024
 
 type outputBudgetState struct {
-	// lastPersistedRatio de-dupes calibration writes: persist only when the
-	// ratio moved meaningfully, so a request every few seconds does not hit
-	// the disk on every turn.
-	lastPersistedRatio float64
-	outputBudget       int
+	outputBudget int
 	// lastUsage caches the latest provider telemetry for per-turn readouts.
 	// The run loop writes it while a frontend reads it, so it is atomic.
 	lastUsage         atomic.Pointer[provider.Usage]
@@ -97,21 +93,13 @@ func (a *Agent) setPromptTokenCalibration(promptTokens int, shape requestCalibra
 	if a == nil || promptTokens <= 0 || shape.requestChars <= 0 {
 		return
 	}
-	cal := &promptTokenCalibration{
+	a.sess.output.promptCalibration.Store(&promptTokenCalibration{
 		promptTokens: promptTokens,
 		requestChars: shape.requestChars,
 		compactChars: shape.compactChars,
 		cjkRunes:     shape.cjkRunes,
 		cjkBytes:     shape.cjkBytes,
-	}
-	a.sess.output.promptCalibration.Store(cal)
-	// Best-effort persistence: write only when the ratio moved ≥2% vs the
-	// last persisted value (first write always persists).
-	if r := float64(promptTokens) / float64(shape.compactChars); r > 0 && r != a.sess.output.lastPersistedRatio &&
-		(a.sess.output.lastPersistedRatio == 0 || absRatioDelta(r, a.sess.output.lastPersistedRatio) >= 0.02) {
-		a.sess.output.lastPersistedRatio = r
-		persistCalibration(a.calibrationKey(), cal)
-	}
+	})
 }
 
 func (a *Agent) setPromptTokenCalibrationFromActive(promptTokens int) {
@@ -235,33 +223,21 @@ func (a *Agent) calibratedPromptTokens(shape requestCalibrationShape) (int, bool
 	if shape.requestChars <= 0 {
 		return 0, false
 	}
-	if cal := a.sess.output.promptCalibration.Load(); cal != nil {
-		chars := cal.requestChars
-		if chars <= 0 {
-			// Pre-request_chars persistence (bfb8029a8 initial shape): the
-			// compact ratio is all we have, so calibrate against it.
-			chars = cal.compactChars
-		}
-		if chars > 0 {
-			ratio := float64(cal.promptTokens) / float64(chars)
-			if ratio > 0.05 && ratio < 2 {
-				trustedChars := shape.requestChars
-				excessCJKBytes := int64(0)
-				// A higher CJK share cannot reuse the aggregate ratio: price only
-				// the excess at the cold rate. A calibration with no recorded CJK
-				// prices all new CJK cold instead of scaling a byte ratio across
-				// 3-byte runes.
-				if shape.cjkRunes*chars > cal.cjkRunes*shape.requestChars {
-					trustedCJKBytes := int64(0)
-					if cal.requestChars > 0 && cal.cjkBytes > 0 {
-						trustedCJKBytes = min(cal.cjkBytes*shape.requestChars/cal.requestChars, shape.cjkBytes)
-					}
-					excessCJKBytes = shape.cjkBytes - trustedCJKBytes
-					trustedChars -= excessCJKBytes
-				}
-				cold := math.Ceil(float64(excessCJKBytes) * fallbackTokPerChar)
-				return int(math.Ceil(float64(trustedChars)*ratio) + cold), true
+	if cal := a.sess.output.promptCalibration.Load(); cal != nil && cal.requestChars > 0 {
+		ratio := float64(cal.promptTokens) / float64(cal.requestChars)
+		if ratio > 0.05 && ratio < 2 {
+			trustedChars := shape.requestChars
+			excessCJKBytes := int64(0)
+			// A higher CJK share cannot safely reuse the aggregate ratio. Scale its
+			// represented share and price only the excess at the cold rate,
+			// preserving exact calibration for stable CJK sessions.
+			if shape.cjkRunes*cal.requestChars > cal.cjkRunes*shape.requestChars {
+				trustedCJKBytes := min(cal.cjkBytes*shape.requestChars/cal.requestChars, shape.cjkBytes)
+				excessCJKBytes = shape.cjkBytes - trustedCJKBytes
+				trustedChars -= excessCJKBytes
 			}
+			cold := math.Ceil(float64(excessCJKBytes) * fallbackTokPerChar)
+			return int(math.Ceil(float64(trustedChars)*ratio) + cold), true
 		}
 	}
 	return 0, false
@@ -395,13 +371,8 @@ func admissionSource(userMax int, policy provider.ContextBudgetPolicy, learnedWi
 // effectiveOutputBudget clips completion tokens at send time only; it never
 // moves compact_ratio. Calibrated exhausted windows fail locally; a cold
 // estimate that differs from the provider tokenizer uses bounded 400 recovery.
-<<<<<<< HEAD
-func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (int, bool, error) {
-	adm, err := a.admitOutputBudget(req, useObserved)
-=======
 func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
 	adm, err := a.admitOutputBudget(req)
->>>>>>> origin/main-v2
 	if err != nil {
 		return 0, false, err
 	}
@@ -409,20 +380,12 @@ func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
 		if adm.ApplyMaxTokens && adm.EffectiveOutputTokens > 0 && !adm.Clipped {
 			return adm.EffectiveOutputTokens, false, nil
 		}
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main-v2
 		return 0, false, nil
 	}
 	return adm.EffectiveOutputTokens, true, nil
 }
 
-<<<<<<< HEAD
-func (a *Agent) admitOutputBudget(req provider.Request, useObserved bool) (contextAdmission, error) {
-=======
 func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error) {
->>>>>>> origin/main-v2
 	adm := contextAdmission{
 		ReserveTokens: outputBudgetReserve,
 		LastRecovery:  a.lastAdmission().LastRecovery,
@@ -458,22 +421,6 @@ func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error
 		return adm, nil
 	}
 	est := a.estimatedRequestTokens(req)
-<<<<<<< HEAD
-	// Admission trusts the last observed prompt size over the wire-char
-	// estimate: fresh agents lack calibration and the 0.25 fallback inflates
-	// dense sessions ~2x, falsely reporting shared-window overflow (8/12).
-	// Observed-prompt override applies only to main requests: the summarizer
-	// carries its own small shape and the main request's observed size must
-	// not bleed into it (8/12: est 1,385,656 → degraded with 98 user turns
-	// dropped). Fresh agents lack calibration; the 0.25 fallback inflates
-	// dense sessions ~2x, so the observed size wins when larger.
-	if useObserved {
-		if u := a.LastUsage(); u != nil {
-			if pt := u.LatestPromptTokens(); pt > 0 {
-				est = pt
-			}
-		}
-	}
 	adm.PromptTokens = est
 	physical := window - est - outputBudgetReserve
 	adm.PhysicalRemaining = physical
@@ -483,17 +430,6 @@ func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error
 		a.storeAdmission(adm)
 		return adm, nil
 	}
-=======
-	adm.PromptTokens = est
-	physical := window - est - outputBudgetReserve
-	adm.PhysicalRemaining = physical
-	shared := policy.WindowMode == provider.ContextWindowShared
-	if !shared {
-		a.applyLimitMode(&adm, req.MaxTokens, policy, physical)
-		a.storeAdmission(adm)
-		return adm, nil
-	}
->>>>>>> origin/main-v2
 	if physical <= 0 {
 		a.storeAdmission(adm)
 		return adm, fmt.Errorf("%w: estimated prompt %d leaves no shared-window output budget", ErrCompactionRequired, est)
@@ -540,19 +476,11 @@ func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error
 	return adm, nil
 }
 
-<<<<<<< HEAD
-func (a *Agent) applyAdmissionToRequest(req *provider.Request, useObserved bool) error {
-	if a == nil || req == nil {
-		return nil
-	}
-	adm, err := a.admitOutputBudget(*req, useObserved)
-=======
 func (a *Agent) applyAdmissionToRequest(req *provider.Request) error {
 	if a == nil || req == nil {
 		return nil
 	}
 	adm, err := a.admitOutputBudget(*req)
->>>>>>> origin/main-v2
 	if err != nil {
 		return err
 	}
