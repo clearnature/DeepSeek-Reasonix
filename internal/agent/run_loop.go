@@ -3,14 +3,11 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
-	"sync"
 	"time"
 
-	"reasonix/internal/ablation"
 	"reasonix/internal/event"
 	"reasonix/internal/evidence"
 	"reasonix/internal/provider"
@@ -61,88 +58,6 @@ type deferredStreamSink struct {
 	waitingForReasoning bool
 	sawReasoning        bool
 	events              []event.Event
-}
-
-var errBackgroundizeRequested = errors.New("backgroundize requested at iteration boundary")
-
-// BackgroundizeSignal is the idempotent one-shot host signal that asks the
-// current foreground task to move to the background at the next iteration
-// boundary. A host (Controller) creates one per turn and injects it into the
-// turn context with WithBackgroundizeSignal; the run-loop checkpoint consumes
-// it exactly once (Request returns true only for the first request, so a
-// double-click or an auto+manual pair collapses to a single handoff). The
-// signal mutex is a short, independent critical section and never nests jobs
-// Manager or job locks.
-type BackgroundizeSignal struct {
-	mu        sync.Mutex
-	requested bool
-}
-
-// NewBackgroundizeSignal returns a fresh, unrequested backgroundize signal.
-func NewBackgroundizeSignal() *BackgroundizeSignal { return &BackgroundizeSignal{} }
-
-// Request marks the signal requested and reports whether this is the first
-// request. Repeated requests are idempotent no-ops returning false.
-func (s *BackgroundizeSignal) Request() bool {
-	if s == nil {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	first := !s.requested
-	s.requested = true
-	return first
-}
-
-// Requested reports whether the signal has been requested.
-func (s *BackgroundizeSignal) Requested() bool {
-	if s == nil {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.requested
-}
-
-type backgroundizeSignalKey struct{}
-
-// WithBackgroundizeSignal injects the signal a foreground task's run loop
-// checks at its iteration boundary. It inherits down the whole sub-agent ctx
-// chain (withAgentContext only rebinds jobs/memory/planmode), so a signal
-// stamped on the parent turn context reaches the nested task's run loop.
-func WithBackgroundizeSignal(ctx context.Context, s *BackgroundizeSignal) context.Context {
-	return context.WithValue(ctx, backgroundizeSignalKey{}, s)
-}
-
-// BackgroundizeSignalFromContext returns the injected signal, or nil when the
-// context carries none (a nil signal is inert: the checkpoint never fires).
-func BackgroundizeSignalFromContext(ctx context.Context) *BackgroundizeSignal {
-	s, _ := ctx.Value(backgroundizeSignalKey{}).(*BackgroundizeSignal)
-	return s
-}
-
-// WithoutBackgroundizeSignal drops the signal from ctx. The handoff applies it
-// to the resumed background run so the consumed signal cannot re-trigger the
-// sentinel inside the job.
-func WithoutBackgroundizeSignal(ctx context.Context) context.Context {
-	return context.WithValue(ctx, backgroundizeSignalKey{}, nil)
-}
-
-type resumeSessionKey struct{}
-
-// WithResumeSession marks a sub-agent run as continuing an in-memory session
-// that already carries the task prompt. beginRunTurn skips appending the input
-// as a new user turn, so the historical prefix stays byte-identical across the
-// foreground→background handoff. Only the backgroundize handoff sets it.
-func WithResumeSession(ctx context.Context) context.Context {
-	return context.WithValue(ctx, resumeSessionKey{}, true)
-}
-
-// ResumeSessionFromContext reports whether the run resumes an existing
-// in-memory session instead of appending a fresh task prompt.
-func ResumeSessionFromContext(ctx context.Context) bool {
-	v, _ := ctx.Value(resumeSessionKey{}).(bool)
-	return v
 }
 
 func newReasoningAwareStreamSink(inner event.Sink) *deferredStreamSink {
@@ -302,14 +217,10 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 	if rawContent == "" {
 		rawContent = a.turn.turnInput
 	}
-	// The turn still re-classifies delivery intent, resets per-turn state, and
-	// emits TurnStarted — only the transcript append is suppressed.
-	if !ResumeSessionFromContext(ctx) {
-		a.sess.conversation.Add(provider.Message{
-			Role: provider.RoleUser, Content: input, RawContent: rawContent,
-			Images: userImages(ctx), CreatedAt: userCreatedAt,
-		})
-	}
+	a.sess.conversation.Add(provider.Message{
+		Role: provider.RoleUser, Content: input, RawContent: rawContent,
+		Images: userImages(ctx), CreatedAt: userCreatedAt,
+	})
 
 	// The loop fields join the classification computed above rather than
 	// opening a second object: one turn, one turnRuntime. The zero values the
@@ -333,12 +244,6 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 	ctx = a.withAgentContext(ctx)
 	for step := 0; state.runMaxSteps <= 0 || step < state.runMaxSteps || state.graceRound || state.recoveryGraceRound; step++ {
-		// P3: messages queued on a background job context (/task-message via
-		// SendMessageForSession) bridge into the steer queue; the foreground
-		// path queues via Steer directly. One message per tool round, FIFO.
-		if text, ok := jobs.DrainPendingMessages(ctx); ok {
-			a.Steer(text)
-		}
 		// Consume a queued steer and persist it to the session so it
 		// survives tab switches and history replay. The model sees it as
 		// guidance (with a prefix), not a new task. One cache miss per
@@ -350,15 +255,6 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			// Loader failed after dequeue: durable entry stays for inspection
 			// (unapplied path marks uncertain + pause via the notice sink).
 			a.RecordUnappliedSteer("(body load failed)", itemID)
-		}
-		// P4: backgroundize checkpoint — one per tool-round boundary. A request
-		// may arrive mid-round (user /background); it is honored only here, so
-		// the current provider round and its tool execution finish (and commit
-		// to the session) cleanly first. Returning the sentinel unwinds the
-		// foreground chain to the serialized handoff, which moves the same
-		// in-memory session to a background job.
-		if a.backgroundizeRequested(ctx) {
-			return errBackgroundizeRequested
 		}
 		schemas := a.svc.tools.Schemas()
 		prefixShape := a.capturePrefixShape(schemas)
@@ -438,30 +334,6 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 	// is already in the session, so the user can just send another message to pick
 	// up where it left off.
 	return a.gracePause(state)
-}
-
-func (a *Agent) backgroundizeRequested(ctx context.Context) bool {
-	// Only a foreground (sync) task sub-agent may hand off; everyone else
-	// (main agent, background jobs, planner) ignores signal + auto threshold,
-	// or a long ordinary turn would fail on the un-captured sentinel.
-	if !foregroundTaskFromContext(ctx) {
-		return false
-	}
-	if ResumeSessionFromContext(ctx) {
-		return false
-	}
-	sig := BackgroundizeSignalFromContext(ctx)
-	if sig != nil && sig.Requested() {
-		return true
-	}
-	// Automatic handoff: a foreground task that has run past the configured
-	// threshold converts itself to a background job at the next boundary.
-	if a.autoBackgroundizeAfter > 0 && !a.ablation.Off(ablation.AutoBackground) {
-		if created := a.activeTurnCreatedAt.Load(); created > 0 && time.Since(time.UnixMilli(created)) >= a.autoBackgroundizeAfter {
-			return true
-		}
-	}
-	return false
 }
 
 // streamWithSamplingRecovery coordinates Codex-style original-request replay

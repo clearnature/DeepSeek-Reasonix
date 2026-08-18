@@ -111,6 +111,19 @@ func withCallContext(ctx context.Context, parentID string, sink event.Sink, aske
 	return context.WithValue(ctx, callContextKey{}, callContext{parentID: parentID, sink: sink, asker: asker, planMode: planMode})
 }
 
+// withSubagentAsker stamps ctx with a sub-agent asker so the `ask` tool can
+// reach the user through the leader's approval chain.
+func withSubagentAsker(ctx context.Context, asker Asker) context.Context {
+	if asker == nil {
+		return ctx
+	}
+	parentID, sink, _, ok := CallContext(ctx)
+	if !ok {
+		return withCallContext(ctx, "", event.Discard, asker, false)
+	}
+	return withCallContext(ctx, parentID, sink, asker, false)
+}
+
 // WithToolCallContext stamps ctx as a host-initiated top-level tool call.
 // Normal model-selected tools receive this context from executeOne; controller
 // entry points that deliberately invoke the same tool machinery (for example a
