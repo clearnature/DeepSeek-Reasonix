@@ -122,7 +122,7 @@ var vendorTable = map[string]vendorCapabilities{
 		stateless:              true,
 		sessionCacheHeader:     false,
 		toolCallReasoning:      true,
-		singleSegmentReasoning: false,
+		singleSegmentReasoning: true,
 		ignoresTemperature:     true,
 		defaultMaxOutputTokens: 128000,
 		summaryMode:            "none",
