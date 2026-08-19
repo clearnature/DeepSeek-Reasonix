@@ -26,6 +26,7 @@ import (
 	"reasonix/internal/billing"
 	"reasonix/internal/boot"
 	"reasonix/internal/command"
+	turncomp "reasonix/internal/completion"
 	"reasonix/internal/config"
 	"reasonix/internal/control"
 	"reasonix/internal/event"
@@ -3727,16 +3728,27 @@ func formatCompletionSummaryLine(c *event.CompletionSummaryInfo) string {
 	return line
 }
 
-func completionSummaryNeedsAttention(c *event.CompletionSummaryInfo) bool {
+func completionSummaryNeedsAttention(c *event.CompletionSummaryInfo, floor string) bool {
 	if c == nil {
 		return false
 	}
-	verdict := strings.ToLower(strings.TrimSpace(c.Verdict))
-	review := strings.ToLower(strings.TrimSpace(c.Review))
-	return verdict == "partial" || verdict == "blocked" ||
-		c.ChecksFailed > 0 || c.ChecksSuppressed > 0 ||
-		review == "warned" || review == "failed" || review == "unavailable" ||
-		len(c.GapKinds) > 0 || c.ConstraintDegraded
+	if strings.TrimSpace(c.Floor) != "" {
+		return c.Attention
+	}
+	return turncomp.NeedsAttention(turncomp.AttentionInput{
+		Verdict:            c.Verdict,
+		ChecksFailed:       c.ChecksFailed,
+		GapKinds:           c.GapKinds,
+		Floor:              floor,
+		RequiredSuppressed: c.ChecksSuppressed > 0,
+	})
+}
+
+func (m chatTUI) ctrlQualityFloor() string {
+	if m.ctrl == nil {
+		return ""
+	}
+	return m.ctrl.QualityFloor()
 }
 
 func completionSummaryWarning(c *event.CompletionSummaryInfo) string {
@@ -4485,7 +4497,7 @@ func (m *chatTUI) ingestEvent(e event.Event) {
 
 	case event.CompletionSummary:
 		if e.Completion != nil {
-			if completionSummaryNeedsAttention(e.Completion) {
+			if completionSummaryNeedsAttention(e.Completion, m.ctrlQualityFloor()) {
 				m.finalizeStreamed()
 				m.commitLine(fmt.Sprintf("  ! %s", completionSummaryWarning(e.Completion)))
 			}
