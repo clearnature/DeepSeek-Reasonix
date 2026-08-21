@@ -92,7 +92,7 @@ for (const path of localeChunks) {
   // measured at 23 B gzip for zh and 8 B for zh-TW. Completion receipts add
   // six short status labels in each locale, requiring another 0.2 KiB per
   // language. Retain all with the smallest 0.1 KiB ratchet increments.
-  const budget = name.startsWith("zh-TW-") ? 56.4 * 1024 : 55.7 * 1024;
+  const budget = name.startsWith("zh-TW-") ? 57.0 * 1024 : 56.3 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 

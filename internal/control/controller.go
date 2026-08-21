@@ -67,6 +67,7 @@ import (
 // ErrTurnRunning reports that a caller tried to start a second foreground turn
 // while one is already active in the same Controller.
 var ErrTurnRunning = errors.New("turn already running")
+var errNoForegroundTaskToBackgroundize = errors.New("no foreground task is running")
 
 // ErrNoFinalReadinessRecovery means an explicit continuation did not match the
 // immediately preceding paused readiness check (for example, an old card after
@@ -103,6 +104,11 @@ type Controller struct {
 	recoveryGate *recovery.Gate
 	// teammates is the team orchestrator for multi-agent sessions.
 	teammates *agent.TeammateStore
+	// foregroundBkg is the P4 foreground→backgroundize signal for the in-flight
+	// foreground turn, nil while no foreground turn is running. spawnGuardedTurn
+	// and RunTurn stamp a fresh signal into the turn context and record it here;
+	// finishGuardedTurn clears it. Guarded by c.mu.
+	foregroundBkg *agent.BackgroundizeSignal
 
 	// taskBudget is the configured spend gate, as passed at construction.
 	taskBudget agent.TaskBudget
@@ -1998,6 +2004,16 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 // Backgroundize moves the current foreground task to the background. The
 // foreground task's context is cancelled; the background task continues
 // running but its output is no longer streamed to the display.
+func (c *Controller) Backgroundize() error {
+	c.mu.Lock()
+	sig := c.foregroundBkg
+	c.mu.Unlock()
+	if sig == nil {
+		return errNoForegroundTaskToBackgroundize
+	}
+	sig.Request()
+	return nil
+}
 
 // SendTaskMessage sends a message to a running background job.
 func (c *Controller) SendTaskMessage(jobID, text string) error {

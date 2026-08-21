@@ -665,6 +665,13 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   RemoteLastWorkspace(hostId: string): Promise<string>;
   ScanRemoteLegacyWorkbenchData(): Promise<RemoteLegacyWorkbenchData>;
   CleanRemoteLegacyWorkbenchData(target: "mirrors" | "trust"): Promise<void>;
+  // ── Job ──
+  JobOutputForTab(tabID: string, jobID: string): Promise<unknown>;
+  JobPanelJobsForTab(tabID: string): Promise<unknown[]>;
+  // ── Performance ──
+  ReportRenderingPerf(maxFrameMs: number, maxMs: number, avgMs: number): Promise<void>;
+  // ── Team ──
+  TeamPanelViewForTab(tabID: string): Promise<unknown>;
 }
 
 // Compile-time drift check. Exclude<A, B> extracts keys in A that are missing
@@ -5554,6 +5561,10 @@ function makeMockApp(): AppBindings {
     },
     async SubmitExtensionForm() {},
     async CleanRemoteLegacyWorkbenchData() {},
+    async JobOutputForTab() { return {}; },
+    async JobPanelJobsForTab() { return []; },
+    async ReportRenderingPerf() {},
+    async TeamPanelViewForTab() { return {}; },
   };
 }
 

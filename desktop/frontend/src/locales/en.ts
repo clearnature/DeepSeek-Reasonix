@@ -3239,6 +3239,9 @@ export const en = {
   "context.time": "Runtime",
   "context.durationSeconds": "{seconds}s",
   "context.durationMinutesSeconds": "{minutes}m {seconds}s",
+  "context.durationDaysHoursMinutes": "{days}d {hours}h {minutes}m",
+  "context.durationHoursMinutes": "{hours}h {minutes}m",
+  "context.durationMinutes": "{minutes}m",
 
   // crash page
   "crash.title": "Reasonix hit an error — send us the report, or copy it",
@@ -3309,6 +3312,22 @@ export const en = {
   "mock.changedFile2Prompt": "Record project context",
   "mock.changedFile1Path": "docs/dev-standard.md",
   "mock.changedFile2Path": ".reasonix/project.md",
+
+  // team panel
+  "team.panelTitle": "Team",
+  "team.members": "members",
+  "team.empty": "No team configured",
+  "team.name": "Name",
+  "team.role": "Role",
+  "team.state": "State",
+  "team.posture": "Posture",
+  "team.job": "Job",
+  "team.worktree": "Worktree",
+  "team.writable": "Writable",
+  "team.token": "Token",
+  "team.readonly": "Read-only",
+  "team.pendingApprovals": "Pending approvals",
+  "team.approveHint": "1 allow · 2 deny",
 };
 
 export type DictKey = keyof typeof en;

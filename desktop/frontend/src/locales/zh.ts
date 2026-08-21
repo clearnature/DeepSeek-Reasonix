@@ -3242,6 +3242,9 @@ export const zh: Record<DictKey, string> = {
   "context.time": "运行时间",
   "context.durationSeconds": "{seconds}秒",
   "context.durationMinutesSeconds": "{minutes}分{seconds}秒",
+  "context.durationDaysHoursMinutes": "{days}天{hours}时{minutes}分",
+  "context.durationHoursMinutes": "{hours}时{minutes}分",
+  "context.durationMinutes": "{minutes}分",
 
   // 崩溃兜底页
   "crash.title": "Reasonix 遇到错误 —— 可以一键发送报告，或复制后反馈",
@@ -3312,4 +3315,20 @@ export const zh: Record<DictKey, string> = {
   "mock.changedFile2Prompt": "记录项目上下文",
   "mock.changedFile1Path": "docs/dev-standard.md",
   "mock.changedFile2Path": ".reasonix/project.md",
+
+  // 团队面板
+  "team.panelTitle": "团队",
+  "team.members": "成员",
+  "team.empty": "未配置团队",
+  "team.name": "名称",
+  "team.role": "角色",
+  "team.state": "状态",
+  "team.posture": "姿态",
+  "team.job": "任务",
+  "team.worktree": "工作树",
+  "team.writable": "可写",
+  "team.token": "令牌",
+  "team.readonly": "只读",
+  "team.pendingApprovals": "待审批",
+  "team.approveHint": "1 允许 · 2 拒绝",
 };

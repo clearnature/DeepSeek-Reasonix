@@ -2279,6 +2279,9 @@ export const zhTW: Record<DictKey, string> = {
   "context.time": "執行時間",
   "context.durationSeconds": "{seconds}秒",
   "context.durationMinutesSeconds": "{minutes}分{seconds}秒",
+  "context.durationDaysHoursMinutes": "{days}天{hours}時{minutes}分",
+  "context.durationHoursMinutes": "{hours}時{minutes}分",
+  "context.durationMinutes": "{minutes}分",
 
   // 崩潰兜底頁
   "crash.title": "Reasonix 遇到錯誤 —— 請截圖傳送",
@@ -3308,4 +3311,20 @@ export const zhTW: Record<DictKey, string> = {
   "performanceReport.dismiss": "關閉",
   "performanceReport.privacyNote": "上傳前桌面端會移除路徑與密鑰；診斷資訊只用於記錄耗時、記憶體、網路狀態、取樣到的應用函式名、近期 breadcrumbs、應用版本和作業系統。",
   "mock.topicSysException": "異常處理與恢復演練",
+
+  // 團隊面板
+  "team.panelTitle": "團隊",
+  "team.members": "成員",
+  "team.empty": "未配置團隊",
+  "team.name": "名稱",
+  "team.role": "角色",
+  "team.state": "狀態",
+  "team.posture": "姿態",
+  "team.job": "任務",
+  "team.worktree": "工作樹",
+  "team.writable": "可寫",
+  "team.token": "令牌",
+  "team.readonly": "唯讀",
+  "team.pendingApprovals": "待審批",
+  "team.approveHint": "1 允許 · 2 拒絕",
 };
