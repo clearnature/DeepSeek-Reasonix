@@ -371,7 +371,7 @@ func admissionSource(userMax int, policy provider.ContextBudgetPolicy, learnedWi
 // effectiveOutputBudget clips completion tokens at send time only; it never
 // moves compact_ratio. Calibrated exhausted windows fail locally; a cold
 // estimate that differs from the provider tokenizer uses bounded 400 recovery.
-func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
+func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (int, bool, error) {
 	adm, err := a.admitOutputBudget(req)
 	if err != nil {
 		return 0, false, err

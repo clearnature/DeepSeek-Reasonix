@@ -238,10 +238,9 @@ func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) 
 
 	a.sess.compactionMu.Lock()
 	defer a.sess.compactionMu.Unlock()
-	state := a.sess.compactionState
-	projVersion := state.Projection.ProjectionVersion + 1
+	projVersion := a.sess.compactionState.Projection.ProjectionVersion + 1
 	now := time.Now().UTC()
-	state.Projection = ContextProjection{
+	a.sess.compactionState.Projection = ContextProjection{
 		Messages:          provider.ModelMessages(next),
 		TranscriptVersion: version,
 		ProjectionVersion: projVersion,
@@ -252,12 +251,12 @@ func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) 
 		ViewOutputHash:    outputHash,
 		CreatedAt:         now,
 	}
-	state.Generation++
-	state.LastTrigger = CompactionTriggerPressure
-	state.LastMode = CompactionModeSnip
-	state.LastSourceTokens = src
-	state.LastResultTokens = dst
-	state.LastReceipt = &ContextMaintenanceReceipt{
+	a.sess.compactionState.Generation++
+	a.sess.compactionState.LastTrigger = CompactionTriggerPressure
+	a.sess.compactionState.LastMode = CompactionModeSnip
+	a.sess.compactionState.LastSourceTokens = src
+	a.sess.compactionState.LastResultTokens = dst
+	a.sess.compactionState.LastReceipt = &ContextMaintenanceReceipt{
 		OperationID: fmt.Sprintf("elide-%d-%s", projVersion, outputHash), Status: "applied", Action: action,
 		Trigger: CompactionTriggerPressure, SourceProjection: projVersion - 1, ProjectionVersion: projVersion,
 		CoveredCount: len(canonical), CoveredPrefixHash: coveredPrefixHash(canonical, len(canonical)),
