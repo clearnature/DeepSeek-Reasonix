@@ -20,7 +20,7 @@ import (
 const (
 	defaultCompactRatio    = 0.80 // sole automatic maintenance trigger (new configs)
 	recentTailBudgetRatio  = 0.16 // recent verbatim tail as a fraction of the window
-	summaryOutputMaxTokens = 16384 // max digest output; further clipped by remaining candidate space
+	summaryOutputMaxTokens = 32768 // max digest output; further clipped by remaining candidate space
 	minRecentKeep          = 2    // never keep fewer recent messages than this
 	minCompactMessages     = 2    // skip compaction below this many compactable messages
 	fallbackTokPerChar     = 0.25 // ~4 chars/token, used before any usage is available to calibrate
