@@ -1965,6 +1965,31 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			return
 		}
 		c.notice("broadcast sent to all teammates")
+	case "/team-list":
+		roster := c.teammates.Roster()
+		if len(roster) == 0 {
+			c.notice("no teammates")
+			return
+		}
+		var buf strings.Builder
+		for _, r := range roster {
+			fmt.Fprintf(&buf, "• %s (role=%s, state=%s)\n", r.Name, r.Role, r.State)
+		}
+		c.noticeDetail("teammates", strings.TrimSpace(buf.String()))
+	case "/team-tasks":
+		tasks := c.teammates.Tasks()
+		if len(tasks) == 0 {
+			c.notice("no tasks")
+			return
+		}
+		var buf strings.Builder
+		for _, t := range tasks {
+			fmt.Fprintf(&buf, "• %s: owner=%s status=%s prompt=%s\n", t.ID, t.Owner, t.Status, t.Prompt)
+		}
+		c.noticeDetail("tasks", strings.TrimSpace(buf.String()))
+	case "/team-destroy":
+		c.teammates.DestroyAll()
+		c.notice("all teammates destroyed")
 	default:
 		c.notice("unknown team command: " + cmd)
 	}
