@@ -46,6 +46,7 @@ import (
 	"reasonix/internal/hook"
 	"reasonix/internal/i18n"
 	"reasonix/internal/jobs"
+	"reasonix/internal/tool/builtin"
 	"reasonix/internal/memory"
 	"reasonix/internal/nilutil"
 	"reasonix/internal/permission"
@@ -369,6 +370,14 @@ type RuntimeStatus struct {
 	CancelRequested bool
 	Cancellable     bool
 }
+
+// ForegroundTaskState represents the state of the foreground task.
+type ForegroundTaskState int
+
+const (
+	ForegroundTaskIdle    ForegroundTaskState = iota
+	ForegroundTaskRunning
+)
 
 const (
 	ToolApprovalAsk     = "ask"
@@ -1746,6 +1755,254 @@ func (c *Controller) applyPrometheus(input, display string) {
 			return c.runGoalLoopWithRawDisplay(ctx, prompt, prompt, display)
 		})
 	}
+}
+
+// applyFastCompress is the /compress-fast host command: elide stale tool
+// results without an API call. Refused while a turn is running or while the
+// provider cache is warm (a rewrite then would only cost cache misses);
+// --force overrides the warm gate. The canonical transcript is never
+// rewritten — the elision lands in a pruned projection view.
+func (c *Controller) applyFastCompress(trimmed string) {
+	force := false
+	for _, f := range strings.Fields(trimmed)[1:] {
+		if f == "--force" {
+			force = true
+		}
+	}
+	c.mu.Lock()
+	running := c.running
+	c.mu.Unlock()
+	if running {
+		c.notice("fast compress failed: a turn is running")
+		return
+	}
+	exec := c.executor
+	if exec == nil {
+		c.notice("fast compress failed: no executor")
+		return
+	}
+	if !force && !exec.PromptOverflow() {
+		last := exec.LastAPICallAt()
+		if !last.IsZero() && time.Since(last) < c.cacheColdAfter() {
+			c.notice(fmt.Sprintf("fast compress refused: provider cache is warm (last API call %s ago)", time.Since(last).Round(time.Second)))
+			return
+		}
+	}
+	if path := c.sessionPath; path != "" {
+		if raw, err := os.ReadFile(path); err == nil {
+			_ = os.WriteFile(path+".bak", raw, 0o644)
+		}
+	}
+	stats, err := exec.PruneStaleToolResults()
+	if err != nil {
+		c.notice("fast compress failed: " + err.Error())
+		return
+	}
+	if stats.Results == 0 {
+		c.notice("no stale tool results to compress")
+		return
+	}
+	c.noticeDetail("compaction telemetry",
+		fmt.Sprintf("trigger=manual mode=prune status=installed cache=unknown src=0 fold=0 spans=0 proj=0 in=0 out=0 hit=0 miss=0 write=0 reqs=0 tpc=0 reason= user_kept=0 user_dropped=0 elided=%d saved=%d",
+			stats.Results, stats.SavedChars))
+	c.notice(fmt.Sprintf("fast-compressed: %d stale tool result(s) elided (%d chars)", stats.Results, stats.SavedChars))
+}
+
+// applyRetrieveInfo is the /retrieve_info host command: run the system
+// retrieval pipeline on the typed query and surface the rendered answer via
+// noticeDetail, with no model round-trip.
+func (c *Controller) applyRetrieveInfo(trimmed string) {
+	q := strings.TrimSpace(strings.TrimPrefix(trimmed, "/retrieve_info"))
+	if q == "" {
+		c.notice("retrieve_info: query is required")
+		return
+	}
+	answer, _, err := builtin.RetrieveSystem(context.Background(), q)
+	if err != nil {
+		c.notice("retrieve_info failed: " + err.Error())
+		return
+	}
+	c.noticeDetail("retrieve_info: "+q, answer)
+}
+
+// applyTeamCommand implements the P6 /team-* management verbs. /team-create
+// adds a named teammate with an optional role and read-only default
+// (opt-out with "writable"). /team-grant issues a write token (D1)
+// restricted to the listed paths or worktree mode. /team-revoke withdraws
+// the token. /team-approve answers a teammate's plan-approval request.
+func (c *Controller) applyTeamCommand(cmd, trimmed string) {
+	if c.teammates == nil {
+		c.notice("team commands are disabled (no TeammateStore configured)")
+		return
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, cmd))
+	switch cmd {
+	case "/team-create":
+		name, rest2, _ := strings.Cut(rest, " ")
+		role, rest3, _ := strings.Cut(strings.TrimSpace(rest2), " ")
+		writable := strings.TrimSpace(rest3) == "writable"
+		if err := c.teammates.Create(name, role, writable); err != nil {
+			c.notice("team-create: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q created (role %q) — assign work with /team-add", name, role))
+	case "/team-grant":
+		fields := strings.Fields(rest)
+		if len(fields) < 2 {
+			c.notice("usage: /team-grant <name> <path...> | <name> worktree")
+			return
+		}
+		if fields[1] == "worktree" {
+			if err := c.teammates.GrantWorktree(fields[0]); err != nil {
+				c.notice("team-grant: " + err.Error())
+				return
+			}
+			c.notice(fmt.Sprintf("teammate %q granted worktree mode — dedicated branch on next assignment", fields[0]))
+			return
+		}
+		ws, err := agent.NormalizeWritePaths(c.workspaceRoot, fields[1:])
+		if err != nil {
+			c.notice("team-grant: " + err.Error())
+			return
+		}
+		if err := c.teammates.Grant(fields[0], ws); err != nil {
+			c.notice("team-grant: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q granted write token over %d path(s) — now a restricted writer", fields[0], len(ws.Paths)))
+	case "/team-revoke":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.Revoke(name); err != nil {
+			c.notice("team-revoke: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q write token revoked — back to read-only", name))
+	case "/team-approve":
+		fields := strings.Fields(rest)
+		if len(fields) != 2 || (fields[1] != "allow" && fields[1] != "deny") {
+			c.notice("usage: /team-approve <request_id> allow|deny")
+			return
+		}
+		if err := c.teammates.Approve(fields[0], fields[1] == "allow", c.parentSessionID()); err != nil {
+			c.notice("team-approve: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("plan %q %s — verdict sent to teammate", fields[0], fields[1]))
+	case "/team-spawn":
+		fields := strings.Fields(rest)
+		if len(fields) < 2 {
+			c.notice("usage: /team-spawn <n> <prefix> [role]")
+			return
+		}
+		n, err := strconv.Atoi(fields[0])
+		if err != nil || n < 1 || n > 32 {
+			c.notice("usage: /team-spawn <n 1..32> <prefix> [role]")
+			return
+		}
+		role := ""
+		if len(fields) > 2 {
+			role = fields[2]
+		}
+		for i := range n {
+			name := fmt.Sprintf("%s%d", fields[1], i)
+			if err := c.teammates.Create(name, role, true); err != nil {
+				c.notice(fmt.Sprintf("team-spawn: %s", err))
+				return
+			}
+		}
+		c.notice(fmt.Sprintf("spawned %d teammates (%s0..%s%d) with worktree mode", n, fields[1], fields[1], n-1))
+	case "/team-ask":
+		fields := strings.Fields(rest)
+		if len(fields) < 3 {
+			c.notice("usage: /team-ask <name> <tool...>")
+			return
+		}
+		if err := c.teammates.RequestApprovalWithKind(fields[0], "ask", "tool", strings.Join(fields[1:], " ")); err != nil {
+			c.notice("team-ask: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("approval request sent to teammate %q", fields[0]))
+	case "/team-add":
+		fields := strings.Fields(rest)
+		if len(fields) < 2 {
+			c.notice("usage: /team-add <name> <task...>")
+			return
+		}
+		if _, err := c.teammates.Assign(context.Background(), fields[0], strings.Join(fields[1:], " ")); err != nil {
+			c.notice("team-add: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("task assigned to teammate %q", fields[0]))
+	case "/team-status":
+		name := strings.TrimSpace(rest)
+		tm, ok := c.teammates.Status(name)
+		if !ok {
+			c.notice(fmt.Sprintf("teammate %q not found", name))
+			return
+		}
+		c.noticeDetail("teammate status", fmt.Sprintf("%+v", tm))
+	case "/team-remove":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.Remove(name); err != nil {
+			c.notice("team-remove: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q removed", name))
+	case "/team-stop":
+		name := strings.TrimSpace(rest)
+		if err := c.teammates.TeamStop(name); err != nil {
+			c.notice("team-stop: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("teammate %q stopped", name))
+	case "/team-broadcast":
+		if rest == "" {
+			c.notice("usage: /team-broadcast <message...>")
+			return
+		}
+		if err := c.teammates.PostMail("*", rest); err != nil {
+			c.notice("team-broadcast: " + err.Error())
+			return
+		}
+		c.notice("broadcast sent to all teammates")
+	default:
+		c.notice("unknown team command: " + cmd)
+	}
+}
+
+// Backgroundize moves the current foreground task to the background. The
+// foreground task's context is cancelled; the background task continues
+// running but its output is no longer streamed to the display.
+
+// SendTaskMessage sends a message to a running background job.
+func (c *Controller) SendTaskMessage(jobID, text string) error {
+	if c.jobs == nil {
+		return fmt.Errorf("background jobs are disabled")
+	}
+	return c.jobs.SendMessageForSession(jobID, c.parentSessionID(), text)
+}
+
+// TeamRosterView returns a snapshot of the current teammate roster for
+// display in the UI.
+func (c *Controller) TeamRosterView() []agent.RosterView {
+	if c.teammates == nil {
+		return nil
+	}
+	return c.teammates.Roster()
+}
+
+// Running reports whether a model turn or shell command is currently executing.
+// JobSnapshots returns a snapshot of all running background jobs.
+func (c *Controller) JobSnapshots() []jobs.JobSnapshot {
+	if c.jobs == nil {
+		return nil
+	}
+	return c.jobs.JobSnapshotsForSession(c.parentSessionID())
+}
+
+// emitRecoveryDepthCapNotice emits a notice when the recovery depth cap is hit.
+func (c *Controller) emitRecoveryDepthCapNotice(path string) {
+	c.notice(fmt.Sprintf("recovery depth cap reached for %s — skipping further recovery attempts", path))
 }
 
 // shellTimeout is the maximum time a user-invoked "!command" may run. Matches
