@@ -112,7 +112,16 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 	// CreatedAt is durable UI metadata, not model input. Strip it from the
 	// transport copy so wall-clock differences never invalidate the provider's
 	// prompt-cache prefix (and custom providers cannot accidentally send it).
-	prepared, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: trigger})
+	policy := ContextPreparePolicy{Trigger: trigger}
+	// #8839 §1: prefer lastUsage observed tokens over fallback estimation.
+	// Fallback estimation (0.25 tok/char) overestimates code/JSON-heavy
+	// sessions by ~2.2x, causing false compaction triggers.
+	if u := a.LastUsage(); u != nil {
+		if pt := u.LatestPromptTokens(); pt > 0 {
+			policy.ObservedInputTokens = pt
+		}
+	}
+	prepared, err := a.contextManager().Prepare(ctx, policy)
 	if err != nil {
 		return samplingRequest{}, err
 	}
