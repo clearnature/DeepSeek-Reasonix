@@ -22,7 +22,7 @@ assert.match(
   "footer resize is routed through the coalesced tail-follow path without depending on item appends",
 
 );
-assert.match(controller, /shouldPreferResidentHistory\(reset, options\.preserveCachedHistory\)/, "retry hydrates fetch instead of serving the resident snapshot");
+assert.match(controller, /shouldPreferResidentHistory\(resetSurface, options\.preserveCachedHistory\)/, "retry hydrates fetch instead of serving the resident snapshot");
 assert.match(
   controller,
   /loadSessionDataForTab\(tabId, false, "startup", \{ preserveCachedHistory: true \}\)/,

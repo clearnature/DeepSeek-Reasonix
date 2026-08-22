@@ -7,8 +7,11 @@ import {
   transcriptElementViewportIsBlank,
   type TranscriptLayoutAnchor,
 } from "./transcriptVirtuosoRecovery";
-import { resolveTranscriptStateSnapshot, type TranscriptStateSnapshot } from "./transcriptStateSnapshot";
+import { createTranscriptStateGeometry, resolveTranscriptStateSnapshot, type TranscriptStateSnapshot } from "./transcriptStateSnapshot";
 import type { TranscriptScrollArbiterRecoveryApi } from "./useTranscriptScrollArbiter";
+import { recordTranscriptScrollDiagnostic } from "./transcriptScrollProbe";
+import { isFrontendDiagnosticsBuild } from "./frontendDiagnosticsBuild";
+import type { TranscriptGeometryEnvironment } from "./transcriptRowGeometry";
 
 const BLANK_RECOVERY_COOLDOWN_MS = 2_000;
 // A viewport that blanks while the user is actively scrolling is almost always
@@ -16,6 +19,10 @@ const BLANK_RECOVERY_COOLDOWN_MS = 2_000;
 // size tree. Resets wait for the scroll to go quiet; only a blank that
 // survives into idle earns a rebuild.
 const USER_SCROLL_IDLE_MS = 320;
+const CAPTURE_SCROLL_DIAGNOSTICS = isFrontendDiagnosticsBuild(
+  typeof __BUILD_CHANNEL__ === "string" ? __BUILD_CHANNEL__ : "development",
+  Boolean(import.meta.env?.DEV),
+);
 
 /**
  * Detects a stale Virtuoso size tree and rebuilds it while preserving the
@@ -43,7 +50,10 @@ export function useTranscriptLayoutIntegrity({
   submitRecoveryRequest,
   retryRecoveryRequest,
   lastGoodAnchorRef,
-  captureStateSnapshot,
+  layoutTransientRef,
+  layoutWidth,
+  geometrySessionKey = surfaceKey,
+  geometryEnvironment = { contentWidth: layoutWidth, typographySignature: "legacy" },
 }: {
   surfaceKey: string;
   rows: readonly TranscriptRow[];
@@ -52,7 +62,11 @@ export function useTranscriptLayoutIntegrity({
   pinnedRef: RefObject<boolean>;
   readyRef: RefObject<boolean>;
   scrollToBottom: () => void;
-} & TranscriptScrollArbiterRecoveryApi) {
+  layoutTransientRef: RefObject<boolean>;
+  layoutWidth?: number;
+  geometrySessionKey?: string;
+  geometryEnvironment?: TranscriptGeometryEnvironment;
+} & Omit<TranscriptScrollArbiterRecoveryApi, "captureStateSnapshot">) {
   const [resetEpoch, setResetEpoch] = useState(0);
   const blankCheckFrameRef = useRef<number | null>(null);
   const pendingAnchorRef = useRef<{ surfaceKey: string; anchor: TranscriptLayoutAnchor } | null>(null);
@@ -66,19 +80,29 @@ export function useTranscriptLayoutIntegrity({
   const activeRecoveryIdRef = useRef<number | null>(null);
   const suspendedRecoveryIdRef = useRef<number | null>(null);
   const rowKeys = useMemo(() => rows.map((row) => String(row.key)), [rows]);
+  const stateGeometry = useMemo(
+    () => createTranscriptStateGeometry(geometrySessionKey, rows, geometryEnvironment),
+    [geometryEnvironment, geometrySessionKey, rows],
+  );
+  const layoutGeneration = useMemo(
+    () => `${surfaceKey}:${String(layoutWidth ?? "unknown")}:${rowKeys.join("\u0000")}`,
+    [layoutWidth, rowKeys, surfaceKey],
+  );
+  // [generation, stage (0=unused, 1=reset, 2=probe)]
+  const recoveryBudgetRef = useRef<[string, number]>([layoutGeneration, 0]);
+  if (recoveryBudgetRef.current[0] !== layoutGeneration) {
+    recoveryBudgetRef.current = [layoutGeneration, 0];
+  }
   const surfaceStateRef = useRef<{ surfaceKey: string; rowKeys: readonly string[] }>({ surfaceKey, rowKeys });
   const stateSnapshotRef = useRef<TranscriptStateSnapshot | null>(null);
   const appliedSnapshotRef = useRef(false);
 
-  // Render-phase surface transition: the outgoing Virtuoso is still mounted
-  // at this point (an effect cleanup would run after the keyed remount), so
-  // this is the last chance to snapshot its measured tree + scrollTop for
-  // the incoming surface to restore from.
+  // A surface transition is a product-level view reset. Measurements may be
+  // reused through the session geometry LRU, but an outgoing scrollTop never
+  // crosses the transition — even if another session happens to have the same
+  // row keys. Blank-watchdog rebuilds also reject their broken size tree.
   if (surfaceStateRef.current.surfaceKey !== surfaceKey) {
-    const snapshot = captureStateSnapshot();
-    if (snapshot && surfaceStateRef.current.rowKeys.length > 0) {
-      stateSnapshotRef.current = { keys: surfaceStateRef.current.rowKeys, snapshot };
-    }
+    stateSnapshotRef.current = null;
     surfaceStateRef.current = { surfaceKey, rowKeys };
   } else {
     surfaceStateRef.current.rowKeys = rowKeys;
@@ -105,7 +129,7 @@ export function useTranscriptLayoutIntegrity({
     if (recoveryRetryTimerRef.current !== null) window.clearTimeout(recoveryRetryTimerRef.current);
   }, []);
 
-  const requestReset = useCallback((): boolean => {
+  const requestReset = useCallback(() => {
     const element = scrollRef.current;
     if (!element || pendingAnchorRef.current?.surfaceKey === surfaceKey) return false;
     // A blank viewport already lost its physical anchor. Restore the last
@@ -122,7 +146,8 @@ export function useTranscriptLayoutIntegrity({
     stateSnapshotRef.current = null;
     pendingAnchorRef.current = { surfaceKey, anchor };
     readyRef.current = false;
-    setResetEpoch((epoch) => epoch + 1);
+    if (CAPTURE_SCROLL_DIAGNOSTICS) recordTranscriptScrollDiagnostic("blank-reset", { blank: true });
+    setResetEpoch((epoch) => Math.abs(epoch) + 1);
     return true;
   }, [lastGoodAnchorRef, pinnedRef, readyRef, scrollRef, surfaceKey]);
 
@@ -134,17 +159,18 @@ export function useTranscriptLayoutIntegrity({
     pendingAnchorRef.current = null;
   }, []);
 
-  const resetKey = `${surfaceKey}:${resetEpoch}`;
+  const resetKey = `${surfaceKey}:${Math.abs(resetEpoch)}`;
+  const safeMode = resetEpoch < 0 && recoveryBudgetRef.current[1] === 2;
   const firstItemIndex = useTranscriptVirtuosoFirstItemIndex(rows, resetKey);
   const pendingAnchor = pendingAnchorRef.current?.surfaceKey === surfaceKey ? pendingAnchorRef.current.anchor : undefined;
   const restoreLocation = transcriptAnchorInitialLocation(pendingAnchor, rowIndexByKey, firstItemIndex);
   // A usable snapshot outranks restoreLocation: Virtuoso pipes restoreStateFrom
   // into the same initial-location stream, so the two never apply together.
   const restoreSnapshot = useMemo(
-    () => resolveTranscriptStateSnapshot(stateSnapshotRef.current, rowKeys),
+    () => resolveTranscriptStateSnapshot(stateSnapshotRef.current, rowKeys, stateGeometry),
     // stateSnapshotRef only changes at the capture points above; every remount
     // path recomputes through one of these deps.
-    [rowKeys, surfaceKey, resetEpoch],
+    [rowKeys, stateGeometry, surfaceKey, resetEpoch],
   );
   appliedSnapshotRef.current = restoreSnapshot !== undefined;
 
@@ -214,29 +240,77 @@ export function useTranscriptLayoutIntegrity({
       blankCheckFrameRef.current !== null
       || pendingAnchorRef.current?.surfaceKey === surfaceKey
       || activeRecoveryIdRef.current !== null
+      || layoutTransientRef.current
     ) return;
     blankCheckFrameRef.current = requestAnimationFrame(() => {
       blankCheckFrameRef.current = requestAnimationFrame(() => {
         blankCheckFrameRef.current = null;
-        if (userScrollActiveRef.current) return;
-        const element = scrollRef.current;
-        if (!element || !transcriptElementViewportIsBlank(element)) {
+        if (recoveryBudgetRef.current[0] !== layoutGeneration) {
           consecutiveBlankRef.current = 0;
+          return;
+        }
+        if (userScrollActiveRef.current || layoutTransientRef.current) {
+          consecutiveBlankRef.current = 0;
+          return;
+        }
+        const element = scrollRef.current;
+        if (!element) return;
+        const blank = transcriptElementViewportIsBlank(element);
+        if (CAPTURE_SCROLL_DIAGNOSTICS) recordTranscriptScrollDiagnostic("blank-check", { blank });
+        if (!blank) {
+          consecutiveBlankRef.current = 0;
+          // The bounded measurement probe is a repair transaction, not a
+          // permanent virtualization mode. It exits without changing the
+          // keyed Virtuoso generation once the viewport is healthy.
+          if (safeMode) {
+            setResetEpoch((epoch) => Math.abs(epoch));
+          }
+          return;
+        }
+        // This check is the probe's own post-render verdict. The generation
+        // already spent its two-sighting mount-lag guard before entering safe
+        // mode, so one still-blank result is enough to end the bounded probe.
+        // Do not depend on Virtuoso emitting another itemsRendered/scroll
+        // callback when the expanded range fails to mount useful coverage.
+        if (safeMode) {
+          consecutiveBlankRef.current = 0;
+          setResetEpoch((epoch) => Math.abs(epoch));
           return;
         }
         consecutiveBlankRef.current += 1;
         if (consecutiveBlankRef.current < 2) return;
         consecutiveBlankRef.current = 0;
-        // Cooldown-only dedup: content revisions no longer reach this hook,
-        // so they cannot rotate the dedup key mid-storm. A blank that
-        // persists past the cooldown earns another rebuild.
+        // Content-only revisions never rotate layoutGeneration, so patch
+        // storms cannot replenish this budget. Only a surface, row-structure,
+        // or width change earns one hard remount and one bounded probe.
+        const budget = recoveryBudgetRef.current;
+        if (budget[1] > 0) {
+          if (budget[1] === 1) {
+            budget[1] = 2;
+            setResetEpoch((epoch) => -Math.abs(epoch));
+            return;
+          }
+          if (safeMode) setResetEpoch((epoch) => Math.abs(epoch));
+          return;
+        }
         const now = Date.now();
         if (now - lastBlankRecoveryAtRef.current < BLANK_RECOVERY_COOLDOWN_MS) return;
-        lastBlankRecoveryAtRef.current = now;
-        requestReset();
+        if (requestReset()) {
+          lastBlankRecoveryAtRef.current = now;
+          budget[1] = 1;
+        }
       });
     });
-  }, [requestReset, scrollRef, surfaceKey]);
+  }, [layoutGeneration, layoutTransientRef, requestReset, safeMode, scrollRef, surfaceKey]);
+
+  // A probe is a one-shot transaction. Schedule its verdict from the hook so
+  // both success and failure leave the larger (but bounded) overscan even if
+  // Virtuoso emits no follow-up range or scroll event.
+  useEffect(() => {
+    if (!safeMode) return;
+    const frame = requestAnimationFrame(() => scheduleBlankViewportCheck());
+    return () => cancelAnimationFrame(frame);
+  }, [safeMode, scheduleBlankViewportCheck]);
 
   // Runs when user-driven scrolling has been quiet for USER_SCROLL_IDLE_MS.
   // Suspended recoveries own a separate bounded retry timer so they cannot
@@ -291,5 +365,6 @@ export function useTranscriptLayoutIntegrity({
     invalidateAnchors,
     noteUserScrollIntent,
     noteScrollActivity,
+    safeMode,
   };
 }
