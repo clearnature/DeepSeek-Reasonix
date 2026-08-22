@@ -18,13 +18,13 @@ import (
 // until compactRatio of the window is crossed, then pressure-time tool pruning
 // and up to two cache-aligned summary checkpoints restore headroom.
 const (
-	defaultCompactRatio    = 0.80 // sole automatic maintenance trigger (new configs)
-	recentTailBudgetRatio  = 0.16 // recent verbatim tail as a fraction of the window
+	defaultCompactRatio    = 0.80  // sole automatic maintenance trigger (new configs)
+	recentTailBudgetRatio  = 0.16  // recent verbatim tail as a fraction of the window
 	summaryOutputMaxTokens = 32768 // max digest output; further clipped by remaining candidate space
-	minRecentKeep          = 2    // never keep fewer recent messages than this
-	minCompactMessages     = 2    // skip compaction below this many compactable messages
-	fallbackTokPerChar     = 0.25 // ~4 chars/token, used before any usage is available to calibrate
-	protocolReserveTokens  = 256  // provider framing and control fields not represented by message estimates
+	minRecentKeep          = 2     // never keep fewer recent messages than this
+	minCompactMessages     = 2     // skip compaction below this many compactable messages
+	fallbackTokPerChar     = 0.25  // ~4 chars/token, used before any usage is available to calibrate
+	protocolReserveTokens  = 256   // provider framing and control fields not represented by message estimates
 )
 
 var (

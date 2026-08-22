@@ -46,7 +46,6 @@ import (
 	"reasonix/internal/hook"
 	"reasonix/internal/i18n"
 	"reasonix/internal/jobs"
-	"reasonix/internal/tool/builtin"
 	"reasonix/internal/memory"
 	"reasonix/internal/nilutil"
 	"reasonix/internal/permission"
@@ -61,6 +60,7 @@ import (
 	"reasonix/internal/store"
 	"reasonix/internal/taskmonitor"
 	"reasonix/internal/tool"
+	"reasonix/internal/tool/builtin"
 	"reasonix/internal/workspacelease"
 )
 
@@ -384,7 +384,7 @@ type RuntimeStatus struct {
 type ForegroundTaskState int
 
 const (
-	ForegroundTaskIdle    ForegroundTaskState = iota
+	ForegroundTaskIdle ForegroundTaskState = iota
 	ForegroundTaskRunning
 )
 

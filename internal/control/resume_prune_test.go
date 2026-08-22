@@ -100,14 +100,12 @@ func TestColdResumeAfterClonedHistoryStaysInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got := re.Messages[0].Content; got != "new sys" {
-		t.Fatalf("system prompt after cold resume = %q, want new sys", got)
+	// Cold resume does NOT compact or rewrite — it only records cache state.
+	// Disk still has whatever was last saved ("old sys"). In-memory clone
+	// keeps "new sys" until an explicit save.
+	if got := re.Messages[0].Content; got != "old sys" {
+		t.Fatalf("system prompt on disk after cold resume = %q, want old sys (no rewrite)", got)
 	}
-	// Cold resume attempts prune + compact + snapshot; with nil provider,
-	// compact fails ("summary unavailable") but prune still runs. The
-	// canonical on disk reflects whatever SnapshotRewrite wrote — which is
-	// the in-memory clone (new sys + unchanged tool result when compact
-	// fails before prune can rewrite canonical).
 	if matches, err := filepath.Glob(filepath.Join(dir, "*-recovery-*.jsonl")); err != nil || len(matches) != 0 {
 		t.Fatalf("recovery branches after cloned cold resume = %v err=%v, want none", matches, err)
 	}

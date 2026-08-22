@@ -241,16 +241,16 @@ func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) 
 	projVersion := a.sess.compactionState.Projection.ProjectionVersion + 1
 	now := time.Now().UTC()
 	a.sess.compactionState.Projection = ContextProjection{
-		Messages:            provider.ModelMessages(next),
-		TranscriptVersion:   version,
-		ProjectionVersion:   projVersion,
-		CoveredCount:        len(canonical),
-		CoveredPrefixHash:   coveredPrefixHash(canonical, len(canonical)),
-		NonToolContentHash:  nonToolContentHash(canonical, len(canonical)),
-		SourceTokens:        src,
-		ProjectionTokens:    dst,
-		ViewOutputHash:      outputHash,
-		CreatedAt:           now,
+		Messages:           provider.ModelMessages(next),
+		TranscriptVersion:  version,
+		ProjectionVersion:  projVersion,
+		CoveredCount:       len(canonical),
+		CoveredPrefixHash:  coveredPrefixHash(canonical, len(canonical)),
+		NonToolContentHash: nonToolContentHash(canonical, len(canonical)),
+		SourceTokens:       src,
+		ProjectionTokens:   dst,
+		ViewOutputHash:     outputHash,
+		CreatedAt:          now,
 	}
 	a.sess.compactionState.Generation++
 	a.sess.compactionState.LastTrigger = CompactionTriggerPressure
