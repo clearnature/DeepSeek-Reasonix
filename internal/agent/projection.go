@@ -66,9 +66,14 @@ type ContextProjection struct {
 	// CoveredPrefixHash fingerprints provider-visible canonical[:CoveredCount]
 	// so append-only growth can be distinguished from prefix edits/rewrites.
 	CoveredPrefixHash string `json:"covered_prefix_hash,omitempty"`
-	SummaryHash       string `json:"summary_hash,omitempty"`
-	SourceTokens      int    `json:"source_tokens,omitempty"`
-	ProjectionTokens  int    `json:"projection_tokens,omitempty"`
+	// NonToolContentHash fingerprints non-tool content in canonical[:CoveredCount].
+	// #8839 §6: prune rewrites tool results → covered hash mismatch. This hash
+	// enables semantic validation — if non-tool content matches, projection is
+	// still valid (prune tolerant). Only invalidate when non-tool content changes.
+	NonToolContentHash string `json:"non_tool_content_hash,omitempty"`
+	SummaryHash        string `json:"summary_hash,omitempty"`
+	SourceTokens       int    `json:"source_tokens,omitempty"`
+	ProjectionTokens   int    `json:"projection_tokens,omitempty"`
 	// ViewInputHash/ViewOutputHash make free maintenance idempotent across
 	// retries and resume. They fingerprint the visible view, not canonical
 	// storage, so a projection can evolve without rewriting the transcript.
@@ -490,13 +495,34 @@ func projectionContentValid(st CompactionState, msgs []provider.Message) bool {
 	if st.Projection.CoveredPrefixHash == "" {
 		return false
 	}
-	if coveredPrefixHash(msgs, n) != st.Projection.CoveredPrefixHash {
-		return false
+	if coveredPrefixHash(msgs, n) == st.Projection.CoveredPrefixHash {
+		return true
 	}
-	// TranscriptVersion is a process-local CAS generation that resets on load.
-	// The covered prefix hash is the durable identity across append-only growth
-	// and exact tail truncation.
-	return true
+	// #8839 §6: covered hash mismatch — check semantic hash (non-tool content).
+	// Prune rewrites tool results → covered hash mismatches → projection would
+	// be invalidated → cascading compaction. Instead, compare non-tool content
+	// semantic hash: if it matches, the projection is still valid (prune tolerant).
+	// Only invalidate when non-tool content actually changed (fail-closed).
+	return nonToolContentHash(msgs, n) == st.Projection.NonToolContentHash
+}
+
+// nonToolContentHash returns a hash of non-tool message content in msgs[:n].
+// Used for semantic validation: prune rewrites tool results but preserves
+// non-tool content, so a matching hash means the projection is still valid.
+func nonToolContentHash(msgs []provider.Message, n int) string {
+	if n <= 0 || n > len(msgs) {
+		return ""
+	}
+	var b strings.Builder
+	for _, m := range msgs[:n] {
+		if m.Role == provider.RoleTool {
+			continue
+		}
+		b.WriteString(string(m.Role))
+		b.WriteString(m.Content)
+	}
+	h := sha256.Sum256([]byte(b.String()))
+	return fmt.Sprintf("%x", h[:8])
 }
 
 // modelVisibleFromProjection splices the projection with any messages appended

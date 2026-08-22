@@ -115,8 +115,8 @@ func (a *Agent) pruneToolResultsToProjectionLocked(trigger string) (bool, error)
 	next.PromptCacheKey = a.currentPromptCacheKey()
 	next.Projection = ContextProjection{
 		Messages: projected, TranscriptVersion: transcriptVersion, ProjectionVersion: projectionVersion,
-		CoveredCount: len(canonical), CoveredPrefixHash: coveredHash, SourceTokens: sourceTokens,
-		ProjectionTokens: resultTokens, ViewInputHash: inputHash, ViewOutputHash: outputHash, CreatedAt: now,
+		CoveredCount: len(canonical), CoveredPrefixHash: coveredHash, NonToolContentHash: nonToolContentHash(canonical, len(canonical)),
+		SourceTokens: sourceTokens, ProjectionTokens: resultTokens, ViewInputHash: inputHash, ViewOutputHash: outputHash, CreatedAt: now,
 	}
 	next.LastReceipt = receipt
 	next.UpdatedAt = now
@@ -241,15 +241,16 @@ func (a *Agent) installElidedProjection(next []provider.Message, st PruneStats) 
 	projVersion := a.sess.compactionState.Projection.ProjectionVersion + 1
 	now := time.Now().UTC()
 	a.sess.compactionState.Projection = ContextProjection{
-		Messages:          provider.ModelMessages(next),
-		TranscriptVersion: version,
-		ProjectionVersion: projVersion,
-		CoveredCount:      len(canonical),
-		CoveredPrefixHash: coveredPrefixHash(canonical, len(canonical)),
-		SourceTokens:      src,
-		ProjectionTokens:  dst,
-		ViewOutputHash:    outputHash,
-		CreatedAt:         now,
+		Messages:            provider.ModelMessages(next),
+		TranscriptVersion:   version,
+		ProjectionVersion:   projVersion,
+		CoveredCount:        len(canonical),
+		CoveredPrefixHash:   coveredPrefixHash(canonical, len(canonical)),
+		NonToolContentHash:  nonToolContentHash(canonical, len(canonical)),
+		SourceTokens:        src,
+		ProjectionTokens:    dst,
+		ViewOutputHash:      outputHash,
+		CreatedAt:           now,
 	}
 	a.sess.compactionState.Generation++
 	a.sess.compactionState.LastTrigger = CompactionTriggerPressure
