@@ -89,19 +89,30 @@ func TestSummaryCollectorRejectsEmptyAndLengthLimitedOutput(t *testing.T) {
 			want: "empty output",
 		},
 		{
-			name: "length finish",
+			name: "length finish accepts partial output",
 			chunks: []provider.Chunk{
 				{Type: provider.ChunkText, Text: "partial"},
 				{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "length"}},
 			},
-			want: "output token limit",
+			want: "partial",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			prov := &summaryChunksProvider{chunks: tc.chunks}
 			a := New(prov, tool.NewRegistry(), NewSession("system"), Options{}, event.Discard)
-			if _, _, err := a.summarize(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "old"}}, ""); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("summarize error = %v, want %q", err, tc.want)
+			result, _, err := a.summarize(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "old"}}, "")
+			if tc.want == "partial" {
+				// length finish now accepts partial output
+				if err != nil {
+					t.Fatalf("summarize error = %v, want success", err)
+				}
+				if !strings.Contains(result, tc.want) {
+					t.Fatalf("summarize result = %q, want %q", result, tc.want)
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("summarize error = %v, want %q", err, tc.want)
+				}
 			}
 		})
 	}

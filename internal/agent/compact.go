@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -425,10 +426,17 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 			return "", usage, ctx.Err()
 		case chunk, ok := <-ch:
 			if !ok {
-				if usage != nil && usage.FinishReason == "length" {
-					return "", usage, fmt.Errorf("%w: provider reached the output token limit", errSummaryOutputTruncated)
-				}
 				s := strings.TrimSpace(b.String())
+				if usage != nil && usage.FinishReason == "length" {
+					// Output was truncated at the provider's token limit.
+					// Accept the partial output rather than failing — a partial
+					// summary is still better than no compaction at all.
+					if s == "" {
+						return "", usage, fmt.Errorf("%w: provider reached the output token limit with zero output", errSummaryOutputTruncated)
+					}
+					slog.Warn("summarizer output truncated at token limit — accepting partial output", "bytes", len(s))
+					return s, usage, nil
+				}
 				if s == "" {
 					return "", usage, fmt.Errorf("summarizer returned empty output")
 				}

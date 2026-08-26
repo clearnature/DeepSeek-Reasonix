@@ -459,15 +459,18 @@ func TestSummarizeClipsSharedWindowOutputBudget(t *testing.T) {
 	}
 }
 
-func TestSummarizeRejectsLengthTruncation(t *testing.T) {
+func TestSummarizeAcceptsLengthTruncation(t *testing.T) {
 	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true, finish: "length"}
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov, sink: event.Discard}, sess: sessionRuntime{output: outputBudgetState{outputBudget: prov.budget}}}
 
-	_, _, err := a.summarizeOnce(context.Background(), []provider.Message{{
+	result, _, err := a.summarizeOnce(context.Background(), []provider.Message{{
 		Role: provider.RoleUser, Content: "retain every durable fact",
 	}}, "")
-	if err == nil || !strings.Contains(err.Error(), "truncated") {
-		t.Fatalf("summarizeOnce error = %v, want truncation failure", err)
+	if err != nil {
+		t.Fatalf("summarizeOnce error = %v, want success with partial output", err)
+	}
+	if !strings.Contains(result, "summary") {
+		t.Fatalf("summarizeOnce result = %q, want partial output", result)
 	}
 	if prov.calls != 1 {
 		t.Fatalf("length-truncated summary calls = %d, want no identical retry", prov.calls)
