@@ -315,8 +315,11 @@ func (c *Controller) prepareTurnAdmission(body func(context.Context) error) func
 	if admissionErr == nil {
 		return body
 	}
-	slog.Error("controller: persist turn admission", "err", admissionErr)
-	return func(context.Context) error { return fmt.Errorf("persist turn admission: %w", admissionErr) }
+	// Ledger errors are non-fatal: proceed without durability rather than
+	// blocking all turns. This handles schema version mismatches, corrupt
+	// files, and permission issues gracefully.
+	slog.Warn("controller: turn admission proceeding without durable ledger", "err", admissionErr)
+	return body
 }
 
 func (c *Controller) applyTurnDoneProtocol(done event.Event, cancelRequested bool) event.Event {

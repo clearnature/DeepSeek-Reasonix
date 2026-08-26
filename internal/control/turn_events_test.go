@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"reasonix/internal/event"
-	"reasonix/internal/turnevent"
 )
 
 type turnEventGateRunner struct {
@@ -75,7 +73,7 @@ func TestTurnAdmissionIsDurableBeforeRunnerStarts(t *testing.T) {
 	}
 }
 
-func TestTurnAdmissionLedgerFailureDoesNotRunProvider(t *testing.T) {
+func TestTurnAdmissionLedgerFailureProceedsWithoutDurability(t *testing.T) {
 	dir := t.TempDir()
 	blockedParent := filepath.Join(dir, "not-a-directory")
 	if err := os.WriteFile(blockedParent, []byte("block"), 0o600); err != nil {
@@ -94,17 +92,26 @@ func TestTurnAdmissionLedgerFailureDoesNotRunProvider(t *testing.T) {
 	})
 	t.Cleanup(c.Close)
 
-	c.Submit("must not reach provider")
+	c.Submit("should proceed without durability")
+	// With non-fatal ledger errors, the turn should proceed.
+	// Wait for the runner to start, then release it.
+	select {
+	case <-runner.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runner did not start")
+	}
+	close(runner.release)
 	select {
 	case terminal := <-done:
-		if !errors.Is(terminal.Err, turnevent.ErrTurnLedgerUnavailable) {
-			t.Fatalf("terminal error = %v, want explicit ledger admission failure", terminal.Err)
+		// Turn should succeed — ledger errors are non-fatal.
+		if terminal.Err != nil {
+			t.Fatalf("terminal error = %v, want success (ledger errors are non-fatal)", terminal.Err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("failed admission did not terminate")
+		t.Fatal("turn did not complete")
 	}
-	if got := runner.calls.Load(); got != 0 {
-		t.Fatalf("runner calls = %d, want provider side effects blocked", got)
+	if got := runner.calls.Load(); got != 1 {
+		t.Fatalf("runner calls = %d, want provider ran once", got)
 	}
 }
 
