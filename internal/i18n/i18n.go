@@ -467,8 +467,8 @@ type Messages struct {
 	ProviderErrAuth                        string // 401 — no key configured / sent
 	ProviderErrAuthRejected                string // 401 — a key was sent but the server rejected it
 	ProviderErrInsufficientBalance         string // 402
-	ProviderErrModelFormatMismatch string // model format mismatch
-	ProviderErrOpenCodeGoGrokRoute string // open code grok route
+	ProviderErrModelFormatMismatch         string // model format mismatch
+	ProviderErrOpenCodeGoGrokRoute         string // open code grok route
 	ProviderErrUnprocessable               string // 422
 	ProviderErrInputSensitive              string // MiniMax 1026
 	ProviderErrOutputSensitive             string // MiniMax 1027
@@ -572,7 +572,6 @@ type Messages struct {
 	RateBandMixed                          string
 	ChatStatusCostLabel                    string
 	QualityFloorApplied                    string
-
 }
 
 // ProviderStatusMessage returns an actionable explanation for a known provider

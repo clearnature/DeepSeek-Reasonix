@@ -9,6 +9,7 @@ import (
 	"reasonix/internal/cli"
 	"reasonix/internal/config"
 	"reasonix/internal/crashreport"
+	"reasonix/internal/plugin"
 
 	// Blank imports wire compile-time built-ins into their registries.
 	_ "reasonix/internal/provider/anthropic"
@@ -42,6 +43,7 @@ func main() {
 	if os.Getenv("REASONIX_DEBUG") != "" {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
+	plugin.SetMCPClientVersion(version)
 	os.Exit(runWithCrashCapture(os.Args[1:], version))
 }
 
