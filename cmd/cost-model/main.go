@@ -262,7 +262,7 @@ func printCalibration(a *audit, prices map[string]*provider.Pricing) {
 	}
 }
 
-func printSimulation(a *audit, prices map[string]*provider.Pricing, filter string) {
+func printSimulation(a *audit, prices map[string]*provider.Pricing, filter, hitOverride string) {
 	rounds := 200
 	grow := 8000
 	if len(a.execGaps) > 0 {
@@ -277,6 +277,10 @@ func printSimulation(a *audit, prices map[string]*provider.Pricing, filter strin
 		rate = 0.95
 	}
 	fmt.Printf("\nsimulation (observed params):\n")
+	hitP := 0.0
+	if hitOverride != "" {
+		hitP, _ = strconv.ParseFloat(hitOverride, 64)
+	}
 	for _, id := range a.modelIDs {
 		if filter != "" && id != filter {
 			continue
@@ -285,17 +289,25 @@ func printSimulation(a *audit, prices map[string]*provider.Pricing, filter strin
 		if p == nil {
 			continue
 		}
+		useHit := p.CacheHit
+		if hitP > 0 {
+			useHit = hitP
+		}
 		// Effective prices from history: the executor's blended ¥/M (mostly
 		// cache hits) prices retention; the compaction source's blended ¥/M
 		// prices a fold, exposing miss-penalty differences between providers.
 		effHit, effFold := effectivePrices(a, id)
-		base := simulate(rounds, grow, rate, p.CacheHit, p.Input, p.Output, 0)
-		c20 := simulate(rounds, grow, rate, p.CacheHit, p.Input, p.Output, 20)
-		c40 := simulate(rounds, grow, rate, p.CacheHit, p.Input, p.Output, 40)
+		base := simulate(rounds, grow, rate, useHit, p.Input, p.Output, 0)
+		c20 := simulate(rounds, grow, rate, useHit, p.Input, p.Output, 20)
+		c40 := simulate(rounds, grow, rate, useHit, p.Input, p.Output, 40)
 		mid := rounds / 2
-		replayed := float64(mid*grow) / 1e6 * p.CacheHit
-		fmt.Printf("  %-20s grow=%-5d hit=%.1f%% list=hit¥%.3f/in¥%.3f  no-comp ¥%.3f | every20 ¥%.3f (%+.1f%%) | every40 ¥%.3f (%+.1f%%) | C1-replay +¥%.4f\n",
-			id, grow, rate*100, p.CacheHit, p.Input, base, c20, (1-c20/base)*100, c40, (1-c40/base)*100, replayed)
+		replayed := float64(mid*grow) / 1e6 * useHit
+		suffix := ""
+		if hitP > 0 {
+			suffix = " (hit-price override)"
+		}
+		fmt.Printf("  %-20s grow=%-5d hit=%.1f%% list=hit¥%.3f/in¥%.3f  no-comp ¥%.3f | every20 ¥%.3f (%+.1f%%) | every40 ¥%.3f (%+.1f%%) | C1-replay +¥%.4f%s\n",
+			id, grow, rate*100, useHit, p.Input, base, c20, (1-c20/base)*100, c40, (1-c40/base)*100, replayed, suffix)
 		if effHit > 0 && effFold > 0 {
 			baseE := simulate(rounds, grow, rate, effHit, effFold, p.Output, 0)
 			c20E := simulate(rounds, grow, rate, effHit, effFold, p.Output, 20)
@@ -342,6 +354,7 @@ func simulate(rounds, grow int, hitRate, hitP, inP, outP float64, compactEvery i
 func main() {
 	days := flag.Int("days", 7, "how many days of stats to audit")
 	modelFilter := flag.String("model", "", "restrict to one model id (default: all)")
+	hitPrice := flag.String("hit-price", "", "override cache-hit price per M tokens (sensitivity: e.g. 2.5 for a GLM-style expensive cache)")
 	flag.Parse()
 
 	dir := statsDir()
@@ -368,5 +381,5 @@ func main() {
 
 	printUsageHeader(a, dir, *days)
 	printCalibration(a, prices)
-	printSimulation(a, prices, *modelFilter)
+	printSimulation(a, prices, *modelFilter, *hitPrice)
 }
