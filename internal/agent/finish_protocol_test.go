@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"reasonix/internal/event"
@@ -173,5 +174,20 @@ func TestPureTextProviderCapabilityHidesFinishAndKeepsCompatibility(t *testing.T
 	}
 	if len(base.requests) != 1 || len(base.requests[0].Tools) != 0 {
 		t.Fatalf("text-only request tools = %#v, want a non-nil empty surface", base.requests)
+	}
+}
+
+// Reasoning models habitually attach a rationale ("reason") when finalizing,
+// mirroring update_goal's schema. finish must accept and ignore it rather than
+// failing the call with an unknown-field error.
+func TestFinishAcceptsAttachedReason(t *testing.T) {
+	ft := &FinishTool{}
+	for _, args := range []string{
+		`{"outcome":"completed","reason":"the request is fully handled"}`,
+		`{"outcome":"partial","reason":"most of the work is done"}`,
+	} {
+		if _, err := ft.Execute(context.Background(), json.RawMessage(args)); err != nil {
+			t.Fatalf("Execute(%s) error = %v, want success", args, err)
+		}
 	}
 }

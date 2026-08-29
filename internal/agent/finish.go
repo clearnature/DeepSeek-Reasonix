@@ -46,6 +46,9 @@ func (*FinishTool) ReadOnly() bool { return true }
 func (*FinishTool) Execute(_ context.Context, args json.RawMessage) (string, error) {
 	var in struct {
 		Outcome FinishOutcome `json:"outcome"`
+		// reason is accepted and ignored: reasoning models habitually attach a
+		// rationale (as update_goal's schema does); rejecting it failed the call.
+		Reason string `json:"reason"`
 	}
 	dec := json.NewDecoder(strings.NewReader(string(args)))
 	dec.DisallowUnknownFields()
