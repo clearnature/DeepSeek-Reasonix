@@ -60,12 +60,14 @@ func (a *statsAgg) hitRate() float64 {
 }
 
 type audit struct {
-	byModel    map[string]*statsAgg
-	executor   *statsAgg
-	compaction *statsAgg
-	execGaps   []int
-	firstTS    time.Time
-	modelIDs   []string
+	byModel     map[string]*statsAgg
+	execByModel map[string]*statsAgg
+	compByModel map[string]*statsAgg
+	executor    *statsAgg
+	compaction  *statsAgg
+	execGaps    []int
+	firstTS     time.Time
+	modelIDs    []string
 }
 
 func statsDir() string {
@@ -121,10 +123,12 @@ func modelID(ref string) string {
 
 func collect(dir string, cutoff time.Time, filter string) (*audit, error) {
 	a := &audit{
-		byModel:    map[string]*statsAgg{},
-		executor:   &statsAgg{},
-		compaction: &statsAgg{},
-		firstTS:    time.Now(),
+		byModel:     map[string]*statsAgg{},
+		execByModel: map[string]*statsAgg{},
+		compByModel: map[string]*statsAgg{},
+		executor:    &statsAgg{},
+		compaction:  &statsAgg{},
+		firstTS:     time.Now(),
 	}
 	files, err := filepath.Glob(filepath.Join(dir, "*.jsonl"))
 	if err != nil {
@@ -162,8 +166,20 @@ func collect(dir string, cutoff time.Time, filter string) (*audit, error) {
 			switch rec.source {
 			case "compaction":
 				a.compaction.add(rec)
+				cagg := a.compByModel[id]
+				if cagg == nil {
+					cagg = &statsAgg{}
+					a.compByModel[id] = cagg
+				}
+				cagg.add(rec)
 			case "executor":
 				a.executor.add(rec)
+				eagg := a.execByModel[id]
+				if eagg == nil {
+					eagg = &statsAgg{}
+					a.execByModel[id] = eagg
+				}
+				eagg.add(rec)
 				if lastPrompt > 0 && rec.prompt > lastPrompt {
 					a.execGaps = append(a.execGaps, rec.prompt-lastPrompt)
 				}
@@ -269,14 +285,38 @@ func printSimulation(a *audit, prices map[string]*provider.Pricing, filter strin
 		if p == nil {
 			continue
 		}
+		// Effective prices from history: the executor's blended ¥/M (mostly
+		// cache hits) prices retention; the compaction source's blended ¥/M
+		// prices a fold, exposing miss-penalty differences between providers.
+		effHit, effFold := effectivePrices(a, id)
 		base := simulate(rounds, grow, rate, p.CacheHit, p.Input, p.Output, 0)
 		c20 := simulate(rounds, grow, rate, p.CacheHit, p.Input, p.Output, 20)
 		c40 := simulate(rounds, grow, rate, p.CacheHit, p.Input, p.Output, 40)
 		mid := rounds / 2
 		replayed := float64(mid*grow) / 1e6 * p.CacheHit
-		fmt.Printf("  %-20s grow=%-5d hit=%.1f%% price=hit¥%.3f/in¥%.3f  no-comp ¥%.3f | every20 ¥%.3f (%+.1f%%) | every40 ¥%.3f (%+.1f%%) | C1-replay +¥%.4f\n",
+		fmt.Printf("  %-20s grow=%-5d hit=%.1f%% list=hit¥%.3f/in¥%.3f  no-comp ¥%.3f | every20 ¥%.3f (%+.1f%%) | every40 ¥%.3f (%+.1f%%) | C1-replay +¥%.4f\n",
 			id, grow, rate*100, p.CacheHit, p.Input, base, c20, (1-c20/base)*100, c40, (1-c40/base)*100, replayed)
+		if effHit > 0 && effFold > 0 {
+			baseE := simulate(rounds, grow, rate, effHit, effFold, p.Output, 0)
+			c20E := simulate(rounds, grow, rate, effHit, effFold, p.Output, 20)
+			fmt.Printf("  %-20s effective: hit=¥%.4f/M fold=¥%.4f/M  no-comp ¥%.3f | every20 ¥%.3f (%+.1f%%)  ← historical prices\n",
+				"", effHit, effFold, baseE, c20E, (1-c20E/baseE)*100)
+		}
 	}
+}
+
+// effectivePrices derives blended per-M prices from the history: the executor
+// record prices history retention (cache-heavy), the compaction record prices
+// a fold request (miss-heavy, exposing miss-penalty differences between
+// providers).
+func effectivePrices(a *audit, id string) (hit, fold float64) {
+	if e := a.execByModel[id]; e != nil && e.prompt > 0 {
+		hit = e.cost / float64(e.prompt) * 1e6
+	}
+	if c := a.compByModel[id]; c != nil && c.prompt > 0 {
+		fold = c.cost / float64(c.prompt) * 1e6
+	}
+	return hit, fold
 }
 
 // simulate prices one 200-round session with per-turn growth at the given
