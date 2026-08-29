@@ -38,9 +38,62 @@ func (a *Agent) CompressContext(ctx context.Context, req tool.CompressRequest) (
 		return tool.CompressResult{}, fmt.Errorf("compress: focus exceeds %d bytes", maxCompressFocusBytes)
 	}
 
-	snap := a.snapshotExplicitCompression()
+	var last tool.CompressResult
+	lastOK := false
+	lastSource := 0
+	for pass := 0; pass < maxCompressPasses; pass++ {
+		snap := a.snapshotExplicitCompression()
+		matches := findCompressAnchors(snap.visible, anchor)
+		if len(matches) == 0 {
+			if pass == 0 {
+				return tool.CompressResult{}, fmt.Errorf("compress: anchor did not match any current user message; retry with an exact excerpt from a visible user turn")
+			}
+			return last, nil
+		}
+		if len(matches) > 1 {
+			if pass == 0 {
+				return tool.CompressResult{}, fmt.Errorf("compress: anchor matched %d user messages; retry with a longer unique excerpt", len(matches))
+			}
+			return last, nil
+		}
+		result, err := a.compressVisibleRange(ctx, snap, CompactionTriggerTool, direction, matches[0], anchorPreview(UserMessageText(snap.visible[matches[0]])), focus)
+		if err != nil {
+			return result, err
+		}
+		if result.Status != "ok" || result.Messages == 0 {
+			// A later pass found nothing more to fold (or the projection would
+			// not shrink); report the last successful pass, not the noop.
+			if lastOK {
+				return last, nil
+			}
+			return result, nil
+		}
+		// Converge: stop once a pass no longer folds meaningfully more content
+		// (the remaining fold is only previously folded summaries).
+		if pass > 0 && lastSource-result.SourceTokens < minCompressSavings {
+			if lastOK {
+				return last, nil
+			}
+			return result, nil
+		}
+		last = result
+		lastOK = true
+		lastSource = result.SourceTokens
+	}
+	return last, nil
+}
+
+// maxCompressPasses bounds how many summary passes one compress invocation may
+// run; each pass is one summarize request folding the next prefix region.
+const maxCompressPasses = 6
+
+// minCompressSavings is the token floor below which another pass is not worth
+// its summarize round trip.
+const minCompressSavings = 10_000
+
+func findCompressAnchors(visible []provider.Message, anchor string) []int {
 	matches := make([]int, 0, 2)
-	for i, msg := range snap.visible {
+	for i, msg := range visible {
 		if !compressAnchorCandidate(msg) {
 			continue
 		}
@@ -48,14 +101,7 @@ func (a *Agent) CompressContext(ctx context.Context, req tool.CompressRequest) (
 			matches = append(matches, i)
 		}
 	}
-	if len(matches) == 0 {
-		return tool.CompressResult{}, fmt.Errorf("compress: anchor did not match any current user message; retry with an exact excerpt from a visible user turn")
-	}
-	if len(matches) > 1 {
-		return tool.CompressResult{}, fmt.Errorf("compress: anchor matched %d user messages; retry with a longer unique excerpt", len(matches))
-	}
-
-	return a.compressVisibleRange(ctx, snap, CompactionTriggerTool, direction, matches[0], anchorPreview(UserMessageText(snap.visible[matches[0]])), focus)
+	return matches
 }
 
 type explicitCompressionSnapshot struct {
@@ -603,6 +649,15 @@ func (a *Agent) maximumSafeSummaryPrefixEnd(msgs []provider.Message, head, end i
 	maxPromptTokens := a.hardInputCeiling()
 	if policy.WindowMode == provider.ContextWindowShared {
 		maxPromptTokens = window - outputBudgetReserve - 256
+	}
+	// The fold is a canonical subset the server already accepted this session
+	// (ObservedPrompt), so folding all at once cannot overflow; the estimate is
+	// inflated for replayed history. Without an observed ceiling, truncation stands.
+	if obs := a.lastAdmission().ObservedPrompt; obs > maxPromptTokens {
+		maxPromptTokens = obs
+		if all := a.estimatedRequestTokens(a.summaryRequest(msgs[head:end], instructions)); all > maxPromptTokens {
+			maxPromptTokens = all
+		}
 	}
 	if maxPromptTokens <= 0 {
 		return head
