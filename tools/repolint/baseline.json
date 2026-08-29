@@ -4,7 +4,7 @@
     "commented-code": 1,
     "complexity": 2037,
     "essay": 2149,
-    "file-size": 110367,
+    "file-size": 110374,
     "function-size": 8805,
     "layering": 2,
     "marker": 0,
@@ -32,7 +32,7 @@
     "desktop/app.go": {
       "complexity": 58,
       "essay": 70,
-      "file-size": 11313,
+      "file-size": 11320,
       "function-size": 360,
       "struct-state": 15
     },

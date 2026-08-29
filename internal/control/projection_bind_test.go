@@ -162,3 +162,46 @@ func TestBranchRebindsProjectionSidecarPath(t *testing.T) {
 		t.Fatalf("branch projection sidecar: ok=%v err=%v", ok, err)
 	}
 }
+
+func TestResumeProjectionStatusDistinguishesValidSidecar(t *testing.T) {
+	dir := t.TempDir()
+	path := agent.NewSessionPath(dir, "proj")
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "work"})
+	if err := sess.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	exec := agent.New(nil, nil, agent.NewSession("sys"), agent.Options{ContextWindow: 1000}, event.Discard)
+	c := New(Options{Executor: exec, SessionDir: dir, Label: "test"})
+
+	// No sidecar: invalid.
+	if valid, covered := c.resumeProjectionStatus(path); valid || covered != 0 {
+		t.Fatalf("no sidecar: valid=%v covered=%d, want false/0", valid, covered)
+	}
+	// Sidecar with body + covered count: valid.
+	if err := agent.SaveCompactionState(path, agent.CompactionState{
+		SchemaVersion: 3,
+		Projection: agent.ContextProjection{
+			Messages:     []provider.Message{{Role: provider.RoleSystem, Content: "sys"}, {Role: provider.RoleUser, Content: "digest"}},
+			CoveredCount: 7,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if valid, covered := c.resumeProjectionStatus(path); !valid || covered != 7 {
+		t.Fatalf("valid sidecar: valid=%v covered=%d, want true/7", valid, covered)
+	}
+	// Body present but zero covered count: not usable.
+	if err := agent.SaveCompactionState(path, agent.CompactionState{
+		SchemaVersion: 3,
+		Projection: agent.ContextProjection{
+			Messages:     []provider.Message{{Role: provider.RoleSystem, Content: "sys"}},
+			CoveredCount: 0,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if valid, _ := c.resumeProjectionStatus(path); valid {
+		t.Fatal("zero covered count must not count as a usable projection")
+	}
+}
