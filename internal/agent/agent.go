@@ -1120,7 +1120,7 @@ type Options struct {
 func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Options, sink event.Sink) *Agent {
 	warnDeprecatedRetention := deprecatedContextRetentionConfigured(opts)
 	if opts.CompactRatio <= 0 {
-		opts.CompactRatio = defaultCompactRatio
+		opts.CompactRatio = priceAwareCompactRatio(opts.Pricing)
 	}
 	if opts.RecentKeep <= 0 {
 		opts.RecentKeep = minRecentKeep

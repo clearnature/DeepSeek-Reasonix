@@ -20,6 +20,8 @@ import (
 // and up to two cache-aligned summary checkpoints restore headroom.
 const (
 	defaultCompactRatio    = 0.80 // sole automatic maintenance trigger (new configs)
+	cheapHitRatioThreshold = 0.015
+	cheapHitCompactRatio   = 0.90
 	recentTailBudgetRatio  = 0.16 // recent verbatim tail as a fraction of the window
 	summaryOutputMaxTokens = 8192 // max digest output; further clipped by remaining candidate space
 	minRecentKeep          = 2    // never keep fewer recent messages than this
@@ -68,6 +70,16 @@ Problems hit and how they were resolved (or not), so the same dead ends are not 
 What is still in progress or unstarted, and the single most concrete next action to take.
 
 Rules: be terse — bullet points and fragments, not prose. Preserve identifiers, paths, and numbers exactly. Merge valid facts from any existing <compaction-summary> and remove facts superseded by later messages. Do NOT invent anything not present in the messages; if something is unknown, leave it out rather than guessing. Output only the structured Markdown briefing. Do not call tools. Do not output reasoning.`
+
+// priceAwareCompactRatio defers compaction when cache hits are nearly free
+// relative to full input (hit/in < 1.5%): retaining history at hit price then
+// beats a full-price fold. Applied only when the user did not set a ratio.
+func priceAwareCompactRatio(p *provider.Pricing) float64 {
+	if p != nil && p.CacheHit > 0 && p.Input > 0 && p.CacheHit/p.Input < cheapHitRatioThreshold {
+		return cheapHitCompactRatio
+	}
+	return defaultCompactRatio
+}
 
 // compactTrigger is the sole automatic context-maintenance boundary. Output
 // budgets are intentionally absent: they are clipped against the final request
