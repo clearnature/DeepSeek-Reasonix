@@ -1089,10 +1089,12 @@ func (m *Manager) recordStalled(parentSession, id, kind, label string) {
 		tag = fmt.Sprintf("%s (%s)", id, label)
 	}
 	parentSession = strings.TrimSpace(parentSession)
-	text := fmt.Sprintf("%s may be stalled — still running after %s with no visible output. Inspect it with wait or bash_output, or stop it with kill_shell.", tag, m.stalledWarning.Round(time.Second))
+	quietFor := m.stalledWarning.Round(time.Second)
+	// The full heads-up text rides both the envelope and the completed note so
+	// drains keep the config pointer and "not necessarily stuck" framing.
+	text := fmt.Sprintf("%s is still running after %s with no visible output — a quiet long-running job can look like this and is not necessarily stuck. If it should have finished, inspect it with wait or bash_output, or stop it with kill_shell. Tune or disable this check with tools.background_jobs.stalled_warning_seconds in your config (0 disables).", tag, quietFor)
 	// Same read-only snapshot pattern as recordCompletion: render the running
 	// envelope under j.mu so the drain path never re-acquires j under m.mu.
-	// The stalled warning rides the envelope body so drains stay informational.
 	var envelope string
 	if j := m.get(parentSession, id); j != nil {
 		j.mu.Lock()
@@ -1104,8 +1106,6 @@ func (m *Manager) recordStalled(parentSession, id, kind, label string) {
 		m.mu.Unlock()
 		return
 	}
-	quietFor := m.stalledWarning.Round(time.Second)
-	text = fmt.Sprintf("%s is still running after %s with no visible output — a quiet long-running job can look like this and is not necessarily stuck. If it should have finished, inspect it with wait or bash_output, or stop it with kill_shell. Tune or disable this check with tools.background_jobs.stalled_warning_seconds in your config (0 disables).", tag, quietFor)
 	m.completed = append(m.completed, completion{sessionID: parentSession, text: text, envelope: envelope})
 	active := m.active
 	shouldEmit := active == "" || parentSession == "" || active == parentSession
