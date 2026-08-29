@@ -84,6 +84,19 @@ reasonix doctor billing --json
 | OpenRouter | 按量付费（部分积分） | `GET /api/v1/key`、`GET /api/v1/credits`（USD 积分余额） | 否 |
 | MiMo Token Plan | 固定订阅费、套餐限量调用 | **无文档化接口（黑箱）** | 否 |
 
+MiMo Token Plan 的积分换算系数（用户调研，2026-08，控制台文档）：
+
+| 模型 | 缓存命中（输入） | 缓存未命中（输入） | 输出 |
+| --- | --- | --- | --- |
+| mimo-v2.5-pro | 2.5 Credits/Token | 300 Credits/Token | 600 Credits/Token |
+| mimo-v2.5 | 2 Credits/Token | 100 Credits/Token | 200 Credits/Token |
+
+未命中的惩罚是命中的 **120 倍**（Pro）；北京时间每日 00:00–08:00 有夜间 8 折。
+配置里 MiMo 的价表（`cache_hit` 0.025 / `input` 3 / `output` 6 ¥/M）恰好是积分系数
+的 1/100 折算（2.5/300/600）——积分模型与价表的命中/未命中之比一致（0.83%）。
+一次 104 万 tokens 全未命中的压缩 fold ≈ 3.12 亿 Credits ≈ Max 套餐额度的 0.38%——
+MiMo 上的压缩成本正是由系数编码的 120 倍未命中惩罚决定。
+
 对 Reasonix 的影响：
 
 - `usage` 永不携带积分；会话报价始终是价表估算，不是扣费或积分扣减。

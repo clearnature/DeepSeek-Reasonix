@@ -97,6 +97,22 @@ those endpoints:
 | OpenRouter | pay-as-you-go (some credits) | `GET /api/v1/key`, `GET /api/v1/credits` (USD credit balance) | no |
 | MiMo Token Plan | fixed subscription, quota-limited calls | **none documented** (black box) | no |
 
+MiMo Token Plan publishes credit conversion coefficients in its console
+documentation (user-surveyed, 2026-08):
+
+| Model | cache-hit input | cache-miss input | output |
+| --- | --- | --- | --- |
+| mimo-v2.5-pro | 2.5 credits/token | 300 credits/token | 600 credits/token |
+| mio-v2.5 | 2 credits/token | 100 credits/token | 200 credits/token |
+
+The miss penalty is 120× the hit rate (Pro), and a nightly 20% discount
+applies 00:00–08:00 Beijing time. The list prices configured for MiMo
+(`cache_hit` 0.025 / `input` 3 / `output` 6 ¥ per M) are exactly the credit
+coefficients scaled by 1/100 (2.5/300/600), so the credit model and the rate
+card agree on the hit-to-miss ratio (0.83%). A 104万-token all-miss fold
+therefore burns ≈3.12亿 credits ≈ 0.38% of a Max plan — compression on MiMo
+is priced by the same 120× miss penalty the coefficients encode.
+
 Consequences for Reasonix:
 
 - `usage` never carries credits; a session quote is always a rate-card
