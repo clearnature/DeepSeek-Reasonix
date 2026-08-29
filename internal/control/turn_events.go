@@ -37,10 +37,8 @@ type turnEventState struct {
 	ledger *turnevent.Ledger
 	err    error
 
-	// Memory fallback keeps the desktop turn-admission protocol (TurnIDForSubmission,
-	// RuntimeStatus) working when the durable ledger is unavailable. The frontend
-	// rejects an empty turnId as "no durable turn id", which would otherwise block
-	// every send — including /compact — even though the turn itself runs fine.
+	// Memory fallback keeps the desktop admission protocol working when the
+	// durable ledger is unavailable; an empty turnId would reject every send.
 	memoryTurnIDs      map[string]string // submissionID → turnID
 	memorySubmissionID string            // most recent routing submissionID
 	memoryActive       string            // current active turnID
@@ -328,10 +326,8 @@ func (c *Controller) prepareTurnAdmission(body func(context.Context) error) func
 		return body
 	}
 	// Ledger errors are non-fatal: proceed without durability rather than
-	// blocking all turns. This handles schema version mismatches, corrupt
-	// files, and permission issues gracefully. A memory turnID keeps the
-	// desktop admission protocol (TurnIDForSubmission/RuntimeStatus) intact
-	// so sends — including /compact — are not rejected for lacking a durable id.
+	// blocking turns. A memory turnID keeps the desktop admission protocol
+	// intact so sends — including /compact — are not rejected for no durable id.
 	id := fallbackTurnID()
 	c.turnEvents.mu.Lock()
 	if c.turnEvents.memoryTurnIDs == nil {
