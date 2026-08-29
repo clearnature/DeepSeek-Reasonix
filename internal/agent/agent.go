@@ -1790,7 +1790,7 @@ func reasoningOnlyFinishHonoured(p provider.Provider, u *provider.Usage, reasoni
 }
 
 func emptyFinalRetryMessage() string {
-	return "The previous assistant response finished without any visible answer text. Continue the same task now and provide a concise visible answer to the user. Do not send reasoning only."
+	return "The previous assistant response finished without any visible answer text (its output budget was spent on long reasoning). Continue the same task now and provide a concise visible answer to the user. Keep reasoning to at most a few short lines — produce the visible answer or tool call promptly."
 }
 
 func emptyFinalNotice() string {
