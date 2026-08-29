@@ -304,6 +304,23 @@
     }
   },
   {
+    "Name": "retrieve_info",
+    "Description": "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中且系统已配置 deepseek-responses 时自动走该管道联网检索并落盘（复用系统 API 凭据，无需单独提供）；未配置时返回 needs_grant 标志，此时应使用 ask 工具询问用户是否允许联网检索。避免重复联网查询已检索过的事实。",
+    "ReadOnly": true,
+    "Schema": {
+      "properties": {
+        "query": {
+          "description": "要查询的问题（与之前的检索问题相同或语义相近）",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "Name": "todo_write",
     "Description": "Record and update a structured task list for the current work. Send the COMPLETE list every call — it replaces the previous one. Use it to plan multi-step work and show progress: keep exactly one item in_progress at a time, and flip an item to completed the moment it's done (don't batch completions). Skip it for trivial single-step tasks. The list is two-level: a `level` 0 item is a PHASE (a milestone) and the `level` 1 items after it are its concrete sub-steps; omit `level` (0) for a flat list. Each item has `content` (imperative, e.g. \"Add the parser\"), `status` (pending|in_progress|completed), `activeForm` (present-continuous shown while in progress, e.g. \"Adding the parser\"), optional `level` (0 phase | 1 sub-step), and `step_id` — an item's stable identity. COPY `step_id` VERBATIM for every item that already has one: it is how a completion stays attached to its step when you retitle it, insert a step above it, or reorder the list. Give a new item a fresh unique id (e.g. \"plan_step_07\"); never reuse or renumber an existing one.",
     "ReadOnly": true,
