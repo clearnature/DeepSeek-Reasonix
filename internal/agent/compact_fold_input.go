@@ -48,7 +48,7 @@ func (a *Agent) foldToSummary(ctx context.Context, fold []provider.Message, inst
 }
 
 func (a *Agent) foldToSummaryMode(ctx context.Context, fold []provider.Message, instructions, inputMode string) (foldSummary, error) {
-	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: summaryInputTokens(fold), InputMode: inputMode}
+	res := foldSummary{Mode: CompactionModeSummarized, Spans: 1, FoldTokens: a.guardedSummaryInputTokens(fold), InputMode: inputMode}
 	return a.singleCallSummary(ctx, res, fold, instructions)
 }
 
