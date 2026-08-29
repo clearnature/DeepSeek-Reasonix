@@ -459,3 +459,19 @@ reasonix catalogs reindex usage [--json]
 
 直接运行 `/memory` 会显示全部 project/global active facts，不会隐藏跨 scope 的同名条目。
 每条事实包含稳定 ID、revision、scope、type、freshness 和 description。斜杠补全会提供
+
+## 成本模型诊断
+
+基于本地用量遥测审计压缩/重放的性价比（零 API 调用）——按模型与 usage source 聚合
+`~/.reasonix/stats`，校准实际花费与列表价，并用实测参数模拟无压缩/定期压缩/重放策略：
+
+```sh
+go run ./cmd/cost-model [-days 7] [-model <id>] [-hit-price <每M>]
+```
+
+- `-days`：审计多少天的 stats（默认 7）
+- `-model`：只看某个模型 id（默认全部）
+- `-hit-price`：覆盖缓存命中价（每 M）——对缓存贵的厂商做敏感性验证（如 GLM 风格
+  `2.5`）
+
+盈亏公式与实测命中/全价比见 [BILLING.zh-CN.md](./BILLING.zh-CN.md)「压缩经济性与缓存定价」。

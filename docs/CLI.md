@@ -535,3 +535,22 @@ lives on a remote host (`reasonix remote connect` / a desktop remote web
 window), they use the remote memory catalog and never fall back to local
 desktop memory. See [Context Engine v2](./SESSION_MEMORY_RETRIEVAL.md) for
 authority, automatic recall, write confirmation, and migration behavior.
+
+## Cost model diagnostics
+
+Audit compaction vs replay economics against local usage telemetry (no API
+calls) — aggregates `~/.reasonix/stats` by model and usage source, calibrates
+real spend against list prices, and simulates no-compaction / periodic
+compaction / replay strategies with observed parameters:
+
+```sh
+go run ./cmd/cost-model [-days 7] [-model <id>] [-hit-price <per-M>]
+```
+
+- `-days`: how many days of stats to audit (default 7)
+- `-model`: restrict to one model id (default: all)
+- `-hit-price`: override the cache-hit price per M tokens — sensitivity
+  check for providers whose cache is expensive (e.g. GLM-style `2.5`)
+
+See [BILLING.md](./BILLING.md) "Compaction economics vs cache pricing" for
+the payback formula and measured hit-to-input ratios.

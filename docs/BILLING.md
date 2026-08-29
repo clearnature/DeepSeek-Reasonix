@@ -125,3 +125,48 @@ Consequences for Reasonix:
 - Balance polling stays optional and per-provider: official DeepSeek and
   OpenRouter expose documented endpoints; MiMo Token Plan deliberately has no
   `balance_url` preset (see `config.go` `balance_url` handling).
+
+## Compaction economics vs cache pricing
+
+Compaction's payback is set by the ratio between the cache-hit price and the
+full input price, not by the absolute prices:
+
+```
+payback = (cache_hit / input) × rounds_saved
+compaction cost  = fold × input price (a fold is a miss-heavy summarize call)
+compaction gain  = fold × cache_hit price × remaining rounds
+```
+
+Measured ratios (list price):
+
+| Provider | cache_hit / input | payback @160 rounds | verdict |
+| --- | --- | --- | --- |
+| DeepSeek v4-flash | 0.1 / 3 = 3.3% | 5.3× | compact — saves ~34% |
+| GLM 5.3 | 0.26 / 1.4 = 18.6% | 29.8× | compact aggressively — saves ~79% |
+| MiMo v2.5-pro | 0.025 / 3 = 0.83% | 1.3× | defer — retention at hit price nearly free |
+
+The higher the cache price, the more expensive keeping history verbatim is and
+the bigger the compaction win. Reasonix reflects this in `priceAwareCompactRatio`
+(agent/compact.go): when `cache_hit / input < 1.5%` the automatic compaction
+trigger moves from 0.80 to 0.90 of the window (compaction runs less often);
+providers with expensive caches (GLM-style) keep the default. A user-configured
+`compact_ratio` always wins.
+
+Cache pricing is also a proxy for the provider's KV-cache engineering: cheap
+cache (DeepSeek, ~3%) means efficient server-side caching, so a session can
+afford to keep history verbatim; expensive cache (GLM, ~19%) forces more
+aggressive folding. This is the economic anchor behind the byte-stable prefix
+philosophy.
+
+Sensitivity check (local model, no API): `go run ./cmd/cost-model -days 7
+-hit-price 2.5` overrides the cache-hit price. At 2.5 (GLM-style ratio 83%)
+no-compaction costs ¥28.1 and compacting every 20 rounds saves 78.6%; at the
+default 0.1 the same policy saves 34%. The verdict flips only at very low
+hit-to-input ratios, which is exactly what the price-aware trigger encodes.
+
+Replay is not a cache reorder: resuming a session re-sends the exact stored
+prefix bytes (C1 warm-window gate, `cacheColdAfter`), so the server charges
+the cache-hit price — measured 99.4% hit on a 1.55M-token replay (¥0.043).
+Only cold-window resumes prune stale tool results and re-send a small prefix.
+Summaries themselves are paid for (the fold request), which is why reducing
+misses — not summaries — is the lever on MiMo (120× miss penalty).
