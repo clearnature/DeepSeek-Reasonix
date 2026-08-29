@@ -92,6 +92,10 @@ func TestTurnAdmissionLedgerFailureProceedsWithoutDurability(t *testing.T) {
 	})
 	t.Cleanup(c.Close)
 
+	// Desktop flow: routing metadata is attached before Submit so the memory
+	// fallback can map the submission back to a non-empty turn id.
+	const submissionID = "test-submission-1"
+	c.SetTurnEventRoutingMetadata("epoch-1", submissionID)
 	c.Submit("should proceed without durability")
 	// With non-fatal ledger errors, the turn should proceed.
 	// Wait for the runner to start, then release it.
@@ -99,6 +103,15 @@ func TestTurnAdmissionLedgerFailureProceedsWithoutDurability(t *testing.T) {
 	case <-runner.started:
 	case <-time.After(5 * time.Second):
 		t.Fatal("runner did not start")
+	}
+	// The desktop admission protocol must still observe a turn id even though
+	// the durable ledger is unavailable — otherwise StartTurnForTab rejects the
+	// send with "turn admission did not produce a durable turn id".
+	if got := c.TurnIDForSubmission(submissionID); got == "" {
+		t.Fatal("TurnIDForSubmission = \"\", want memory fallback turn id")
+	}
+	if got := c.RuntimeStatus().TurnID; got == "" {
+		t.Fatal("RuntimeStatus().TurnID = \"\", want memory fallback turn id")
 	}
 	close(runner.release)
 	select {

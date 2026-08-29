@@ -2,11 +2,14 @@ package control
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"reasonix/internal/agent"
 	"reasonix/internal/event"
@@ -33,6 +36,15 @@ type turnEventState struct {
 	mu     sync.RWMutex
 	ledger *turnevent.Ledger
 	err    error
+
+	// Memory fallback keeps the desktop turn-admission protocol (TurnIDForSubmission,
+	// RuntimeStatus) working when the durable ledger is unavailable. The frontend
+	// rejects an empty turnId as "no durable turn id", which would otherwise block
+	// every send — including /compact — even though the turn itself runs fine.
+	memoryTurnIDs      map[string]string // submissionID → turnID
+	memorySubmissionID string            // most recent routing submissionID
+	memoryActive       string            // current active turnID
+	memoryStatus       event.TurnStatus
 }
 
 func newTurnEventSink(inner event.Sink, c *Controller) *turnEventSink {
@@ -317,7 +329,18 @@ func (c *Controller) prepareTurnAdmission(body func(context.Context) error) func
 	}
 	// Ledger errors are non-fatal: proceed without durability rather than
 	// blocking all turns. This handles schema version mismatches, corrupt
-	// files, and permission issues gracefully.
+	// files, and permission issues gracefully. A memory turnID keeps the
+	// desktop admission protocol (TurnIDForSubmission/RuntimeStatus) intact
+	// so sends — including /compact — are not rejected for lacking a durable id.
+	id := fallbackTurnID()
+	c.turnEvents.mu.Lock()
+	if c.turnEvents.memoryTurnIDs == nil {
+		c.turnEvents.memoryTurnIDs = make(map[string]string)
+	}
+	c.turnEvents.memoryTurnIDs[c.turnEvents.memorySubmissionID] = id
+	c.turnEvents.memoryActive = id
+	c.turnEvents.memoryStatus = event.TurnQueued
+	c.turnEvents.mu.Unlock()
 	slog.Warn("controller: turn admission proceeding without durable ledger", "err", admissionErr)
 	return body
 }
@@ -337,7 +360,9 @@ func (c *Controller) applyTurnDoneProtocol(done event.Event, cancelRequested boo
 func (c *Controller) turnEventRuntimeStatus() (string, event.TurnStatus, uint64, uint64) {
 	ledger := c.turnEventLedger()
 	if ledger == nil {
-		return "", "", 0, 0
+		c.turnEvents.mu.RLock()
+		defer c.turnEvents.mu.RUnlock()
+		return c.turnEvents.memoryActive, c.turnEvents.memoryStatus, 0, 0
 	}
 	latest, replayAfter := ledger.ProjectionCursor()
 	return ledger.ActiveTurnID(), ledger.CurrentStatus(), latest, replayAfter
@@ -412,7 +437,12 @@ func (c *Controller) emitTurnEventChecked(e event.Event) error {
 
 // SetTurnEventRoutingMetadata attaches desktop routing identity to lifecycle
 // envelopes only. It never changes provider-visible prompts or tool schemas.
+// The submissionID is also remembered in memory so the fallback turnID path
+// (durable ledger unavailable) can map the desktop submission to a turn.
 func (c *Controller) SetTurnEventRoutingMetadata(runtimeEpoch, submissionID string) {
+	c.turnEvents.mu.Lock()
+	c.turnEvents.memorySubmissionID = submissionID
+	c.turnEvents.mu.Unlock()
 	if ledger := c.turnEventLedger(); ledger != nil {
 		ledger.RequireProjectionAck(true)
 		ledger.SetRoutingMetadata(runtimeEpoch, submissionID)
@@ -478,9 +508,21 @@ func (c *Controller) DrainTurnEventMetrics() turnevent.MetricsSnapshot {
 // TurnIDForSubmission exposes the synchronous admission receipt without
 // depending on whether the provider is still running when Wails returns.
 func (c *Controller) TurnIDForSubmission(submissionID string) string {
-	ledger := c.turnEventLedger()
-	if ledger == nil {
-		return ""
+	if ledger := c.turnEventLedger(); ledger != nil {
+		return ledger.TurnIDForSubmission(submissionID)
 	}
-	return ledger.TurnIDForSubmission(submissionID)
+	c.turnEvents.mu.RLock()
+	defer c.turnEvents.mu.RUnlock()
+	return c.turnEvents.memoryTurnIDs[submissionID]
+}
+
+// fallbackTurnID mints a process-local turn id when the durable ledger is
+// unavailable. It mirrors turnevent.newTurnID's shape so frontends cannot tell
+// the two apart; unlike the ledger id it is not replayed after restart.
+func fallbackTurnID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return fmt.Sprintf("turn_%d", time.Now().UnixNano())
+	}
+	return "turn_" + hex.EncodeToString(raw[:])
 }
