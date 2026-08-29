@@ -3,6 +3,7 @@
 // render the active tab's state.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asArray } from "./array";
+import { compactArchivedToolItems } from "./archivedToolItems";
 import { addBreadcrumb } from "./breadcrumbs";
 import { app, onEvent, onReady, onRuntimeRebuilt, onTabMeta, onTopicActivation } from "./bridge";
 import { invalidateCache } from "./composerHistory";
@@ -35,11 +36,14 @@ import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
+import { createUniqueItemIDAllocator } from "./historyItemIds";
+import { withRemoteProviderUnreachable, withRemoteTurnInterrupted } from "./remoteTurnState";
 import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./navigationSurfaceTransition";
 import { sameStringList, sameTodoList } from "./todoVisibility";
 import { resolveSnapshotTurnStartedAt, resolveTurnStartedAt, snapshotPredatesTurnLifecycle } from "./turnTiming";
 import { TurnEventProjector } from "./turnEventProjection";
 import { useStaleTurnWatchdog } from "./useStaleTurnWatchdog";
+import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import type { SearchSource } from "./searchSources";
 import { attachWebSearchOutput, historySearchAndAnswer } from "./searchTranscript";
 import { fileDiffFromWire, parseTodos, summarize, summarizeFileDiff, type ToolFileDiff } from "./tools";
@@ -110,6 +114,7 @@ const SUBAGENT_PROGRESS_TOOLS = new Set(["task", "read_only_task", "parallel_tas
 const SUBAGENT_PREVIEW_REASONING_LIMIT = 8 << 10;
 const SUBAGENT_PREVIEW_TEXT_LIMIT = 8 << 10;
 const SUBAGENT_PREVIEW_NOTICE_LIMIT = 2 << 10;
+const RUNTIME_STATUS_ONLY = { hydrateSessionData: false } as const;
 export type SubagentPhase =
   | "queued" | "running" | "reasoning" | "responding" | "tool" | "retrying"
   | "completed" | "failed" | "cancelled";
@@ -355,7 +360,7 @@ export const STEER_NOTICE_PREFIX = "↪ ";
 export function isSteerNoticeText(text: string): boolean {
   return text.startsWith(STEER_NOTICE_PREFIX);
 }
-interface State {
+export interface State {
   items: Item[];
   /** Exact backend-owned turn targeted by Stop/Ask. */
   activeTurnId?: string;
@@ -773,54 +778,20 @@ export function isReadOnlyTool(name: string): boolean {
 
 export { isBatchedReadOnlyTool } from "./searchTranscript";
 
-const ARCHIVED_TOOL_ARG_LIMIT = 200;
-
-function archivedToolArgs(_name: string, args: string): string {
-  return args && args.length > ARCHIVED_TOOL_ARG_LIMIT ? args.slice(0, ARCHIVED_TOOL_ARG_LIMIT) + "…" : args;
-}
-
-function isCanonicalTodoTool(tool: ToolItem): boolean {
-  return tool.name === "todo_write" && !tool.parentId && tool.status === "done" && !tool.error;
-}
-
-function latestCanonicalTodoToolIndex(items: Item[]): number {
-  for (let i = items.length - 1; i >= 0; i -= 1) {
-    const item = items[i];
-    if (item.kind === "tool" && isCanonicalTodoTool(item)) return i;
-  }
-  return -1;
-}
-
-function compactArchivedToolItems(items: Item[]): Item[] {
-  const canonicalTodoIndex = latestCanonicalTodoToolIndex(items);
-  return items.map((item, index) => {
-    if (item.kind !== "tool" || item.status === "running") return item;
-    const preserveArgs = index === canonicalTodoIndex;
-    const nextArgs = preserveArgs ? item.args : archivedToolArgs(item.name, item.args);
-    if (nextArgs === item.args && item.output === undefined && item.dataArchived === true) return item;
-    return {
-      ...item,
-      args: nextArgs,
-      output: undefined,
-      dataArchived: true,
-    };
-  });
-}
-
 function historyRevisionIsOlder(current: number | undefined, incoming: number | undefined): boolean {
   return typeof current === "number" && current > 0
     && typeof incoming === "number" && incoming > 0
     && incoming < current;
 }
-
 type Action =
-  | { type: "event"; e: WireEvent }
+  | { type: "event"; e: WireEvent; remote?: boolean }
   | { type: "stream_batch"; segments: StreamSegment[] }
   | { type: "user"; text: string; submitText?: string; seq: number; submissionId: string; deliveryRecovery?: boolean }
   | { type: "unsend" }
   | { type: "send_confirmed"; submissionId: string }
   | { type: "turn_admitted"; turnId: string; submissionId: string }
   | { type: "send_failed"; submissionId: string; error: string }
+  | { type: "turn_interrupted" }
   | { type: "backend_status"; running: boolean; turnStartedAt?: number; pendingPrompt?: boolean; backgroundJobs?: number; cancelRequested?: boolean; cancellable?: boolean; turnId?: string; turnStatus?: string; snapshotAt?: number }
   | { type: "cancel_requested" }
   | { type: "meta"; meta: Meta }
@@ -837,7 +808,7 @@ type Action =
   | { type: "backend_activation_done" }
   | { type: "message_action_start"; action: MessageActionState }
   | { type: "message_action_done" }
-  | { type: "history"; messages: HistoryMessage[] }
+  | { type: "history"; messages: HistoryMessage[]; remote?: boolean }
   | { type: "history_page"; page: HistoryPage; mode: "replace" | "prepend" }
   // TranscriptStore-driven history actions (windowed HistorySliceForTab flow).
   // Items carry stable entryId-derived ids; prepend also lists existing item
@@ -889,6 +860,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
   let items: Item[] = [];
   let seq = startSeq;
   const consumedToolIDs = new Set<string>();
+	const uniqueItemID = createUniqueItemIDAllocator();
   for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
     const m = messages[messageIndex];
     if (m.role === "system") continue;
@@ -967,7 +939,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
         const fileDiff = fileDiffFromWire(tc);
         items.push({
           kind: "tool",
-          id: tc.id || `${idPrefix}tool${seq}`,
+          id: uniqueItemID(tc.id || "", `${idPrefix}tool${seq}`),
           name: tc.name,
           args: tc.arguments ?? "",
           readOnly: typeof tc.resolvedReadOnly === "boolean" ? tc.resolvedReadOnly : isReadOnlyTool(tc.name),
@@ -993,7 +965,7 @@ export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: str
       const error = m.toolResultError || (output ? historyToolError(output) : undefined);
       items.push({
         kind: "tool",
-        id: m.toolCallId || `${idPrefix}tool${seq}`,
+        id: uniqueItemID(m.toolCallId || "", `${idPrefix}tool${seq}`),
         name: m.toolName || "tool",
         args: "",
         readOnly: isReadOnlyTool(m.toolName || "tool"),
@@ -1444,7 +1416,7 @@ function applyExtensionNotification(s: State, surface: WireExtensionSurface): St
   return { ...s, seq: s.seq + 1, extensionNotifications: [...s.extensionNotifications, entry] };
 }
 
-function applyEvent(s: State, e: WireEvent): State {
+function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State {
   if (s.discardTurn) {
     if (e.kind === "turn_done") {
       return {
@@ -1491,6 +1463,10 @@ function applyEvent(s: State, e: WireEvent): State {
       turnStartAt: s.turnStartAt || Date.now(),
     };
   }
+  if (e.kind === "provider_unreachable") {
+    const detail = typeof e.text === "string" ? e.text : "";
+    return withRemoteProviderUnreachable(s, detail);
+  }
   if (e.kind === "stream_attempt") {
     return applyStreamAttempt(s, e);
   }
@@ -1502,6 +1478,9 @@ function applyEvent(s: State, e: WireEvent): State {
       // instant the backend acknowledges the turn — no dead gap waiting for
       // the first text/reasoning token.
       const fresh = { ...s, activeTurnId: e.turnId ?? s.activeTurnId, pendingSearchSources: undefined };
+      if (fresh.items.some((it) => it.id === "provider-unreachable")) {
+        fresh.items = fresh.items.filter((it) => it.id !== "provider-unreachable");
+      }
       const { items, id, seq } = ensureAssistant(fresh);
       return {
         ...fresh,
@@ -1746,7 +1725,8 @@ function applyEvent(s: State, e: WireEvent): State {
       }
       // A nested result refreshes its sub-agent parent's recent activity.
       if (t.parentId) touchSubagentParent(next, t.parentId);
-      return attachWebSearchOutput({ ...s, items: compactArchivedToolItems(next) }, t.name, t.output, t.err, idx >= 0 && next[idx]?.kind === "tool" ? next[idx].id : t.id);
+      const items = preserveToolPayloads ? next : compactArchivedToolItems(next);
+      return attachWebSearchOutput({ ...s, items }, t.name, t.output, t.err, idx >= 0 && next[idx]?.kind === "tool" ? next[idx].id : t.id);
     }
     case "tool_progress": {
       const t = e.tool;
@@ -2056,6 +2036,9 @@ export function reducer(s: State, a: Action): State {
       const notice: Item = { kind: "notice", id: `n${s.seq}`, level: "warn", text: a.error };
       return { ...s, pendingUser: undefined, pendingSubmissionId: undefined, deliveryRecoveryActive: false, running: false, turnActive: false, pendingPrompt: false, cancelRequested: false, cancellable: false, live: undefined, turnLifecycleObservedAt: promptEventClock(), seq: s.seq + 1, items: [...items, notice] };
     }
+    case "turn_interrupted": {
+      return withRemoteTurnInterrupted(s);
+    }
     case "backend_status": {
       // Reject snapshots that began before newer prompt or turn lifecycle evidence.
       if (runtimeSnapshotPredatesPrompt(s, a.snapshotAt) || snapshotPredatesTurnLifecycle(s.turnLifecycleObservedAt, a.snapshotAt)) return s;
@@ -2180,7 +2163,8 @@ export function reducer(s: State, a: Action): State {
     case "message_action_done": return { ...s, messageAction: undefined };
     case "history": {
       const { items, seq } = historyMessagesToItems(a.messages, "h", s.seq);
-      return { ...s, items: compactArchivedToolItems(items), historyPrefixCount: items.length, pendingSubmissionId: undefined, seq, hydrateHistoryLoaded: true, hydratePlaceholderItems: undefined, historyStartTurn: 0, historyTotalTurns: 0, historyHasOlder: false, historyOlderLoading: false, historyOlderError: undefined, historyRevision: undefined, historyDigest: undefined, historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" } };
+      // Remote cards have no local ToolResultForTab fallback; retain expansion data.
+      return { ...s, items: a.remote ? items : compactArchivedToolItems(items), historyPrefixCount: items.length, pendingSubmissionId: undefined, seq, hydrateHistoryLoaded: true, hydratePlaceholderItems: undefined, historyStartTurn: 0, historyTotalTurns: 0, historyHasOlder: false, historyOlderLoading: false, historyOlderError: undefined, historyRevision: undefined, historyDigest: undefined, historyMutation: { seq: s.historyMutation.seq + 1, kind: "replace" } };
     }
     case "history_page": {
       if (historyRevisionIsOlder(s.historyRevision, a.page.revision)) return s;
@@ -2340,7 +2324,7 @@ export function reducer(s: State, a: Action): State {
     case "reset": return { ...initialState, meta: metaWithoutCanonicalTodos(s.meta), context: { used: 0, window: s.context.window, sessionTokens: 0, compactRatio: s.context.compactRatio }, balance: s.balance, effort: s.effort, jobs: s.jobs, hydrating: s.hydrating, hydrateReason: s.hydrateReason, hydrateError: s.hydrateError, hydrateHistoryLoaded: s.hydrateHistoryLoaded, hydratePlaceholderItems: s.hydratePlaceholderItems, backendActivationPending: s.backendActivationPending, sessionGen: s.sessionGen + 1, promptEpoch: s.promptEpoch + 1 };
     case "context_panel_refresh": return { ...s, contextPanelSeq: s.contextPanelSeq + 1 };
     case "event": {
-      const next = applyEvent(s, a.e);
+      const next = applyEvent(s, a.e, a.remote);
       return next.items.length > s.items.length
         ? { ...next, historyMutation: { seq: s.historyMutation.seq + 1, kind: "append" } }
         : next;
@@ -3238,7 +3222,7 @@ export function useController() {
     if (stalePromptReconcileTimers.current.has(tabId)) return;
     const timer = window.setTimeout(() => {
       stalePromptReconcileTimers.current.delete(tabId);
-      void reconcileTabRuntime(tabId, { hydrateSessionData: false }).catch(() => {});
+      void reconcileTabRuntime(tabId, RUNTIME_STATUS_ONLY).catch(() => {});
     }, STALE_PROMPT_RECONCILE_MS);
     stalePromptReconcileTimers.current.set(tabId, timer);
   }, [reconcileTabRuntime]);
@@ -3256,7 +3240,7 @@ export function useController() {
     const delay = CANCEL_RECONCILE_DELAYS_MS[Math.min(attempt, CANCEL_RECONCILE_DELAYS_MS.length - 1)];
     const timer = window.setTimeout(() => {
       cancelReconcileTimers.current.delete(tabId);
-      void reconcileTabRuntime(tabId, { hydrateSessionData: false }).then((tabs) => {
+      void reconcileTabRuntime(tabId, RUNTIME_STATUS_ONLY).then((tabs) => {
         const tab = tabs?.find((candidate) => candidate.id === tabId);
         if (!tab) return;
         const stillReconciling = foregroundRunningFromRuntimeMeta(tab) || Boolean(tab.cancelRequested);
@@ -3330,7 +3314,7 @@ export function useController() {
         sessionDigest: restoredMeta.sessionDigest,
         sessionGeneration: restoredMeta.sessionGeneration,
         surfacePolicy: "preserve-current",
-      }).then(() => reconcileTabRuntime(restoredTabId, { hydrateSessionData: false })).catch(() => {});
+      }).then(() => reconcileTabRuntime(restoredTabId, RUNTIME_STATUS_ONLY)).catch(() => {});
     }
     navigationSourcesRef.current.delete(navigationSeq);
     return true;
@@ -3402,7 +3386,7 @@ export function useController() {
           void restoreNavigationSource(pending.navigationSeq, tabId, t("history.failedOpenSession"));
           return;
         }
-        return reconcileTabRuntime(tabId, { hydrateSessionData: false });
+        return reconcileTabRuntime(tabId, RUNTIME_STATUS_ONLY);
       })
       .catch(() => {
         if (isNavigationIntentCurrent(pending.navigationSeq) && activeTabIdRef.current === tabId) {
@@ -3567,10 +3551,13 @@ export function useController() {
 
   // If the startup ready event is missed, keep the composer lock in sync with
   // the active tab's backend metadata without kicking off tab activation work.
+  // Remote tabs are exempt: their readiness flows through remote-tab state
+  // events, and MetaForTab reports ready:false for them forever — reconciling
+  // would just burn every attempt on a surface that never uses it.
   useEffect(() => {
     const tabId = activeTabId;
     const meta = activeState.meta;
-    if (!tabId || !meta || meta.ready || meta.startupErr || activeState.backendActivationPending) {
+    if (!tabId || !meta || meta.remote || meta.ready || meta.startupErr || activeState.backendActivationPending) {
       readyMetaReconcileSeq.current += 1;
       readyMetaReconcileActive.current = undefined;
       return;
@@ -4423,7 +4410,7 @@ export function useController() {
     dispatchRuntimeStatusForTab(tab.id, tab, snapshotAt);
     await waitForTabReady(tab.id);
     await loadSessionDataForTab(tab.id, true);
-    await reconcileTabRuntime(tab.id, { hydrateSessionData: false });
+    await reconcileTabRuntime(tab.id, RUNTIME_STATUS_ONLY);
     return tab.id;
   };
   const rewindForTabDetailed = useCallback(async (sourceTabId: string, turn: number, scope: string): Promise<RewindResultView & { ok: boolean }> => {
@@ -4534,6 +4521,40 @@ export function useController() {
     if (optimisticTab) {
       dispatchTo(tabId, { type: "optimistic_meta", meta: metaFromTab(optimisticTab, statesRef.current.get(tabId)?.meta) });
     }
+    // Remote tabs have no local controller/history slice. Their transcript is
+    // hydrated by useRemoteSession via RemoteTabSnapshot after ready. Running
+    // HistorySliceForTab here fails with "session path unavailable" and the
+    // hydrateError path would bounce the user back to the previous local tab.
+    if (optimisticTab?.remote) {
+      if (!preserveTargetSurface) dispatchTo(tabId, { type: "reset" });
+      dispatchTo(tabId, { type: "hydrate_done" });
+      const backendActivation = app.SetActiveTab(tabId)
+        .then(async () => {
+          if (!isNavigationIntentCurrent(navigationSeq) || activeTabIdRef.current !== tabId) {
+            noteActivationSettled(switchRequestId, "cancelled");
+            await reassertVisibleTabAfterStaleNavigation("tab.switch", tabId);
+            return false;
+          }
+          confirmBackendActiveTab(tabId);
+          noteActivationSettled(switchRequestId, "ready");
+          return true;
+        })
+        .catch((err) => {
+          noteActivationSettled(switchRequestId, "failed", errorMessage(err));
+          if (!isNavigationIntentCurrent(navigationSeq)) return false;
+          dispatchTo(tabId, { type: "backend_activation_done" });
+          if (previousTabId && activeTabIdRef.current === tabId) {
+            setActiveTabId(previousTabId);
+            activeTabIdRef.current = previousTabId;
+          }
+          return false;
+        });
+      trackBackendActivation(tabId, backendActivation);
+      return backendActivation.then(async (activated) => {
+        if (!activated || !isNavigationIntentCurrent(navigationSeq)) return undefined;
+        return reconcileTabRuntime(tabId, RUNTIME_STATUS_ONLY);
+      });
+    }
     if (!preserveTargetSurface) dispatchTo(tabId, { type: "reset" });
     if (optimisticStatus?.running) dispatchTo(tabId, optimisticStatus);
     dispatchTo(tabId, { type: "hydrate_start", reason: "switch-tab", placeholderItems });
@@ -4619,6 +4640,14 @@ export function useController() {
     return backendSwitch;
   }, [beginActiveNavigation, confirmBackendActiveTab, dispatchTo, isNavigationIntentCurrent, loadSessionDataForTab, navigationCompletionCurrent, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, restoreNavigationSource, snapshotNavigationSourceTab, trackBackendActivation]);
 
+  const switchRemoteTab = useRemoteTabSwitch({
+    activeTabIdRef, setActiveTabId, beginNavigation: beginActiveNavigation,
+    navigationCanComplete: navigationCompletionCurrent,
+    navigationIsCurrent: isNavigationIntentCurrent,
+    confirmBackendActiveTab,
+    reassertVisibleTab: reassertVisibleTabAfterStaleNavigation,
+  });
+
   const openProjectTab = useCallback(async (workspaceRoot: string, topicId: string, navigationIntentSeq?: number): Promise<TabMeta> => {
     const navigationSeq = navigationIntentSeq ?? beginActiveNavigation();
     snapshotNavigationSourceTab(navigationSeq);
@@ -4641,7 +4670,7 @@ export function useController() {
       placeholderItems: sameSessionPlaceholderItems(meta, prevState), surfacePolicy: sameSession ? "preserve-current" : "replace-surface", preserveCachedHistory,
       sessionPath: meta.sessionPath, sessionRevision: meta.sessionRevision, sessionDigest: meta.sessionDigest, sessionGeneration: meta.sessionGeneration,
     });
-    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, { hydrateSessionData: false }) : undefined);
+    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, RUNTIME_STATUS_ONLY) : undefined);
     return meta;
   }, [beginActiveNavigation, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, monitorNavigationHydration, navigationCompletionCurrent, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, snapshotNavigationSourceTab]);
 
@@ -4667,7 +4696,7 @@ export function useController() {
       placeholderItems: sameSessionPlaceholderItems(meta, prevState), surfacePolicy: sameSession ? "preserve-current" : "replace-surface", preserveCachedHistory,
       sessionPath: meta.sessionPath, sessionRevision: meta.sessionRevision, sessionDigest: meta.sessionDigest, sessionGeneration: meta.sessionGeneration,
     });
-    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, { hydrateSessionData: false }) : undefined);
+    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, RUNTIME_STATUS_ONLY) : undefined);
     return meta;
   }, [beginActiveNavigation, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, monitorNavigationHydration, navigationCompletionCurrent, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, snapshotNavigationSourceTab]);
 
@@ -4693,7 +4722,7 @@ export function useController() {
       placeholderItems: sameSessionPlaceholderItems(meta, prevState), surfacePolicy: sameSession ? "preserve-current" : "replace-surface", preserveCachedHistory,
       sessionPath: meta.sessionPath, sessionRevision: meta.sessionRevision, sessionDigest: meta.sessionDigest, sessionGeneration: meta.sessionGeneration,
     });
-    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, { hydrateSessionData: false }) : undefined);
+    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, RUNTIME_STATUS_ONLY) : undefined);
     return meta;
   }, [beginActiveNavigation, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, monitorNavigationHydration, navigationCompletionCurrent, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, snapshotNavigationSourceTab]);
 
@@ -4783,7 +4812,7 @@ export function useController() {
     dispatchTo(meta.id, { type: "optimistic_meta", meta: metaFromTab(meta, statesRef.current.get(meta.id)?.meta) });
     dispatchRuntimeStatusForTab(meta.id, meta, snapshotAt);
     const load = loadSessionDataForTab(meta.id, true, "new-session", { surfacePolicy: "replace-surface", sessionPath: meta.sessionPath, sessionGeneration: meta.sessionGeneration });
-    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, { hydrateSessionData: false }) : undefined);
+    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, RUNTIME_STATUS_ONLY) : undefined);
     return meta;
   }, [beginActiveNavigation, bumpCheckpointRefreshSeq, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, monitorNavigationHydration, navigationCompletionCurrent, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, snapshotNavigationSourceTab]);
 
@@ -4802,7 +4831,7 @@ export function useController() {
     dispatchTo(meta.id, { type: "optimistic_meta", meta: metaFromTab(meta, statesRef.current.get(meta.id)?.meta) });
     dispatchRuntimeStatusForTab(meta.id, meta, snapshotAt);
     const load = loadSessionDataForTab(meta.id, true, "new-session", { surfacePolicy: "replace-surface", sessionPath: meta.sessionPath, sessionGeneration: meta.sessionGeneration });
-    monitorNavigationHydration(navigationSeq, meta.id, load, () => reconcileTabRuntime(meta.id, { hydrateSessionData: false }));
+    monitorNavigationHydration(navigationSeq, meta.id, load, () => reconcileTabRuntime(meta.id, RUNTIME_STATUS_ONLY));
     return meta;
   }, [beginActiveNavigation, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, monitorNavigationHydration, navigationCompletionCurrent, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, snapshotNavigationSourceTab]);
 
@@ -4828,7 +4857,7 @@ export function useController() {
       placeholderItems: sameSessionPlaceholderItems(meta, prevState), surfacePolicy: sameSession ? "preserve-current" : "replace-surface",
       sessionPath: meta.sessionPath, sessionRevision: meta.sessionRevision, sessionDigest: meta.sessionDigest, sessionGeneration: meta.sessionGeneration,
     });
-    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, { hydrateSessionData: false }) : undefined);
+    monitorNavigationHydration(navigationSeq, meta.id, load, isNewTab ? () => reconcileTabRuntime(meta.id, RUNTIME_STATUS_ONLY) : undefined);
     return result;
   }, [beginActiveNavigation, confirmBackendActiveTab, dispatchRuntimeStatusForTab, dispatchTo, loadSessionDataForTab, monitorNavigationHydration, navigationCompletionCurrent, reassertVisibleTabAfterStaleNavigation, reconcileTabRuntime, snapshotNavigationSourceTab]);
 
@@ -4883,7 +4912,7 @@ export function useController() {
     requestHistoryFullContent,
     refreshMeta, pickWorkspace, switchWorkspace, compact, rewind, rewindForTab, rewindForTabDetailed, undoRewindForTab, setModel, setEffort, cancelJob,
     fetchMemory, remember, forget, saveDoc,
-    switchTab, openProjectTab, openGlobalTab, openTopicSession, ensureBlankTab, activateTopic, ensureBlankSurface, createIsolatedWorktree, commitSingleSurfaceNavigation, closeTab, reorderTabs,
+    switchTab, switchRemoteTab, openProjectTab, openGlobalTab, openTopicSession, ensureBlankTab, activateTopic, ensureBlankSurface, createIsolatedWorktree, commitSingleSurfaceNavigation, closeTab, reorderTabs,
     // Invalidate in-flight navigation completions (activateTopic's stale
     // guard) from outside the hook. The App-level navigation queue must call
     // this at ENQUEUE time: a queued click does not run — and so does not

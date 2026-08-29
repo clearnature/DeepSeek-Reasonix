@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -480,7 +479,7 @@ func topicSummaryFromCatalogTopic(topic sessioncatalog.TopicRecord, visible []se
 	return summary
 }
 
-func (a *App) ListProjectTopics(req ProjectTopicPageRequest) (ProjectTopicPage, error) {
+func (a *App) listProjectTopics(req ProjectTopicPageRequest) (ProjectTopicPage, error) {
 	catalog := a.sessionCatalog.Load()
 	if catalog == nil {
 		return a.metadataTopicPage(req), nil
@@ -696,20 +695,6 @@ func (a *App) GetTopicSummary(key ProjectTopicKey) (ProjectNode, error) {
 
 func (a *App) GetSessionCatalogStatus() SessionCatalogStatus {
 	return a.currentSessionCatalogStatus()
-}
-
-func (a *App) RebuildSessionCatalog() error {
-	if a == nil || a.shuttingDown.Load() {
-		return errors.New("application is shutting down")
-	}
-	if !a.catalogRebuilding.CompareAndSwap(false, true) {
-		return nil
-	}
-	go func() {
-		a.stopSessionCatalog(250 * time.Millisecond)
-		a.startSessionCatalog(true)
-	}()
-	return nil
 }
 
 // ListProjectTree is the one-release compatibility wrapper. It composes only

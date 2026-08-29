@@ -18,7 +18,23 @@ branch.
   readable on old sessions and are stripped from new provider context.
   Old `--preset`/`--profile` compatibility no-ops are unchanged.
 
+- **Remote connect wizard host picker:** Step 1's host field now opens the
+  saved SSH connections through an explicit chevron dropdown on the input's
+  right edge instead of the old focus-triggered popup. The dropdown lists
+  every saved connection unfiltered, appends non-standard ports to each row,
+  leads with a "saved SSH connections" caption, and closes on pick, arrow
+  toggle, Escape (before the Escape that exits the wizard), or an outside
+  pointer press. The arrow is hidden while no hosts are saved and disabled
+  while a connection is busy.
+
 ### Fixed
+
+- **Compact MCP discovery:** `use_capability(action=list)` now returns one
+  compact summary per configured MCP server instead of expanding every cached
+  tool description, including tools from disabled servers. Inspecting one
+  enabled `mcp-server:<name>` still returns its live or cached directory
+  without starting it, while direct known-ID calls, routing, authorization,
+  and the fixed provider-visible tool schema remain unchanged.
 
 - **Project MCP session reliability:** The MCP client now uses the official Go
   SDK for stdio, legacy SSE, and Streamable HTTP while retaining Reasonix's

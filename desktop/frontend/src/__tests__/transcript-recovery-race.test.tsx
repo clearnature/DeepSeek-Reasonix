@@ -1,14 +1,16 @@
 // Run: tsx src/__tests__/transcript-recovery-race.test.tsx
 
-import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { StateSnapshot, VirtuosoHandle } from "react-virtuoso";
 import { useTranscriptScrollArbiter, type TranscriptRecoveryTerminal } from "../lib/useTranscriptScrollArbiter";
 import { useTranscriptLayoutIntegrity } from "../lib/useTranscriptLayoutIntegrity";
+import { createTranscriptMeasuredSizes } from "../lib/transcriptMeasuredSizes";
 import type { TranscriptScrollWriteRecord } from "../lib/transcriptScrollProbe";
-import type { TranscriptRow } from "../lib/transcriptRows";
+import { buildTranscriptRows, buildTurnModels, EMPTY_FOLDS, transcriptRowMeasurementVersion, type TranscriptRow } from "../lib/transcriptRows";
 import type { Item } from "../lib/useController";
+import { installTranscriptRaceClock } from "./helpers/transcriptRaceClock";
+import { installTranscriptRecoveryRaceDom } from "./helpers/transcriptRecoveryRaceDom";
 
 let passed = 0;
 let failed = 0;
@@ -25,73 +27,9 @@ function check(condition: unknown, label: string) {
 
 console.log("\ntranscript recovery races");
 
-const dom = new JSDOM('<!doctype html><html><body><div id="root"></div><div id="scroll"><div class="transcript__row" data-row-key="row-a"></div></div></body></html>', {
-  pretendToBeVisual: true,
-  url: "http://localhost/",
-});
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-globalThis.window = dom.window as unknown as Window & typeof globalThis;
-globalThis.document = dom.window.document;
-globalThis.HTMLElement = dom.window.HTMLElement;
-globalThis.Element = dom.window.Element;
-globalThis.Node = dom.window.Node;
+const { dom, flushFrames } = installTranscriptRecoveryRaceDom();
 
-let nextFrame = 1;
-const frames = new Map<number, FrameRequestCallback>();
-const requestFrame = (callback: FrameRequestCallback) => {
-  const id = nextFrame;
-  nextFrame += 1;
-  frames.set(id, callback);
-  return id;
-};
-const cancelFrame = (id: number) => void frames.delete(id);
-globalThis.requestAnimationFrame = requestFrame;
-globalThis.cancelAnimationFrame = cancelFrame;
-dom.window.requestAnimationFrame = requestFrame;
-dom.window.cancelAnimationFrame = cancelFrame;
-
-let clockNow = 10_000;
-let nextTimer = 1;
-const timers = new Map<number, { dueAt: number; run: () => void }>();
-const originalDateNow = Date.now;
-const originalSetTimeout = dom.window.setTimeout;
-const originalClearTimeout = dom.window.clearTimeout;
-Date.now = () => clockNow;
-dom.window.setTimeout = ((handler: TimerHandler, timeout = 0, ...args: unknown[]) => {
-  const id = nextTimer;
-  nextTimer += 1;
-  const run = typeof handler === "function"
-    ? () => handler(...args)
-    : () => { throw new Error("string timer handlers are unsupported in this test"); };
-  timers.set(id, { dueAt: clockNow + Math.max(0, timeout), run });
-  return id;
-}) as typeof dom.window.setTimeout;
-dom.window.clearTimeout = ((id: number | undefined) => {
-  if (id !== undefined) timers.delete(id);
-}) as typeof dom.window.clearTimeout;
-
-async function advanceClock(milliseconds: number) {
-  await act(async () => {
-    const target = clockNow + milliseconds;
-    while (true) {
-      const next = [...timers.entries()]
-        .filter(([, timer]) => timer.dueAt <= target)
-        .sort(([leftID, left], [rightID, right]) => left.dueAt - right.dueAt || leftID - rightID)[0];
-      if (!next) break;
-      const [id, timer] = next;
-      timers.delete(id);
-      clockNow = timer.dueAt;
-      timer.run();
-    }
-    clockNow = target;
-  });
-}
-
-async function flushFrames() {
-  const pending = [...frames.entries()];
-  frames.clear();
-  await act(async () => pending.forEach(([, callback]) => callback(performance.now())));
-}
+const { advanceClock, restore: restoreClock } = installTranscriptRaceClock(dom.window as unknown as Window);
 
 // Runtime capture of every imperative scroll write (Phase 0 probe).
 const scrollWrites: TranscriptScrollWriteRecord[] = [];
@@ -125,15 +63,17 @@ let scrollToBottomCalls = 0;
 // Null disables snapshot capture; the snapshot sections opt in explicitly so
 // the pre-snapshot scenarios keep their first-mount scrollToBottom behavior.
 let stubSnapshot: StateSnapshot | null = null;
+const applyScrollTo = (options?: { top?: number }) => {
+  scrollToCalls += 1;
+  const top = options?.top ?? 0;
+  scrollElement.scrollTop = Math.max(0, Math.min(scrollExtent - scrollElement.clientHeight, top));
+};
+scrollElement.scrollTo = applyScrollTo;
 const virtuosoHandle = {
   scrollBy: () => { scrollByCalls += 1; },
   scrollToIndex: () => { scrollToIndexCalls += 1; },
   // Browser semantics: an offset write clamps against the current extent.
-  scrollTo: (options?: { top?: number }) => {
-    scrollToCalls += 1;
-    const top = options?.top ?? 0;
-    scrollElement.scrollTop = Math.max(0, Math.min(scrollExtent - scrollElement.clientHeight, top));
-  },
+  scrollTo: applyScrollTo,
   getState: (callback: (state: StateSnapshot) => void) => {
     if (stubSnapshot) callback(stubSnapshot);
   },
@@ -229,6 +169,28 @@ scrollElement.scrollTop = 400;
 await act(async () => arbiter?.atBottomStateChange(false));
 check(arbiter?.isAtBottom === true, "physical bottom overrides a stale Virtuoso atBottom=false report");
 
+// A live-footer structural commit (answer -> tool) can expose the new native
+// extent before Virtuoso reports its footer height. Tail ownership repairs the
+// offset synchronously so WebView2 never paints the clamped intermediate frame.
+scrollExtent = 700;
+scrollElement.scrollTop = 477;
+scrollToCalls = 0;
+await act(async () => arbiter?.pinLiveTailBeforePaint());
+check(
+  scrollElement.scrollTop === 600 && scrollToCalls === 1,
+  "a claimed live tail pins the new native extent before paint",
+);
+await act(async () => arbiter?.releaseTailFollow());
+scrollExtent = 800;
+scrollElement.scrollTop = 500;
+scrollToCalls = 0;
+await act(async () => arbiter?.pinLiveTailBeforePaint());
+check(
+  scrollElement.scrollTop === 500 && scrollToCalls === 0,
+  "a manual reader is never moved by live-tail commit stabilization",
+);
+await act(async () => arbiter?.reset());
+
 // A nested code/tool scrollport owns the wheel until it reaches its edge.
 // Capturing the event on Transcript must not release tail-follow early.
 const nestedScroller = dom.window.document.createElement("div");
@@ -279,11 +241,12 @@ await triggerWatchdogRebuild();
 check(integrity?.resetKey === keyBeforeJumpBlank, "jump-bottom transients cannot trigger a blank size-tree rebuild");
 await advanceClock(350);
 
-// Tail-follow is a persistent mode, not a six-frame retry window. As long as
-// growth keeps arriving (streaming), each height notification re-arms another
-// coalesced convergence and the view keeps landing on the current bottom.
+// Tail-follow is a persistent mode, not a six-frame retry window. Successful
+// writes may follow real growth revisions; only ineffective writes enter the
+// quiet-window quarantine.
 scrollToCalls = 0;
 await act(async () => arbiter?.scrollToBottom());
+scrollToCalls = 0;
 for (let i = 0; i < 14; i += 1) {
   scrollExtent += 200;
   await advanceClock(40);
@@ -521,7 +484,8 @@ check(
   "a blank confirmed by two consecutive idle checks earns a rebuild",
 );
 
-// ── Restore waits for a slow-mounting anchor row beyond the old 8-frame budget
+// ── Restore waits for a slow-mounting anchor row without repeating the same
+// writer phase inside one geometry revision.
 await switchSurface("surface-f");
 await act(async () => arbiter?.releaseTailFollow());
 const keySurfaceF = integrity?.resetKey;
@@ -532,7 +496,7 @@ scrollByCalls = 0;
 scrollToIndexCalls = 0;
 await act(async () => integrity?.handleItemsRendered(1));
 for (let i = 0; i < 10; i += 1) await flushFrames();
-check(scrollToIndexCalls > 8, "restore keeps re-aiming past the old 8-frame budget while the anchor row is unmounted");
+check(scrollToIndexCalls === 1, "restore writes its mount anchor at most once per geometry revision");
 check(scrollByCalls === 0, "no intermediate scrollBy lands while the anchor row is unmounted");
 scrollElement.appendChild(rowElement);
 rowElement.getBoundingClientRect = () => rectAt(50);
@@ -720,6 +684,72 @@ await flushFrames();
 check(scrollToBottomCalls === scrollToBottomBeforeSnapshot + 3, "a disjoint snapshot-less first mount settles at the bottom");
 stubSnapshot = null;
 
+// A prepended turn may reuse the mounted process id while its content patches.
+const duplicateCurrent: Item[] = [
+  { kind: "user", id: "u-duplicate-current", text: "current" }, { kind: "phase", id: "duplicate-process-id", text: "working" },
+];
+const duplicateOptions = { folds: EMPTY_FOLDS, foldPreference: "auto" as const, hasOlderHistory: false, creationMode: false, turnForUser: () => undefined };
+const duplicateBeforeRows = buildTranscriptRows(buildTurnModels(duplicateCurrent), duplicateOptions);
+const duplicateAfterRows = buildTranscriptRows(buildTurnModels([
+  { kind: "user", id: "u-duplicate-older", text: "older" }, { kind: "phase", id: "duplicate-process-id", text: "older work" },
+  { kind: "assistant", id: "a-duplicate-older", text: "older answer", reasoning: "", streaming: false }, duplicateCurrent[0],
+  { ...duplicateCurrent[1], text: "working with a late patch" } as Item,
+  { kind: "assistant", id: "a-duplicate-current", text: "late outside answer", reasoning: "", streaming: false },
+]), duplicateOptions);
+const duplicateBeforeHeader = duplicateBeforeRows.find((row) => row.kind === "process-header")!;
+const duplicateAfterHeader = duplicateAfterRows.find((row) => row.kind === "process-header" && "segment" in row
+  && row.segment.processItems.some((item) => item.kind === "phase" && item.text.includes("late patch")))!;
+check(duplicateAfterHeader.key === duplicateBeforeHeader.key, "prepend plus outside-content patch preserves the mounted duplicate-process row key");
+const duplicateMeasurements = createTranscriptMeasuredSizes();
+const duplicateEnvironment = { contentWidth: 800, typographySignature: "race-test" };
+duplicateMeasurements.recordGeometry("duplicate-session", { rowKey: String(duplicateBeforeHeader.key), kind: duplicateBeforeHeader.kind,
+  layoutVariant: duplicateBeforeHeader.layoutVariant, height: 144, environment: duplicateEnvironment,
+  measurementVersion: transcriptRowMeasurementVersion(duplicateBeforeHeader) });
+check(duplicateMeasurements.synthesizeDetailed("duplicate-session", [duplicateBeforeHeader], duplicateEnvironment).estimateSources[0] === "exact", "the mounted duplicate-process row reuses its exact measured height before the patch");
+check(duplicateMeasurements.synthesizeDetailed("duplicate-session", [duplicateAfterHeader], duplicateEnvironment).estimateSources[0] !== "exact", "the late process patch invalidates only its stale measurement version");
+await switchSurface("surface-duplicate-process", duplicateBeforeRows);
+await act(async () => arbiter?.releaseTailFollow());
+scrollElement.scrollTop = 160; const duplicateResetKey = integrity?.resetKey;
+scrollWrites.length = 0; scrollByCalls = 0; scrollToCalls = 0; scrollToIndexCalls = 0;
+await act(async () => root.render(<Probe surfaceKey="surface-duplicate-process" rows={duplicateAfterRows} />));
+await flushFrames();
+check(integrity?.resetKey === duplicateResetKey, "prepend plus outside-content patch keeps the Virtuoso generation mounted");
+check(scrollElement.scrollTop === 160, "prepend plus outside-content patch preserves the reader viewport");
+check(scrollByCalls === 0 && scrollToCalls === 0 && scrollToIndexCalls === 0 && scrollWrites.length === 0,
+  "prepend plus outside-content patch emits no recovery or direct scroll writes");
+
+// Imported pages may also repeat user/assistant ids. The already mounted
+// current turn keeps its unsuffixed keys while older duplicates receive stable
+// identity hashes, so the prepend does not reset the reader's surface.
+const duplicateTurnCurrent: Item[] = [
+  { kind: "user", id: "duplicate-turn-user", text: "current", createdAt: 200 },
+  { kind: "assistant", id: "duplicate-turn-answer", text: "current answer", reasoning: "", streaming: false },
+];
+const duplicateTurnBeforeRows = buildTranscriptRows(buildTurnModels(duplicateTurnCurrent), duplicateOptions);
+const duplicateTurnAfterRows = buildTranscriptRows(buildTurnModels([
+  { kind: "user", id: "duplicate-turn-user", text: "older", createdAt: 100, historyTurn: 1 },
+  { kind: "assistant", id: "duplicate-turn-answer", text: "older answer", reasoning: "", streaming: false },
+  ...duplicateTurnCurrent,
+]), duplicateOptions);
+const duplicateTurnBeforeKeys = duplicateTurnBeforeRows.map((row) => row.key);
+const duplicateTurnCurrentKeys = duplicateTurnAfterRows.filter((row) =>
+  (row.kind === "user" && row.item.text === "current")
+  || (row.kind === "answer" && row.item.text === "current answer")
+).map((row) => row.key);
+check(JSON.stringify(duplicateTurnCurrentKeys) === JSON.stringify(duplicateTurnBeforeKeys),
+  "prepending duplicate turn ids preserves every mounted current-turn row key");
+check(duplicateTurnAfterRows.slice(0, 2).every((row) => String(row.key).includes("@") && !String(row.key).includes("#")),
+  "older duplicate turn rows use immutable identity hashes instead of occurrence suffixes");
+await switchSurface("surface-duplicate-turn", duplicateTurnBeforeRows);
+await act(async () => arbiter?.releaseTailFollow());
+scrollElement.scrollTop = 180; const duplicateTurnResetKey = integrity?.resetKey;
+scrollWrites.length = 0; scrollByCalls = 0; scrollToCalls = 0; scrollToIndexCalls = 0;
+await act(async () => root.render(<Probe surfaceKey="surface-duplicate-turn" rows={duplicateTurnAfterRows} />));
+await flushFrames();
+check(integrity?.resetKey === duplicateTurnResetKey, "duplicate turn prepend keeps the Virtuoso generation mounted");
+check(scrollElement.scrollTop === 180, "duplicate turn prepend preserves the reader viewport");
+check(scrollByCalls === 0 && scrollToCalls === 0 && scrollToIndexCalls === 0 && scrollWrites.length === 0,
+  "duplicate turn prepend emits no recovery or direct scroll writes");
 // A 10,000-row generation gets only one keyed reset and one bounded probe.
 const longRows: TranscriptRow[] = Array.from({ length: 10_000 }, (_, index) => ({
   kind: "answer", key: `long-${index}`,
@@ -752,9 +782,7 @@ await triggerWatchdogRebuild();
 check(integrity?.resetKey !== nextGenerationResetBefore, "a changed 10,000-row generation receives a fresh hard-reset budget");
 
 await act(async () => root.unmount());
-Date.now = originalDateNow;
-dom.window.setTimeout = originalSetTimeout;
-dom.window.clearTimeout = originalClearTimeout;
+restoreClock();
 dom.window.close();
 
 if (failed > 0) {
