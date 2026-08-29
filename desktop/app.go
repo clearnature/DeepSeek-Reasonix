@@ -1070,6 +1070,15 @@ func (a *App) submitToTab(tabID, input string, fromBridge bool, submissionID ...
 		// reservation (an in-flight turn owns the sink) leaves the command
 		// un-correlated but still runs it.
 		if tab.sink != nil && tab.sink.tryBeginTurn(submissionID...) {
+			// Attach routing identity so a guarded slash turn (e.g. /mcp__)
+			// correlates its durable turn id back to this submission. Pure
+			// management verbs (e.g. /compact) never Begin a ledger turn and
+			// simply leave nextRouting unconsumed.
+			if metadata, ok := ctrl.(interface {
+				SetTurnEventRoutingMetadata(runtimeEpoch, submissionID string)
+			}); ok {
+				metadata.SetTurnEventRoutingMetadata(tab.sink.runtimeEpochSnapshot(), firstSubmissionID(submissionID))
+			}
 			ctrl.SubmitDisplay(trimmed, trimmed)
 			if !ctrl.RuntimeStatus().Running {
 				tab.sink.cancelTurnStart()

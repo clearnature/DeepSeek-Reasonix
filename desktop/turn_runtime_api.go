@@ -35,7 +35,10 @@ func (a *App) StartTurnForTab(tabID, input, submissionID string) (TurnStartView,
 	if admitted, ok := ctrl.(interface{ TurnIDForSubmission(string) string }); ok {
 		turnID = admitted.TurnIDForSubmission(submissionID)
 	}
-	if strings.TrimSpace(turnID) == "" {
+	// Slash commands (e.g. /compact) are controller-routed management verbs and
+	// may legitimately have no durable turn id: /compact runs asynchronously
+	// without a ledger Begin. The id check applies to real user turns only.
+	if strings.TrimSpace(turnID) == "" && !strings.HasPrefix(strings.TrimSpace(input), "/") {
 		return TurnStartView{}, fmt.Errorf("turn admission did not produce a durable turn id")
 	}
 	epoch := ""
