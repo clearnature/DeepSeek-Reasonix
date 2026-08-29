@@ -7650,7 +7650,7 @@ func loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath string
 		}
 		return preloaded.Session, path, true, nil
 	}
-	loaded, err := agent.LoadSession(path)
+	loaded, err := loadResumableSession(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, path, true, nil

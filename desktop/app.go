@@ -4368,7 +4368,7 @@ func loadResumableSession(sessionPath string) (*agent.Session, error) {
 	if agent.IsCleanupPending(sessionPath) {
 		return nil, fmt.Errorf("session is pending cleanup")
 	}
-	return agent.LoadSession(sessionPath)
+	return loadResumableSessionCached(sessionPath)
 }
 
 // PreviewSession reads a saved session for display only. It does not snapshot or
