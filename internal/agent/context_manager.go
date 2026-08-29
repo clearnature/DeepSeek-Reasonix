@@ -161,7 +161,10 @@ func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContex
 	}
 	result := prepared
 	for range maxSummaries {
-		mustFree := policy.Trigger != CompactionTriggerManual && (policy.Trigger == CompactionTriggerOverflow || result.InputTokens >= hard)
+		// Reserve summary output space whenever the fold could exceed the
+		// window's physical input ceiling — including manual compaction, whose
+		// summarize request would otherwise be truncated or rejected at send.
+		mustFree := policy.Trigger == CompactionTriggerOverflow || result.InputTokens >= hard
 		outcome, err := a.compactToProjectionLocked(ctx, policy.Trigger, policy.Instructions, forceFold, mustFree)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

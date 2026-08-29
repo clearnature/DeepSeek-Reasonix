@@ -81,3 +81,27 @@ func TestMaximumSafeSummaryPrefixKeepsToolPairsTogether(t *testing.T) {
 		t.Fatalf("fold boundary = %d, want 2 so the assistant call and both results stay in the tail", end)
 	}
 }
+
+// Manual compaction whose input sits at/above the physical ceiling must also
+// reserve summary output space (maximumSafeSummaryPrefixEnd) — otherwise the
+// summarize request is truncated or rejected at send, and the user's /compact
+// fails even though the session is compactable.
+func TestManualCompactReservesSummaryOutputSpaceAtCeiling(t *testing.T) {
+	prov := &overflowSummaryProvider{}
+	sess := foldableSessionOverForce(120)
+	a := agentOverForceWindow(t, prov, sess, 60_000)
+
+	if err := prepareContext(context.Background(), a, CompactionTriggerManual); err != nil {
+		t.Fatalf("manual compaction: %v", err)
+	}
+	if len(prov.requests) != 1 {
+		t.Fatalf("summary requests = %d, want 1", len(prov.requests))
+	}
+	req := prov.requests[0]
+	if got, max := a.estimatedRequestTokens(req), a.effectiveContextWindow()-outputBudgetReserve-256; got > max {
+		t.Fatalf("manual summary request tokens = %d, exceeds admissible input %d", got, max)
+	}
+	if receipt := a.sess.compactionState.LastReceipt; receipt == nil || receipt.Status != "applied" {
+		t.Fatalf("receipt = %+v, want applied projection", receipt)
+	}
+}
