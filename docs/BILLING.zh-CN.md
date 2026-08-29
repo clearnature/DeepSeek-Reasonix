@@ -71,3 +71,24 @@ reasonix doctor billing --json
 
 兼容保留的 `fx` 对象固定为 `enabled=false`、无缓存；正文同时展示自动选择策略、价表
 基准币种和官方目录匹配情况。
+
+### 各厂商积分/余额接口调研（2026-08）
+
+没有任何厂商在 `usage` 响应块里返回积分/点数消耗——`usage` 只有 token 计数。余额或
+积分事实（如果有）来自独立的账户接口；会话费用能否估算仍取决于价表，与这些接口无关：
+
+| 厂商 | 计费模式 | 余额/积分接口 | usage 返回积分？ |
+| --- | --- | --- | --- |
+| DeepSeek（官方） | 按量付费、按 token | `GET /user/balance` → `balance_infos`（`total_balance`/`granted_balance`/`topped_up_balance`） | 否 |
+| GLM | 积分制（100 credits = $1.80，按 $0.018/credit 计费） | 有余额接口；积分耗尽返回 HTTP 402 `insufficient_quota` | 否 |
+| OpenRouter | 按量付费（部分积分） | `GET /api/v1/key`、`GET /api/v1/credits`（USD 积分余额） | 否 |
+| MiMo Token Plan | 固定订阅费、套餐限量调用 | **无文档化接口（黑箱）** | 否 |
+
+对 Reasonix 的影响：
+
+- `usage` 永不携带积分；会话报价始终是价表估算，不是扣费或积分扣减。
+- MiMo Token Plan 完全没有余额接口——其消耗只能参考（如套餐额度），无法查询。这正是
+  会话在"有单价模型"和"套餐/额度模型"之间切换时无法给出单一完整费用数字的原因：
+  有价段可估算，套餐段不可估算。
+- 余额轮询保持可选、按厂商配置：官方 DeepSeek 与 OpenRouter 有文档化接口；MiMo
+  Token Plan 刻意不预设 `balance_url`（见 `config.go` 的 `balance_url` 处理）。

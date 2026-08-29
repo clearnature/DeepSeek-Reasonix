@@ -81,3 +81,31 @@ reasonix doctor billing --json
 The compatible `fx` report is always `enabled=false` and has no cache. The
 report also lists the automatic selection policy, pricing-table currencies,
 and official-catalog matches.
+
+### Provider credit / balance interfaces (survey, 2026-08)
+
+No provider returns point/credit consumption inside the `usage` block of a
+completion or responses payload — `usage` carries only token counts. Balance
+or credit facts, when available at all, come from separate account endpoints,
+and the ability to quote session cost still depends on a rate card, not on
+those endpoints:
+
+| Provider | Billing model | Balance/credit endpoint | Usage-level points? |
+| --- | --- | --- | --- |
+| DeepSeek (official) | pay-as-you-go, per token | `GET /user/balance` → `balance_infos` (`total_balance`, `granted_balance`, `topped_up_balance`) | no |
+| GLM | credits (100 credits = $1.80; charged at $0.018/credit) | balance endpoint exists; exhaustion returns HTTP 402 `insufficient_quota` | no |
+| OpenRouter | pay-as-you-go (some credits) | `GET /api/v1/key`, `GET /api/v1/credits` (USD credit balance) | no |
+| MiMo Token Plan | fixed subscription, quota-limited calls | **none documented** (black box) | no |
+
+Consequences for Reasonix:
+
+- `usage` never carries credits; a session quote is always a rate-card
+  estimate, never a debit or credit deduction.
+- MiMo Token Plan has no balance endpoint at all — its consumption can only be
+  referenced (e.g. plan quota), never queried. This is why sessions that
+  switch between a priced model and a quota/plan model cannot produce one
+  single complete cost figure: the priced segment is estimable, the plan
+  segment is not.
+- Balance polling stays optional and per-provider: official DeepSeek and
+  OpenRouter expose documented endpoints; MiMo Token Plan deliberately has no
+  `balance_url` preset (see `config.go` `balance_url` handling).
