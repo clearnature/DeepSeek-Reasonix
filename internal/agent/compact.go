@@ -46,6 +46,7 @@ const (
 // byte-stable sampling prefix. This lets providers reuse the ordinary request's
 // system, tools and message-prefix KV cache.
 const compactionInstruction = `Compact the preceding conversation prefix into a durable resume briefing.
+Do not spend tokens on reasoning — produce the briefing directly, without a thinking block.
 Write under these exact headings, omitting a heading only if it has no content:
 
 ## Standing facts & constraints
