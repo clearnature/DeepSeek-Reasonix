@@ -6465,6 +6465,23 @@ func (a *App) ContextUsageForTab(tabID string) ContextInfo {
 		info.Estimated = snap.Usage.Estimated
 		info.SessionCostComplete = snap.Usage.SessionCostComplete
 		info.SessionCostQuote = snap.Usage.SessionCostQuote
+		// Re-aggregate when the persisted quote is stale-unavailable (e.g. a
+		// history session reopened without new usage, whose ledger predates the
+		// unpriced-entry fix): the ledger still holds the priced entries and
+		// now yields a Selected estimate instead of DisplayStatusUnavailable.
+		if snap.Usage.CostLedger != nil && (info.SessionCostQuote == nil || info.SessionCostQuote.DisplayStatus == billing.DisplayStatusUnavailable) {
+			display := billing.NormalizeCurrency(info.SessionCurrency)
+			if display == "" {
+				display = "CNY"
+			}
+			total := snap.Usage.CostLedger.Total(display)
+			info.SessionCostQuote = &total
+			info.SessionCostComplete = total.Complete
+			if total.Selected != nil {
+				info.SessionCost = total.Selected.Float64()
+				info.SessionCurrency = total.LegacyCurrencyCode()
+			}
+		}
 		info.Sources = snap.Usage.Sources
 	}
 	if ctrl == nil {
