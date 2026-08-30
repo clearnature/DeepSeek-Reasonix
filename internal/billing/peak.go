@@ -2,19 +2,12 @@ package billing
 
 import "time"
 
-// IsPeakHour reports whether now falls in DeepSeek's peak billing window:
-// Beijing time Monday–Friday 09:00–12:00 and 14:00–18:00 (all other times,
-// including weekends, are off-peak). The pricing table's 2x peak multiplier
-// follows this exact schedule.
+// IsPeakHour reports whether now falls in DeepSeek's peak billing window
+// (Beijing time Monday–Friday 09:00–12:00 and 14:00–18:00). It delegates to
+// DeepSeekRateBand so both the catalog resolution and the config dual-rate
+// selection share one schedule source of truth.
 func IsPeakHour(now time.Time) bool {
-	loc := time.FixedZone("CST", 8*3600) // Asia/Shanghai, UTC+8
-	t := now.In(loc)
-	if t.Weekday() == time.Saturday || t.Weekday() == time.Sunday {
-		return false
-	}
-	h, m := t.Hour(), t.Minute()
-	mins := h*60 + m
-	return (mins >= 9*60 && mins < 12*60) || (mins >= 14*60 && mins < 18*60)
+	return DeepSeekRateBand(now) == RateBandPeak
 }
 
 // SelectRates picks the peak or base rate card for the given occurrence time.

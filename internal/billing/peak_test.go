@@ -66,3 +66,19 @@ func TestSelectRatesNoPeakScheduleUnchanged(t *testing.T) {
 		t.Fatalf("no-peak card must stay unchanged, got %+v", got)
 	}
 }
+
+func TestDeepSeekRateBandWeekendOffPeak(t *testing.T) {
+	// Sunday 10:00 Beijing = UTC 02:00 — upstream rule (UTC window) would say
+	// peak, but the official schedule is Mon–Fri only.
+	if got := DeepSeekRateBand(beijingTime("2026-08-30", 10, 0)); got != RateBandOffPeak {
+		t.Fatalf("Sunday 10:00 = %q, want off_peak", got)
+	}
+	// Saturday 15:00 Beijing also off-peak.
+	if got := DeepSeekRateBand(beijingTime("2026-09-05", 15, 0)); got != RateBandOffPeak {
+		t.Fatalf("Saturday 15:00 = %q, want off_peak", got)
+	}
+	// Monday 10:00 still peak.
+	if got := DeepSeekRateBand(beijingTime("2026-08-31", 10, 0)); got != RateBandPeak {
+		t.Fatalf("Monday 10:00 = %q, want peak", got)
+	}
+}

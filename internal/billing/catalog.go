@@ -115,9 +115,14 @@ func catalogEntryEffective(e CatalogEntry, at time.Time) bool {
 // DeepSeekRateBand selects the documented Beijing peak windows by their stable
 // UTC equivalents.
 func DeepSeekRateBand(at time.Time) string {
-	at = at.UTC()
+	at = at.In(time.FixedZone("CST", 8*3600)) // Asia/Shanghai, UTC+8
+	// Official schedule: peak = Beijing time Mon–Fri 09:00–12:00 & 14:00–18:00;
+	// weekends are off-peak all day.
+	if at.Weekday() == time.Saturday || at.Weekday() == time.Sunday {
+		return RateBandOffPeak
+	}
 	minutes := at.Hour()*60 + at.Minute()
-	if (minutes >= 60 && minutes < 240) || (minutes >= 360 && minutes < 600) {
+	if (minutes >= 9*60 && minutes < 12*60) || (minutes >= 14*60 && minutes < 18*60) {
 		return RateBandPeak
 	}
 	return RateBandOffPeak
