@@ -1440,8 +1440,8 @@ func TestApplyDeepSeekOfficialDefaultPricingExplicitCurrencyWins(t *testing.T) {
 	// billing currency — force official CNY rates for this assertion.
 	flash.Price = deepSeekV4FlashPriceCNY()
 	applyDeepSeekOfficialDefaultPricing(c)
-	if flash.Price == nil || flash.Price.Output != 9 || flash.Price.Currency != "¥" {
-		t.Fatalf("flash price = %+v, want CNY billing_currency table", flash.Price)
+	if flash.Price == nil || flash.Price.Output != 4.5 || flash.Price.Currency != "¥" || flash.Price.PeakOutput != 9 {
+		t.Fatalf("flash price = %+v, want CNY billing_currency table (off-peak base + peak)", flash.Price)
 	}
 }
 

@@ -131,6 +131,11 @@ type RateCard struct {
 	Input    float64 // per 1M uncached prompt tokens
 	Output   float64 // per 1M completion tokens
 	Currency string  // ISO or symbol; normalized on quote
+	// Peak* carry the peak-hours rates (DeepSeek 8/17 schedule: 2x off-peak,
+	// Mon–Fri 09:00–12:00 & 14:00–18:00 Beijing). Zero means no peak schedule.
+	PeakCacheHit float64
+	PeakInput    float64
+	PeakOutput   float64
 }
 
 // UsageTokens is the token breakdown needed for cost. Mirrors provider.Usage
@@ -225,6 +230,8 @@ type quoteBuildState struct {
 }
 
 func newQuoteBuildState(in QuoteInput) *quoteBuildState {
+	// Peak/off-peak schedule selection happens once, before any rate use.
+	in.Rates = SelectRates(in.Rates, in.OccurredAt)
 	currency := NormalizeCurrency(in.Rates.Currency)
 	if currency == "" {
 		currency = "CNY"

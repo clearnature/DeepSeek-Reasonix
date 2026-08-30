@@ -160,10 +160,10 @@ price = { cache_hit = 0.0028, input = 0.14, output = 0.28, currency = "$" }
 	}
 	cfg := LoadForEdit(path)
 	official, _ := cfg.Provider("deepseek")
-	if got := official.Prices["deepseek-v4-flash"]; got == nil || got.CacheHit != 0.10 || got.Input != 3 || got.Output != 9 {
+	if got := official.Prices["deepseek-v4-flash"]; got == nil || got.CacheHit != 0.05 || got.Input != 1.5 || got.Output != 4.5 || got.PeakCacheHit != 0.10 {
 		t.Fatalf("flash = %+v", got)
 	}
-	if got := official.Prices["deepseek-v4-pro"]; got == nil || got.CacheHit != 0.30 || got.Input != 9 || got.Output != 27 {
+	if got := official.Prices["deepseek-v4-pro"]; got == nil || got.CacheHit != 0.15 || got.Input != 4.5 || got.Output != 13.5 || got.PeakCacheHit != 0.30 {
 		t.Fatalf("pro = %+v", got)
 	}
 	customEndpoint, _ := cfg.Provider("custom-endpoint")

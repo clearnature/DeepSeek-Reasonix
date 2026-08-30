@@ -206,7 +206,21 @@ func MatchesCatalog(provider, model string, rates RateCard) (CatalogEntry, bool)
 // MatchesScheduleAnchor verifies that configured rates are the current peak
 // anchor. Custom and off-peak-looking static prices stay static.
 func MatchesScheduleAnchor(provider, model, scheduleID string, rates RateCard) bool {
-	entry, ok := LookupCatalog(provider, model, rates.Currency, BillingModePAYG)
-	return ok && entry.ScheduleID == scheduleID && entry.RateBand == RateBandPeak &&
-		entry.CacheHit == rates.CacheHit && entry.Input == rates.Input && entry.Output == rates.Output
+	for _, e := range OfficialCatalog() {
+		if !catalogIdentityMatches(e, provider, model, rates.Currency, BillingModePAYG) || e.ScheduleID != scheduleID {
+			continue
+		}
+		if e.RateBand == RateBandPeak {
+			// Anchor on either the legacy single peak price (base matches the
+			// peak row) or the dual-rate config (explicit peak fields match).
+			if (e.CacheHit == rates.CacheHit && e.Input == rates.Input && e.Output == rates.Output) ||
+				(e.CacheHit == rates.PeakCacheHit && e.Input == rates.PeakInput && e.Output == rates.PeakOutput) {
+				return true
+			}
+		} else if e.CacheHit == rates.CacheHit && e.Input == rates.Input && e.Output == rates.Output {
+			// Config priced at the off-peak row is still an official anchor.
+			return true
+		}
+	}
+	return false
 }

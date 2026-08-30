@@ -1269,8 +1269,13 @@ func renderPricingInline(p *provider.Pricing) string {
 	if p == nil {
 		return "{}"
 	}
-	return fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q }",
+	base := fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q",
 		p.CacheHit, p.Input, p.Output, p.Symbol())
+	if p.PeakCacheHit > 0 || p.PeakInput > 0 || p.PeakOutput > 0 {
+		base += fmt.Sprintf(", peak_cache_hit = %v, peak_input = %v, peak_output = %v",
+			p.PeakCacheHit, p.PeakInput, p.PeakOutput)
+	}
+	return base + " }"
 }
 
 func renderPricingMap(prices map[string]*provider.Pricing) string {

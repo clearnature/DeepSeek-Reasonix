@@ -9,11 +9,17 @@ import (
 )
 
 func deepSeekV4FlashPriceCNY() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.10, Input: 3, Output: 9, Currency: "¥"}
+	return &provider.Pricing{
+		CacheHit: 0.05, Input: 1.5, Output: 4.5, Currency: "¥",
+		PeakCacheHit: 0.10, PeakInput: 3, PeakOutput: 9,
+	}
 }
 
 func deepSeekV4ProPriceCNY() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.30, Input: 9, Output: 27, Currency: "¥"}
+	return &provider.Pricing{
+		CacheHit: 0.15, Input: 4.5, Output: 13.5, Currency: "¥",
+		PeakCacheHit: 0.30, PeakInput: 9, PeakOutput: 27,
+	}
 }
 
 func deepSeekV4PricesCNY() map[string]*provider.Pricing {

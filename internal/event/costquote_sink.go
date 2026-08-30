@@ -190,10 +190,13 @@ func rateCardFromPricing(p *provider.Pricing) billing.RateCard {
 		return billing.RateCard{}
 	}
 	return billing.RateCard{
-		CacheHit: p.CacheHit,
-		Input:    p.Input,
-		Output:   p.Output,
-		Currency: billing.NormalizeCurrency(p.Currency),
+		CacheHit:     p.CacheHit,
+		Input:        p.Input,
+		Output:       p.Output,
+		Currency:     billing.NormalizeCurrency(p.Currency),
+		PeakCacheHit: p.PeakCacheHit,
+		PeakInput:    p.PeakInput,
+		PeakOutput:   p.PeakOutput,
 	}
 }
 

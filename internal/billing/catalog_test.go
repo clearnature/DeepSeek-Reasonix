@@ -69,12 +69,12 @@ func TestDeepSeekScheduledRatesAllModelsCurrenciesAndTokenClasses(t *testing.T) 
 		anchor, peak, off RateCard
 	}
 	sets := []priceSet{
-		{"deepseek-v4-flash", "CNY", RateCard{0.10, 3, 9, "CNY"}, RateCard{0.10, 3, 9, "CNY"}, RateCard{0.05, 1.5, 4.5, "CNY"}},
-		{"deepseek-v4-flash-vision-exp", "CNY", RateCard{0.10, 3, 9, "CNY"}, RateCard{0.10, 3, 9, "CNY"}, RateCard{0.05, 1.5, 4.5, "CNY"}},
-		{"deepseek-v4-pro", "CNY", RateCard{0.30, 9, 27, "CNY"}, RateCard{0.30, 9, 27, "CNY"}, RateCard{0.15, 4.5, 13.5, "CNY"}},
-		{"deepseek-v4-flash", "USD", RateCard{0.014, 0.44, 1.32, "USD"}, RateCard{0.014, 0.44, 1.32, "USD"}, RateCard{0.007, 0.22, 0.66, "USD"}},
-		{"deepseek-v4-flash-vision-exp", "USD", RateCard{0.014, 0.44, 1.32, "USD"}, RateCard{0.014, 0.44, 1.32, "USD"}, RateCard{0.007, 0.22, 0.66, "USD"}},
-		{"deepseek-v4-pro", "USD", RateCard{0.044, 1.32, 3.96, "USD"}, RateCard{0.044, 1.32, 3.96, "USD"}, RateCard{0.022, 0.66, 1.98, "USD"}},
+		{"deepseek-v4-flash", "CNY", RateCard{CacheHit: 0.10, Input: 3, Output: 9, Currency: "CNY"}, RateCard{CacheHit: 0.10, Input: 3, Output: 9, Currency: "CNY"}, RateCard{CacheHit: 0.05, Input: 1.5, Output: 4.5, Currency: "CNY"}},
+		{"deepseek-v4-flash-vision-exp", "CNY", RateCard{CacheHit: 0.10, Input: 3, Output: 9, Currency: "CNY"}, RateCard{CacheHit: 0.10, Input: 3, Output: 9, Currency: "CNY"}, RateCard{CacheHit: 0.05, Input: 1.5, Output: 4.5, Currency: "CNY"}},
+		{"deepseek-v4-pro", "CNY", RateCard{CacheHit: 0.30, Input: 9, Output: 27, Currency: "CNY"}, RateCard{CacheHit: 0.30, Input: 9, Output: 27, Currency: "CNY"}, RateCard{CacheHit: 0.15, Input: 4.5, Output: 13.5, Currency: "CNY"}},
+		{"deepseek-v4-flash", "USD", RateCard{CacheHit: 0.014, Input: 0.44, Output: 1.32, Currency: "USD"}, RateCard{CacheHit: 0.014, Input: 0.44, Output: 1.32, Currency: "USD"}, RateCard{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "USD"}},
+		{"deepseek-v4-flash-vision-exp", "USD", RateCard{CacheHit: 0.014, Input: 0.44, Output: 1.32, Currency: "USD"}, RateCard{CacheHit: 0.014, Input: 0.44, Output: 1.32, Currency: "USD"}, RateCard{CacheHit: 0.007, Input: 0.22, Output: 0.66, Currency: "USD"}},
+		{"deepseek-v4-pro", "USD", RateCard{CacheHit: 0.044, Input: 1.32, Output: 3.96, Currency: "USD"}, RateCard{CacheHit: 0.044, Input: 1.32, Output: 3.96, Currency: "USD"}, RateCard{CacheHit: 0.022, Input: 0.66, Output: 1.98, Currency: "USD"}},
 	}
 	bands := []struct {
 		name string

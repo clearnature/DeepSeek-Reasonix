@@ -130,10 +130,13 @@ func (e *ProviderEntry) RateCardForModel(model string) billing.RateCard {
 		cur = e.ProviderBillingCurrency()
 	}
 	return billing.RateCard{
-		CacheHit: p.CacheHit,
-		Input:    p.Input,
-		Output:   p.Output,
-		Currency: cur,
+		CacheHit:     p.CacheHit,
+		Input:        p.Input,
+		Output:       p.Output,
+		Currency:     cur,
+		PeakCacheHit: p.PeakCacheHit,
+		PeakInput:    p.PeakInput,
+		PeakOutput:   p.PeakOutput,
 	}
 }
 

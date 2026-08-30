@@ -814,6 +814,12 @@ type Pricing struct {
 	Input    float64 `toml:"input"`     // per 1M uncached prompt tokens
 	Output   float64 `toml:"output"`    // per 1M completion tokens
 	Currency string  `toml:"currency"`
+	// Peak* are the peak-hours rates (DeepSeek 8/17 schedule: 2x off-peak,
+	// Mon–Fri 09:00–12:00 & 14:00–18:00 Beijing). Zero means no peak schedule;
+	// billing.SelectRates applies them when the quote occurs in peak hours.
+	PeakCacheHit float64 `toml:"peak_cache_hit,omitempty"`
+	PeakInput    float64 `toml:"peak_input,omitempty"`
+	PeakOutput   float64 `toml:"peak_output,omitempty"`
 	// Estimated marks a price from a third-party estimate rather than an
 	// official provider API. Set by presets; has no TOML key.
 	Estimated bool `toml:"-"`
