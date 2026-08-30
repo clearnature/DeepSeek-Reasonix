@@ -570,9 +570,14 @@ func (a *quoteAccumulator) add(quote CostQuote) {
 }
 
 func (a *quoteAccumulator) addOriginal(original Money, currency string) {
-	if currency != "" {
-		a.originalTotals[currency] = a.originalTotals[currency].Add(original.AmountValue())
+	if currency == "" {
+		// No original currency: the entry carries no original-currency charge
+		// (unpriced title/subagent/auxiliary work). It must not poison the
+		// aggregate's original total or completeness — the priced entries
+		// still form a valid partial total.
+		return
 	}
+	a.originalTotals[currency] = a.originalTotals[currency].Add(original.AmountValue())
 	if a.originalCurrency == "" {
 		a.originalCurrency = currency
 		a.originalTotal = original.AmountValue()
@@ -658,6 +663,18 @@ func (a *quoteAccumulator) finish() CostQuote {
 	a.out.DisplayComplete = false
 	a.out.Complete = false
 	if !a.costFactsComplete {
+		if valuation, ok := a.out.Valuations[a.display]; ok && a.display != "" {
+			// Partial facts: unpriced entries (title/auxiliary) have no
+			// original charge, but the priced entries form a valid estimate.
+			// Show it with an incomplete marker instead of hiding the entire
+			// session cost behind DisplayStatusUnavailable.
+			selected := valuation.Money
+			a.out.Selected = &selected
+			a.out.DisplayStatus = DisplayStatusMatched
+			a.out.AggregateMode = AggregateModeSingleCurrency
+			a.out.IncompleteReason = firstNonEmpty(a.out.IncompleteReason, "incomplete_cost_fact")
+			return a.out
+		}
 		a.out.DisplayStatus = DisplayStatusUnavailable
 		a.out.IncompleteReason = firstNonEmpty(a.out.IncompleteReason, "incomplete_cost_fact")
 	} else if a.originalComplete && a.originalCurrency != "" {

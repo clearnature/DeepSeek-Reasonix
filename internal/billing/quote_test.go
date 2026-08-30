@@ -143,6 +143,41 @@ func TestAggregateNoUsageIsUnavailable(t *testing.T) {
 	}
 }
 
+// TestAggregateUnpricedEntryKeepsEstimate: an entry with no original currency
+// (unpriced title/auxiliary work) must not zero the aggregate's original total
+// or hide the priced entries' estimate behind DisplayStatusUnavailable.
+func TestAggregateUnpricedEntryKeepsEstimate(t *testing.T) {
+	priced := CostQuote{
+		Original: Money{Amount: "1.50", Currency: "CNY"},
+		Valuations: map[string]Valuation{
+			"CNY": {Money: Money{Amount: "1.50", Currency: "CNY"}, Basis: BasisIdentity},
+		},
+		CostComplete: true, DisplayComplete: true, Complete: true,
+		DisplayStatus: DisplayStatusMatched, ModelRef: "priced",
+	}
+	unpriced := CostQuote{
+		Original:         Money{Amount: "0", Currency: ""},
+		Valuations:       map[string]Valuation{"CNY": {Money: Money{Amount: "0", Currency: "CNY"}, Basis: BasisIdentity}},
+		CostComplete:     false,
+		DisplayComplete:  false,
+		IncompleteReason: "no_price",
+		ModelRef:         "unpriced",
+	}
+	q := AggregateQuotes([]CostQuote{priced, unpriced}, "CNY")
+	if q.Original.Float64() != 1.5 || q.Original.Currency != "CNY" {
+		t.Fatalf("original should keep priced total, got %+v", q.Original)
+	}
+	if q.Selected == nil || q.Selected.Float64() != 1.5 {
+		t.Fatalf("selected estimate missing, got %+v", q)
+	}
+	if q.DisplayStatus == DisplayStatusUnavailable {
+		t.Fatalf("estimate hidden behind unavailable: %+v", q)
+	}
+	if q.CostComplete {
+		t.Fatalf("unpriced entry must keep cost incomplete: %+v", q)
+	}
+}
+
 func TestLedgerMixedOriginalBucketsContinueAccumulating(t *testing.T) {
 	l := NewLedger()
 	base := func(currency string, amount string) CostQuote {

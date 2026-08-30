@@ -146,7 +146,11 @@ export function contextCostDisplay({
     };
   }
   const fallbackOriginal = quote?.displayStatus === "fallback_original";
-  if (!fallbackOriginal && (info?.sessionCostComplete === false || quote?.displayStatus === "unavailable" || quote?.costComplete === false)) {
+  // Unavailable blocks the display only when there is genuinely nothing to
+  // show. A partial-cost quote (unpriced auxiliary entries with a valid
+  // priced-entries estimate) keeps its Selected and renders as an estimate
+  // rather than a bare "-".
+  if (!fallbackOriginal && quote?.displayStatus === "unavailable" && !quote?.selected?.amount) {
     return {
       amount: 0,
       currency: info?.sessionCurrency || sessionCurrency || usage?.currencyCode || usage?.currency,
