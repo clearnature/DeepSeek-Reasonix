@@ -82,3 +82,30 @@ func TestDeepSeekRateBandWeekendOffPeak(t *testing.T) {
 		t.Fatalf("Monday 10:00 = %q, want peak", got)
 	}
 }
+
+func TestBuildQuoteRateBandConfigDualRates(t *testing.T) {
+	rates := RateCard{
+		CacheHit: 0.05, Input: 1.5, Output: 4.5, Currency: "CNY",
+		PeakCacheHit: 0.10, PeakInput: 3, PeakOutput: 9,
+	}
+	usage := UsageTokens{PromptTokens: 1_000_000, CacheHitTokens: 1_000_000}
+	// Off-peak (Sunday) — band must be off_peak with the off-peak amount.
+	off := BuildQuote(QuoteInput{
+		Usage: usage, Rates: rates, OccurredAt: beijingTime("2026-08-30", 10, 0),
+		ModelRef: "m", PricingFingerprint: "x",
+	})
+	if off.RateBand != RateBandOffPeak {
+		t.Fatalf("Sunday quote band = %q, want off_peak", off.RateBand)
+	}
+	// Peak (Monday 10:00) — band must be peak with the 2x amount.
+	on := BuildQuote(QuoteInput{
+		Usage: usage, Rates: rates, OccurredAt: beijingTime("2026-08-31", 10, 0),
+		ModelRef: "m", PricingFingerprint: "x",
+	})
+	if on.RateBand != RateBandPeak {
+		t.Fatalf("Monday quote band = %q, want peak", on.RateBand)
+	}
+	if on.Original.AmountValue() != off.Original.AmountValue()*2 {
+		t.Fatalf("peak amount %v should be 2x off-peak %v", on.Original.AmountValue(), off.Original.AmountValue())
+	}
+}

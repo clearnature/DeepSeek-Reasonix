@@ -255,6 +255,14 @@ func newQuoteBuildState(in QuoteInput) *quoteBuildState {
 			resolvedBand = resolved.RateBand
 			resolvedSchedule = true
 		}
+	} else if in.Rates.PeakCacheHit > 0 || in.Rates.PeakInput > 0 || in.Rates.PeakOutput > 0 {
+		// Config dual-rate without an official catalog anchor: report the band
+		// SelectRates chose so telemetry still shows peak/off_peak.
+		if IsPeakHour(occurred) {
+			resolvedBand = RateBandPeak
+		} else {
+			resolvedBand = RateBandOffPeak
+		}
 	}
 	fingerprint := strings.TrimSpace(in.PricingFingerprint)
 	if fingerprint == "" || resolvedSchedule {
