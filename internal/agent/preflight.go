@@ -28,6 +28,18 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
+	} else if len(st.Projection.Messages) > 0 &&
+		(st.Projection.NonToolContentHash != "" || st.Projection.CoveredCount > len(msgs)) {
+		// Trustworthy degraded projection (same-lineage, compaction artifact
+		// with metadata): send projection+tail instead of the full transcript.
+		// The summary covers covered history; the tail carries the latest
+		// messages. Full replay of an uncompacted jsonl (12:49 case: 928k)
+		// would exceed the pressure threshold and force an unnecessary
+		// compaction right after resume. Untrustworthy bodies were dropped at
+		// load time and never reach this branch.
+		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
+			return visible
+		}
 	}
 	return msgs
 }
@@ -168,8 +180,28 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
 	if !valid && len(st.Projection.Messages) > 0 {
-		// Keep blocked receipts / telemetry; drop unusable projection body.
-		st.Projection = ContextProjection{}
+		coveredExceeds := st.Projection.CoveredCount > len(msgs)
+		// Keep only trustworthy projections: a covered count beyond the
+		// current transcript means the disk was compacted under this sidecar,
+		// and a non-empty non-tool hash means the body is a compaction
+		// artifact with full metadata. Either way resume sends projection+tail
+		// instead of replaying the full disk transcript (12:49 case: 928k vs
+		// 452k in-memory), avoiding a post-resume pressure compaction. Bodies
+		// without verification metadata stay dropped (fail-closed): they may
+		// be legacy or tampered, and replaying the transcript is the safe
+		// answer. Foreign-lineage mismatch is dropped earlier (keyOK=false),
+		// so reaching here means the projection belongs to this session.
+		if coveredExceeds || st.Projection.NonToolContentHash != "" {
+			hashMismatch := !coveredExceeds && st.Projection.CoveredPrefixHash != "" && !projectionContentValid(st, msgs)
+			slog.Warn("agent: projection degraded, kept for tail-only send",
+				"session", sessionPath, "generation", st.Generation,
+				"covered", st.Projection.CoveredCount, "msgs", len(msgs),
+				"covered_hash_mismatch", hashMismatch,
+				"covered_exceeds_transcript", coveredExceeds)
+		} else {
+			// Keep blocked receipts / telemetry; drop unusable projection body.
+			st.Projection = ContextProjection{}
+		}
 	}
 	a.sess.compactionState = st
 	if valid {

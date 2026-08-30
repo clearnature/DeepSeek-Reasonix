@@ -320,3 +320,107 @@ func TestCompactInstallsCoveredPrefixHash(t *testing.T) {
 		t.Fatal("fresh projection should validate")
 	}
 }
+
+func TestLoadProjectionSidecarDegradedKeepsBody(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	orig := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "task-v1"},
+		{Role: provider.RoleAssistant, Content: "done"},
+		{Role: provider.RoleUser, Content: "next"},
+	}
+	// Sidecar records the unedited prefix hash. NonToolContentHash marks it
+	// as a trustworthy compaction artifact (full metadata).
+	if err := SaveCompactionState(path, CompactionState{
+		SchemaVersion:     compactionStateSchemaV1,
+		PromptCacheKey:    promptCacheKey("ws", BranchID(path), "model"),
+		TranscriptVersion: 1,
+		Projection: ContextProjection{
+			Messages: []provider.Message{
+				{Role: provider.RoleSystem, Content: "sys summary"},
+				{Role: provider.RoleUser, Content: "task summary"},
+			},
+			CoveredCount:       3,
+			CoveredPrefixHash:  coveredPrefixHash(orig, 3),
+			NonToolContentHash: nonToolContentHash(orig, 3),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Conversation has an edited covered prefix (hash mismatch, same lineage).
+	edited := append([]provider.Message(nil), orig...)
+	edited[1].Content = "task-EDITED"
+	sess := NewSession("sys")
+	sess.Add(edited[1])
+	sess.Add(edited[2])
+	sess.Add(edited[3])
+	a := New(nil, nil, sess, Options{
+		SessionPath: path,
+		WorkspaceID: "ws",
+		ModelRef:    "model",
+	}, event.Discard)
+	// Same-lineage hash mismatch must keep the projection body for the
+	// degraded tail-only send (12:49 case) — not drop it and replay the full
+	// disk transcript.
+	if len(a.sess.compactionState.Projection.Messages) == 0 {
+		t.Fatal("same-lineage degraded projection body was dropped")
+	}
+	if a.sess.checkpointState != "none" {
+		t.Fatalf("checkpointState = %q, want none (degraded, not restored)", a.sess.checkpointState)
+	}
+	// modelVisibleMessages must send projection+tail, not the full transcript.
+	visible := a.modelVisibleMessages()
+	if len(visible) != 3 {
+		t.Fatalf("model-visible = %d messages, want 3 (2 projection + 1 tail)", len(visible))
+	}
+	if visible[0].Content != "sys summary" {
+		t.Fatalf("visible[0] = %q, want projection summary head", visible[0].Content)
+	}
+	if visible[len(visible)-1].Content != "next" {
+		t.Fatalf("visible tail = %q, want latest message", visible[len(visible)-1].Content)
+	}
+}
+
+func TestModelVisibleDegradedCoveredExceedsTranscript(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	msgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "task"},
+	}
+	// Sidecar claims to cover 5 messages while the disk transcript has only 2
+	// (post-compaction transcript shrink). The projection body still covers
+	// the folded history — send it alone rather than replaying the transcript.
+	if err := SaveCompactionState(path, CompactionState{
+		SchemaVersion:     compactionStateSchemaV1,
+		PromptCacheKey:    promptCacheKey("ws", BranchID(path), "model"),
+		TranscriptVersion: 1,
+		Projection: ContextProjection{
+			Messages: []provider.Message{
+				{Role: provider.RoleSystem, Content: "folded summary"},
+			},
+			CoveredCount:      5,
+			CoveredPrefixHash: "stale-hash",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sess := NewSession(msgs[0].Content)
+	sess.Add(msgs[1])
+	a := New(nil, nil, sess, Options{
+		SessionPath: path,
+		WorkspaceID: "ws",
+		ModelRef:    "model",
+	}, event.Discard)
+	if len(a.sess.compactionState.Projection.Messages) == 0 {
+		t.Fatal("covered-exceeds projection body was dropped")
+	}
+	visible := a.modelVisibleMessages()
+	if len(visible) != 1 {
+		t.Fatalf("model-visible = %d messages, want 1 (projection body only)", len(visible))
+	}
+	if visible[0].Content != "folded summary" {
+		t.Fatalf("visible[0] = %q, want folded summary", visible[0].Content)
+	}
+}
