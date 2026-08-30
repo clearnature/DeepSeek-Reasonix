@@ -49,7 +49,7 @@ func (p *deadlineInspectProvider) Stream(ctx context.Context, _ provider.Request
 func TestSummaryDoesNotAddInternalWallClockDeadline(t *testing.T) {
 	prov := &deadlineInspectProvider{}
 	a := New(prov, tool.NewRegistry(), &Session{Messages: []provider.Message{{Role: provider.RoleSystem, Content: "sys"}}}, Options{}, event.Discard)
-	if _, err := a.foldToSummary(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "old"}}, ""); err != nil {
+	if _, err := a.foldToSummary(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "old"}}, ""); err != nil {
 		t.Fatal(err)
 	}
 	if prov.hadDeadline {
@@ -65,7 +65,7 @@ func TestSummaryCollectorStoresOnlyVisibleText(t *testing.T) {
 		{Type: provider.ChunkDone},
 	}}
 	a := New(prov, tool.NewRegistry(), NewSession("system"), Options{}, event.Discard)
-	got, _, err := a.summarize(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "old"}}, "")
+	got, _, err := a.summarize(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "old"}}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestSummaryCollectorRejectsEmptyAndLengthLimitedOutput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			prov := &summaryChunksProvider{chunks: tc.chunks}
 			a := New(prov, tool.NewRegistry(), NewSession("system"), Options{}, event.Discard)
-			result, _, err := a.summarize(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "old"}}, "")
+			result, _, err := a.summarize(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "old"}}, "")
 			if tc.want == "partial" {
 				// length finish now accepts partial output
 				if err != nil {
@@ -129,7 +129,7 @@ func TestSummaryRequestReplaysSystemToolsAndSelectedPrefix(t *testing.T) {
 	}
 	a := New(prov, reg, &Session{Messages: append([]provider.Message{system}, fold...)}, Options{ContextWindow: 100_000, MaxOutputTokens: 1024}, event.Discard)
 
-	if _, err := a.foldToSummary(context.Background(), fold, "keep exact identifiers"); err != nil {
+	if _, err := a.foldToSummary(context.Background(), nil, fold, "keep exact identifiers"); err != nil {
 		t.Fatalf("foldToSummary: %v", err)
 	}
 	if len(prov.got) != 1 {
@@ -190,7 +190,7 @@ func TestFoldUnderBudgetIsSummarizedVerbatimInOneCall(t *testing.T) {
 	a := newFoldAgent(t, 200000, prov)
 	fold := foldOfToolResults(3, 40)
 
-	res, err := a.foldToSummary(context.Background(), fold, "")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err != nil {
 		t.Fatalf("foldToSummary: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestManualFoldDoesNotPrivatelyShortenToolResults(t *testing.T) {
 	a := newFoldAgent(t, 24000, prov)
 	fold := foldOfToolResults(6, 300)
 
-	res, err := a.foldToSummary(context.Background(), fold, "")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err != nil {
 		t.Fatalf("foldToSummary: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestHugeFoldNeverMultiSpan(t *testing.T) {
 	a := newFoldAgent(t, 32000, prov)
 	fold := foldOfToolResults(80, 800)
 
-	res, err := a.foldToSummary(context.Background(), fold, "focus on the parser")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "focus on the parser")
 	if err != nil {
 		// Failure without a second attempt is acceptable for an unfittable fold.
 		if len(prov.got) != 0 {
@@ -251,7 +251,7 @@ func TestNoContextWindowLeavesTheFoldUnbounded(t *testing.T) {
 	a := New(prov, nil, &Session{}, Options{}, event.Discard)
 	fold := foldOfToolResults(40, 400)
 
-	res, err := a.foldToSummary(context.Background(), fold, "")
+	res, err := a.foldToSummary(context.Background(), nil, fold, "")
 	if err != nil {
 		// Without a window the input budget is 0 and the single-call path
 		// refuses before paying for a request.
@@ -268,7 +268,7 @@ func TestNoContextWindowLeavesTheFoldUnbounded(t *testing.T) {
 func TestSummarizeOnceNoRetry(t *testing.T) {
 	prov := &failOnceProvider{}
 	a := newFoldAgent(t, 200000, prov)
-	_, _, err := a.summarizeOnce(context.Background(), []provider.Message{
+	_, _, err := a.summarizeOnce(context.Background(), nil, []provider.Message{
 		{Role: provider.RoleUser, Content: "hello"},
 	}, "")
 	if err == nil {
@@ -313,9 +313,10 @@ func TestMaximumSafeSummaryPrefixEndTrimsOversizedFold(t *testing.T) {
 		t.Fatalf("oversized fold not trimmed: end=%d start=%d", end, start)
 	}
 	if end > head {
-		// Trimmed fold must still fit the summary input budget.
+		// Trimmed fold must still fit the summary input budget, measured with
+		// the real request shape: verbatim head precedes the fold region.
 		folded := msgs[head:end]
-		req := a.summaryRequest(folded, "")
+		req := a.summaryRequest(msgs[0:head], folded, "")
 		if est := a.estimatedRequestTokens(req); est > a.hardInputCeiling() {
 			t.Fatalf("trimmed fold est=%d exceeds hard input ceiling %d", est, a.hardInputCeiling())
 		}
@@ -327,7 +328,7 @@ func TestSummaryRequestForcesNoReasoningEffort(t *testing.T) {
 	// DeepSeek thinking would consume the 8192 output budget and truncate
 	// the digest (errSummaryOutputTruncated), failing compaction.
 	a := &Agent{}
-	req := a.summaryRequest([]provider.Message{{Role: provider.RoleUser, Content: "x"}}, "")
+	req := a.summaryRequest(nil, []provider.Message{{Role: provider.RoleUser, Content: "x"}}, "")
 	if req.EffortOverride != "none" {
 		t.Fatalf("summaryRequest EffortOverride = %q, want none", req.EffortOverride)
 	}
@@ -391,5 +392,39 @@ func TestCompactToProjectionTrimsOversizedFoldEvenWithoutMustFree(t *testing.T) 
 	}
 	if est := a.estimatedVisibleRequestTokens(prov.got[0].Messages); est > a.hardInputCeiling() {
 		t.Fatalf("summary request est=%d exceeds hard input ceiling %d", est, a.hardInputCeiling())
+	}
+}
+
+func TestSummaryRequestPrefixMatchesOrdinaryRequestBytes(t *testing.T) {
+	// Summary must reproduce the ordinary request's byte prefix; divergence = full-price cache miss (2026-08-30: 3.6% hit).
+	msgs := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "task"},
+		{Role: provider.RoleAssistant, Content: "reply-1", ToolCalls: []provider.ToolCall{{ID: "c1", Name: "read", Arguments: `{"p":"a"}`}}},
+		{Role: provider.RoleTool, ToolCallID: "c1", Content: `{"ok":true}`},
+		{Role: provider.RoleUser, Content: "more"},
+		{Role: provider.RoleAssistant, Content: "reply-2"},
+	}
+	a := &Agent{}
+	head := 1
+	ordinary := a.normalizeModelRequestMessages(msgs)
+	summary := a.summaryRequest(msgs[0:head], msgs[head:], "").Messages
+	// Both end with the compaction instruction; the shared prefix must match
+	// up to the start of the instruction.
+	prefix := len(summary) - 1
+	if prefix > len(ordinary) {
+		prefix = len(ordinary)
+	}
+	if prefix != len(ordinary) {
+		t.Fatalf("ordinary messages = %d, summary prefix = %d (want ordinary fully reproduced)", len(ordinary), prefix)
+	}
+	for i := 0; i < prefix; i++ {
+		o, s := ordinary[i], summary[i]
+		if o.Role != s.Role || o.Content != s.Content || o.ToolCallID != s.ToolCallID {
+			t.Fatalf("byte divergence at message %d: ordinary (%s %q tc=%s) vs summary (%s %q tc=%s)", i, o.Role, o.Content, o.ToolCallID, s.Role, s.Content, s.ToolCallID)
+		}
+		if len(o.ToolCalls) != len(s.ToolCalls) {
+			t.Fatalf("tool-call count divergence at message %d: %d vs %d", i, len(o.ToolCalls), len(s.ToolCalls))
+		}
 	}
 }

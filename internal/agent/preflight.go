@@ -24,9 +24,22 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
-	if projectionValid(st, msgs, a.currentPromptCacheKey()) {
+	visible, _ := a.visibleMessagesWithFlag(st, msgs, a.currentPromptCacheKey())
+	return visible
+}
+
+// visibleMessagesWithFlag resolves the model-visible view shared by ordinary
+// sampling and compaction planning: the projection + tail when the projection
+// is usable (valid, degraded, or replay fallback), canonical otherwise. The
+// flag reports whether the projection view was used, so fold boundaries can be
+// translated back to canonical indices. Ordinary and compaction paths must
+// resolve the same view — a divergence (compaction falling back to canonical
+// while sampling sends projection+tail) breaks the prompt-cache prefix and
+// makes every summary request a full-price miss.
+func (a *Agent) visibleMessagesWithFlag(st CompactionState, msgs []provider.Message, cacheKey string) ([]provider.Message, bool) {
+	if projectionValid(st, msgs, cacheKey) {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
-			return visible
+			return visible, true
 		}
 	} else if len(st.Projection.Messages) > 0 &&
 		(st.Projection.NonToolContentHash != "" || st.Projection.CoveredCount > len(msgs)) {
@@ -38,14 +51,14 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 		// compaction right after resume. Untrustworthy bodies were dropped at
 		// load time and never reach this branch.
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
-			return visible
+			return visible, true
 		}
 	} else if visible := a.replayProjectionView(msgs, st); len(visible) > 0 {
 		// 投影失效但投影体可用（load 时已验证）且全量超窗：优先投影+tail，
 		// 避免暖重放全量估算虚高（如 gpu1 5.6M 字符 → 1.9M 假超窗）。
-		return visible
+		return visible, true
 	}
-	return msgs
+	return msgs, false
 }
 
 // replayProjectionView prefers projection+tail over a canonical full replay

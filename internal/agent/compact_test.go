@@ -164,7 +164,7 @@ func TestSummarizeRespectsContextCancel(t *testing.T) {
 	a := New(&fakeProvider{hang: true}, tool.NewRegistry(), &Session{}, Options{}, event.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := a.summarize(ctx, []provider.Message{{Role: provider.RoleUser, Content: "x"}}, ""); err == nil {
+	if _, _, err := a.summarize(ctx, nil, []provider.Message{{Role: provider.RoleUser, Content: "x"}}, ""); err == nil {
 		t.Fatal("summarize must return when ctx is cancelled, not hang")
 	}
 }

@@ -375,17 +375,20 @@ func compactionInstructionWithFocus(instructions string) string {
 }
 
 // summaryRequest builds the exact cache-aligned request shape used by
-// summarize. Keeping planning and execution on this shared builder prevents a
-// supposedly safe overflow fold from being rejected only after it is selected.
-func (a *Agent) summaryRequest(region []provider.Message, instructions string) provider.Request {
-	prefix := append([]provider.Message(nil), region...)
-	if len(prefix) == 0 || prefix[0].Role != provider.RoleSystem {
+// summarize: the verbatim head (already in the provider's prefix cache from
+// ordinary requests) precedes the fold region so the fold lands at the same
+// byte position the server cached it at. Keeping planning and execution on
+// this shared builder prevents a supposedly safe overflow fold from being
+// rejected only after it is selected.
+func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions string) provider.Request {
+	msgs := append(append([]provider.Message(nil), prefix...), region...)
+	if len(msgs) == 0 || msgs[0].Role != provider.RoleSystem {
 		visible := a.modelVisibleMessages()
 		if len(visible) > 0 && visible[0].Role == provider.RoleSystem {
-			prefix = append([]provider.Message{visible[0]}, prefix...)
+			msgs = append([]provider.Message{visible[0]}, msgs...)
 		}
 	}
-	messages := a.normalizeModelRequestMessages(prefix)
+	messages := a.normalizeModelRequestMessages(msgs)
 	messages = append(messages, provider.Message{Role: provider.RoleUser, Content: compactionInstructionWithFocus(instructions)})
 	var schemas []provider.ToolSchema
 	if a.svc.tools != nil {
@@ -415,9 +418,10 @@ func (a *Agent) summaryOutputBudget() int {
 }
 
 // summarize asks the executor's own provider to distill a replayed prefix into
-// a briefing. instructions is optional /compact focus + PreCompact text.
+// a briefing. prefix is the verbatim head kept out of the fold; instructions
+// is optional /compact focus + PreCompact text.
 // Named returns so defer can attach RequestCount and still return usage.
-func (a *Agent) summarize(ctx context.Context, region []provider.Message, instructions string) (summary string, usage *provider.Usage, err error) {
+func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message, instructions string) (summary string, usage *provider.Usage, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx = provider.WithRequestAttemptCounter(ctx)
@@ -428,7 +432,7 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 		}
 	}()
 	defer trackPublishedHostStream(ctx, cancel)()
-	req := a.summaryRequest(region, instructions)
+	req := a.summaryRequest(prefix, region, instructions)
 	if err := a.applyAdmissionToRequest(&req); err != nil {
 		return "", usage, err
 	}
@@ -485,8 +489,8 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 // summarizeOnce performs exactly one application-layer summary request.
 // Timeouts, empty results, stream errors, and output truncation all fail once
 // with no second attempt.
-func (a *Agent) summarizeOnce(ctx context.Context, fold []provider.Message, instructions string) (string, *provider.Usage, error) {
-	return a.summarize(ctx, fold, instructions)
+func (a *Agent) summarizeOnce(ctx context.Context, prefix, fold []provider.Message, instructions string) (string, *provider.Usage, error) {
+	return a.summarize(ctx, prefix, fold, instructions)
 }
 
 // renderTranscript flattens messages into a readable transcript for summarization.

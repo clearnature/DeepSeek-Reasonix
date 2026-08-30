@@ -74,7 +74,7 @@ func TestMaximumSafeSummaryPrefixKeepsToolPairsTogether(t *testing.T) {
 		svc:         agentServices{prov: &overflowSummaryProvider{}},
 		sess:        sessionRuntime{conversation: &Session{Messages: msgs}},
 	}
-	promptThroughFirstResult := a.estimatedRequestTokens(a.summaryRequest(msgs[1:4], ""))
+	promptThroughFirstResult := a.estimatedRequestTokens(a.summaryRequest(nil, msgs[1:4], ""))
 	a.contextWindow = promptThroughFirstResult + outputBudgetReserve + 256
 	end := a.maximumSafeSummaryPrefixEnd(msgs, 1, len(msgs)-1, "")
 	if end != 2 {

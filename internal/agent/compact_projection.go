@@ -239,7 +239,7 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
-	res, err := a.foldToSummaryMode(ctx, prepared.fold, prepared.instructions, prepared.inputMode)
+	res, err := a.foldToSummaryMode(ctx, snap.visible[0:plan.firstFold], prepared.fold, prepared.instructions, prepared.inputMode)
 	summary := res.Text
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
 	if err != nil {
@@ -524,7 +524,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
 		inputMode = SummaryInputExtensionRewritten
 	}
-	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, fold, instructions, sourceTokens, inputMode)
+	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, msgs[0:head], fold, instructions, sourceTokens, inputMode)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
@@ -587,16 +587,13 @@ func projectionCoverageForFold(state CompactionState, msgs []provider.Message, s
 	return prior + (start - body), nil
 }
 
-// visibleInputForFold prefers the prior projection + new history over full
-// canonical. The second return reports whether the projection was used, so
-// fold boundaries can be translated back to canonical indices.
+// visibleInputForFold resolves the same model-visible view ordinary sampling
+// uses (see visibleMessagesWithFlag), so summary requests share the sampling
+// request's byte prefix and keep the provider prefix cache warm. The second
+// return reports whether the projection view was used, so fold boundaries can
+// be translated back to canonical indices.
 func (a *Agent) visibleInputForFold(state CompactionState, canonical []provider.Message, transcriptVersion uint64) ([]provider.Message, bool) {
-	if projectionValid(state, canonical, a.currentPromptCacheKey()) {
-		if projected := modelVisibleFromProjection(state.Projection, canonical); len(projected) > 0 {
-			return projected, true
-		}
-	}
-	return canonical, false
+	return a.visibleMessagesWithFlag(state, canonical, a.currentPromptCacheKey())
 }
 
 func checkpointProjectionMessages(msgs []provider.Message, head int, kept []provider.Message, summary string) []provider.Message {
@@ -661,7 +658,7 @@ func (a *Agent) maximumSafeSummaryPrefixEnd(msgs []provider.Message, head, end i
 	// inflated for replayed history. Without an observed ceiling, truncation stands.
 	if obs := a.lastAdmission().ObservedPrompt; obs > maxPromptTokens {
 		maxPromptTokens = obs
-		if all := a.estimatedRequestTokens(a.summaryRequest(msgs[head:end], instructions)); all > maxPromptTokens {
+		if all := a.estimatedRequestTokens(a.summaryRequest(msgs[0:head], msgs[head:end], instructions)); all > maxPromptTokens {
 			maxPromptTokens = all
 		}
 	}
@@ -669,7 +666,7 @@ func (a *Agent) maximumSafeSummaryPrefixEnd(msgs []provider.Message, head, end i
 		return head
 	}
 	fits := func(candidate int) bool {
-		request := a.summaryRequest(msgs[head:candidate], instructions)
+		request := a.summaryRequest(msgs[0:head], msgs[head:candidate], instructions)
 		return a.estimatedRequestTokens(request) <= maxPromptTokens
 	}
 	if fits(end) {
@@ -714,8 +711,8 @@ func (a *Agent) partitionFoldForProjection(region []provider.Message) (kept, fol
 }
 
 // runCompactionSummary uses the single local summarizer path for every provider.
-func (a *Agent) runCompactionSummary(ctx context.Context, fold []provider.Message, instructions string) (summary, mode string, usage *provider.Usage, providerReqID string, err error) {
-	summary, usage, err = a.summarizeOnce(ctx, fold, instructions)
+func (a *Agent) runCompactionSummary(ctx context.Context, prefix, fold []provider.Message, instructions string) (summary, mode string, usage *provider.Usage, providerReqID string, err error) {
+	summary, usage, err = a.summarizeOnce(ctx, prefix, fold, instructions)
 	if err != nil {
 		return "", CompactionModeSummarized, usage, "", err
 	}

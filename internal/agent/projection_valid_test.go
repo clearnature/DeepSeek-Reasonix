@@ -247,7 +247,7 @@ func TestSummarizeOnceDoesNotRetry(t *testing.T) {
 		usage2:   &provider.Usage{PromptTokens: 11, CompletionTokens: 3, TotalTokens: 14, RequestCount: 1},
 	}
 	a := New(fp, tool.NewRegistry(), NewSession("sys"), Options{}, event.Discard)
-	_, _, err := a.summarizeOnce(context.Background(), []provider.Message{
+	_, _, err := a.summarizeOnce(context.Background(), nil, []provider.Message{
 		{Role: provider.RoleUser, Content: "fold me"},
 	}, "")
 	if err == nil {
@@ -422,5 +422,57 @@ func TestModelVisibleDegradedCoveredExceedsTranscript(t *testing.T) {
 	}
 	if visible[0].Content != "folded summary" {
 		t.Fatalf("visible[0] = %q, want folded summary", visible[0].Content)
+	}
+}
+
+func TestVisibleInputForFoldMatchesSamplingViewOnProjectionLoss(t *testing.T) {
+	// Projection loss with a usable body must degrade both sampling and compaction
+	// to the same projection+tail view, or summary requests lose the prefix bytes (2026-08-30: 3.6% hit).
+	canonical := []provider.Message{
+		{Role: provider.RoleSystem, Content: "sys"},
+		{Role: provider.RoleUser, Content: "task-v1"},
+		{Role: provider.RoleAssistant, Content: "done"},
+		{Role: provider.RoleUser, Content: "mid-1"},
+		{Role: provider.RoleAssistant, Content: "mid-2"},
+		{Role: provider.RoleUser, Content: "tail"},
+	}
+	st := CompactionState{
+		TranscriptVersion: 1,
+		PromptCacheKey:    "ws|sess|model",
+		Projection: ContextProjection{
+			Messages: []provider.Message{
+				{Role: provider.RoleSystem, Content: "sys"},
+				{Role: provider.RoleUser, Content: "SUMMARY"},
+			},
+			TranscriptVersion:  1,
+			CoveredCount:       3,
+			CoveredPrefixHash:  "stale-hash", // fingerprint mismatch → invalid
+			NonToolContentHash: "usable-body",
+		},
+	}
+	a := &Agent{}
+	foldView, onProjection := a.visibleInputForFold(st, canonical, 1)
+	if !onProjection {
+		t.Fatal("projection loss with usable body must degrade to projection+tail, not canonical")
+	}
+	want := append([]provider.Message{}, st.Projection.Messages...)
+	want = append(want, canonical[st.Projection.CoveredCount:]...)
+	if len(foldView) != len(want) {
+		t.Fatalf("fold view = %d messages, want %d", len(foldView), len(want))
+	}
+	for i := range want {
+		if foldView[i].Role != want[i].Role || foldView[i].Content != want[i].Content {
+			t.Fatalf("fold view[%d] = (%s %q), want (%s %q)", i, foldView[i].Role, foldView[i].Content, want[i].Role, want[i].Content)
+		}
+	}
+	// Sampling and compaction must resolve the identical view.
+	samplingView, _ := a.visibleMessagesWithFlag(st, canonical, "ws|sess|model")
+	if len(samplingView) != len(foldView) {
+		t.Fatalf("sampling view = %d messages, fold view = %d", len(samplingView), len(foldView))
+	}
+	for i := range foldView {
+		if samplingView[i].Role != foldView[i].Role || samplingView[i].Content != foldView[i].Content {
+			t.Fatalf("view divergence at %d: sampling (%s %q) vs fold (%s %q)", i, samplingView[i].Role, samplingView[i].Content, foldView[i].Role, foldView[i].Content)
+		}
 	}
 }
