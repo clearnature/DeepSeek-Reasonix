@@ -322,6 +322,20 @@ func TestMaximumSafeSummaryPrefixEndTrimsOversizedFold(t *testing.T) {
 	}
 }
 
+func TestSummaryRequestForcesNoReasoningEffort(t *testing.T) {
+	// Summary requests must not inherit the user's reasoning effort:
+	// DeepSeek thinking would consume the 8192 output budget and truncate
+	// the digest (errSummaryOutputTruncated), failing compaction.
+	a := &Agent{}
+	req := a.summaryRequest([]provider.Message{{Role: provider.RoleUser, Content: "x"}}, "")
+	if req.EffortOverride != "none" {
+		t.Fatalf("summaryRequest EffortOverride = %q, want none", req.EffortOverride)
+	}
+	if req.MaxTokens != summaryOutputMaxTokens {
+		t.Fatalf("summaryRequest MaxTokens = %d, want %d", req.MaxTokens, summaryOutputMaxTokens)
+	}
+}
+
 func TestCompactToProjectionTrimsOversizedFoldEvenWithoutMustFree(t *testing.T) {
 	// Regression for the manual-compaction 400: compactToProjection with
 	// mustFree=false (the pre-fix manual-trigger path) must still bound the

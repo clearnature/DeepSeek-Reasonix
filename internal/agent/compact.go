@@ -392,10 +392,11 @@ func (a *Agent) summaryRequest(region []provider.Message, instructions string) p
 		schemas = a.providerToolSchemas()
 	}
 	return provider.Request{
-		Messages:    messages,
-		Tools:       schemas,
-		MaxTokens:   summaryOutputMaxTokens,
-		Temperature: provider.OptionalTemperature(a.temperature),
+		Messages:       messages,
+		Tools:          schemas,
+		MaxTokens:      summaryOutputMaxTokens,
+		Temperature:    provider.OptionalTemperature(a.temperature),
+		EffortOverride: "none", // 摘要必须无推理：effort 继承会让 thinking 挤占 8192 输出预算致压缩失败
 	}
 }
 
