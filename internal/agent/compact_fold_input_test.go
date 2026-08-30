@@ -290,3 +290,63 @@ func (p *failOnceProvider) Stream(_ context.Context, _ provider.Request) (<-chan
 	close(ch)
 	return ch, nil
 }
+
+func TestMaximumSafeSummaryPrefixEndTrimsOversizedFold(t *testing.T) {
+	// Manual compaction with an oversized fold (2026-08-30: 1.15M fold vs a
+	// 1,048,576-token model) used to reach the provider as-is when mustFree
+	// was false (manual trigger, under-estimated input) → provider 400. The
+	// fold region must now be trimmed to the window's physical input ceiling
+	// on every path.
+	prov := &countingProvider{reply: "digest"}
+	a := newFoldAgent(t, 100000, prov)
+	fold := foldOfToolResults(300, 400) // ~120k tokens, window 100k
+	msgs := append([]provider.Message{}, fold...)
+	adm := a.lastAdmission()
+	adm.ObservedWindow = 100000
+	a.storeAdmission(adm)
+	head, start, ok := a.planFoldRegion(msgs, false)
+	if !ok || head >= start {
+		t.Fatalf("planFoldRegion ok=%v head=%d start=%d", ok, head, start)
+	}
+	end := a.maximumSafeSummaryPrefixEnd(msgs, head, start, "")
+	if end >= start {
+		t.Fatalf("oversized fold not trimmed: end=%d start=%d", end, start)
+	}
+	if end > head {
+		// Trimmed fold must still fit the summary input budget.
+		folded := msgs[head:end]
+		req := a.summaryRequest(folded, "")
+		if est := a.estimatedRequestTokens(req); est > a.hardInputCeiling() {
+			t.Fatalf("trimmed fold est=%d exceeds hard input ceiling %d", est, a.hardInputCeiling())
+		}
+	}
+}
+
+func TestCompactToProjectionTrimsOversizedFoldEvenWithoutMustFree(t *testing.T) {
+	// Regression for the manual-compaction 400: compactToProjection with
+	// mustFree=false (the pre-fix manual-trigger path) must still bound the
+	// fold input instead of sending an oversized summary request.
+	prov := &countingProvider{reply: "digest"}
+	a := newFoldAgent(t, 100000, prov)
+	fold := foldOfToolResults(300, 400)
+	msgs := append([]provider.Message{}, fold...)
+	adm := a.lastAdmission()
+	adm.ObservedWindow = 100000
+	a.storeAdmission(adm)
+	a.sess.conversation = &Session{Messages: msgs}
+	_, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", false, false)
+	if err != nil {
+		// Trimmed to nothing is acceptable (explicit rejection); a provider
+		// request for an oversized fold is not.
+		if len(prov.got) != 0 {
+			t.Fatalf("failed compaction still sent %d provider requests", len(prov.got))
+		}
+		return
+	}
+	if len(prov.got) != 1 {
+		t.Fatalf("requests=%d, want exactly one bounded summary call", len(prov.got))
+	}
+	if est := a.estimatedVisibleRequestTokens(prov.got[0].Messages); est > a.hardInputCeiling() {
+		t.Fatalf("summary request est=%d exceeds hard input ceiling %d", est, a.hardInputCeiling())
+	}
+}

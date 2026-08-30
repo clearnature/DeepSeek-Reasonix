@@ -448,7 +448,8 @@ func (a *Agent) compact(ctx context.Context, trigger, instructions string, force
 // stable prefix + one structured digest + recent verbatim tail.
 // The canonical transcript is never rewritten. CompactionNoop means nothing
 // was foldable; callers at physical overflow must treat that as hard failure.
-// mustFree marks the fold the caller cannot proceed without.
+// mustFree is kept for caller semantics (overflow paths cannot proceed without
+// a fold); the fold input budget is now enforced unconditionally inside.
 func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force, mustFree bool) (CompactionOutcome, error) {
 	a.sess.compactionRunMu.Lock()
 	defer a.sess.compactionRunMu.Unlock()
@@ -487,12 +488,17 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 			instructions += hookInstr
 		}
 	}
-	if mustFree {
-		start = a.maximumSafeSummaryPrefixEnd(msgs, head, start, instructions)
-		if start <= head {
-			a.emitCompactionAborted(trigger)
-			return CompactionNoop, fmt.Errorf("%w: no balanced prefix leaves enough room for a summary response", errCheckpointRejected)
-		}
+	// Fold input is bounded by the window's physical input ceiling on every
+	// path — not only overflow-triggered compactions. A manual compaction with
+	// an under-estimated input would otherwise send an oversized fold and get
+	// a provider 400 ("maximum context length exceeded"), e.g. a 1.15M fold
+	// against a 1,048,576-token model (2026-08-30). maximumSafeSummaryPrefixEnd
+	// trims the fold region when the summary request would exceed the budget;
+	// normal-size folds are untouched (fits(end) short-circuits).
+	start = a.maximumSafeSummaryPrefixEnd(msgs, head, start, instructions)
+	if start <= head {
+		a.emitCompactionAborted(trigger)
+		return CompactionNoop, fmt.Errorf("%w: no balanced prefix leaves enough room for a summary response", errCheckpointRejected)
 	}
 
 	covered, bodySuffix := projectionCoverageForFold(stateSnapshot, msgs, start, onProjection)
