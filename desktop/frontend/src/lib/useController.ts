@@ -1749,7 +1749,22 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       return { ...s, items: next };
     }
     case "usage": {
-      if (!countsTowardCurrentTurn(s)) return s;
+      const usageTokens = usageTotalTokens(e.usage);
+      const usageCost = e.usage?.cost ?? e.usage?.costUsd ?? 0;
+      const usageCurrency = e.usage?.currency || s.sessionCurrency || "¥";
+      if (!countsTowardCurrentTurn(s)) {
+        // A usage event can land after turn_done (async stream tail, subagent
+        // completion). It no longer belongs to the closed turn readout, but it
+        // is still part of this run's session ledger — gate only turnCost, not
+        // the cumulative session cost/tokens.
+        return {
+          ...s,
+          sessionTokens: s.sessionTokens + usageTokens,
+          sessionCost: s.sessionCost + usageCost,
+          sessionCurrency: usageCurrency,
+          usageSeq: s.usageSeq + 1,
+        };
+      }
       const updateContextGauge = updatesContextGauge(e.usage);
       // Only executor usage belongs to the foreground model stream. Planner,
       // subagent, and auxiliary usage still contributes to session totals and
@@ -1774,14 +1789,12 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
       const turnOutputEstimated = updateContextGauge
         ? settled.turnOutputEstimated || Boolean(e.usage?.estimated)
         : settled.turnOutputEstimated;
-      const usageTokens = usageTotalTokens(e.usage);
       const turnTotalTokens = settled.turnTotalTokens + usageTokens;
       const sessionTokens = settled.sessionTokens + usageTokens;
-      const usageCost = e.usage?.cost ?? e.usage?.costUsd ?? 0;
       const turnCost = settled.turnCost + usageCost;
       const turnRateBand = mergeRateBand(settled.turnRateBand, e.usage?.costQuote?.rateBand);
       const sessionCost = settled.sessionCost + usageCost;
-      const sessionCurrency = e.usage?.currency || settled.sessionCurrency || "¥";
+      const sessionCurrency = usageCurrency;
       const usage = updateContextGauge ? e.usage : settled.usage;
       // The completed round's usage now accounts for the streamed tool-call
       // arguments, so drop the live estimate rather than double-count it.
