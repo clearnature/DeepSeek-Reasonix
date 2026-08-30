@@ -209,6 +209,8 @@ func (r *Recorder) recordCompaction(e event.Event) {
 			rec.Status = v
 		case "pref_hash":
 			rec.PrefHash = v
+		case "view_fp":
+			rec.ViewFP = v
 		case "tpc":
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
 				rec.TokPerChar = f
@@ -312,6 +314,10 @@ func (r *Recorder) recordResume(e event.Event) {
 			if n, err := strconv.Atoi(v); err == nil {
 				rec.EstTok = n
 			}
+		case "view_fp":
+			rec.ViewFP = v
+		case "covered_match":
+			rec.Covered = v == "true"
 		}
 	}
 	r.dispatcher.enqueue(record{

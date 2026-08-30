@@ -122,8 +122,10 @@ type ResumeRecord struct {
 	Path     string `json:"path,omitempty"`
 	State    string `json:"state,omitempty"` // warm | cold | unknown
 	IdleMin  int    `json:"idle_min,omitempty"`
-	Decision string `json:"decision,omitempty"` // replay | compact-first | record-only
-	EstTok   int    `json:"est,omitempty"`      // resume 决策时估算（超窗才 compact-first）
+	Decision string `json:"decision,omitempty"`      // replay | compact-first | record-only
+	EstTok   int    `json:"est,omitempty"`           // resume 决策时估算（超窗才 compact-first）
+	ViewFP   string `json:"view_fp,omitempty"`       // 模型可见视图指纹（对比压缩/请求前缀）
+	Covered  bool   `json:"covered_match,omitempty"` // sidecar covered 前缀与转录是否字节匹配
 }
 
 // EstimateAnomalyRecord is the structured form of the agent's estimate
@@ -166,6 +168,7 @@ type CompactionRecord struct {
 	UserKept   int     `json:"user_kept,omitempty"`
 	UserDrop   int     `json:"user_dropped,omitempty"`
 	PrefHash   string  `json:"pref_hash,omitempty"`
+	ViewFP     string  `json:"view_fp,omitempty"`    // fold view fingerprint (resume-divergence diagnosis)
 	ElapsedMs  int64   `json:"elapsed_ms,omitempty"` // summarizer stage wall time
 	Status     string  `json:"status,omitempty"`
 	TokPerChar float64 `json:"tpc,omitempty"`

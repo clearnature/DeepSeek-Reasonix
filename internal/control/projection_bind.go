@@ -76,6 +76,13 @@ func (c *Controller) resumeProjectionStatus(path string) (valid bool, covered in
 // emitResumeTelemetry lands the C1 gate decision in the stats file so a
 // historical reopen (and its cache warmth) is diagnosable after the fact.
 func (c *Controller) emitResumeTelemetry(path, state string, idleMin int, projValid bool, projCovered int) {
+	viewFP := ""
+	coveredMatch := false
+	if c.executor != nil {
+		viewFP = c.executor.ModelVisibleFingerprint()
+		coveredMatch, _ = c.executor.ProjectionCoveredMatch()
+	}
 	c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "resume telemetry",
-		Detail: fmt.Sprintf("path=%s state=%s idle_min=%d decision=replay proj_valid=%t proj_covered=%d", path, state, idleMin, projValid, projCovered)})
+		Detail: fmt.Sprintf("path=%s state=%s idle_min=%d decision=replay proj_valid=%t proj_covered=%d view_fp=%s covered_match=%t",
+			path, state, idleMin, projValid, projCovered, viewFP, coveredMatch)})
 }

@@ -552,8 +552,9 @@ func TestRecorderPersistsCompactionTelemetry(t *testing.T) {
 	r := NewRecorder(inner, dir, "desktop")
 	// Compaction notices must reach the frontend unchanged.
 	detail := "trigger=manual mode=summarized cache=warm src=5108937 proj=0 in=0 out=0 hit=0 miss=0 write=0 reqs=2 provider_request_id=req-abc err_type=deepseek-responses: status 400: over window"
+	_ = detail
 	r.Emit(event.Event{Kind: event.Notice, Text: "compaction failed", Detail: detail})
-	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry", Detail: "trigger=auto mode=summarized cache=warm src=2666458 proj=297000 in=10 out=20 hit=30 miss=40 write=50 reqs=1 tpc=0.250"})
+	r.Emit(event.Event{Kind: event.Notice, Text: "compaction telemetry", Detail: "trigger=auto mode=summarized cache=warm src=2666458 proj=297000 in=10 out=20 hit=30 miss=40 write=50 reqs=1 tpc=0.250 view_fp=abc123"})
 	flushRecorder(t, r)
 
 	w := NewWriter(dir)
@@ -575,8 +576,8 @@ func TestRecorderPersistsCompactionTelemetry(t *testing.T) {
 	if !strings.Contains(failed.Error, "status 400") || !strings.Contains(failed.Error, "over window") {
 		t.Fatalf("failed row error should keep the full multi-word message: %q", failed.Error)
 	}
-	if auto.Trigger != "auto" || auto.SourceTok != 2666458 || auto.ProjTok != 297000 {
-		t.Fatalf("auto row: trigger=%s src=%d proj=%d", auto.Trigger, auto.SourceTok, auto.ProjTok)
+	if auto.Trigger != "auto" || auto.SourceTok != 2666458 || auto.ProjTok != 297000 || auto.ViewFP != "abc123" {
+		t.Fatalf("auto row: trigger=%s src=%d proj=%d view_fp=%s", auto.Trigger, auto.SourceTok, auto.ProjTok, auto.ViewFP)
 	}
 	if auto.TokPerChar != 0.25 {
 		t.Fatalf("auto row tpc: %v, want 0.250 (calibrated factor must survive the stats round-trip)", auto.TokPerChar)
@@ -757,8 +758,7 @@ func TestRecorderPersistsRetrievalTelemetry(t *testing.T) {
 func TestRecorderWritesResumeTelemetry(t *testing.T) {
 	dir := t.TempDir()
 	r := NewRecorder(&spySink{}, dir, "desktop")
-	r.Emit(event.Event{Kind: event.Notice, Text: "resume telemetry",
-		Detail: "path=/tmp/sess.jsonl state=cold idle_min=1530 decision=replay"})
+	r.Emit(event.Event{Kind: event.Notice, Text: "resume telemetry", Detail: "path=/tmp/sess.jsonl state=cold idle_min=1530 decision=replay view_fp=abc123 covered_match=true"})
 	flushRecorder(t, r)
 	files := dailyJSONLFiles(t, dir)
 	if len(files) != 1 {
@@ -782,7 +782,7 @@ func TestRecorderWritesResumeTelemetry(t *testing.T) {
 	if got.Resume == nil {
 		t.Fatalf("no resume row in daily file: %s", data)
 	}
-	if got.Resume.State != "cold" || got.Resume.IdleMin != 1530 || got.Resume.Decision != "replay" || got.Resume.Path != "/tmp/sess.jsonl" {
+	if got.Resume.State != "cold" || got.Resume.IdleMin != 1530 || got.Resume.Decision != "replay" || got.Resume.Path != "/tmp/sess.jsonl" || got.Resume.ViewFP != "abc123" || !got.Resume.Covered {
 		t.Fatalf("resume record = %+v", got.Resume)
 	}
 }

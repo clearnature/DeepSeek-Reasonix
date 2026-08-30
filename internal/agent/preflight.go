@@ -28,6 +28,34 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	return visible
 }
 
+// ModelVisibleFingerprint fingerprints the current model-visible view, for
+// resume-time diagnostics: compare it against the compaction view_fp and the
+// last request's prefix_hash to pin where the cache prefix diverges.
+func (a *Agent) ModelVisibleFingerprint() string {
+	if a == nil {
+		return ""
+	}
+	return providerVisibleFingerprint(modelInputMessages(a.modelVisibleMessages()))
+}
+
+// ProjectionCoveredMatch reports whether the sidecar's covered prefix still
+// byte-matches the current transcript. A mismatch after resume means history
+// rewrites (replay repairs) diverged the fold view from what the parent sent.
+func (a *Agent) ProjectionCoveredMatch() (match bool, covered int) {
+	if a == nil || a.sess.conversation == nil {
+		return false, 0
+	}
+	msgs, _ := a.sess.conversation.snapshotMessagesVersion()
+	a.sess.compactionMu.Lock()
+	st := a.sess.compactionState
+	a.sess.compactionMu.Unlock()
+	covered = st.Projection.CoveredCount
+	if covered <= 0 || covered > len(msgs) || st.Projection.CoveredPrefixHash == "" {
+		return false, covered
+	}
+	return coveredPrefixHash(msgs, covered) == st.Projection.CoveredPrefixHash, covered
+}
+
 // visibleMessagesWithFlag resolves the model-visible view shared by ordinary
 // sampling and compaction planning: the projection + tail when the projection
 // is usable (valid, degraded, or replay fallback), canonical otherwise. The

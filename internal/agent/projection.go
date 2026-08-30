@@ -163,6 +163,7 @@ type CompactionTelemetry struct {
 	RequestCount      int    `json:"request_count"`
 	ProviderRequestID string `json:"provider_request_id,omitempty"`
 	SummaryInputMode  string `json:"summary_input_mode,omitempty"`
+	ViewFP            string `json:"view_fp,omitempty"` // fold view fingerprint, for resume-divergence diagnosis
 	Error             string `json:"error,omitempty"`
 }
 

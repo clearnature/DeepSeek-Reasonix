@@ -61,6 +61,8 @@ func (a *Agent) singleCallSummary(ctx context.Context, prefix []provider.Message
 func (a *Agent) foldSummaryWithTelemetry(ctx context.Context, trigger string, prefix, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
 	res, err := a.foldToSummaryMode(ctx, prefix, fold, instructions, inputMode)
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	view := append(append([]provider.Message(nil), prefix...), fold...)
+	tele.ViewFP = providerVisibleFingerprint(modelInputMessages(view))
 	if err != nil {
 		tele.Error = err.Error()
 	}
