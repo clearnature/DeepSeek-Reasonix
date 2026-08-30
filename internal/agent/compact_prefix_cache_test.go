@@ -330,4 +330,17 @@ func TestSummaryRequestReusesFrozenTools(t *testing.T) {
 	if len(req2.Tools) != 0 {
 		t.Fatalf("without frozen bytes tools = %+v, want live registry (empty)", req2.Tools)
 	}
+
+	// Legacy sidecar: frozen messages restored but no frozen tools. The live
+	// registry must supply the schemas — an empty tool list would diverge
+	// from the real main-request prefix at the tools seam.
+	a.saveMainRequest(mainReq, nil)
+	req3 := a.summaryRequest(mainReq, nil, "")
+	if len(req3.Tools) != 0 {
+		t.Fatalf("frozen-messages-only tools = %+v, want live registry (empty)", req3.Tools)
+	}
+	commitTools := a.summaryRequestToolsForCommit(mainReq)
+	if len(commitTools) != 0 {
+		t.Fatalf("commit tools = %+v, want live registry (empty)", commitTools)
+	}
 }

@@ -378,7 +378,7 @@ func compactionInstructionWithFocus(instructions string) string {
 // actually sends for the given prefix, mirroring summaryRequest's choice so
 // the persisted sidecar bytes match what hit the provider.
 func (a *Agent) summaryRequestToolsForCommit(prefix []provider.Message) []provider.ToolSchema {
-	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
 		return saved.tools
 	}
 	if a.svc.tools != nil {
@@ -404,13 +404,16 @@ func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions s
 	messages := a.normalizeModelRequestMessages(msgs)
 	messages = append(messages, provider.Message{Role: provider.RoleUser, Content: compactionInstructionWithFocus(instructions)})
 	var schemas []provider.ToolSchema
-	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
 		// The prefix replays the frozen main-request bytes, so the tools must
 		// be the frozen ones too: the server caches system+tools+messages as
 		// one unit, and the live tool set drifts (MCP registration) between
 		// the main request and the summary request.
 		schemas = saved.tools
 	} else if a.svc.tools != nil {
+		// No frozen tools (legacy sidecar or tool-less request): fall back to
+		// the live registry so the summary never sends an empty tool list
+		// that diverges from the real main-request prefix.
 		schemas = a.providerToolSchemas()
 	}
 	return provider.Request{
