@@ -6683,6 +6683,9 @@ type Meta struct {
 	CanonicalTodos *[]evidence.TodoItem `json:"canonicalTodos,omitempty"`
 	// Closed completed todo fingerprints from this session and its lineage.
 	DismissedTodoBatches []string `json:"dismissedTodoBatches,omitempty"`
+	// BootTurns is the controller's process-lifetime turn counter (cold-start
+	// cycle); the session-turns readout prefers it over checkpoint counts.
+	BootTurns int `json:"bootTurns,omitempty"`
 	// Remote marks a remote session tab; its readiness is carried by the
 	// remote-tab state channel rather than a local controller.
 	Remote *RemoteTabRef `json:"remote,omitempty"`
@@ -6720,6 +6723,15 @@ func goalRuntimeViewFromController(ctrl control.SessionAPI) *GoalRuntimeView {
 		StopCause:        rt.StopCause,
 		BudgetExtensions: rt.BudgetExtensions,
 	}
+}
+
+// controllerBootTurns reports the controller's cold-start turn counter (0 when
+// no controller is bound yet).
+func controllerBootTurns(ctrl control.SessionAPI) int {
+	if ctrl == nil {
+		return 0
+	}
+	return ctrl.Turn()
 }
 
 // Meta reports the model label, readiness, any startup error, the working
@@ -6803,6 +6815,7 @@ func (a *App) MetaForTab(tabID string) Meta {
 		Goal:                  goal,
 		GoalStatus:            goalStatus,
 		GoalRuntime:           goalRuntimeViewFromController(snap.ctrl),
+		BootTurns:             controllerBootTurns(snap.ctrl),
 		CanonicalTodos:        ctrlTodos(snap.ctrl),
 		DismissedTodoBatches:  a.dismissedTodoBatchesForSession(sessionPath),
 	}

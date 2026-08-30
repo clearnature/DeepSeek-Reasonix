@@ -976,6 +976,8 @@ export interface Meta extends RemoteSessionMetaFields {
   goalStatus?: GoalStatus;
   goalRuntime?: GoalRuntime;
   canonicalTodos?: Todo[]; dismissedTodoBatches?: string[];
+  /** Process-lifetime turn counter (cold-start cycle); preferred over checkpoint counts. */
+  bootTurns?: number;
 }
 
 export type CollaborationMode = "normal" | "plan" | "goal";

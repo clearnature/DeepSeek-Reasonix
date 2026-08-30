@@ -1743,7 +1743,7 @@ export default function App() {
   }, [activeTab?.scope, activeTab?.topicId, activeTab?.workspaceRoot, projectRevision]);
   const visibleUserTurns = visibleRuntimeState.items.reduce((count, item) => (item.kind === "user" ? count + 1 : count), 0);
   const currentTabTurns = Math.max(visibleRuntimeState.checkpoints.length, visibleUserTurns);
-  const bootTurns = visibleRuntimeState.bootTurns;
+  const bootTurns = visibleRuntimeState.bootTurns ?? visibleRuntimeState.meta?.bootTurns;
   // Cold-start cycle: prefer the backend's process-lifetime turn counter (0 is
   // valid before the first turn of this run); fall back only when the running
   // binary predates bootTurns.
