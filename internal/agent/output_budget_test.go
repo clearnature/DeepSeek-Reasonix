@@ -504,6 +504,67 @@ func TestEstimateAnomalyReason(t *testing.T) {
 	}
 }
 
+func TestEstimatedReplaySafeTokensGuardsFullReplay(t *testing.T) {
+	big := strings.Repeat("y", 50_000)
+	canonical := make([]provider.Message, 100)
+	for i := range canonical {
+		canonical[i] = provider.Message{Role: provider.RoleUser, Content: big}
+	}
+	req := provider.Request{Messages: canonical}
+	a := &Agent{}
+	a.sess.compactionState.Projection.CoveredCount = 90
+	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 620_000})
+	shape := a.requestCalibrationShape(req)
+	est, raw := a.estimatedReplaySafeTokens(req, shape)
+	if raw <= est {
+		t.Fatalf("full-replay estimate = %d, raw = %d: want est < raw (projection guard)", est, raw)
+	}
+	// 投影视图（消息数 <= covered+slack）不保护：保持全量估算。
+	a.sess.compactionState.Projection.CoveredCount = 95
+	viewReq := provider.Request{Messages: canonical[:95]}
+	shape = a.requestCalibrationShape(viewReq)
+	est, raw = a.estimatedReplaySafeTokens(viewReq, shape)
+	if est != raw {
+		t.Fatalf("projection view est = %d, raw = %d: want equal (no guard)", est, raw)
+	}
+	// 无上次实测：不保护。
+	a.sess.compactionState.Projection.CoveredCount = 90
+	a.sess.output.lastUsage.Store(nil)
+	est, raw = a.estimatedReplaySafeTokens(req, shape)
+	_ = est
+	if raw == 0 {
+		t.Fatal("raw estimate should be non-zero")
+	}
+}
+
+func TestReplayProjectionViewPrefersProjectionOnOverflow(t *testing.T) {
+	big := strings.Repeat("z", 50_000)
+	canonical := make([]provider.Message, 100)
+	for i := range canonical {
+		canonical[i] = provider.Message{Role: provider.RoleUser, Content: big}
+	}
+	a := &Agent{agentConfig: agentConfig{contextWindow: 1_000_000}}
+	st := CompactionState{Projection: ContextProjection{
+		Messages:     []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
+		CoveredCount: 90,
+	}}
+	view := a.replayProjectionView(canonical, st)
+	if len(view) != 1+10 {
+		t.Fatalf("overflow replay view = %d messages, want projection(1)+tail(10)", len(view))
+	}
+	if view[0].Content != "summary" || view[len(view)-1].Content != big {
+		t.Fatalf("view tail mismatch: first=%q last_len=%d", view[0].Content, len(view[len(view)-1].Content))
+	}
+	// 不超窗：不干预（返回 nil，调用方走全量）。
+	small := make([]provider.Message, 5)
+	for i := range small {
+		small[i] = provider.Message{Role: provider.RoleUser, Content: "tiny"}
+	}
+	if v := a.replayProjectionView(small, st); v != nil {
+		t.Fatalf("non-overflow replay view = %v, want nil", v)
+	}
+}
+
 func TestSetSessionResetsPerTranscriptUsageState(t *testing.T) {
 	a := &Agent{}
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 200_000})

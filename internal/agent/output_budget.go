@@ -364,6 +364,47 @@ func (a *Agent) estimatedShapeTokens(shape requestCalibrationShape) int {
 	return int(float64(shape.requestChars) * fallbackTokPerChar)
 }
 
+// replayTailSlack bounds the projection-covered prefix comparison below; a
+// message set that far exceeds the covered count is a canonical full replay.
+const replayTailSlack = 8
+
+// estimatedReplaySafeTokens prices the request like estimatedShapeTokens but
+// guards the display/admission estimate against canonical full replay after
+// projection loss: a whole-transcript estimate (e.g. gpu1 5.6M chars → 1.9M
+// tokens) fakes the window and forces an unnecessary compaction on a warm
+// replay. When the message set clearly exceeds the projection-covered prefix
+// and a last observed prompt exists, it prices the covered history at the
+// observed baseline and only the uncovered tail above it. The raw estimate is
+// returned separately so anomaly diagnostics still see the inflation source.
+func (a *Agent) estimatedReplaySafeTokens(req provider.Request, shape requestCalibrationShape) (est, raw int) {
+	raw = a.estimatedShapeTokens(shape)
+	if a == nil {
+		return raw, raw
+	}
+	a.sess.compactionMu.Lock()
+	covered := a.sess.compactionState.Projection.CoveredCount
+	a.sess.compactionMu.Unlock()
+	if covered <= 0 || len(req.Messages) <= covered+replayTailSlack {
+		return raw, raw
+	}
+	last := 0
+	if u := a.LastUsage(); u != nil {
+		last = u.LatestPromptTokens()
+	}
+	if last <= 0 {
+		return raw, raw
+	}
+	var tailChars int64
+	for _, m := range req.Messages[covered:] {
+		tailChars += int64(len(m.Content))
+	}
+	est = last + int(float64(tailChars)*fallbackTokPerChar)
+	if est < raw {
+		return est, raw
+	}
+	return raw, raw
+}
+
 func isCJKRune(r rune) bool {
 	return (r >= 0x4E00 && r <= 0x9FFF) ||
 		(r >= 0x3400 && r <= 0x4DBF) ||
@@ -536,8 +577,8 @@ func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error
 		return adm, nil
 	}
 	shape := a.requestCalibrationShape(req)
-	est := a.estimatedShapeTokens(shape)
-	a.emitEstimateAnomaly(req, shape, est, window)
+	est, rawEst := a.estimatedReplaySafeTokens(req, shape)
+	a.emitEstimateAnomaly(req, shape, rawEst, window)
 	adm.PromptTokens = est
 	physical := window - est - outputBudgetReserve
 	adm.PhysicalRemaining = physical

@@ -40,8 +40,24 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible
 		}
+	} else if visible := a.replayProjectionView(msgs, st); len(visible) > 0 {
+		// 投影失效但投影体可用（load 时已验证）且全量超窗：优先投影+tail，
+		// 避免暖重放全量估算虚高（如 gpu1 5.6M 字符 → 1.9M 假超窗）。
+		return visible
 	}
 	return msgs
+}
+
+// replayProjectionView prefers projection+tail over a canonical full replay
+// after projection loss when the full transcript would blow the window.
+func (a *Agent) replayProjectionView(msgs []provider.Message, st CompactionState) []provider.Message {
+	if len(st.Projection.Messages) == 0 || st.Projection.CoveredCount <= 0 {
+		return nil
+	}
+	if window := a.effectiveContextWindow(); window <= 0 || a.estimatedVisibleRequestTokens(msgs) < window {
+		return nil
+	}
+	return modelVisibleFromProjection(st.Projection, msgs)
 }
 
 func (a *Agent) currentProjectionVersion() uint64 {
