@@ -255,6 +255,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // merged main-v2 baseline (including its own prepaint port), bringing the
 // path to 2437.892 KiB; retain 0.108 KiB of bounded headroom.
 // Merged dev panels (team/retrieval) push the initial path to 2439.4 KiB raw.
-const rawInitialBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 2_439.6 : 2_439.6;
+// The cold-start session-turns readout (bootTurns plumbing through Meta and
+// the reducer) adds ~0.2 KiB to that dev baseline; retain a narrow 0.4 KiB
+// raw ratchet over the measured path instead of tightening an equality gate.
+const rawInitialBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 2_440.0 : 2_440.0;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
