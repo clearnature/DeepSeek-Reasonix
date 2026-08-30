@@ -1902,6 +1902,13 @@ const LanguagePolicy = `Reply in the same language the user is using in their mo
 	`whenever they switch. Let this also guide the language you think in. Always keep code, ` +
 	`identifiers, file paths, shell commands, and technical terms in their original form — never translate them.`
 
+// FormatDisciplinePolicy is appended to every system prompt so reasoning and
+// replies stay clean even when conversation history carries non-standard
+// formatting (repeated punctuation, decorative emoji runs, bold-dash emphasis,
+// leaked planning markers). It mirrors the 8/17 (=-pollution root cause: models
+// probabilistically imitate history formatting; the explicit ban breaks the loop.
+const FormatDisciplinePolicy = `Use standard punctuation in replies and reasoning; never use repeated exclamation marks (！！/！！！), decorative emoji runs (🎉), or bold-dash emphasis (**x**——); never imitate non-standard formatting seen in the conversation history.`
+
 // Default returns the built-in default configuration.
 func Default() *Config {
 	return &Config{

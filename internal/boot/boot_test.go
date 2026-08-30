@@ -2845,6 +2845,9 @@ api_key_env = "REASONIX_TEST_KEY_UNSET"
 	if !strings.Contains(sys, config.LanguagePolicy) {
 		t.Fatalf("language policy missing from system prompt:\n%s", sys)
 	}
+	if !strings.Contains(sys, config.FormatDisciplinePolicy) {
+		t.Fatalf("format discipline policy missing from system prompt:\n%s", sys)
+	}
 }
 
 func TestBuildAppendsUserDecisionPolicyToCustomSystemPrompt(t *testing.T) {
@@ -2892,14 +2895,22 @@ func systemMessage(msgs []provider.Message) string {
 }
 
 func stripLanguagePolicy(s string) string {
-	s = strings.TrimSpace(s)
-	for _, policy := range []string{
-		config.LanguagePolicy, config.WorkPracticePolicy,
-		config.UserDecisionPolicy,
-	} {
-		s = strings.TrimSpace(strings.TrimSuffix(s, policy))
+	// Core policies append in a fixed order (UserDecision, WorkPractice,
+	// FormatDiscipline, Language) plus the workspace line; trimming one at a
+	// time exposes the next, so repeat until stable.
+	for {
+		prev := s
+		s = strings.TrimSpace(s)
+		for _, policy := range []string{
+			config.LanguagePolicy, config.WorkPracticePolicy,
+			config.UserDecisionPolicy, config.FormatDisciplinePolicy,
+		} {
+			s = strings.TrimSpace(strings.TrimSuffix(s, policy))
+		}
+		if s == prev {
+			return s
+		}
 	}
-	return s
 }
 
 func stripEnvironmentBlock(s string) string {
