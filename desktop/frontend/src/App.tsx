@@ -1743,10 +1743,11 @@ export default function App() {
   }, [activeTab?.scope, activeTab?.topicId, activeTab?.workspaceRoot, projectRevision]);
   const visibleUserTurns = visibleRuntimeState.items.reduce((count, item) => (item.kind === "user" ? count + 1 : count), 0);
   const currentTabTurns = Math.max(visibleRuntimeState.checkpoints.length, visibleUserTurns);
-  // Cold-start cycle: the backend's process-lifetime turn counter resets on
-  // every app restart, so the readout reflects this run, not the whole session.
-  const bootTurns = visibleRuntimeState.bootTurns ?? 0;
-  const sessionTurns = bootTurns > 0 ? bootTurns : currentTabTurns > 0 ? currentTabTurns : remoteSurfaceActive ? 0 : activeTopicTurns ?? 0;
+  const bootTurns = visibleRuntimeState.bootTurns;
+  // Cold-start cycle: prefer the backend's process-lifetime turn counter (0 is
+  // valid before the first turn of this run); fall back only when the running
+  // binary predates bootTurns.
+  const sessionTurns = bootTurns !== undefined ? bootTurns : currentTabTurns > 0 ? currentTabTurns : remoteSurfaceActive ? 0 : activeTopicTurns ?? 0;
   const startupSplashHold = !activeTabId && state.meta?.ready !== true && !state.meta?.startupErr;
   const activeComposerProfile = activeTabId ? composerProfilesByTab[activeTabId] : undefined;
   const backendActiveComposerProfile = useMemo(() => {

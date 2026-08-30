@@ -2063,6 +2063,7 @@ export function reducer(s: State, a: Action): State {
         cancelRequested === s.cancelRequested &&
         cancellable === s.cancellable &&
         turnStartedAt === s.turnStartAt &&
+        a.bootTurns === s.bootTurns &&
         !clearsRetry
       ) return s;
       if (foregroundRunning) {
