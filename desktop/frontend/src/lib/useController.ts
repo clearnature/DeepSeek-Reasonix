@@ -364,6 +364,8 @@ export interface State {
   items: Item[];
   /** Exact backend-owned turn targeted by Stop/Ask. */
   activeTurnId?: string;
+  /** Turns since this process started (cold-start cycle), for the session-turns readout. */
+  bootTurns?: number;
   running: boolean;
   turnActive: boolean;
   pendingPrompt: boolean;
@@ -792,7 +794,7 @@ type Action =
   | { type: "turn_admitted"; turnId: string; submissionId: string }
   | { type: "send_failed"; submissionId: string; error: string }
   | { type: "turn_interrupted" }
-  | { type: "backend_status"; running: boolean; turnStartedAt?: number; pendingPrompt?: boolean; backgroundJobs?: number; cancelRequested?: boolean; cancellable?: boolean; turnId?: string; turnStatus?: string; snapshotAt?: number }
+  | { type: "backend_status"; running: boolean; turnStartedAt?: number; pendingPrompt?: boolean; backgroundJobs?: number; cancelRequested?: boolean; cancellable?: boolean; turnId?: string; turnStatus?: string; bootTurns?: number; snapshotAt?: number }
   | { type: "cancel_requested" }
   | { type: "meta"; meta: Meta }
   | { type: "optimistic_meta"; meta: Meta }
@@ -842,6 +844,7 @@ function backendStatusFromRuntimeMeta(meta: RuntimeMetaSnapshot): Extract<Action
     cancellable: foregroundRunning,
     turnId: meta.turnId,
     turnStatus: meta.turnStatus,
+    bootTurns: meta.bootTurns,
   };
 }
 
@@ -2073,6 +2076,7 @@ export function reducer(s: State, a: Action): State {
           cancellable,
           activeTurnId: a.turnId ?? s.activeTurnId,
           turnStartAt: turnStartedAt,
+          bootTurns: a.bootTurns ?? s.bootTurns,
         };
       }
       const telemetry = snapshotCompletedTurnTelemetry(s);
@@ -2097,6 +2101,7 @@ export function reducer(s: State, a: Action): State {
         approval: undefined,
         ask: undefined,
         retry: undefined,
+        bootTurns: a.bootTurns ?? s.bootTurns,
       });
     }
     case "meta": {
@@ -3121,6 +3126,7 @@ export function useController() {
       cancellable: foregroundRunning,
       turnId: tab.turnId,
       turnStatus: tab.turnStatus,
+      bootTurns: tab.bootTurns,
       snapshotAt,
     });
     // backend_status reconciliation can clear a live prompt from frontend state.

@@ -383,6 +383,7 @@ type RuntimeStatus struct {
 	Status          event.TurnStatus
 	TurnEventSeq    uint64
 	ReplayAfterSeq  uint64
+	BootTurns       int // process-lifetime turn counter (cold-start cycle)
 }
 
 // ForegroundTaskState represents the state of the foreground task.
@@ -2489,6 +2490,7 @@ func (c *Controller) RuntimeStatus() RuntimeStatus {
 		Status:          status,
 		TurnEventSeq:    turnEventSeq,
 		ReplayAfterSeq:  replayAfterSeq,
+		BootTurns:       c.Turn(),
 	}
 }
 

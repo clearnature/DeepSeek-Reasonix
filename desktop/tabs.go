@@ -2398,6 +2398,7 @@ func (a *App) tabMeta(tab *WorkspaceTab, active bool) TabMeta {
 		m.TurnStatus = string(status.Status)
 		m.TurnEventSeq = status.TurnEventSeq
 		m.TurnReplayAfter = status.ReplayAfterSeq
+		m.BootTurns = status.BootTurns
 	}
 	if a.botBridge != nil {
 		m.RemoteControlled = a.botBridge.remoteControlledTabs()[tab.ID]

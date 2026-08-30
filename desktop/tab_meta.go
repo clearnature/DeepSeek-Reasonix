@@ -34,6 +34,7 @@ type TabMeta struct {
 	TurnStatus        string             `json:"turnStatus,omitempty"`
 	TurnEventSeq      uint64             `json:"turnEventSeq,omitempty"`
 	TurnReplayAfter   uint64             `json:"turnReplayAfterSeq,omitempty"`
+	BootTurns         int                `json:"bootTurns,omitempty"` // cold-start cycle turn counter
 	Mode              string             `json:"mode"`
 	CollaborationMode string             `json:"collaborationMode"`
 	ToolApprovalMode  string             `json:"toolApprovalMode"`

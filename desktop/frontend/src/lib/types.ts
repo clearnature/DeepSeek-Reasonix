@@ -491,6 +491,7 @@ export interface TabMeta extends RemoteTabMetaFields {
   turnStatus?: TurnStatus;
   turnEventSeq?: number;
   turnReplayAfterSeq?: number;
+  bootTurns?: number;
   mode: Mode;
   collaborationMode?: CollaborationMode;
   toolApprovalMode?: ToolApprovalMode;
