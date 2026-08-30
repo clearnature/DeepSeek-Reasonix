@@ -684,6 +684,7 @@ export function sameMeta(a?: Meta, b?: Meta): boolean {
     a.floorInferred === b.floorInferred &&
     a.goal === b.goal &&
     a.goalStatus === b.goalStatus &&
+    a.bootTurns === b.bootTurns &&
     sameTodoList(a.canonicalTodos, b.canonicalTodos) && sameStringList(a.dismissedTodoBatches, b.dismissedTodoBatches)
   );
 }
