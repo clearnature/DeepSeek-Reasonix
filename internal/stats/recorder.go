@@ -24,6 +24,13 @@ type Recorder struct {
 	writer     *Writer
 	dispatcher *recordDispatcher
 	source     string
+
+	// Process-lifetime (cold-start cycle) session accumulation, stamped on
+	// TurnDone marker rows for auditing the UI's session-cost readout.
+	sessionMu       sync.Mutex
+	sessionTokens   int64
+	sessionCost     float64
+	sessionCurrency string
 }
 
 var _ event.OptionalSinkCapabilities = (*Recorder)(nil)
@@ -364,7 +371,17 @@ func (r *Recorder) recordTurnCompletion() {
 	if r == nil || r.dispatcher == nil {
 		return
 	}
-	r.dispatcher.enqueue(record{Timestamp: time.Now(), Source: r.source, Turn: true})
+	r.sessionMu.Lock()
+	tokens, cost, currency := r.sessionTokens, r.sessionCost, r.sessionCurrency
+	r.sessionMu.Unlock()
+	r.dispatcher.enqueue(record{
+		Timestamp:       time.Now(),
+		Source:          r.source,
+		Turn:            true,
+		SessionTokens:   tokens,
+		SessionCost:     cost,
+		SessionCurrency: currency,
+	})
 }
 
 // Flush waits until records already accepted by this recorder's shared queue
@@ -512,7 +529,20 @@ func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, q
 			rec.ValuationUSD = v.Money.Amount
 		}
 	}
+	r.accumulateSession(usage.TotalTokens, rec.SelectedCost, rec.SelectedCurrency)
 	r.dispatcher.enqueue(rec)
+}
+
+// accumulateSession folds a usage event into the process-lifetime session
+// totals stamped on TurnDone marker rows.
+func (r *Recorder) accumulateSession(tokens int, cost float64, currency string) {
+	r.sessionMu.Lock()
+	defer r.sessionMu.Unlock()
+	r.sessionTokens += int64(tokens)
+	r.sessionCost += cost
+	if currency != "" {
+		r.sessionCurrency = currency
+	}
 }
 
 func usageRequestCount(usage *provider.Usage) int {

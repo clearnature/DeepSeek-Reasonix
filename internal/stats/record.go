@@ -88,6 +88,12 @@ type record struct {
 	ValuationUSD string `json:"valuation_usd,omitempty"`
 	// SelectedCost is a float compatibility mirror of SelectedAmount.
 	SelectedCost float64 `json:"selected_cost,omitempty"`
+	// SessionTokens/SessionCost are the recorder's process-lifetime (cold-start
+	// cycle) accumulation, stamped on TurnDone marker rows so the session-cost
+	// readout can be audited against the UI.
+	SessionTokens   int64   `json:"session_tokens,omitempty"`
+	SessionCost     float64 `json:"session_cost,omitempty"`
+	SessionCurrency string  `json:"session_currency,omitempty"`
 }
 
 // CompactionRecord is the structured form of the agent's compaction telemetry
