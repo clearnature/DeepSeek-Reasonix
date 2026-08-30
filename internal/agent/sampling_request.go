@@ -160,6 +160,7 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 	if err != nil {
 		return samplingRequest{}, err
 	}
+	a.sess.setWireFP(providerVisibleFingerprint(req.Messages))
 	return samplingRequest{req: req}, nil
 }
 

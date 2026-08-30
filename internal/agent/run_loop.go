@@ -276,6 +276,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		text, reasoning, signature, calls, responsesItems, serverSearch, usage := streamed.text, streamed.reasoning, streamed.signature, streamed.calls, streamed.responsesItems, streamed.serverSearch, streamed.usage
 		partialCalls, err := streamed.partialCalls, streamed.err
 		cacheDiagnostics := CompareShape(prevPrefixShape, prefixShape, usage, contentReasons)
+		cacheDiagnostics.WireFP = a.sess.wireFP()
 		if err != nil {
 			quote := a.emitTurnUsage(usage, &cacheDiagnostics)
 			a.observeRunBudget(state, usage, quote)

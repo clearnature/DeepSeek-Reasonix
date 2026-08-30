@@ -57,6 +57,10 @@ type record struct {
 	// ViewFP fingerprints the sent view; vs a compaction view_fp it pins
 	// summary misses to a post-resume view divergence.
 	ViewFP string `json:"view_fp,omitempty"`
+	// WireFP fingerprints the normalized messages actually sent this request;
+	// compared across requests/resume it separates byte divergence (different
+	// wire_fp) from server-side cache expiry (identical wire_fp).
+	WireFP string `json:"wire_fp,omitempty"`
 	Turn   bool   `json:"turn,omitempty"` // true for TurnDone marker rows
 	// Compaction records one context-compaction pass (agent compaction
 	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
@@ -129,6 +133,7 @@ type ResumeRecord struct {
 	EstTok   int    `json:"est,omitempty"`           // resume 决策时估算（超窗才 compact-first）
 	ViewFP   string `json:"view_fp,omitempty"`       // 模型可见视图指纹（对比压缩/请求前缀）
 	Covered  bool   `json:"covered_match,omitempty"` // sidecar covered 前缀与转录是否字节匹配
+	WireFP   string `json:"wire_fp,omitempty"`       // resume 时上次发送字节指纹
 }
 
 // EstimateAnomalyRecord is the structured form of the agent's estimate
@@ -172,6 +177,7 @@ type CompactionRecord struct {
 	UserDrop   int     `json:"user_dropped,omitempty"`
 	PrefHash   string  `json:"pref_hash,omitempty"`
 	ViewFP     string  `json:"view_fp,omitempty"`    // fold view fingerprint (resume-divergence diagnosis)
+	WireFP     string  `json:"wire_fp,omitempty"`    // normalized bytes actually sent (vs view_fp)
 	ElapsedMs  int64   `json:"elapsed_ms,omitempty"` // summarizer stage wall time
 	Status     string  `json:"status,omitempty"`
 	TokPerChar float64 `json:"tpc,omitempty"`

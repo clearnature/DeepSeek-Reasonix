@@ -19,6 +19,7 @@ type PrefixShape struct {
 	ToolsHash         string
 	PrefixHash        string
 	ViewFP            string // fingerprint of the full model-visible view (messages after prompt shaping)
+	WireFP            string // fingerprint of the normalized messages actually sent last request
 	LogRewriteVersion int
 	ToolSchemaTokens  int
 }
@@ -35,7 +36,7 @@ func shortHash(v any) string {
 }
 
 // CaptureShape takes a snapshot of the current prefix state.
-func CaptureShape(systemPrompt string, schemas []provider.ToolSchema, rewriteVersion int, viewFP string) PrefixShape {
+func CaptureShape(systemPrompt string, schemas []provider.ToolSchema, rewriteVersion int, viewFP, wireFP string) PrefixShape {
 	normalizedSchemas := normalizeToolSchemas(schemas)
 	toolsJSON, _ := json.Marshal(normalizedSchemas)
 	return PrefixShape{
@@ -46,6 +47,7 @@ func CaptureShape(systemPrompt string, schemas []provider.ToolSchema, rewriteVer
 			"tools":  string(toolsJSON),
 		}),
 		ViewFP:            viewFP,
+		WireFP:            wireFP,
 		LogRewriteVersion: rewriteVersion,
 		ToolSchemaTokens:  estimateTokens(string(toolsJSON)),
 	}
@@ -95,6 +97,7 @@ func CompareShape(prev, cur PrefixShape, usage *provider.Usage, contentReasons [
 		SystemHash:          cur.SystemHash,
 		ToolsHash:           cur.ToolsHash,
 		ViewFP:              cur.ViewFP,
+		WireFP:              cur.WireFP,
 		LogRewriteVersion:   cur.LogRewriteVersion,
 		ToolSchemaTokens:    cur.ToolSchemaTokens,
 		CacheMissTokens:     miss,

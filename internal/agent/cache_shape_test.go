@@ -22,8 +22,8 @@ func TestCaptureShapeNormalizesToolSchemaOrder(t *testing.T) {
 	}
 	reordered := []provider.ToolSchema{schemas[1], schemas[0]}
 
-	first := CaptureShape("system", schemas, 1, "")
-	second := CaptureShape("system", reordered, 1, "")
+	first := CaptureShape("system", schemas, 1, "", "")
+	second := CaptureShape("system", reordered, 1, "", "")
 
 	if first.ToolsHash != second.ToolsHash {
 		t.Fatalf("ToolsHash should be stable across schema order: %q != %q", first.ToolsHash, second.ToolsHash)
@@ -37,12 +37,12 @@ func TestCaptureShapeNormalizesToolSchemaOrder(t *testing.T) {
 }
 
 func TestCompareShapeIgnoresBareLogRewriteVersionDrift(t *testing.T) {
-	before := CaptureShape("system", nil, 5, "")
+	before := CaptureShape("system", nil, 5, "", "")
 	// Simulates AddDecisionReceipt/UpdateToolCallPreview/UpdateToolCallResolution/
 	// ReplaceLocalMetadata bumping rewriteVersion alone, with no drained content
 	// reason: none of those touch provider-visible bytes, so this must not be
 	// reported as a cache-prefix change.
-	after := CaptureShape("system", nil, 9, "")
+	after := CaptureShape("system", nil, 9, "", "")
 	if diag := CompareShape(before, after, nil, nil); diag.PrefixChanged {
 		t.Fatalf("LogRewriteVersion drift with no drained reason must not report a change: %+v", diag)
 	}

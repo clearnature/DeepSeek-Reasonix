@@ -164,6 +164,7 @@ type CompactionTelemetry struct {
 	ProviderRequestID string `json:"provider_request_id,omitempty"`
 	SummaryInputMode  string `json:"summary_input_mode,omitempty"`
 	ViewFP            string `json:"view_fp,omitempty"` // fold view fingerprint, for resume-divergence diagnosis
+	WireFP            string `json:"wire_fp,omitempty"` // normalized bytes actually sent (vs view_fp)
 	Error             string `json:"error,omitempty"`
 }
 

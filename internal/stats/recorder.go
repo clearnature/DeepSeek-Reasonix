@@ -211,6 +211,8 @@ func (r *Recorder) recordCompaction(e event.Event) {
 			rec.PrefHash = v
 		case "view_fp":
 			rec.ViewFP = v
+		case "wire_fp":
+			rec.WireFP = v
 		case "tpc":
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
 				rec.TokPerChar = f
@@ -316,6 +318,8 @@ func (r *Recorder) recordResume(e event.Event) {
 			}
 		case "view_fp":
 			rec.ViewFP = v
+		case "wire_fp":
+			rec.WireFP = v
 		case "covered_match":
 			rec.Covered = v == "true"
 		}
@@ -564,6 +568,7 @@ func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, q
 		rec.PrefixChanged = diag.PrefixChanged
 		rec.PrefixReasons = diag.PrefixChangeReasons
 		rec.ViewFP = diag.ViewFP
+		rec.WireFP = diag.WireFP
 	}
 	if quote != nil {
 		rec.CostAmount = quote.Original.Amount

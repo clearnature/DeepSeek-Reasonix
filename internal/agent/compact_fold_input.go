@@ -63,6 +63,7 @@ func (a *Agent) foldSummaryWithTelemetry(ctx context.Context, trigger string, pr
 	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
 	view := append(append([]provider.Message(nil), prefix...), fold...)
 	tele.ViewFP = providerVisibleFingerprint(modelInputMessages(view))
+	tele.WireFP = a.sess.wireFP()
 	if err != nil {
 		tele.Error = err.Error()
 	}

@@ -25,6 +25,10 @@ type sessionRuntime struct {
 
 	missingReasoning missingReasoningWatch
 
+	// lastWireFP: normalized bytes actually sent last request; vs the next
+	// wire fp it separates payload divergence from server-side expiry.
+	lastWireFP atomic.Pointer[string]
+
 	// compactionMu guards projection snapshots/install and the in-memory sidecar
 	// generation. Network summarization never runs while this lock is held.
 	compactionMu sync.Mutex
@@ -65,6 +69,7 @@ func (r *sessionRuntime) reset(s *Session) {
 	r.cacheMiss.Store(0)
 	r.output.reset()
 	r.missingReasoning = missingReasoningWatch{}
+	r.lastWireFP.Store(nil)
 	r.compactionMu.Lock()
 	r.compactionState = CompactionState{} // lineage change; disk reloaded on Resume
 	r.cacheState = CacheStateUnknown
@@ -74,6 +79,19 @@ func (r *sessionRuntime) reset(s *Session) {
 	r.compaction.consecutive = 0
 	r.compaction.failedTurn.Store(0)
 	r.compaction.lastTurn.Store(0)
+}
+
+// wireFP returns the fingerprint of the normalized bytes sent last request.
+func (r *sessionRuntime) wireFP() string {
+	if p := r.lastWireFP.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// setWireFP records the normalized bytes about to go on the wire.
+func (r *sessionRuntime) setWireFP(fp string) {
+	r.lastWireFP.Store(&fp)
 }
 
 // session returns the bound conversation under the lock that guards the

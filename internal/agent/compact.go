@@ -445,6 +445,7 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 	if a.svc.prov == nil {
 		return "", usage, fmt.Errorf("summary unavailable")
 	}
+	a.sess.setWireFP(providerVisibleFingerprint(req.Messages))
 	ch, err := a.svc.prov.Stream(ctx, req)
 	if err != nil {
 		return "", usage, err

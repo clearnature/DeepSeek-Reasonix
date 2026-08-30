@@ -499,8 +499,8 @@ func verifyLargeToolOutputCacheContract(t *testing.T, size int) int {
 	reg := tool.NewRegistry()
 	reg.Add(echoTool{})
 	beforeSchemas, afterSchemas := reg.Schemas(), reg.Schemas()
-	beforeShape := CaptureShape(systemPrompt, beforeSchemas, 0, "")
-	afterShape := CaptureShape(systemPrompt, afterSchemas, 0, "")
+	beforeShape := CaptureShape(systemPrompt, beforeSchemas, 0, "", "")
+	afterShape := CaptureShape(systemPrompt, afterSchemas, 0, "", "")
 	if !bytes.Equal(mustCacheJSON(t, beforeSchemas), mustCacheJSON(t, afterSchemas)) {
 		t.Fatal("large tool result changed provider tool schema bytes or order")
 	}

@@ -478,6 +478,7 @@ type CacheDiagnostics struct {
 	SystemHash          string
 	ToolsHash           string
 	ViewFP              string
+	WireFP              string // normalized messages actually sent this request
 	LogRewriteVersion   int
 	ToolSchemaTokens    int
 	CacheMissTokens     int
