@@ -6702,7 +6702,7 @@ type Meta struct {
 	DismissedTodoBatches []string `json:"dismissedTodoBatches,omitempty"`
 	// BootTurns is the controller's process-lifetime turn counter (cold-start
 	// cycle); the session-turns readout prefers it over checkpoint counts.
-	BootTurns int `json:"bootTurns,omitempty"`
+	BootTurns int `json:"bootTurns" // 0 is a valid cold-start value; must always be sent`
 	// Remote marks a remote session tab; its readiness is carried by the
 	// remote-tab state channel rather than a local controller.
 	Remote *RemoteTabRef `json:"remote,omitempty"`
