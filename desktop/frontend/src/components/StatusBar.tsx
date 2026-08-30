@@ -257,22 +257,24 @@ export function StatusBar({
   const statusBucketed = statusQuote?.displayStatus === "bucketed" || statusQuote?.aggregateMode === "currency_buckets";
   const statusSelectedAmount = statusQuote?.selected?.amount ? Number(statusQuote.selected.amount) : NaN;
   const hasStatusSelected = Number.isFinite(statusSelectedAmount) && statusSelectedAmount > 0;
-  // Unavailable hides the cost only when there is nothing to show. A
-  // partial-cost quote (unpriced auxiliary entries with a priced-entries
-  // estimate) keeps its Selected and renders the estimate; otherwise fall
-  // back to the session accumulator before giving up.
-  const statusUnavailable = !hasStatusSelected && (context.sessionCostComplete === false || statusQuote?.displayStatus === "unavailable" || statusQuote?.costComplete === false);
+  // User design: the session cost is the cold-start cycle accumulator (starts
+  // at 0 on every app launch, accumulates this run's usage × local prices),
+  // with the persisted session-cumulative quote only as a fallback when the
+  // cycle has no usage data yet (history session reopened, no new requests).
+  const hasCycleCost = typeof cost === "number";
   const rawStatusCostLabel = statusBucketed
     ? t("context.sessionCostBucketed")
-    : statusUnavailable
-      ? "-"
+    : hasCycleCost
+      ? costLabel
       : hasStatusSelected
         ? markEstimated(formatMoneyLocalized(statusSelectedAmount, statusQuote?.selected?.currency || context.sessionCurrency || currency, { locale }), statusQuote?.estimated !== false)
-        : costLabel;
+        : "-";
   const statusCostLabel = appendRateBand(rawStatusCostLabel, statusQuote?.rateBand, t);
   const rateBandTooltip = t("billing.rateBand.tooltip");
   const turnCostTooltip = rateBandLabel(turnRateBand, t) ? `${t("status.turnCostTitle")} ${rateBandTooltip}` : t("status.turnCostTitle");
-  const sessionCostTooltip = rateBandLabel(statusQuote?.rateBand, t) ? `${t("status.spendTitle")} ${rateBandTooltip}` : t("status.spendTitle");
+  const sessionCostTooltip = hasStatusSelected
+    ? `${t("status.spendTitle")} · 会话累计 ${formatMoneyLocalized(statusSelectedAmount, statusQuote?.selected?.currency || context.sessionCurrency || currency, { locale })}`
+    : t("status.spendTitle");
   const balanceLabel = balance?.available && balance.display ? balance.display : "-";
   const balanceTitle = balance?.available
     ? (balance.detail

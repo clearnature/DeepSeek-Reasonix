@@ -134,8 +134,23 @@ export function contextCostDisplay({
   billingMode?: string;
   labelKind?: "estimated" | "payg_equivalent" | "fallback" | "bucketed" | "unavailable";
 } {
-  // Prefer structured session quote, then per-usage quote.
+  // Prefer the structured session quote, then per-usage quote.
   const quote = info?.sessionCostQuote || usage?.costQuote;
+  // User design: the session cost is the cold-start cycle accumulator — starts
+  // at 0 on every launch and accumulates this run's usage × local prices
+  // (mixed providers/models are each priced by their own local rate card, so
+  // the sum is a reference estimate, not a unified billing amount). The
+  // persisted session-cumulative quote below only falls back when the cycle
+  // has no usage data yet (history session reopened without new requests).
+  if (typeof sessionCost === "number") {
+    return {
+      amount: sessionCost,
+      currency: sessionCurrency || info?.sessionCurrency || usage?.currencyCode || usage?.currency,
+      estimated: true,
+      complete: true,
+      labelKind: "estimated",
+    };
+  }
   if (quote?.displayStatus === "bucketed" || quote?.aggregateMode === "currency_buckets") {
     return {
       amount: 0,
