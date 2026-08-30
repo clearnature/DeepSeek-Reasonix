@@ -255,13 +255,18 @@ export function StatusBar({
   const turnTokenLabel = markEstimated(formatTokenCount(turnTokens), turnEstimated);
   const statusQuote = context.sessionCostQuote;
   const statusBucketed = statusQuote?.displayStatus === "bucketed" || statusQuote?.aggregateMode === "currency_buckets";
-  const statusUnavailable = context.sessionCostComplete === false || statusQuote?.displayStatus === "unavailable" || statusQuote?.costComplete === false;
   const statusSelectedAmount = statusQuote?.selected?.amount ? Number(statusQuote.selected.amount) : NaN;
+  const hasStatusSelected = Number.isFinite(statusSelectedAmount) && statusSelectedAmount > 0;
+  // Unavailable hides the cost only when there is nothing to show. A
+  // partial-cost quote (unpriced auxiliary entries with a priced-entries
+  // estimate) keeps its Selected and renders the estimate; otherwise fall
+  // back to the session accumulator before giving up.
+  const statusUnavailable = !hasStatusSelected && (context.sessionCostComplete === false || statusQuote?.displayStatus === "unavailable" || statusQuote?.costComplete === false);
   const rawStatusCostLabel = statusBucketed
     ? t("context.sessionCostBucketed")
     : statusUnavailable
       ? "-"
-      : Number.isFinite(statusSelectedAmount) && statusSelectedAmount > 0
+      : hasStatusSelected
         ? markEstimated(formatMoneyLocalized(statusSelectedAmount, statusQuote?.selected?.currency || context.sessionCurrency || currency, { locale }), statusQuote?.estimated !== false)
         : costLabel;
   const statusCostLabel = appendRateBand(rawStatusCostLabel, statusQuote?.rateBand, t);
