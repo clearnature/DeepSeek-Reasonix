@@ -172,7 +172,7 @@ func (a *Agent) withAgentContext(ctx context.Context) context.Context {
 	} else {
 		ctx = memory.WithoutQueue(ctx)
 	}
-	return planmode.WithActive(ctx, a.planMode.Load())
+	return planmode.WithActive(withParentAgent(ctx, a), a.planMode.Load())
 }
 
 // WithParentSession stamps the active parent session ID onto a turn context so

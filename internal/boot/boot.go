@@ -1254,7 +1254,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		// the child model's own vision capability. Text-only children retain the
 		// attachment metadata locally but never receive image parts on the wire.
 		childCtx := agent.WithUserImages(sctx, agent.SubagentImageCandidates(sctx))
-		return agent.RunReadOnlySubAgentWithSession(childCtx, prov, subReg, agent.NewSession(sysPrompt), task,
+		return agent.RunReadOnlySubAgentWithSession(childCtx, prov, subReg, skillForkSession(sctx, sysPrompt), task,
 			runOptions, agent.NestedSink(sctx, event.Discard))
 	}
 	// Writer-capable subagent skills reuse the sub-agent machinery via this
@@ -1329,7 +1329,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			if continueFrom != "" || legacyForkFrom != "" {
 				return "", fmt.Errorf("subagent continuation requires a persisted session; none is active in this run")
 			}
-			run = agent.EphemeralSubagentRun(sk.Body)
+			run = ephemeralSkillRun(sctx, sk.Body)
 		} else {
 			identityModel, identityEffort := subagentIdentity(modelRef, effortRef)
 			spec := agent.SubagentSpec{
@@ -1349,7 +1349,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			} else if legacyForkFrom != "" {
 				run, prepErr = subagentStore.PrepareLegacyForkFrom(legacyForkFrom, spec)
 			} else {
-				run, prepErr = subagentStore.PrepareFresh(spec)
+				run, prepErr = prepareSkillRun(sctx, sk, spec, subagentStore)
 			}
 			if prepErr != nil {
 				return "", prepErr

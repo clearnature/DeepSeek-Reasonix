@@ -1976,8 +1976,8 @@ func (a *Agent) EvidenceSummary() evidence.ChildEvidenceSummary {
 }
 
 func isFreshSubagentSession(sess *Session) bool {
-	if sess == nil {
-		return false
+	if forkPrefillSession(sess) {
+		return true
 	}
 	snap := sess.Snapshot()
 	return len(snap) == 1 && snap[0].Role == provider.RoleSystem

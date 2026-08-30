@@ -331,3 +331,52 @@ func TestForkSourceContext(t *testing.T) {
 		t.Fatalf("ForkSourceFromContext on plain ctx unexpectedly ok")
 	}
 }
+
+// TestCaptureSkillForkPrefixAppendsBodyToSystemTail 验证技能 fork 前缀：
+// 父 system 字节保留在头部（命中父缓存），技能 body 追加在 system 尾部，
+// 且返回切片与父会话零共享。
+func TestCaptureSkillForkPrefixAppendsBodyToSystemTail(t *testing.T) {
+	msgs := []provider.Message{
+		{Role: provider.RoleUser, Content: "u1"},
+		{Role: provider.RoleAssistant, Content: "a1"},
+	}
+	parent := forkPrefixTestAgent(t, msgs)
+	const body = "你是 team-executor。\n执行已批准计划。"
+	prefix := CaptureSkillForkPrefix(parent, body)
+	if len(prefix) == 0 {
+		t.Fatal("CaptureSkillForkPrefix returned nil with a live parent")
+	}
+	if !strings.HasPrefix(prefix[0].Content, "sys") {
+		t.Fatalf("system lost parent prefix: %q", prefix[0].Content[:min(20, len(prefix[0].Content))])
+	}
+	if !strings.HasSuffix(prefix[0].Content, body) {
+		t.Fatalf("system tail missing skill body: %q", prefix[0].Content)
+	}
+	// 深拷贝：修改返回前缀不得回流父会话。
+	before := marshalMessages(t, parent.Session().Snapshot())
+	prefix[1].Content = "mutated"
+	prefix[0].ToolCalls = []provider.ToolCall{{ID: "x", Name: "y", Arguments: `{}`}}
+	if after := marshalMessages(t, parent.Session().Snapshot()); after != before {
+		t.Fatalf("fork prefix write-back mutated parent\n before: %s\n after: %s", before, after)
+	}
+}
+
+// TestPrepareSkillForkSessionPrefillsSession 验证 session 预填数量与内容。
+func TestPrepareSkillForkSessionPrefillsSession(t *testing.T) {
+	msgs := []provider.Message{
+		{Role: provider.RoleUser, Content: "u1"},
+		{Role: provider.RoleAssistant, Content: "a1"},
+	}
+	parent := forkPrefixTestAgent(t, msgs)
+	sess := PrepareSkillForkSession(parent, "body")
+	if sess == nil {
+		t.Fatal("PrepareSkillForkSession returned nil with a live parent")
+	}
+	if got := sess.Len(); got != len(msgs)+1 {
+		t.Fatalf("session messages = %d, want %d (system + history)", got, len(msgs)+1)
+	}
+	// 无会话父 → 回退冷启动（nil）。
+	if got := PrepareSkillForkSession(nil, "body"); got != nil {
+		t.Fatalf("PrepareSkillForkSession(nil) = non-nil, want nil")
+	}
+}

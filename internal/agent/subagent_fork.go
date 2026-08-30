@@ -184,3 +184,39 @@ func ForkSourceFromContext(ctx context.Context) (*Agent, bool) {
 	parent, ok := ctx.Value(forkSourceKey{}).(*Agent)
 	return parent, ok
 }
+
+// CaptureSkillForkPrefix returns the parent's fork prefix with the skill body
+// appended to the system tail (parent bytes unchanged, so the child's first
+// request hits the parent's warm prefix cache while the skill's role
+// instructions stay intact). Returns nil when inheritance is unavailable (no
+// parent session, or the prefix exceeds the window guard) — callers fall back
+// to a cold start.
+func CaptureSkillForkPrefix(parent *Agent, skillBody string) []provider.Message {
+	prefix := captureForkPrefix(parent, nil)
+	if len(prefix) == 0 {
+		return nil
+	}
+	if parent != nil {
+		if err := checkForkSizeGuard(parent.effectiveContextWindow(), prefix); err != nil {
+			return nil
+		}
+	}
+	prefix[0].Content += "\n\n" + skillBody
+	return prefix
+}
+
+// PrepareSkillForkSession prefills a skill sub-agent session with the parent's
+// fork prefix (see CaptureSkillForkPrefix). Returns nil on unavailable
+// inheritance — callers fall back to a cold start.
+func PrepareSkillForkSession(parent *Agent, skillBody string) *Session {
+	prefix := CaptureSkillForkPrefix(parent, skillBody)
+	if len(prefix) == 0 {
+		return nil
+	}
+	sess := NewSession("")
+	for _, m := range prefix {
+		sess.Add(m)
+	}
+	sess.MarkForkPrefill()
+	return sess
+}

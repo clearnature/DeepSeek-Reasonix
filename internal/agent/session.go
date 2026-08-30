@@ -20,7 +20,8 @@ type Session struct {
 	mu             sync.RWMutex
 	Messages       []provider.Message
 	version        uint64
-	rewriteVersion int // bumped each time the log is rewritten (compact/fold)
+	forkPrefill    bool // prefilled with a parent fork prefix; still a fresh sub-agent for start-context purposes
+	rewriteVersion int  // bumped each time the log is rewritten (compact/fold)
 	// persistedRewriteVersion is the highest rewriteVersion whose transcript
 	// has fully reached disk. It lives on the Session — not on the controller
 	// — so swapping session objects can never orphan or misattribute the
@@ -87,6 +88,14 @@ func NewSession(system string) *Session {
 }
 
 // Add appends a message.
+// MarkForkPrefill records that this session was prefilled with a parent fork
+// prefix; sub-agent start context still applies to it.
+func (s *Session) MarkForkPrefill() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forkPrefill = true
+}
+
 func (s *Session) Add(m provider.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
