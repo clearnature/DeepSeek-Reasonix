@@ -64,6 +64,10 @@ type record struct {
 	// Resume records one session-resume gate decision (C1): how warm the
 	// provider cache was and what the replay did with the history.
 	Resume *ResumeRecord `json:"resume,omitempty"`
+	// Estimate records one admission-time prompt-estimate anomaly (overflow or
+	// inflated vs observed) with the request shape behind it. Nil otherwise;
+	// Query aggregation skips it.
+	Estimate *EstimateAnomalyRecord `json:"estimate,omitempty"`
 	// Cost quote fields (additive; older readers ignore them).
 	UsageSource        string   `json:"usage_source,omitempty"`
 	CostAmount         string   `json:"cost_amount,omitempty"`     // original amount decimal
@@ -120,6 +124,25 @@ type ResumeRecord struct {
 	IdleMin  int    `json:"idle_min,omitempty"`
 	Decision string `json:"decision,omitempty"` // replay | compact-first | record-only
 	EstTok   int    `json:"est,omitempty"`      // resume 决策时估算（超窗才 compact-first）
+}
+
+// EstimateAnomalyRecord is the structured form of the agent's estimate
+// telemetry detail line (reason/est/window/obs/chars/cchars/cjk/cjkb/msgs/
+// top_role/top_chars/cal), persisted so an inflated desktop context percentage
+// or a false ErrCompactionRequired can be traced back to its request shape.
+type EstimateAnomalyRecord struct {
+	Reason       string `json:"reason,omitempty"`
+	EstTok       int    `json:"est_tokens,omitempty"`
+	WindowTok    int    `json:"window,omitempty"`
+	ObsTok       int    `json:"obs_tokens,omitempty"`
+	Chars        int64  `json:"chars,omitempty"`
+	CompactChars int64  `json:"compact_chars,omitempty"`
+	CJKRunes     int64  `json:"cjk_runes,omitempty"`
+	CJKBytes     int64  `json:"cjk_bytes,omitempty"`
+	Messages     int    `json:"messages,omitempty"`
+	TopRole      string `json:"top_role,omitempty"`
+	TopChars     int    `json:"top_chars,omitempty"`
+	Calibrated   bool   `json:"calibrated,omitempty"`
 }
 
 type CompactionRecord struct {

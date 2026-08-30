@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"reasonix/internal/event"
 	"reasonix/internal/nilutil"
 	"reasonix/internal/provider"
 )
@@ -533,7 +535,9 @@ func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error
 		a.storeAdmission(adm)
 		return adm, nil
 	}
-	est := a.estimatedRequestTokens(req)
+	shape := a.requestCalibrationShape(req)
+	est := a.estimatedShapeTokens(shape)
+	a.emitEstimateAnomaly(req, shape, est, window)
 	adm.PromptTokens = est
 	physical := window - est - outputBudgetReserve
 	adm.PhysicalRemaining = physical
@@ -601,6 +605,49 @@ func (a *Agent) applyAdmissionToRequest(req *provider.Request) error {
 		req.MaxTokens = adm.EffectiveOutputTokens
 	}
 	return nil
+}
+
+// estimateAnomalyReason reports why an admission-time prompt estimate looks
+// unreliable. overflow means the estimate alone already crosses the shared
+// window (admitOutputBudget will refuse or force-compact); inflated means the
+// estimate is far above the last provider-observed prompt on a meaningful
+// request, which would fake the desktop context percentage without necessarily
+// overflowing. Returns "" when the estimate looks trustworthy.
+func (a *Agent) estimateAnomalyReason(est, window int) string {
+	if est >= window-outputBudgetReserve {
+		return "overflow"
+	}
+	if obs := a.lastAdmission().ObservedPrompt; obs > 0 && est > obs*2 && est >= window*2/3 {
+		return "inflated"
+	}
+	return ""
+}
+
+// emitEstimateAnomaly persists the request shape behind a suspicious estimate
+// (overflow or inflated vs observed) so the culprit message can be pinned from
+// the stats file. The estimate is otherwise only shown on the desktop and never
+// written to disk. Observer-only: it never changes admission behavior.
+func (a *Agent) emitEstimateAnomaly(req provider.Request, shape requestCalibrationShape, est, window int) {
+	if a == nil || a.svc.sink == nil {
+		return
+	}
+	reason := a.estimateAnomalyReason(est, window)
+	if reason == "" {
+		return
+	}
+	topRole, topChars := "", 0
+	for _, msg := range req.Messages {
+		if n := len(msg.Content); n > topChars {
+			topChars, topRole = n, string(msg.Role)
+		}
+	}
+	_, calibrated := a.calibratedPromptTokens(shape)
+	detail := fmt.Sprintf("reason=%s est=%d window=%d obs=%d chars=%d cchars=%d cjk=%d cjkb=%d msgs=%d top_role=%s top_chars=%d cal=%t",
+		reason, est, window, a.lastAdmission().ObservedPrompt, shape.requestChars, shape.compactChars,
+		shape.cjkRunes, shape.cjkBytes, len(req.Messages), topRole, topChars, calibrated)
+	slog.Warn("agent: estimated prompt anomaly", "detail", detail)
+	a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Audience: event.NoticeAudienceOperator,
+		Text: "estimate telemetry", Detail: detail})
 }
 
 func (a *Agent) applyLimitMode(adm *contextAdmission, userMax int, policy provider.ContextBudgetPolicy, physical int) {

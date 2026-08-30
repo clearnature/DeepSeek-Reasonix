@@ -477,6 +477,33 @@ func TestSummarizeAcceptsLengthTruncation(t *testing.T) {
 	}
 }
 
+func TestEstimateAnomalyReason(t *testing.T) {
+	a := &Agent{}
+	a.storeAdmission(contextAdmission{ObservedPrompt: 100_000})
+	window := 1_048_576
+	cases := []struct {
+		name     string
+		est      int
+		want     string
+		observed int
+	}{
+		{"trustworthy", 50_000, "", 100_000},
+		{"overflow", 1_100_000, "overflow", 100_000},
+		{"inflated", 800_000, "inflated", 100_000},
+		{"no-observed-not-inflated", 800_000, "", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.observed != 100_000 {
+				a.storeAdmission(contextAdmission{ObservedPrompt: tc.observed})
+			}
+			if got := a.estimateAnomalyReason(tc.est, window); got != tc.want {
+				t.Fatalf("estimateAnomalyReason(%d, %d) = %q, want %q", tc.est, window, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSetSessionResetsPerTranscriptUsageState(t *testing.T) {
 	a := &Agent{}
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 200_000})
