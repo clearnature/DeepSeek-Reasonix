@@ -270,6 +270,12 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		}
 	}
 	a.sess.compactionState = st
+	// Lossless projection inverse: the sidecar preserved the parent process's
+	// last wire bytes; replay them as the frozen main-request prefix so the
+	// first post-resume compaction hits the provider-cached unit.
+	if len(st.LastWireMessages) > 0 {
+		a.sess.lastMainReq.Store(&st.LastWireMessages)
+	}
 	if valid {
 		a.sess.checkpointState = "restored"
 		if needsNormalization {
@@ -312,6 +318,7 @@ func (a *Agent) resetCompactionState() {
 	a.sess.compactionMu.Lock()
 	a.sess.compactionState = CompactionState{}
 	a.sess.checkpointState = "none"
+	a.sess.lastMainReq.Store(nil)
 	a.sess.compactionMu.Unlock()
 }
 
@@ -331,6 +338,7 @@ func (a *Agent) BindSessionPath(path string, loadSidecar bool) {
 	a.sess.compactionState = CompactionState{}
 	a.sess.checkpointState = "none"
 	a.sess.cacheState = CacheStateUnknown
+	a.sess.lastMainReq.Store(nil)
 	a.sess.compactionMu.Unlock()
 	a.sess.compaction.stuck = false
 	a.sess.compaction.stuckInputHash = ""

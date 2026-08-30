@@ -22,6 +22,32 @@ func modelInputMessages(msgs []provider.Message) []provider.Message {
 	return provider.ModelMessages(msgs)
 }
 
+// saveMainRequest freezes the exact messages a sampling request sends, so a
+// later summarizer can reuse that byte prefix instead of the live view (which
+// drifts after prune/projection updates). Deep-copied: the request payload is
+// frozen and must not alias session storage.
+func (a *Agent) saveMainRequest(msgs []provider.Message) {
+	cp := make([]provider.Message, len(msgs))
+	for i, m := range msgs {
+		cp[i] = m
+		cp[i].ToolCalls = append([]provider.ToolCall(nil), m.ToolCalls...)
+		cp[i].Images = append([]string(nil), m.Images...)
+		cp[i].ResponsesItems = append([]json.RawMessage(nil), m.ResponsesItems...)
+		cp[i].ServerSearch = append([]provider.ServerSearchCall(nil), m.ServerSearch...)
+	}
+	a.sess.lastMainReq.Store(&cp)
+}
+
+// savedMainRequest returns the frozen messages of the last sampling request,
+// or nil when none was sent in this process (fresh resume included).
+func (a *Agent) savedMainRequest() []provider.Message {
+	p := a.sess.lastMainReq.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
 // normalizeModelRequestMessages is shared by ordinary sampling and compaction
 // replay so their cacheable prefix has the same role projection and metadata
 // cleanup. Interceptors deliberately remain outside this helper.
@@ -114,11 +140,15 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		}
 		shape := a.requestCalibrationShape(rebuilt.req)
 		a.sess.output.activeReqShape.Store(&shape)
-		return samplingRequest{req: freezeProviderRequest(rebuilt.req)}, nil
+		wire := freezeProviderRequest(rebuilt.req)
+		a.saveMainRequest(wire.Messages)
+		return samplingRequest{req: wire}, nil
 	}
 	shape := a.requestCalibrationShape(frozen.req)
 	a.sess.output.activeReqShape.Store(&shape)
-	return samplingRequest{req: freezeProviderRequest(frozen.req)}, nil
+	wire := freezeProviderRequest(frozen.req)
+	a.saveMainRequest(wire.Messages)
+	return samplingRequest{req: wire}, nil
 }
 
 func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (samplingRequest, error) {

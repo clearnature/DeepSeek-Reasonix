@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"reasonix/internal/evidence"
+	"reasonix/internal/provider"
 )
 
 // sessionRuntime is the host state one conversation owns. Its lifetime sits
@@ -28,6 +29,13 @@ type sessionRuntime struct {
 	// lastWireFP: normalized bytes actually sent last request; vs the next
 	// wire fp it separates payload divergence from server-side expiry.
 	lastWireFP atomic.Pointer[string]
+
+	// lastMainReq freezes the last main (sampling) request's messages. The
+	// summarizer reuses this exact byte prefix so its request hits the unit
+	// the provider cached — the live view drifts after prune/projection
+	// updates and would otherwise miss everything past the system prefix
+	// (2026-08-31: hit=16896 of 51112 on a same-process manual compaction).
+	lastMainReq atomic.Pointer[[]provider.Message]
 
 	// compactionMu guards projection snapshots/install and the in-memory sidecar
 	// generation. Network summarization never runs while this lock is held.
@@ -70,6 +78,7 @@ func (r *sessionRuntime) reset(s *Session) {
 	r.output.reset()
 	r.missingReasoning = missingReasoningWatch{}
 	r.lastWireFP.Store(nil)
+	r.lastMainReq.Store(nil) // a new conversation starts with no sent prefix
 	r.compactionMu.Lock()
 	r.compactionState = CompactionState{} // lineage change; disk reloaded on Resume
 	r.cacheState = CacheStateUnknown

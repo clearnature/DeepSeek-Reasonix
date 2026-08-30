@@ -137,9 +137,15 @@ type CompactionState struct {
 	// NativeContextEditingAccepted latches the first successful native request.
 	// ContextEditingFallbackLocal persists the only allowed request-shape switch:
 	// an explicit unsupported response before that latch was set.
-	NativeContextEditingAccepted bool      `json:"native_context_editing_accepted,omitempty"`
-	ContextEditingFallbackLocal  bool      `json:"context_editing_fallback_local,omitempty"`
-	UpdatedAt                    time.Time `json:"updated_at"`
+	NativeContextEditingAccepted bool `json:"native_context_editing_accepted,omitempty"`
+	ContextEditingFallbackLocal  bool `json:"context_editing_fallback_local,omitempty"`
+	// LastWireMessages is the lossless inverse of the compaction projection:
+	// the exact messages the last main request sent before this checkpoint.
+	// After resume the summarizer replays them, so its request byte-matches
+	// the provider-cached unit the parent process wrote instead of missing
+	// past the system prefix (project + reconstruct = identity, CRT-style).
+	LastWireMessages []provider.Message `json:"last_wire_messages,omitempty"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 // CompactionTelemetry is the structured observability record for one

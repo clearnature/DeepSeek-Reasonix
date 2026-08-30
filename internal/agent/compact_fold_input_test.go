@@ -411,14 +411,11 @@ func TestSummaryRequestPrefixMatchesOrdinaryRequestBytes(t *testing.T) {
 	summary := a.summaryRequest(msgs[0:head], msgs[head:], "").Messages
 	// Both end with the compaction instruction; the shared prefix must match
 	// up to the start of the instruction.
-	prefix := len(summary) - 1
-	if prefix > len(ordinary) {
-		prefix = len(ordinary)
-	}
+	prefix := min(len(summary)-1, len(ordinary))
 	if prefix != len(ordinary) {
 		t.Fatalf("ordinary messages = %d, summary prefix = %d (want ordinary fully reproduced)", len(ordinary), prefix)
 	}
-	for i := 0; i < prefix; i++ {
+	for i := range prefix {
 		o, s := ordinary[i], summary[i]
 		if o.Role != s.Role || o.Content != s.Content || o.ToolCallID != s.ToolCallID {
 			t.Fatalf("byte divergence at message %d: ordinary (%s %q tc=%s) vs summary (%s %q tc=%s)", i, o.Role, o.Content, o.ToolCallID, s.Role, s.Content, s.ToolCallID)
@@ -426,5 +423,35 @@ func TestSummaryRequestPrefixMatchesOrdinaryRequestBytes(t *testing.T) {
 		if len(o.ToolCalls) != len(s.ToolCalls) {
 			t.Fatalf("tool-call count divergence at message %d: %d vs %d", i, len(o.ToolCalls), len(s.ToolCalls))
 		}
+	}
+}
+
+func TestPlanFoldRegionResumeFirstAlignsToFullCanonicalView(t *testing.T) {
+	// DeepSeek caches only complete prefix units (request-input end-aligned):
+	// a resume-first compaction's budget-cropped fold end has never been sent,
+	// so the summary request misses everything past the system public prefix
+	// (2026-08-31 00:26:19: hit=16896 of 86355). After a resume the fold end
+	// must align to the full canonical view to byte-match the parent process's
+	// last request, which wrote a fresh cache unit before shutdown.
+	prov := &countingProvider{reply: "digest"}
+	a := newFoldAgent(t, 200000, prov)
+	msgs := foldOfToolResults(50, 300) // ~113k tokens, tail budget ~32k
+	head, start, ok := a.planFoldRegion(msgs, false)
+	if !ok || head >= start {
+		t.Fatalf("planFoldRegion ok=%v head=%d start=%d", ok, head, start)
+	}
+	if start == len(msgs) {
+		t.Fatalf("non-resume fold end = %d, want budget-cropped (< %d)", start, len(msgs))
+	}
+	a.sess.checkpointState = "restored"
+	head, start, ok = a.planFoldRegion(msgs, false)
+	if !ok {
+		t.Fatalf("planFoldRegion(resume) ok=%v", ok)
+	}
+	if start != len(msgs) {
+		t.Fatalf("resume-first fold end = %d, want %d (full canonical view)", start, len(msgs))
+	}
+	if head != a.pinnedPrefixLen(msgs) {
+		t.Fatalf("head = %d, want pinned prefix %d", head, a.pinnedPrefixLen(msgs))
 	}
 }

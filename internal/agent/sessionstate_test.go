@@ -20,6 +20,7 @@ var sessionReset = map[string]bool{
 	"cacheMiss":        true,
 	"missingReasoning": true,
 	"lastWireFP":       true, // per-conversation; a stale wire fp would misread the next prefix
+	"lastMainReq":      true, // per-conversation; a new conversation has sent nothing
 	"compactionMu":     true,
 	"compactionState":  true,
 	"cacheState":       true,

@@ -524,7 +524,19 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
 		inputMode = SummaryInputExtensionRewritten
 	}
-	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, msgs[0:head], fold, instructions, sourceTokens, inputMode)
+	summaryPrefix, foldExtra, foldAnchors := a.summaryFoldPlan(msgs, head, start)
+	if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
+		// An extension rewrote the fold: the rewritten bytes must be sent and
+		// read literally — anchor locating inside the frozen prefix would
+		// summarize the pre-rewrite text. Quality wins over cache here.
+		summaryPrefix = msgs[:head]
+		foldExtra = fold
+		foldAnchors = ""
+	}
+	if foldAnchors != "" {
+		instructions += foldAnchors
+	}
+	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, summaryPrefix, foldExtra, instructions, sourceTokens, inputMode)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
@@ -561,6 +573,10 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		generation: startGeneration, activeTurn: activeTurn, trigger: trigger,
 		summary: summary, inputHash: viewInputHash, outputHash: viewOutputHash,
 		sourceTokens: sourceTokens, projectionTokens: projTokens, covered: covered,
+		// Persist the wire form (normalized): a resumed process re-normalizes
+		// the restored bytes inside summaryRequest, so they must already match
+		// what this request actually sent — the raw view would diverge.
+		wirePrefix: a.normalizeModelRequestMessages(summaryPrefix),
 	})
 	if err != nil {
 		a.emitCompactionAborted(trigger)
@@ -626,10 +642,135 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force bool) (head, start
 	if !ok {
 		return head, start, false
 	}
+	// Resume-first fold: this process has no frozen main-request bytes, so
+	// the summarizer prefix cannot hit the parent's cached unit and only the
+	// system prefix survives (2026-08-31 00:26:19: hit=16896 of 86355).
+	// Aligning the fold end to the full view keeps the fold maximal; the
+	// next in-process compaction aligns to a fresh unit instead.
+	if a.sess.checkpointState == "restored" {
+		start = len(msgs)
+	}
 	if active := a.activeTurnStart(msgs); active >= head && active < start {
 		start = active
 	}
 	return head, start, start > head
+}
+
+// summaryFoldPlan splits the summarizer request into the byte prefix that
+// matches the provider-cached unit and the extra messages that must be sent.
+// With frozen main-request bytes, the whole main request is the prefix (it is
+// the unit the server cached) and the fold is NOT re-sent — the fold segment
+// already lives inside that prefix, so the instruction locates it by verbatim
+// anchor excerpts instead. A fresh resume has no frozen bytes, but the live
+// view still byte-matches the parent process's last request while the cache
+// is warm — replaying the whole view + tail instruction is the C1 shape
+// (warm replay, not new bytes). Only an over-window view falls back to the
+// old cropped shape. The second return is the fold tail that extends beyond
+// the prefix; anchors describe the fold region for the summarizer instruction.
+func (a *Agent) summaryFoldPlan(msgs []provider.Message, head, start int) (prefix, extra []provider.Message, anchors string) {
+	fold := msgs[head:start]
+	if saved := a.savedMainRequest(); len(saved) > 0 {
+		region := fold
+		if start > len(saved) {
+			extra = msgs[max(head, len(saved)):start]
+			region = append(append([]provider.Message(nil), fold...), extra...)
+		}
+		return saved, extra, foldAnchorInstruction(region)
+	}
+	if a.summaryViewReplayFits(msgs) {
+		return msgs, nil, foldAnchorInstruction(fold)
+	}
+	return msgs[:head], msgs[head:start], ""
+}
+
+// summaryMaxPromptTokens is the admissible summarizer input ceiling, shared by
+// planning (maximumSafeSummaryPrefixEnd), the replay-fits check, and send-time
+// admission so a planned request is never rejected after selection.
+func (a *Agent) summaryMaxPromptTokens() int {
+	window := a.effectiveContextWindow()
+	if window <= 0 {
+		return 0
+	}
+	policy := contextBudgetPolicyOf(a.svc.prov)
+	if policy.WindowMode == provider.ContextWindowUnknown {
+		// A learned overflow makes an unknown gateway shared-window. Otherwise
+		// preserve the request because the configured window may be an estimate.
+		if a.lastAdmission().ObservedWindow <= 0 {
+			return a.hardInputCeiling()
+		}
+		policy.WindowMode = provider.ContextWindowShared
+	}
+	if policy.WindowMode == provider.ContextWindowShared {
+		return window - outputBudgetReserve - 256
+	}
+	return a.hardInputCeiling()
+}
+
+// summaryViewReplayFits reports whether the whole live view can be replayed
+// as the summarizer prefix (view + instruction within the admissible input
+// ceiling). Over-ceiling views must crop instead, at the cost of the prefix
+// cache match.
+func (a *Agent) summaryViewReplayFits(msgs []provider.Message) bool {
+	maxPromptTokens := a.summaryMaxPromptTokens()
+	if maxPromptTokens <= 0 {
+		return true
+	}
+	return a.estimatedRequestTokens(a.summaryRequest(msgs, nil, "")) <= maxPromptTokens
+}
+
+// foldAnchorInstruction names the fold region by verbatim excerpts so the
+// summarizer can locate it inside the already-sent main-request bytes. The end
+// excerpt is taken from the whole region (fold + extras) so new turns beyond
+// the frozen prefix stay inside the summarized range.
+func foldAnchorInstruction(region []provider.Message) string {
+	startAnchor, endAnchor := "", ""
+	for _, m := range region {
+		if text := strings.TrimSpace(m.Content); text != "" {
+			if startAnchor == "" {
+				startAnchor = foldAnchor(text)
+			}
+			endAnchor = foldAnchor(text)
+		}
+	}
+	if startAnchor == "" {
+		return ""
+	}
+	return fmt.Sprintf("\n\nThe conversation above contains a segment to summarize. It starts with the excerpt %q and ends with the excerpt %q (both appear verbatim in the conversation above). Summarize ONLY that segment; leave everything else untouched.", startAnchor, endAnchor)
+}
+
+// foldAnchor truncates a message's content to a stable locating excerpt.
+func foldAnchor(text string) string {
+	const maxAnchor = 160
+	if len(text) <= maxAnchor {
+		return text
+	}
+	return text[:maxAnchor]
+}
+
+// summaryFoldEstimate builds the same request shape summaryFoldPlan would
+// produce for a candidate fold end, for budget checks (see
+// maximumSafeSummaryPrefixEnd). With frozen main-request bytes the whole saved
+// request is the prefix; otherwise the whole view replays when it fits.
+func (a *Agent) summaryFoldEstimate(msgs []provider.Message, head, candidate int, instructions string) provider.Request {
+	if saved := a.savedMainRequest(); len(saved) > 0 {
+		var extra []provider.Message
+		if start := max(head, len(saved)); start < candidate && candidate <= len(msgs) {
+			extra = msgs[start:candidate]
+		}
+		anchors := ""
+		if region := msgs[head:candidate]; len(region) > 0 && candidate <= len(msgs) {
+			anchors = foldAnchorInstruction(append(append([]provider.Message(nil), region...), extra...))
+		}
+		return a.summaryRequest(saved, extra, instructions+anchors)
+	}
+	if a.summaryViewReplayFits(msgs) {
+		anchors := ""
+		if region := msgs[head:candidate]; len(region) > 0 {
+			anchors = foldAnchorInstruction(region)
+		}
+		return a.summaryRequest(msgs, nil, instructions+anchors)
+	}
+	return a.summaryRequest(msgs[:head], msgs[head:candidate], instructions)
 }
 
 // maximumSafeSummaryPrefixEnd returns the largest balanced contiguous prefix
@@ -649,16 +790,13 @@ func (a *Agent) maximumSafeSummaryPrefixEnd(msgs []provider.Message, head, end i
 		}
 		policy.WindowMode = provider.ContextWindowShared
 	}
-	maxPromptTokens := a.hardInputCeiling()
-	if policy.WindowMode == provider.ContextWindowShared {
-		maxPromptTokens = window - outputBudgetReserve - 256
-	}
+	maxPromptTokens := a.summaryMaxPromptTokens()
 	// The fold is a canonical subset the server already accepted this session
 	// (ObservedPrompt), so folding all at once cannot overflow; the estimate is
 	// inflated for replayed history. Without an observed ceiling, truncation stands.
 	if obs := a.lastAdmission().ObservedPrompt; obs > maxPromptTokens {
 		maxPromptTokens = obs
-		if all := a.estimatedRequestTokens(a.summaryRequest(msgs[0:head], msgs[head:end], instructions)); all > maxPromptTokens {
+		if all := a.estimatedRequestTokens(a.summaryFoldEstimate(msgs, head, end, instructions)); all > maxPromptTokens {
 			maxPromptTokens = all
 		}
 	}
@@ -666,7 +804,7 @@ func (a *Agent) maximumSafeSummaryPrefixEnd(msgs []provider.Message, head, end i
 		return head
 	}
 	fits := func(candidate int) bool {
-		request := a.summaryRequest(msgs[0:head], msgs[head:candidate], instructions)
+		request := a.summaryFoldEstimate(msgs, head, candidate, instructions)
 		return a.estimatedRequestTokens(request) <= maxPromptTokens
 	}
 	if fits(end) {
