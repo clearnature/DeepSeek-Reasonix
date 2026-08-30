@@ -336,6 +336,35 @@ func TestSummaryRequestForcesNoReasoningEffort(t *testing.T) {
 	}
 }
 
+type compactionBudgetProvider struct {
+	provider.Provider
+	budget int
+}
+
+func (p compactionBudgetProvider) CompactionOutputTokens() int { return p.budget }
+
+func TestSummaryOutputBudgetUsesVendorCompactionTokens(t *testing.T) {
+	a := &Agent{}
+	if got := a.summaryOutputBudget(); got != summaryOutputMaxTokens {
+		t.Fatalf("default budget = %d, want %d", got, summaryOutputMaxTokens)
+	}
+	a.svc.prov = compactionBudgetProvider{budget: 16384}
+	if got := a.summaryOutputBudget(); got != 16384 {
+		t.Fatalf("vendor budget = %d, want 16384", got)
+	}
+}
+
+func TestForkCaptureProviderPassesCompactionBudget(t *testing.T) {
+	f := &forkCaptureProvider{inner: compactionBudgetProvider{budget: 16384}}
+	if got := f.CompactionOutputTokens(); got != 16384 {
+		t.Fatalf("fork CompactionOutputTokens = %d, want 16384", got)
+	}
+	f = &forkCaptureProvider{inner: compactionBudgetProvider{}}
+	if got := f.CompactionOutputTokens(); got != 0 {
+		t.Fatalf("non-provider inner = %d, want 0", got)
+	}
+}
+
 func TestCompactToProjectionTrimsOversizedFoldEvenWithoutMustFree(t *testing.T) {
 	// Regression for the manual-compaction 400: compactToProjection with
 	// mustFree=false (the pre-fix manual-trigger path) must still bound the

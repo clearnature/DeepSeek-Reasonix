@@ -163,7 +163,7 @@ func New(cfg Config) provider.Provider {
 		baseURL: baseURL, requestURL: requestURL, model: cfg.Model, effort: cfg.Effort,
 		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache, webSearch: cfg.WebSearch, maxOutputTokens: maxOutputTokens,
 		vision: vision,
-		http:   httpClient, idleTimeout: defaultStreamIdleTimeout,
+		http:   httpClient, idleTimeout: cap.streamIdleTimeout, // 0 = readStream falls back to default
 	}
 }
 
@@ -259,20 +259,9 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	messages := provider.SanitizeToolPairing(provider.ModelMessages(req.Messages))
 	body := map[string]any{"model": c.model, "stream": true}
 
-	effort := requestEffort(req, c.effort)
-	if c.vendor == "deepseek" && (strings.EqualFold(strings.TrimSpace(c.model), "deepseek-v4-flash") || strings.EqualFold(strings.TrimSpace(c.model), "deepseek-v4-pro")) {
-		if effort == "medium" || effort == "xhigh" {
-			effort = "high"
-		}
-	}
-	switch effort {
-	case "auto":
-		effort = ""
-	case "disabled", "off":
-		effort = "none"
-	}
-	if effort != "" {
-		body["reasoning"] = map[string]any{"effort": effort}
+	effort := normalizeEffort(requestEffort(req, c.effort), c.model)
+	if reasoning := reasoningBody(effort, c.caps.summaryMode); reasoning != nil {
+		body["reasoning"] = reasoning
 	}
 	maxOutputTokens := req.MaxTokens
 	if maxOutputTokens == 0 {

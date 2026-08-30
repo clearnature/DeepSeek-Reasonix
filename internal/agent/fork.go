@@ -88,6 +88,13 @@ func (p *forkCaptureProvider) Name() string { return p.inner.Name() }
 
 func (p *forkCaptureProvider) OutputBudget() int { return outputBudgetOf(p.inner) }
 
+func (p *forkCaptureProvider) CompactionOutputTokens() int {
+	if q, ok := p.inner.(provider.CompactionOutputTokensProvider); ok {
+		return q.CompactionOutputTokens()
+	}
+	return 0
+}
+
 func (p *forkCaptureProvider) SharesContextWindow() bool { return sharesContextWindow(p.inner) }
 
 func (p *forkCaptureProvider) ContextBudgetPolicy() provider.ContextBudgetPolicy {

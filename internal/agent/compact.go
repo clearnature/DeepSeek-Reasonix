@@ -394,10 +394,24 @@ func (a *Agent) summaryRequest(region []provider.Message, instructions string) p
 	return provider.Request{
 		Messages:       messages,
 		Tools:          schemas,
-		MaxTokens:      summaryOutputMaxTokens,
+		MaxTokens:      a.summaryOutputBudget(),
 		Temperature:    provider.OptionalTemperature(a.temperature),
-		EffortOverride: "none", // 摘要必须无推理：effort 继承会让 thinking 挤占 8192 输出预算致压缩失败
+		EffortOverride: "none", // 摘要必须无推理：effort 继承会让 thinking 挤占输出预算致压缩失败
 	}
+}
+
+// summaryOutputBudget sizes the digest request: the vendor's dedicated
+// compaction budget wins (deepseek 16K, dashscope 8192, mimo 4096), otherwise
+// the default applies.
+func (a *Agent) summaryOutputBudget() int {
+	if a != nil && a.svc.prov != nil {
+		if p, ok := a.svc.prov.(provider.CompactionOutputTokensProvider); ok {
+			if v := p.CompactionOutputTokens(); v > 0 {
+				return v
+			}
+		}
+	}
+	return summaryOutputMaxTokens
 }
 
 // summarize asks the executor's own provider to distill a replayed prefix into
@@ -418,8 +432,8 @@ func (a *Agent) summarize(ctx context.Context, region []provider.Message, instru
 	if err := a.applyAdmissionToRequest(&req); err != nil {
 		return "", usage, err
 	}
-	if req.MaxTokens > summaryOutputMaxTokens {
-		req.MaxTokens = summaryOutputMaxTokens
+	if req.MaxTokens > a.summaryOutputBudget() {
+		req.MaxTokens = a.summaryOutputBudget()
 	}
 	if req.MaxTokens < 256 {
 		return "", usage, fmt.Errorf("summary output budget too small (%d tokens)", req.MaxTokens)
