@@ -29,14 +29,16 @@ type fakeProvider struct {
 	reply        string
 	promptTokens int
 	got          []provider.Message
-	streamErr    error // when set, Stream emits a ChunkError instead of the reply
-	hang         bool  // when true, Stream returns a channel that never sends or closes
+	reqs         []provider.Request // full request surface, incl. Tools
+	streamErr    error              // when set, Stream emits a ChunkError instead of the reply
+	hang         bool               // when true, Stream returns a channel that never sends or closes
 }
 
 func (f *fakeProvider) Name() string { return "fake" }
 
 func (f *fakeProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	f.got = req.Messages
+	f.reqs = append(f.reqs, req)
 	if f.hang {
 		return make(chan provider.Chunk), nil
 	}

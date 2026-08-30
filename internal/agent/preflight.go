@@ -274,7 +274,7 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	// last wire bytes; replay them as the frozen main-request prefix so the
 	// first post-resume compaction hits the provider-cached unit.
 	if len(st.LastWireMessages) > 0 {
-		a.sess.lastMainReq.Store(&st.LastWireMessages)
+		a.sess.lastMainReq.Store(&mainRequestBytes{messages: st.LastWireMessages, tools: st.LastWireTools})
 	}
 	if valid {
 		a.sess.checkpointState = "restored"

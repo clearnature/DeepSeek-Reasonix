@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -145,7 +146,12 @@ type CompactionState struct {
 	// the provider-cached unit the parent process wrote instead of missing
 	// past the system prefix (project + reconstruct = identity, CRT-style).
 	LastWireMessages []provider.Message `json:"last_wire_messages,omitempty"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	// LastWireTools is the tool-schema half of the same cached unit: the
+	// server caches system+tools+messages as one prefix, and the live tool
+	// set drifts (MCP registration) between requests, so the frozen tools
+	// must persist next to the frozen messages.
+	LastWireTools []provider.ToolSchema `json:"last_wire_tools,omitempty"`
+	UpdatedAt     time.Time             `json:"updated_at"`
 }
 
 // CompactionTelemetry is the structured observability record for one
@@ -203,6 +209,11 @@ func LoadCompactionState(sessionPath string) (CompactionState, bool, error) {
 	if st.SchemaVersion == 0 {
 		st.SchemaVersion = compactionStateSchemaV1
 	}
+	// The sidecar is written pretty-printed; RawMessage fields inside the
+	// frozen wire bytes would carry that indentation and diverge from the
+	// bytes the main request actually sent. Re-compact them so a resumed
+	// process replays the provider-cached unit byte-exact.
+	compactSidecarRawMessages(&st)
 	return st, true, nil
 }
 
@@ -234,12 +245,46 @@ func SaveCompactionState(sessionPath string, st CompactionState) error {
 		st.BlockedInputHash = ""
 		st.BlockedReason = ""
 	}
+	// Pretty-printing the outer structure must not rewrite RawMessage bytes
+	// inside the frozen wire form: they are part of the provider-cached
+	// prefix and must survive the round trip byte-exact.
+	compactSidecarRawMessages(&st)
 	b, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
 	b = append(b, '\n')
 	return fileutil.AtomicWriteFileStrict(path, b, 0o644)
+}
+
+// compactSidecarRawMessages rewrites json.RawMessage fields inside the frozen
+// wire bytes (tool parameters, Responses API items, server-search payloads) to
+// their compact form. MarshalIndent pretty-prints raw messages, so without
+// this a sidecar round trip would replay tool schemas that no longer
+// byte-match the main request's cached prefix. Idempotent for already-compact
+// input.
+func compactSidecarRawMessages(st *CompactionState) {
+	compact := func(raw json.RawMessage) json.RawMessage {
+		if len(raw) == 0 {
+			return raw
+		}
+		var buf bytes.Buffer
+		if err := json.Compact(&buf, raw); err != nil {
+			return raw
+		}
+		return append(json.RawMessage(nil), buf.Bytes()...)
+	}
+	for i := range st.LastWireMessages {
+		for j := range st.LastWireMessages[i].ResponsesItems {
+			st.LastWireMessages[i].ResponsesItems[j] = compact(st.LastWireMessages[i].ResponsesItems[j])
+		}
+		for j := range st.LastWireMessages[i].ServerSearch {
+			st.LastWireMessages[i].ServerSearch[j].Raw = compact(st.LastWireMessages[i].ServerSearch[j].Raw)
+		}
+	}
+	for i := range st.LastWireTools {
+		st.LastWireTools[i].Parameters = compact(st.LastWireTools[i].Parameters)
+	}
 }
 
 // RemoveCompactionState deletes a corrupt or invalidated projection sidecar.

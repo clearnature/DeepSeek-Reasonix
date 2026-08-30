@@ -374,6 +374,19 @@ func compactionInstructionWithFocus(instructions string) string {
 	return instruction
 }
 
+// summaryRequestToolsForCommit returns the tool schemas the summary request
+// actually sends for the given prefix, mirroring summaryRequest's choice so
+// the persisted sidecar bytes match what hit the provider.
+func (a *Agent) summaryRequestToolsForCommit(prefix []provider.Message) []provider.ToolSchema {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
+		return saved.tools
+	}
+	if a.svc.tools != nil {
+		return a.providerToolSchemas()
+	}
+	return nil
+}
+
 // summaryRequest builds the exact cache-aligned request shape used by
 // summarize: the verbatim head (already in the provider's prefix cache from
 // ordinary requests) precedes the fold region so the fold lands at the same
@@ -391,7 +404,13 @@ func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions s
 	messages := a.normalizeModelRequestMessages(msgs)
 	messages = append(messages, provider.Message{Role: provider.RoleUser, Content: compactionInstructionWithFocus(instructions)})
 	var schemas []provider.ToolSchema
-	if a.svc.tools != nil {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
+		// The prefix replays the frozen main-request bytes, so the tools must
+		// be the frozen ones too: the server caches system+tools+messages as
+		// one unit, and the live tool set drifts (MCP registration) between
+		// the main request and the summary request.
+		schemas = saved.tools
+	} else if a.svc.tools != nil {
 		schemas = a.providerToolSchemas()
 	}
 	return provider.Request{

@@ -22,6 +22,10 @@ type summaryProjectionCommit struct {
 	// (the provider-cached unit it replayed). Persisted as the lossless
 	// projection inverse so a resumed process replays the same bytes.
 	wirePrefix []provider.Message
+	// wireTools is the tool-schema half of the same cached unit; without it a
+	// resumed process replays the frozen messages against the live tool set
+	// and misses past the system prefix (2026-08-31 desktop).
+	wireTools []provider.ToolSchema
 }
 
 // commitSummaryProjection CAS-installs a checkpoint under compactionMu:
@@ -91,5 +95,6 @@ func (a *Agent) summaryProjectionState(commit summaryProjectionCommit) Compactio
 		// can replay the same bytes instead of paying a full-price first
 		// compaction (project + reconstruct = identity, CRT-style).
 		LastWireMessages: commit.wirePrefix,
+		LastWireTools:    commit.wireTools,
 	}
 }

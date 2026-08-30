@@ -22,11 +22,12 @@ func modelInputMessages(msgs []provider.Message) []provider.Message {
 	return provider.ModelMessages(msgs)
 }
 
-// saveMainRequest freezes the exact messages a sampling request sends, so a
-// later summarizer can reuse that byte prefix instead of the live view (which
-// drifts after prune/projection updates). Deep-copied: the request payload is
-// frozen and must not alias session storage.
-func (a *Agent) saveMainRequest(msgs []provider.Message) {
+// saveMainRequest freezes the exact messages AND tool schemas a sampling
+// request sends, so a later summarizer can reuse that byte prefix instead of
+// the live view (which drifts after prune/projection updates) or the live
+// tool set (which grows as MCP servers finish registering). Deep-copied: the
+// request payload is frozen and must not alias session storage.
+func (a *Agent) saveMainRequest(msgs []provider.Message, tools []provider.ToolSchema) {
 	cp := make([]provider.Message, len(msgs))
 	for i, m := range msgs {
 		cp[i] = m
@@ -35,17 +36,27 @@ func (a *Agent) saveMainRequest(msgs []provider.Message) {
 		cp[i].ResponsesItems = append([]json.RawMessage(nil), m.ResponsesItems...)
 		cp[i].ServerSearch = append([]provider.ServerSearchCall(nil), m.ServerSearch...)
 	}
-	a.sess.lastMainReq.Store(&cp)
+	var toolCP []provider.ToolSchema
+	if len(tools) > 0 {
+		toolCP = make([]provider.ToolSchema, len(tools))
+		for i, s := range tools {
+			toolCP[i] = s
+			if len(s.Parameters) > 0 {
+				toolCP[i].Parameters = append(json.RawMessage(nil), s.Parameters...)
+			}
+		}
+	}
+	a.sess.lastMainReq.Store(&mainRequestBytes{messages: cp, tools: toolCP})
 }
 
-// savedMainRequest returns the frozen messages of the last sampling request,
-// or nil when none was sent in this process (fresh resume included).
-func (a *Agent) savedMainRequest() []provider.Message {
+// savedMainRequest returns the frozen bytes of the last sampling request, or
+// nil when none was sent in this process (fresh resume included).
+func (a *Agent) savedMainRequest() *mainRequestBytes {
 	p := a.sess.lastMainReq.Load()
 	if p == nil {
 		return nil
 	}
-	return *p
+	return p
 }
 
 // normalizeModelRequestMessages is shared by ordinary sampling and compaction
@@ -141,13 +152,13 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		shape := a.requestCalibrationShape(rebuilt.req)
 		a.sess.output.activeReqShape.Store(&shape)
 		wire := freezeProviderRequest(rebuilt.req)
-		a.saveMainRequest(wire.Messages)
+		a.saveMainRequest(wire.Messages, wire.Tools)
 		return samplingRequest{req: wire}, nil
 	}
 	shape := a.requestCalibrationShape(frozen.req)
 	a.sess.output.activeReqShape.Store(&shape)
 	wire := freezeProviderRequest(frozen.req)
-	a.saveMainRequest(wire.Messages)
+	a.saveMainRequest(wire.Messages, wire.Tools)
 	return samplingRequest{req: wire}, nil
 }
 

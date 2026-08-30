@@ -13,6 +13,15 @@ import (
 // reset restarts everything here that belongs to it. Atomics and mutexes make
 // the whole-value assignment taskRuntime uses illegal, so the "no field is
 // forgotten" property is enforced by sessionstate_test.go instead.
+// mainRequestBytes freezes the exact provider-visible byte unit of the last
+// sampling request. The server caches system+tools+messages as one prefix, so
+// the summarizer replays all three to hit the cached unit; messages alone
+// leaves the tools seam unaligned whenever the live tool set changes.
+type mainRequestBytes struct {
+	messages []provider.Message
+	tools    []provider.ToolSchema
+}
+
 type sessionRuntime struct {
 	mu           sync.Mutex // guards conversation for external Session()/SetSession
 	conversation *Session
@@ -30,12 +39,13 @@ type sessionRuntime struct {
 	// wire fp it separates payload divergence from server-side expiry.
 	lastWireFP atomic.Pointer[string]
 
-	// lastMainReq freezes the last main (sampling) request's messages. The
-	// summarizer reuses this exact byte prefix so its request hits the unit
-	// the provider cached — the live view drifts after prune/projection
-	// updates and would otherwise miss everything past the system prefix
-	// (2026-08-31: hit=16896 of 51112 on a same-process manual compaction).
-	lastMainReq atomic.Pointer[[]provider.Message]
+	// lastMainReq freezes the last main (sampling) request's provider-visible
+	// unit — messages AND tool schemas. The server caches system+tools+messages
+	// as one prefix, so the summarizer must replay all three; freezing only
+	// messages left the tools seam unaligned when the live tool set changed
+	// (MCP registration, interceptors) and every summary missed past the
+	// system prefix (2026-08-31: hit=16896 of 256122 on desktop).
+	lastMainReq atomic.Pointer[mainRequestBytes]
 
 	// compactionMu guards projection snapshots/install and the in-memory sidecar
 	// generation. Network summarization never runs while this lock is held.

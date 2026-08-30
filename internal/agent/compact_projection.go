@@ -575,8 +575,10 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		sourceTokens: sourceTokens, projectionTokens: projTokens, covered: covered,
 		// Persist the wire form (normalized): a resumed process re-normalizes
 		// the restored bytes inside summaryRequest, so they must already match
-		// what this request actually sent — the raw view would diverge.
+		// what this request actually sent — the raw view would diverge. The
+		// tools ride along as the same cached unit (system+tools+messages).
 		wirePrefix: a.normalizeModelRequestMessages(summaryPrefix),
+		wireTools:  a.summaryRequestToolsForCommit(summaryPrefix),
 	})
 	if err != nil {
 		a.emitCompactionAborted(trigger)
@@ -669,13 +671,13 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force bool) (head, start
 // the prefix; anchors describe the fold region for the summarizer instruction.
 func (a *Agent) summaryFoldPlan(msgs []provider.Message, head, start int) (prefix, extra []provider.Message, anchors string) {
 	fold := msgs[head:start]
-	if saved := a.savedMainRequest(); len(saved) > 0 {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
 		region := fold
-		if start > len(saved) {
-			extra = msgs[max(head, len(saved)):start]
+		if start > len(saved.messages) {
+			extra = msgs[max(head, len(saved.messages)):start]
 			region = append(append([]provider.Message(nil), fold...), extra...)
 		}
-		return saved, extra, foldAnchorInstruction(region)
+		return saved.messages, extra, foldAnchorInstruction(region)
 	}
 	if a.summaryViewReplayFits(msgs) {
 		return msgs, nil, foldAnchorInstruction(fold)
@@ -752,16 +754,16 @@ func foldAnchor(text string) string {
 // maximumSafeSummaryPrefixEnd). With frozen main-request bytes the whole saved
 // request is the prefix; otherwise the whole view replays when it fits.
 func (a *Agent) summaryFoldEstimate(msgs []provider.Message, head, candidate int, instructions string) provider.Request {
-	if saved := a.savedMainRequest(); len(saved) > 0 {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
 		var extra []provider.Message
-		if start := max(head, len(saved)); start < candidate && candidate <= len(msgs) {
+		if start := max(head, len(saved.messages)); start < candidate && candidate <= len(msgs) {
 			extra = msgs[start:candidate]
 		}
 		anchors := ""
 		if region := msgs[head:candidate]; len(region) > 0 && candidate <= len(msgs) {
 			anchors = foldAnchorInstruction(append(append([]provider.Message(nil), region...), extra...))
 		}
-		return a.summaryRequest(saved, extra, instructions+anchors)
+		return a.summaryRequest(saved.messages, extra, instructions+anchors)
 	}
 	if a.summaryViewReplayFits(msgs) {
 		anchors := ""

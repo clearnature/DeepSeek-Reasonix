@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestSummaryFoldPlanReusesFullMainRequestBytes(t *testing.T) {
 		{Role: provider.RoleAssistant, Content: "assistant two"},
 		{Role: provider.RoleUser, Content: "user three"},
 	}
-	a.saveMainRequest(mainReq)
+	a.saveMainRequest(mainReq, nil)
 
 	// Live view drifted: a projection update rewrote the middle; two new
 	// turns were appended beyond the frozen bytes.
@@ -100,7 +101,7 @@ func TestSummaryFoldPlanExtendsBeyondFrozenBytes(t *testing.T) {
 		{Role: provider.RoleUser, Content: "u1"},
 		{Role: provider.RoleAssistant, Content: "a1"},
 		{Role: provider.RoleUser, Content: "u2"},
-	})
+	}, nil)
 	view := []provider.Message{
 		{Role: provider.RoleSystem, Content: "system"},
 		{Role: provider.RoleUser, Content: "u1"},
@@ -156,7 +157,7 @@ func TestSummaryFoldEstimateClampsBeyondSaved(t *testing.T) {
 		{Role: provider.RoleSystem, Content: "system"},
 		{Role: provider.RoleUser, Content: "u1"},
 		{Role: provider.RoleAssistant, Content: "a1"},
-	})
+	}, nil)
 	view := []provider.Message{
 		{Role: provider.RoleSystem, Content: "system"},
 		{Role: provider.RoleUser, Content: "u1"},
@@ -217,7 +218,11 @@ func TestCompactionRequestPrefixMatchesLastMainRequest(t *testing.T) {
 	// 1. Main request: freeze the wire bytes exactly as prepareSamplingRequest
 	// does (normalized view, LocalOnly stripped: 9 -> 8 wire messages).
 	mainReq := a.normalizeModelRequestMessages(sess.Messages)
-	a.saveMainRequest(mainReq)
+	frozenTools := []provider.ToolSchema{
+		{Name: "search", Description: "search the web", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "read", Description: "read a file", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	a.saveMainRequest(mainReq, frozenTools)
 
 	// 2. Live view drifts after the main request (projection/prune rewrite).
 	sess.Messages[4] = provider.Message{Role: provider.RoleAssistant, Content: strings.Repeat("b ", 2000) + " [pruned]"}
@@ -232,16 +237,33 @@ func TestCompactionRequestPrefixMatchesLastMainRequest(t *testing.T) {
 	// The summary request prefix must be the ENTIRE frozen main request (the
 	// provider-cached unit), byte-exact, with the drifted view only feeding
 	// the anchor instruction — never the request bytes.
-	prefix := a.savedMainRequest()
-	if len(prefix) == 0 {
+	saved := a.savedMainRequest()
+	if saved == nil || len(saved.messages) == 0 {
 		t.Fatal("main request bytes were not saved")
 	}
+	prefix := saved.messages
 	if len(sent) != len(prefix)+1 {
 		t.Fatalf("summary request = %d messages, want frozen main request (%d) + instruction (1)", len(sent), len(prefix))
 	}
 	for i := range prefix {
 		if sent[i].Role != prefix[i].Role || sent[i].Content != prefix[i].Content {
 			t.Fatalf("summary prefix diverges from main-request bytes at %d:\n sent=%+v\n main=%+v", i, sent[i], prefix[i])
+		}
+	}
+	// The summary request must send the FROZEN tool schemas, not the live
+	// registry: the server caches system+tools+messages as one unit, and the
+	// live tool set can grow (MCP registration) after the main request.
+	if len(prov.reqs) == 0 {
+		t.Fatal("no provider request captured")
+	}
+	lastReq := prov.reqs[len(prov.reqs)-1]
+	if len(lastReq.Tools) != len(frozenTools) {
+		t.Fatalf("summary tools = %d, want frozen %d", len(lastReq.Tools), len(frozenTools))
+	}
+	for i := range frozenTools {
+		if lastReq.Tools[i].Name != frozenTools[i].Name || lastReq.Tools[i].Description != frozenTools[i].Description ||
+			string(lastReq.Tools[i].Parameters) != string(frozenTools[i].Parameters) {
+			t.Fatalf("summary tool %d diverges from frozen schema: %+v vs %+v", i, lastReq.Tools[i], frozenTools[i])
 		}
 	}
 	// The instruction (last message) locates the fold by anchor excerpts; the
@@ -280,5 +302,32 @@ func TestCompactionRequestPrefixMatchesLastMainRequest(t *testing.T) {
 		if renorm[i].Content != persisted[i].Content || renorm[i].Role != persisted[i].Role {
 			t.Fatalf("re-normalization diverged at %d: %q vs %q", i, renorm[i].Content, persisted[i].Content)
 		}
+	}
+}
+
+// TestSummaryRequestReusesFrozenTools pins the tool-schema half of the cached
+// unit: when frozen main-request bytes exist, the summary request must send
+// the FROZEN tool schemas (byte-identical to the main request's), not the
+// live registry — the server caches system+tools+messages as one prefix and
+// the live tool set drifts (MCP registration) after the main request
+// (2026-08-31: hit=16896 of 256122 on desktop, tools seam unaligned).
+func TestSummaryRequestReusesFrozenTools(t *testing.T) {
+	a := newFoldAgent(t, 200000, &countingProvider{reply: "digest"})
+	frozen := []provider.ToolSchema{
+		{Name: "read", Description: "read a file", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	mainReq := []provider.Message{{Role: provider.RoleSystem, Content: "s"}}
+	a.saveMainRequest(mainReq, frozen)
+
+	req := a.summaryRequest(mainReq, nil, "")
+	if len(req.Tools) != len(frozen) || req.Tools[0].Name != "read" {
+		t.Fatalf("summary tools = %+v, want the frozen schemas", req.Tools)
+	}
+
+	// Without frozen bytes the live registry supplies the schemas (empty here).
+	a.sess.lastMainReq.Store(nil)
+	req2 := a.summaryRequest(mainReq, nil, "")
+	if len(req2.Tools) != 0 {
+		t.Fatalf("without frozen bytes tools = %+v, want live registry (empty)", req2.Tools)
 	}
 }
