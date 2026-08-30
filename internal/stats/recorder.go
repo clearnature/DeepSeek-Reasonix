@@ -563,6 +563,7 @@ func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, q
 		rec.PrefixHash = diag.PrefixHash
 		rec.PrefixChanged = diag.PrefixChanged
 		rec.PrefixReasons = diag.PrefixChangeReasons
+		rec.ViewFP = diag.ViewFP
 	}
 	if quote != nil {
 		rec.CostAmount = quote.Original.Amount

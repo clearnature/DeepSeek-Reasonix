@@ -704,7 +704,7 @@ func TestRecorderPersistsPrefixHash(t *testing.T) {
 	r := NewRecorder(&spySink{}, dir, "desktop")
 	u := usageEvent("deepseek/deepseek-v4-flash", 1000, 50, 10, 900, 100, 1050)
 	u.CacheDiagnostics = &event.CacheDiagnostics{
-		PrefixHash: "abc123", PrefixChanged: true, PrefixChangeReasons: []string{"log_rewrite"},
+		PrefixHash: "abc123", PrefixChanged: true, PrefixChangeReasons: []string{"log_rewrite"}, ViewFP: "view456",
 	}
 	u.EstTokens = 1600
 	r.Emit(u)
@@ -720,8 +720,8 @@ func TestRecorderPersistsPrefixHash(t *testing.T) {
 	if !strings.Contains(string(data), `"prefix_changed":true`) {
 		t.Fatalf("row missing prefix_changed: %s", data)
 	}
-	if !strings.Contains(string(data), `"prefix_reasons":["log_rewrite"]`) {
-		t.Fatalf("row missing prefix_reasons: %s", data)
+	if !strings.Contains(string(data), `"prefix_reasons":["log_rewrite"]`) || !strings.Contains(string(data), `"view_fp":"view456"`) {
+		t.Fatalf("row missing prefix_reasons/view_fp: %s", data)
 	}
 	if !strings.Contains(string(data), `"est":1600`) {
 		t.Fatalf("row missing est: %s", data)

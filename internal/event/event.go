@@ -477,13 +477,12 @@ type CacheDiagnostics struct {
 	PrefixChangeReasons []string // "system", "tools", "log_rewrite"
 	SystemHash          string
 	ToolsHash           string
+	ViewFP              string
 	LogRewriteVersion   int
 	ToolSchemaTokens    int
 	CacheMissTokens     int
 	CacheHitTokens      int
-	// CacheMissDrop is true when the hit count dropped ≥5% and ≥2000 tokens
-	// from the previous turn without a compaction/snip rewrite — a sign that
-	// the server-side prefix cache was evicted between turns.
+	// CacheMissDrop: hit count fell ≥5%/≥2000 tokens without a rewrite — server eviction.
 	CacheMissDrop bool
 }
 

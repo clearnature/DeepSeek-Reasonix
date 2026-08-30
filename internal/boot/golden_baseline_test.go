@@ -140,7 +140,7 @@ api_key_env = "REASONIX_TEST_KEY_UNSET"
 		SystemPrompt: prompt,
 		ToolSchemas:  append(toolJSON, '\n'),
 		ProviderReq:  append(reqJSON, '\n'),
-		PrefixShape:  agent.CaptureShape(prompt, schemas, 0),
+		PrefixShape:  agent.CaptureShape(prompt, schemas, 0, ""),
 	}
 }
 

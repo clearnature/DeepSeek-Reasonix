@@ -2148,7 +2148,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 }
 
 func (a *Agent) capturePrefixShape(schemas []provider.ToolSchema) PrefixShape {
-	return CaptureShape(a.systemPrompt(), schemas, a.sess.conversation.RewriteVersion())
+	return CaptureShape(a.systemPrompt(), schemas, a.sess.conversation.RewriteVersion(), a.ModelVisibleFingerprint())
 }
 
 func (a *Agent) systemPrompt() string {

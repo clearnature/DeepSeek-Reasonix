@@ -54,7 +54,10 @@ type record struct {
 	PrefixHash    string   `json:"prefix_hash,omitempty"`
 	PrefixChanged bool     `json:"prefix_changed,omitempty"`
 	PrefixReasons []string `json:"prefix_reasons,omitempty"`
-	Turn          bool     `json:"turn,omitempty"` // true for TurnDone marker rows
+	// ViewFP fingerprints the sent view; vs a compaction view_fp it pins
+	// summary misses to a post-resume view divergence.
+	ViewFP string `json:"view_fp,omitempty"`
+	Turn   bool   `json:"turn,omitempty"` // true for TurnDone marker rows
 	// Compaction records one context-compaction pass (agent compaction
 	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
 	Compaction *CompactionRecord `json:"compaction,omitempty"`

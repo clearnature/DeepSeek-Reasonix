@@ -24,7 +24,7 @@ func TestRecoveryWiringPreservesSuccessPathCacheShape(t *testing.T) {
 	sys := "You are a coding agent. Keep the stable system prompt byte-stable."
 	schemas := reg.Schemas()
 
-	baseline := agent.CaptureShape(sys, schemas, 0)
+	baseline := agent.CaptureShape(sys, schemas, 0, "")
 
 	// Gate with recovery enabled but no failures must not alter agent schemas.
 	gate := recovery.NewGate(recovery.Options{Mode: func() string { return "auto" }})
@@ -38,7 +38,7 @@ func TestRecoveryWiringPreservesSuccessPathCacheShape(t *testing.T) {
 	}
 	// Provider-visible prefix is still the stable system string + registry schemas.
 	_ = ag
-	withRecovery := agent.CaptureShape(sys, reg.Schemas(), 0)
+	withRecovery := agent.CaptureShape(sys, reg.Schemas(), 0, "")
 	if baseline.SystemHash != withRecovery.SystemHash {
 		t.Fatalf("system prompt hash changed with recovery gate: %s vs %s", baseline.SystemHash, withRecovery.SystemHash)
 	}
