@@ -41,15 +41,12 @@ func (a *Agent) visibleMessagesWithFlag(st CompactionState, msgs []provider.Mess
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible, true
 		}
-	} else if len(st.Projection.Messages) > 0 &&
-		(st.Projection.NonToolContentHash != "" || st.Projection.CoveredCount > len(msgs)) {
-		// Trustworthy degraded projection (same-lineage, compaction artifact
-		// with metadata): send projection+tail instead of the full transcript.
-		// The summary covers covered history; the tail carries the latest
-		// messages. Full replay of an uncompacted jsonl (12:49 case: 928k)
-		// would exceed the pressure threshold and force an unnecessary
-		// compaction right after resume. Untrustworthy bodies were dropped at
-		// load time and never reach this branch.
+	} else if len(st.Projection.Messages) > 0 {
+		// Load-verified body: send projection+tail, never canonical — canonical
+		// bytes diverge from the sent projection view at the summary splice,
+		// making every summary request a full-price miss (2026-08-30 21:47:44:
+		// hit=11008/222690). Full replay of an uncompacted jsonl (12:49 case:
+		// 928k) would also force an unnecessary compaction after resume.
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
 			return visible, true
 		}
@@ -104,7 +101,19 @@ func (a *Agent) InvalidateProjection() {
 	}
 	a.sess.compactionMu.Lock()
 	path := a.sess.path
-	a.sess.compactionState = CompactionState{}
+	body := a.sess.compactionState.Projection
+	// Keep the projection body for the degraded view; only lineage metadata
+	// is invalid. Dropping it would push fold planning to canonical, whose
+	// bytes diverge from the sent projection view at the summary splice —
+	// every summary request then pays full price (2026-08-30 21:47:44:
+	// in=222690, hit=11008, ¥0.32).
+	a.sess.compactionState = CompactionState{
+		Projection: ContextProjection{
+			Messages:           body.Messages,
+			CoveredCount:       body.CoveredCount,
+			NonToolContentHash: body.NonToolContentHash,
+		},
+	}
 	a.sess.compactionMu.Unlock()
 	a.sess.compaction.stuck = false
 	a.sess.compaction.stuckInputHash = ""
@@ -112,8 +121,8 @@ func (a *Agent) InvalidateProjection() {
 	a.sess.compaction.failedTurn.Store(0)
 	a.sess.compaction.lastTurn.Store(0)
 	if path != "" {
-		if err := RemoveCompactionState(path); err != nil {
-			slog.Warn("agent: remove context projection", "err", err)
+		if err := SaveCompactionState(path, a.sess.compactionState); err != nil {
+			slog.Warn("agent: persist degraded projection", "err", err)
 		}
 	}
 }

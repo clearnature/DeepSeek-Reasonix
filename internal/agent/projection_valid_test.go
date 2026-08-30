@@ -438,7 +438,6 @@ func TestVisibleInputForFoldMatchesSamplingViewOnProjectionLoss(t *testing.T) {
 	}
 	st := CompactionState{
 		TranscriptVersion: 1,
-		PromptCacheKey:    "ws|sess|model",
 		Projection: ContextProjection{
 			Messages: []provider.Message{
 				{Role: provider.RoleSystem, Content: "sys"},
@@ -474,5 +473,118 @@ func TestVisibleInputForFoldMatchesSamplingViewOnProjectionLoss(t *testing.T) {
 		if samplingView[i].Role != foldView[i].Role || samplingView[i].Content != foldView[i].Content {
 			t.Fatalf("view divergence at %d: sampling (%s %q) vs fold (%s %q)", i, samplingView[i].Role, samplingView[i].Content, foldView[i].Role, foldView[i].Content)
 		}
+	}
+}
+
+// TestSummaryRequestBytesMatchSamplingOnValidProjection 验证投影 valid 时
+// 摘要请求字节与采样发送字节一致（d9e235177 R1+R2 的核心契约）：视图统一 +
+// head 前置后，摘要请求前缀应命中父已发送前缀。2026-08-30 21:47 实测仍
+// miss（4.9%），此测试固定该契约防止回归。
+func TestSummaryRequestBytesMatchSamplingOnValidProjection(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	sess := NewSession("sys")
+	msgs := []provider.Message{
+		{Role: provider.RoleUser, Content: "task-1"},
+		{Role: provider.RoleAssistant, Content: "a1", ToolCalls: []provider.ToolCall{{ID: "c1", Name: "read", Arguments: `{"p":"x"}`}}},
+		{Role: provider.RoleTool, ToolCallID: "c1", Name: "read", Content: "RESULT"},
+		{Role: provider.RoleUser, Content: "task-2"},
+		{Role: provider.RoleAssistant, Content: "a2"},
+	}
+	for _, m := range msgs {
+		sess.Add(m)
+	}
+	a := New(nil, nil, sess, Options{SessionPath: path, WorkspaceID: "ws", ModelRef: "model"}, event.Discard)
+	canonical, _ := a.sess.conversation.snapshotMessagesVersion()
+	covered := len(canonical)
+	st := CompactionState{
+		TranscriptVersion: 1,
+		Projection: ContextProjection{
+			Messages: []provider.Message{
+				{Role: provider.RoleSystem, Content: "sys"},
+				{Role: provider.RoleUser, Content: "SUMMARY"},
+			},
+			TranscriptVersion: 1,
+			CoveredCount:      covered,
+			CoveredPrefixHash: coveredPrefixHash(canonical, covered),
+		},
+	}
+	st.PromptCacheKey = a.currentPromptCacheKey()
+	a.sess.compactionState = st
+
+	sampling := a.normalizeModelRequestMessages(a.modelVisibleMessages())
+	visible, onProjection := a.visibleInputForFold(st, canonical, 1)
+	if !onProjection {
+		t.Fatal("expected valid projection view")
+	}
+	if len(sampling) != len(visible) {
+		t.Fatalf("sampling view = %d messages, fold view = %d", len(sampling), len(visible))
+	}
+	head := 1 // pinned system
+	req := a.summaryRequest(visible[0:head], visible[head:], "")
+	for i := range sampling {
+		if i >= len(req.Messages)-1 { // last message is the summary instruction
+			t.Fatalf("request too short at %d: sampling %d, req %d", i, len(sampling), len(req.Messages))
+		}
+		got := req.Messages[i].Content
+		want := sampling[i].Content
+		if got != want {
+			t.Fatalf("byte divergence at message %d:\n sampling: %q\n request: %q", i, want, got)
+		}
+	}
+}
+
+// TestInvalidateProjectionKeepsBodyForDegradedView 验证投影失效后保留 body：
+// 折叠路径仍走 degraded 投影+tail 视图（与父已发送字节一致），而非退回
+// canonical（SUMMARY 替换处与父前缀分叉 → 摘要请求全价 miss，
+// 2026-08-30 21:47:44 实测 hit=11008/222690）。
+func TestInvalidateProjectionKeepsBodyForDegradedView(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	sess := NewSession("sys")
+	msgs := []provider.Message{
+		{Role: provider.RoleUser, Content: "task-1"},
+		{Role: provider.RoleAssistant, Content: "a1"},
+	}
+	for _, m := range msgs {
+		sess.Add(m)
+	}
+	a := New(nil, nil, sess, Options{SessionPath: path, WorkspaceID: "ws", ModelRef: "model"}, event.Discard)
+	canonical, _ := a.sess.conversation.snapshotMessagesVersion()
+	st := CompactionState{
+		TranscriptVersion: 1,
+		Projection: ContextProjection{
+			Messages: []provider.Message{
+				{Role: provider.RoleSystem, Content: "sys"},
+				{Role: provider.RoleUser, Content: "SUMMARY"},
+			},
+			CoveredCount:      len(canonical),
+			CoveredPrefixHash: coveredPrefixHash(canonical, len(canonical)),
+		},
+	}
+	st.PromptCacheKey = a.currentPromptCacheKey()
+	a.sess.compactionState = st
+	a.InvalidateProjection()
+	if len(a.sess.compactionState.Projection.Messages) != 2 {
+		t.Fatalf("projection body dropped after invalidation: %d messages", len(a.sess.compactionState.Projection.Messages))
+	}
+	visible, onProjection := a.visibleInputForFold(a.sess.compactionState, canonical, 1)
+	if !onProjection {
+		t.Fatal("invalidated projection must degrade to projection+tail, not canonical")
+	}
+	want := append([]provider.Message{}, st.Projection.Messages...)
+	want = append(want, canonical[st.Projection.CoveredCount:]...)
+	if len(visible) != len(want) {
+		t.Fatalf("degraded view = %d messages, want %d", len(visible), len(want))
+	}
+	for i := range want {
+		if visible[i].Content != want[i].Content {
+			t.Fatalf("degraded view[%d] = %q, want %q", i, visible[i].Content, want[i].Content)
+		}
+	}
+	// 采样路径必须解析同一视图（R1 契约）。
+	sampling := a.modelVisibleMessages()
+	if len(sampling) != len(visible) {
+		t.Fatalf("sampling view = %d, degraded view = %d", len(sampling), len(visible))
 	}
 }
