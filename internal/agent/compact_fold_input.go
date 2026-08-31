@@ -64,6 +64,11 @@ func (a *Agent) foldSummaryWithTelemetry(ctx context.Context, trigger string, pr
 	view := append(append([]provider.Message(nil), prefix...), fold...)
 	tele.ViewFP = providerVisibleFingerprint(modelInputMessages(view))
 	tele.WireFP = a.sess.wireFP()
+	if schemas, source := a.summaryToolsSource(); source != "none" {
+		tele.ToolsCount = len(schemas)
+		tele.ToolsFP = toolsFingerprint(schemas)
+		tele.ToolsSource = source
+	}
 	if err != nil {
 		tele.Error = err.Error()
 	}

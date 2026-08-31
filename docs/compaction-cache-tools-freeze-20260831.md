@@ -122,6 +122,18 @@ sidecar → **永久性 system-only**。修复：冻结 tools 为空时回退 li
 1. sidecar 保鲜——主请求后节流更新冻结前缀（resume 恢复最近字节 → 缓存热）
 2. resume 陈旧降级——冻结前缀超安全窗口不赌缓存，走视图重放/裁剪
 
+### 已实施（2026-09-01）：sidecar 保鲜 + tools 分叉遥测
+
+用户 2026-08-31 深夜决定实施（针对 23:44 system-only 案例加遥测定位）：
+
+1. **sidecar 保鲜**（`maybePersistFreshMainRequest`，`freshWireSidecarInterval=60s`）：
+   主请求后节流刷新 sidecar `last_wire_messages`/`last_wire_tools`——resume 恢复
+   最近主请求的字节 → 服务器缓存必然热 → 首次压缩命中。纯本地写盘零 API 成本。
+   23:01 类场景（活跃 15h 后 resume 0% 全价）不再复现。
+2. **tools 分叉遥测**：detail 行新增 `tools_count`/`tools_fp`/`tools_source`
+   （frozen|live|none）——23:44 类 system-only 命中可直接判定工具缝分叉源
+   （冻结集 vs live 回退），无需离线指纹比对。
+
 ## 维护纪律（新增）
 
 1. **发送侧任何改动**（tools 注册时序、MCP 重连、拦截器、工具 schema 字段）

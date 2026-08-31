@@ -13,18 +13,19 @@ import (
 // holding atomics and mutexes cannot be assigned, so reset must name each field
 // and this list is what keeps it honest.
 var sessionReset = map[string]bool{
-	"mu":               true,
-	"conversation":     true,
-	"output":           true,
-	"cacheHit":         true,
-	"cacheMiss":        true,
-	"missingReasoning": true,
-	"lastWireFP":       true, // per-conversation; a stale wire fp would misread the next prefix
-	"lastMainReq":      true, // per-conversation; a new conversation has sent nothing
-	"compactionMu":     true,
-	"compactionState":  true,
-	"cacheState":       true,
-	"compaction":       true,
+	"mu":                 true,
+	"conversation":       true,
+	"output":             true,
+	"cacheHit":           true,
+	"cacheMiss":          true,
+	"missingReasoning":   true,
+	"lastWireFP":         true, // per-conversation; a stale wire fp would misread the next prefix
+	"lastMainReq":        true, // per-conversation; a new conversation has sent nothing
+	"lastMainReqPersist": true, // per-conversation; fresh-wire throttle restarts
+	"compactionMu":       true,
+	"compactionState":    true,
+	"cacheState":         true,
+	"compaction":         true,
 }
 
 // sessionCarryOver names the fields reset deliberately leaves alone, each with

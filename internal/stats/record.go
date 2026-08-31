@@ -156,33 +156,36 @@ type EstimateAnomalyRecord struct {
 }
 
 type CompactionRecord struct {
-	Trigger    string  `json:"trigger,omitempty"`
-	Mode       string  `json:"mode,omitempty"`
-	Cache      string  `json:"cache,omitempty"`
-	EstTok     int     `json:"est_tokens,omitempty"` // decision estimate that crossed the trigger
-	SourceTok  int     `json:"src,omitempty"`
-	ProjTok    int     `json:"proj,omitempty"`
-	FoldTok    int     `json:"fold,omitempty"`
-	Spans      int     `json:"spans,omitempty"`
-	Reason     string  `json:"reason,omitempty"`
-	InputTok   int     `json:"in,omitempty"`
-	OutTok     int     `json:"out,omitempty"`
-	HitTok     int     `json:"hit,omitempty"`
-	MissTok    int     `json:"miss,omitempty"`
-	WriteTok   int     `json:"write,omitempty"`
-	Reqs       int     `json:"reqs,omitempty"`
-	Results    int     `json:"results,omitempty"`
-	SavedChars int     `json:"saved_chars,omitempty"`
-	UserKept   int     `json:"user_kept,omitempty"`
-	UserDrop   int     `json:"user_dropped,omitempty"`
-	PrefHash   string  `json:"pref_hash,omitempty"`
-	ViewFP     string  `json:"view_fp,omitempty"`    // fold view fingerprint (resume-divergence diagnosis)
-	WireFP     string  `json:"wire_fp,omitempty"`    // normalized bytes actually sent (vs view_fp)
-	ElapsedMs  int64   `json:"elapsed_ms,omitempty"` // summarizer stage wall time
-	Status     string  `json:"status,omitempty"`
-	TokPerChar float64 `json:"tpc,omitempty"`
-	RequestID  string  `json:"provider_request_id,omitempty"`
-	Error      string  `json:"err_type,omitempty"`
+	Trigger     string  `json:"trigger,omitempty"`
+	Mode        string  `json:"mode,omitempty"`
+	Cache       string  `json:"cache,omitempty"`
+	EstTok      int     `json:"est_tokens,omitempty"` // decision estimate that crossed the trigger
+	SourceTok   int     `json:"src,omitempty"`
+	ProjTok     int     `json:"proj,omitempty"`
+	FoldTok     int     `json:"fold,omitempty"`
+	Spans       int     `json:"spans,omitempty"`
+	Reason      string  `json:"reason,omitempty"`
+	InputTok    int     `json:"in,omitempty"`
+	OutTok      int     `json:"out,omitempty"`
+	HitTok      int     `json:"hit,omitempty"`
+	MissTok     int     `json:"miss,omitempty"`
+	WriteTok    int     `json:"write,omitempty"`
+	Reqs        int     `json:"reqs,omitempty"`
+	Results     int     `json:"results,omitempty"`
+	SavedChars  int     `json:"saved_chars,omitempty"`
+	UserKept    int     `json:"user_kept,omitempty"`
+	UserDrop    int     `json:"user_dropped,omitempty"`
+	PrefHash    string  `json:"pref_hash,omitempty"`
+	ViewFP      string  `json:"view_fp,omitempty"`     // fold view fingerprint (resume-divergence diagnosis)
+	WireFP      string  `json:"wire_fp,omitempty"`     // normalized bytes actually sent (vs view_fp)
+	ToolsCount  int     `json:"tools_count,omitempty"` // tool schema set the summary sent
+	ToolsFP     string  `json:"tools_fp,omitempty"`
+	ToolsSource string  `json:"tools_source,omitempty"` // frozen | live | none
+	ElapsedMs   int64   `json:"elapsed_ms,omitempty"`   // summarizer stage wall time
+	Status      string  `json:"status,omitempty"`
+	TokPerChar  float64 `json:"tpc,omitempty"`
+	RequestID   string  `json:"provider_request_id,omitempty"`
+	Error       string  `json:"err_type,omitempty"`
 }
 
 // Writer appends records to the daily stats file for a given stats dir.

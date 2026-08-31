@@ -3,9 +3,9 @@
     "banner": 46,
     "commented-code": 1,
     "complexity": 2036,
-    "essay": 2165,
-    "file-size": 110132,
-    "function-size": 8765,
+    "essay": 2180,
+    "file-size": 110181,
+    "function-size": 8777,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -401,11 +401,19 @@
     "internal/agent/capability_gate_test.go": {
       "essay": 1
     },
+    "internal/agent/compact.go": {
+      "essay": 1
+    },
+    "internal/agent/compact_commit.go": {
+      "essay": 1
+    },
     "internal/agent/compact_fold_input_test.go": {
-      "essay": 2
+      "essay": 5
     },
     "internal/agent/compact_projection.go": {
-      "essay": 4
+      "essay": 7,
+      "file-size": 60,
+      "function-size": 12
     },
     "internal/agent/context_manager.go": {
       "essay": 1
@@ -485,14 +493,14 @@
       "essay": 3
     },
     "internal/agent/preflight.go": {
-      "complexity": 4,
+      "complexity": 5,
       "essay": 11
     },
     "internal/agent/profile_spec.go": {
       "essay": 1
     },
     "internal/agent/projection.go": {
-      "essay": 3
+      "essay": 7
     },
     "internal/agent/reasoning_language.go": {
       "essay": 1
@@ -551,6 +559,9 @@
       "essay": 2
     },
     "internal/agent/session_lease_test.go": {
+      "essay": 3
+    },
+    "internal/agent/sessionstate.go": {
       "essay": 3
     },
     "internal/agent/storm_breaker.go": {
@@ -1332,9 +1343,9 @@
       "narrative": 2
     },
     "internal/provider/responses/responses.go": {
-      "complexity": 55,
+      "complexity": 54,
       "essay": 22,
-      "file-size": 178,
+      "file-size": 167,
       "function-size": 181,
       "struct-state": 6
     },

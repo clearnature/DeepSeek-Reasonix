@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"time"
 
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
@@ -47,6 +49,49 @@ func (a *Agent) saveMainRequest(msgs []provider.Message, tools []provider.ToolSc
 		}
 	}
 	a.sess.lastMainReq.Store(&mainRequestBytes{messages: cp, tools: toolCP})
+	a.maybePersistFreshMainRequest()
+}
+
+// freshWireSidecarInterval throttles how often a main request refreshes the
+// sidecar's frozen wire bytes. Every tool-loop round trip rewrites the sidecar
+// at per-request frequency would make disk IO a per-turn cost; the interval
+// amortizes it while still leaving a recently-active session with a recent
+// prefix for the next resume.
+const freshWireSidecarInterval = 60 * time.Second
+
+// maybePersistFreshMainRequest refreshes the sidecar's last_wire_* fields with
+// the current frozen main-request bytes, throttled. The sidecar otherwise only
+// updates on compaction commits, so a long-lived session resumes with a stale
+// prefix whose server-side cache has already been evicted (2026-08-31 23:01:
+// 0% hit after 15h of activity). Refreshing keeps the resumed prefix equal to
+// the most recent main request — the byte range the server just cached, so the
+// first post-resume compaction replays a warm unit instead of a stale one.
+func (a *Agent) maybePersistFreshMainRequest() {
+	if a == nil || a.sess.path == "" {
+		return
+	}
+	now := time.Now()
+	if now.Sub(time.Unix(0, a.sess.lastMainReqPersist.Load())) < freshWireSidecarInterval {
+		return
+	}
+	saved := a.savedMainRequest()
+	if saved == nil || len(saved.messages) == 0 {
+		return
+	}
+	a.sess.compactionMu.Lock()
+	defer a.sess.compactionMu.Unlock()
+	// Re-check under the lock: a compaction commit may have just persisted.
+	if time.Since(time.Unix(0, a.sess.lastMainReqPersist.Load())) < freshWireSidecarInterval {
+		return
+	}
+	a.sess.compactionState.LastWireMessages = append([]provider.Message(nil), saved.messages...)
+	a.sess.compactionState.LastWireTools = append([]provider.ToolSchema(nil), saved.tools...)
+	a.sess.compactionState.UpdatedAt = now.UTC()
+	if err := a.persistCompactionStateLocked(); err != nil {
+		slog.Warn("agent: refresh frozen-wire sidecar", "err", err)
+		return
+	}
+	a.sess.lastMainReqPersist.Store(now.UnixNano())
 }
 
 // savedMainRequest returns the frozen bytes of the last sampling request, or

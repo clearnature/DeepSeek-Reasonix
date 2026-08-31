@@ -213,6 +213,14 @@ func (r *Recorder) recordCompaction(e event.Event) {
 			rec.ViewFP = v
 		case "wire_fp":
 			rec.WireFP = v
+		case "tools_fp":
+			rec.ToolsFP = v
+		case "tools_source":
+			rec.ToolsSource = v
+		case "tools_count":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.ToolsCount = n
+			}
 		case "tpc":
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
 				rec.TokPerChar = f

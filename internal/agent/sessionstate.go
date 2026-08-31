@@ -47,6 +47,10 @@ type sessionRuntime struct {
 	// system prefix (2026-08-31: hit=16896 of 256122 on desktop).
 	lastMainReq atomic.Pointer[mainRequestBytes]
 
+	// lastMainReqPersist is the last time the frozen main-request bytes were
+	// written to the sidecar (unix nano), throttling fresh-wire refreshes.
+	lastMainReqPersist atomic.Int64
+
 	// compactionMu guards projection snapshots/install and the in-memory sidecar
 	// generation. Network summarization never runs while this lock is held.
 	compactionMu sync.Mutex
@@ -89,6 +93,7 @@ func (r *sessionRuntime) reset(s *Session) {
 	r.missingReasoning = missingReasoningWatch{}
 	r.lastWireFP.Store(nil)
 	r.lastMainReq.Store(nil) // a new conversation starts with no sent prefix
+	r.lastMainReqPersist.Store(0)
 	r.compactionMu.Lock()
 	r.compactionState = CompactionState{} // lineage change; disk reloaded on Resume
 	r.cacheState = CacheStateUnknown

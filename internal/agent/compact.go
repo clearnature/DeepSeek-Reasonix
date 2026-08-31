@@ -387,6 +387,20 @@ func (a *Agent) summaryRequestToolsForCommit(prefix []provider.Message) []provid
 	return nil
 }
 
+// summaryToolsSource reports which tool set a summary request will send and
+// where it came from: the frozen main-request set, the live registry fallback,
+// or none. Mirrors summaryRequest's choice so telemetry can attribute a
+// system-only cache hit to a tool-seam fork.
+func (a *Agent) summaryToolsSource() ([]provider.ToolSchema, string) {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
+		return saved.tools, "frozen"
+	}
+	if a.svc.tools != nil {
+		return a.providerToolSchemas(), "live"
+	}
+	return nil, "none"
+}
+
 // summaryRequest builds the exact cache-aligned request shape used by
 // summarize: the verbatim head (already in the provider's prefix cache from
 // ordinary requests) precedes the fold region so the fold lands at the same

@@ -177,7 +177,25 @@ type CompactionTelemetry struct {
 	SummaryInputMode  string `json:"summary_input_mode,omitempty"`
 	ViewFP            string `json:"view_fp,omitempty"` // fold view fingerprint, for resume-divergence diagnosis
 	WireFP            string `json:"wire_fp,omitempty"` // normalized bytes actually sent (vs view_fp)
+	ToolsCount        int    `json:"tools_count,omitempty"`
+	ToolsFP           string `json:"tools_fp,omitempty"`     // tool schema set the summary sent
+	ToolsSource       string `json:"tools_source,omitempty"` // frozen | live | none
 	Error             string `json:"error,omitempty"`
+}
+
+// toolsFingerprint fingerprints a tool schema set. A system-only summary hit
+// means the prefix broke at the tool seam; this hash distinguishes the frozen
+// main-request set from the live registry in that diagnosis.
+func toolsFingerprint(tools []provider.ToolSchema) string {
+	if len(tools) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(tools)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:16])
 }
 
 // ContextStatePath returns the projection sidecar path for a session transcript.
