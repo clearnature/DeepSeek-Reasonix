@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -301,8 +302,10 @@ type Controller struct {
 	// and rotating are mutually exclusive gates — a turn refuses to start while
 	// a rotation is in progress, and a rotation refuses to start while a turn
 	// runs — so the run loop's session reference cannot change under it.
-	rotating   bool
-	autosaveWG sync.WaitGroup
+	rotating          bool
+	rotationStartedAt time.Time
+	rotationCaller    string
+	autosaveWG        sync.WaitGroup
 	// sessionSettings groups the per-session posture knobs that share one
 	// lifetime: swapped together on session rotation.
 	sessionSettings sessionSettings
@@ -2451,9 +2454,28 @@ func (c *Controller) beginRotation() error {
 		return errTurnRunningRotation
 	}
 	if c.rotating {
-		return errRotationInProgress
+		elapsed := time.Since(c.rotationStartedAt)
+		if elapsed > 30*time.Second {
+			slog.Error("controller: rotating lock timeout, force releasing",
+				"caller", c.rotationCaller, "elapsed", elapsed.String())
+			c.rotating = false
+			c.rotationCaller = ""
+		} else {
+			slog.Warn("controller: rotation blocked",
+				"caller", c.rotationCaller, "elapsed", elapsed.String())
+			return errRotationInProgress
+		}
 	}
 	c.rotating = true
+	c.rotationStartedAt = time.Now()
+	c.rotationCaller = "unknown"
+	if pc, _, _, ok := runtime.Caller(1); ok {
+		if fn := runtime.FuncForPC(pc); fn != nil {
+			if i := strings.LastIndex(fn.Name(), "."); i >= 0 {
+				c.rotationCaller = fn.Name()[i+1:]
+			}
+		}
+	}
 	return nil
 }
 

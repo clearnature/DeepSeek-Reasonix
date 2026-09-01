@@ -2,14 +2,14 @@
   "limits": {
     "banner": 46,
     "commented-code": 1,
-    "complexity": 2036,
+    "complexity": 2037,
     "essay": 2180,
-    "file-size": 110181,
+    "file-size": 110203,
     "function-size": 8777,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "struct-state": 124,
+    "struct-state": 126,
     "test-file-size": 70759
   },
   "files": {
@@ -493,7 +493,7 @@
       "essay": 3
     },
     "internal/agent/preflight.go": {
-      "complexity": 5,
+      "complexity": 6,
       "essay": 11
     },
     "internal/agent/profile_spec.go": {
@@ -948,10 +948,10 @@
     "internal/control/controller.go": {
       "complexity": 30,
       "essay": 95,
-      "file-size": 5818,
+      "file-size": 5840,
       "function-size": 129,
       "narrative": 4,
-      "struct-state": 17
+      "struct-state": 19
     },
     "internal/control/controller_test.go": {
       "essay": 1,
