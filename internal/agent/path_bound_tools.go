@@ -35,6 +35,25 @@ func (p pathBoundCapabilityProxy) bindToolResultSession(session func() *Session)
 	}
 }
 
+func (p pathBoundCapabilityProxy) bindReadStrategyState(state func() *incompleteReadState) {
+	if binder, ok := p.inner.(readStrategyStateBinder); ok {
+		binder.bindReadStrategyState(state)
+	}
+}
+
+func (p pathBoundCapabilityProxy) bindMCPListObserver(observer func(mcpListObservation)) {
+	if binder, ok := p.inner.(mcpListObserverBinder); ok {
+		binder.bindMCPListObserver(observer)
+	}
+}
+
+func (p pathBoundCapabilityProxy) activateMCPListObserver() func() {
+	if activator, ok := p.inner.(mcpListObserverActivator); ok {
+		return activator.activateMCPListObserver()
+	}
+	return func() {}
+}
+
 func (p pathBoundCapabilityProxy) Name() string            { return p.inner.Name() }
 func (p pathBoundCapabilityProxy) Description() string     { return p.inner.Description() }
 func (p pathBoundCapabilityProxy) Schema() json.RawMessage { return p.inner.Schema() }

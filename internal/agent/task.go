@@ -1171,7 +1171,7 @@ func (t *restrictedCapabilityProxy) check(args json.RawMessage) error {
 	if id == "" {
 		return fmt.Errorf("capability_id is required")
 	}
-	if id == sessionToolResultCapabilityID {
+	if id == sessionToolResultCapabilityID || id == sessionReadStrategyReceiptCapabilityID {
 		return nil
 	}
 	if !t.allowed[id] {

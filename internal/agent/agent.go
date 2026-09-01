@@ -2820,7 +2820,9 @@ func firstLine(s string) string {
 
 // truncateToolOutput builds the stable provider-visible Content form for a tool
 // result. Under-cap bodies are byte-identical; over-cap bodies keep a tool-aware
-// head and tail while RawContent stores the full local original.
+// preview while RawContent stores the full local original. read_file is special:
+// its preview is a contiguous prefix so an exact recovery cursor can never skip
+// source text that the model did not actually see.
 func truncateToolOutput(s string) (string, string) {
 	return truncateToolOutputFor(s, "", "")
 }
@@ -2830,6 +2832,9 @@ func truncateToolOutput(s string) (string, string) {
 func truncateToolOutputFor(s, toolName, toolCallID string) (string, string) {
 	if len(s) <= maxToolOutputBytes {
 		return s, ""
+	}
+	if toolName == "read_file" {
+		return truncateReadFileOutput(s, toolName, toolCallID)
 	}
 	strategy := snipStrategy{head: 40, tail: 40, headChars: 8000, tailChars: 8000}
 	switch {
@@ -2881,6 +2886,7 @@ func truncateToolOutputFor(s, toolName, toolCallID string) (string, string) {
 	notice := fmt.Sprintf("tool output truncated: %d of %d bytes elided", len(s)-len(head)-len(tail), len(s))
 	return head + marker + tail, notice
 }
+
 
 
 // finishReasonMessage maps an abnormal finish_reason to a one-line warning,
