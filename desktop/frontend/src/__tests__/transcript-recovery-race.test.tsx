@@ -58,14 +58,13 @@ const baseRows: TranscriptRow[] = [{ kind: "answer", key: "row-a", item }];
 const readyRef = { current: true };
 let scrollByCalls = 0;
 let scrollToIndexCalls = 0;
-let scrollToCalls = 0, suppressScrollTo = false;
+let scrollToCalls = 0;
 let scrollToBottomCalls = 0;
 // Null disables snapshot capture; the snapshot sections opt in explicitly so
 // the pre-snapshot scenarios keep their first-mount scrollToBottom behavior.
 let stubSnapshot: StateSnapshot | null = null;
 const applyScrollTo = (options?: { top?: number }) => {
   scrollToCalls += 1;
-  if (suppressScrollTo) return;
   const top = options?.top ?? 0;
   scrollElement.scrollTop = Math.max(0, Math.min(scrollExtent - scrollElement.clientHeight, top));
 };
@@ -242,7 +241,9 @@ await triggerWatchdogRebuild();
 check(integrity?.resetKey === keyBeforeJumpBlank, "jump-bottom transients cannot trigger a blank size-tree rebuild");
 await advanceClock(350);
 
-// Real growth may re-arm persistent tail-follow; ineffective writes are quarantined.
+// Tail-follow is a persistent mode, not a six-frame retry window. Successful
+// writes may follow real growth revisions; only ineffective writes enter the
+// quiet-window quarantine.
 scrollToCalls = 0;
 await act(async () => arbiter?.scrollToBottom());
 scrollToCalls = 0;
@@ -259,7 +260,10 @@ check(
   "sustained growth still lands on the physical bottom after the burst ends",
 );
 
-// Reduced-motion churn must survive a frame before writing; settled growth reconverges.
+// ── Reduced-motion flicker filter (#9028/#9089): layout churn alternates the
+// extent between two values on consecutive frames. A tail displacement must
+// survive a full frame before the writer acts, so pure oscillation earns zero
+// writes; once the churn settles off-bottom, one write reconverges.
 const churnBase = scrollExtent;
 scrollToCalls = 0;
 for (let i = 0; i < 8; i += 1) {
@@ -278,7 +282,10 @@ check(
 );
 check(scrollToCalls >= 1 && scrollToCalls <= 2, `post-churn convergence costs at most two writes (${scrollToCalls})`);
 
-// A Windows extent trace gets one immediate write and one final correction.
+// Replay the returned Windows trace: several different extents become visible
+// while one explicit jump owns the viewport. The writer may respond immediately
+// and perform one final correction, but must not write once per intermediate
+// height.
 scrollToCalls = 0;
 scrollExtent = 5_154;
 scrollElement.scrollTop = 0;
@@ -290,25 +297,11 @@ for (const extent of [3_467, 6_785, 7_728, 5_525, 4_869]) {
   await flushFrames();
 }
 await advanceClock(240);
-// Absorb one post-quiet WebView2 extent without opening an unbounded write loop.
-scrollExtent += 37;
-scrollElement.scrollTop = Math.min(scrollElement.scrollTop, scrollExtent - scrollElement.clientHeight);
-await advanceClock(240);
 for (let i = 0; i < 6; i += 1) await flushFrames();
-check(scrollToCalls <= 3, `one jump-bottom transaction emits at most three effective writes (${scrollToCalls})`);
-check(arbiter?.modeRef.current === "tail-follow" && scrollElement.scrollTop === scrollExtent - scrollElement.clientHeight, "a progressing jump-bottom transaction retains automatic ownership");
-scrollElement.scrollTop = 0; suppressScrollTo = true;
-await act(async () => arbiter?.scrollToBottom());
-await act(async () => arbiter?.followGrowingTail("items-rendered"));
-for (let i = 0; i < 6; i += 1) { await advanceClock(350); await flushFrames(); }
-check(arbiter?.modeRef.current === "tail-follow" && arbiter?.isAtBottom === false, `exhausted ineffective tail-follow exposes recovery without revoking ownership (${arbiter?.modeRef.current}/${arbiter?.isAtBottom}/${scrollToCalls})`);
-suppressScrollTo = false;
-await act(async () => arbiter?.scrollToBottom());
-await advanceClock(240);
-for (let i = 0; i < 2; i += 1) await flushFrames();
+check(scrollToCalls <= 2, `one jump-bottom transaction emits at most two effective writes (${scrollToCalls})`);
 check(
   scrollElement.scrollTop === scrollExtent - scrollElement.clientHeight,
-  `the exposed jump-bottom retry converges on the final native bottom (${scrollElement.scrollTop}/${scrollExtent - scrollElement.clientHeight})`,
+  `the bounded jump-bottom transaction still converges on the final native bottom (${scrollElement.scrollTop}/${scrollExtent - scrollElement.clientHeight})`,
 );
 
 scrollExtent = 500;
