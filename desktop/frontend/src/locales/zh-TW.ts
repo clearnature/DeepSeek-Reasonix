@@ -2406,6 +2406,9 @@ export const zhTW: Record<DictKey, string> = {
   "context.sessionCost": "本次費用",
   "context.requests": "請求數",
   "context.time": "執行時間",
+  "context.durationDaysHoursMinutes": "{days}天{hours}小時{minutes}分鐘",
+  "context.durationHoursMinutes": "{hours}小時{minutes}分鐘",
+  "context.durationMinutes": "{minutes}分鐘",
   "context.durationSeconds": "{seconds}秒",
   "context.durationMinutesSeconds": "{minutes}分{seconds}秒",
 

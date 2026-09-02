@@ -3427,6 +3427,9 @@ export const zh: Record<DictKey, string> = {
   "context.moreSources": "还有 {count} 个来源",
   "context.requests": "请求数",
   "context.time": "运行时间",
+  "context.durationDaysHoursMinutes": "{days}天{hours}小时{minutes}分钟",
+  "context.durationHoursMinutes": "{hours}小时{minutes}分钟",
+  "context.durationMinutes": "{minutes}分钟",
   "context.durationSeconds": "{seconds}秒",
   "context.durationMinutesSeconds": "{minutes}分{seconds}秒",
 

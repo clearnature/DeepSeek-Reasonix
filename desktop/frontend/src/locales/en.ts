@@ -3424,6 +3424,9 @@ export const en = {
   "context.moreSources": "{count} more sources",
   "context.requests": "Requests",
   "context.time": "Runtime",
+  "context.durationDaysHoursMinutes": "{days}d {hours}h {minutes}m",
+  "context.durationHoursMinutes": "{hours}h {minutes}m",
+  "context.durationMinutes": "{minutes}m",
   "context.durationSeconds": "{seconds}s",
   "context.durationMinutesSeconds": "{minutes}m {seconds}s",
 
