@@ -5469,6 +5469,9 @@ function makeMockApp(): AppBindings {
     async TrashTopic(topicID: string) {
       deleteMockTopic(topicID);
     },
+    async TrashTopicForce(topicID: string) {
+      deleteMockTopic(topicID);
+    },
     async SetTopicPinned(topicID: string, pinned: boolean) {
       setMockTopicPinned(topicID, pinned);
     },
