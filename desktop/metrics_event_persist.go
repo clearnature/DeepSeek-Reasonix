@@ -18,3 +18,11 @@ func persistMetricsEvent(app *App, metrics *metricsAggregator, tabID string, e e
 	}
 	metrics.persist()
 }
+
+
+// metricsEventRequiresPersist reports whether the given event should trigger
+// an immediate persistence of the metrics aggregator. This is a simplified
+// version that always returns true (persist all events).
+func metricsEventRequiresPersist(e event.Event) bool {
+	return true
+}
