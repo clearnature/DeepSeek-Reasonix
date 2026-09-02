@@ -111,6 +111,7 @@ export function useTranscriptReaderExtentStability({
   onIdleDeadline,
   onStabilitySample,
   onTailHandoff,
+  onGeometryCommitReady,
   onEnd,
 }: {
   generationRef: RefObject<number>;
@@ -123,6 +124,7 @@ export function useTranscriptReaderExtentStability({
   onIdleDeadline: (transaction: TranscriptReaderTransaction) => void;
   onStabilitySample: (transaction: TranscriptReaderTransaction, stable: boolean, tailEligible: boolean) => void;
   onTailHandoff: (transaction: TranscriptReaderTransaction) => void;
+  onGeometryCommitReady: () => void;
   onEnd: (transaction: TranscriptReaderTransaction, reason: "stable-manual" | "timeout" | "cancelled") => void;
 }) {
   const transactionRef = useRef<ActiveReaderTransaction | null>(null);
@@ -140,8 +142,8 @@ export function useTranscriptReaderExtentStability({
   // cancel(). A new reader epoch must inherit the same lease without toggling
   // the Virtuoso range in between.
   const [readerLayoutLease, setReaderLayoutLease] = useState(false);
-  const callbacksRef = useRef({ onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onEnd });
-  callbacksRef.current = { onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onEnd };
+  const callbacksRef = useRef({ onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onGeometryCommitReady, onEnd });
+  callbacksRef.current = { onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onGeometryCommitReady, onEnd };
   const finish = useCallback((transaction: ActiveReaderTransaction, reason: "stable-manual" | "timeout" | "cancelled", notify = true) => {
     if (transactionRef.current !== transaction) return;
     transactionRef.current = null;
