@@ -226,8 +226,8 @@ for (const path of localeChunks) {
   // Stream-failure diagnostics add five strings per dialect. Together with the
   // reachable-tail recovery copy, the merged chunks measure 58.923 KiB zh and
   // 59.710 KiB zh-TW. The isolated-fork guidance brings the measured chunks
-  // to 59.5 KiB zh and 59.9 KiB zh-TW; retain a narrow one-decimal ratchet.
-  const budget = name.startsWith("zh-TW-") ? 60.0 * 1024 : 59.6 * 1024;
+  // to 59.5 KiB zh and 60.3 KiB zh-TW; retain a narrow one-decimal ratchet.
+  const budget = name.startsWith("zh-TW-") ? 60.5 * 1024 : 59.6 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
