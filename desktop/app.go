@@ -328,7 +328,8 @@ type App struct {
 	notificationSenderOnce sync.Once
 	notificationSender     notify.Sender
 
-	runtimeEvents asyncRuntimeEmitter
+	runtimeEvents  asyncRuntimeEmitter
+	mcpAppsSandbox mcpAppsSandbox
 
 	// terminals owns local PTY/ConPTY sessions. It is intentionally separate
 	// from chat runtimes: terminal lifecycle must never acquire App.mu or the

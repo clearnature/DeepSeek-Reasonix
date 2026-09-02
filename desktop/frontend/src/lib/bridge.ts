@@ -8,6 +8,7 @@ import { makeMockSessionCatalogBindings } from "./sessionCatalogBridge";
 import { makeMockHistoryCatalogBindings, type HistoryCatalogBindings } from "./historyCatalogBridge";
 import { makeMockTaskCatalogBindings, type TaskCatalogBindings } from "./taskCatalogBridge";
 import { makeMockBlankProjectBindings, type BlankProjectBindings } from "./blankProjectBridge";
+import { makeMockMCPAppBindings, type MCPAppBindings } from "./mcpAppBridge";
 import { makeMockQualityFloorBindings, type QualityFloorBindings } from "./deliveryFloorBridge";
 import { t } from "./i18n";
 import { providerIsConfigured, providerRequiresKey, removeProviderAccessesForMock } from "./providerModels";
@@ -182,7 +183,7 @@ interface DesktopWindowState {
 
 // AppBindings is the hand-written React-to-Go contract. _CheckGeneratedBindings
 // catches generated methods missing here; update this interface and typecheck.
-export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganizationBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, QualityFloorBindings, SessionTitleBindings, ScrollDiagnosticBindings, RemoteProjectBindings {
+export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganizationBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, QualityFloorBindings, SessionTitleBindings, ScrollDiagnosticBindings, RemoteProjectBindings, MCPAppBindings {
   Platform(): Promise<string>;
   MinimiseMainWindow(): Promise<void>;
   ToggleMaximiseMainWindow(): Promise<void>;
@@ -2484,6 +2485,7 @@ function makeMockApp(): AppBindings {
   return {
     ...makeMockSessionCatalogBindings(cloneProjectTree),
     ...makeMockBlankProjectBindings(),
+    ...makeMockMCPAppBindings(),
     async MinimiseMainWindow() {
       console.info("mock MinimiseMainWindow");
     },
