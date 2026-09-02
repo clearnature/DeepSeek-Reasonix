@@ -361,3 +361,23 @@ func IsUserAuthoredTurn(content string) bool {
 	}
 	return true
 }
+
+
+// IsUserAuthoredTurnMessage reports whether a user-role message was authored by
+// the user (not host-injected synthetic turns or steers). This is a simplified
+// version of the upstream function that does not depend on IsHostGeneratedUserMessage.
+func IsUserAuthoredTurnMessage(msg provider.Message) bool {
+	if msg.Role != provider.RoleUser {
+		return false
+	}
+	// Messages with origin=host are host-injected synthetic turns
+	if msg.Origin == provider.MessageOriginHost {
+		return false
+	}
+	// Messages with origin=user are user-authored
+	if msg.Origin == provider.MessageOriginUser {
+		return true
+	}
+	// Messages without origin are assumed to be user-authored (legacy)
+	return true
+}

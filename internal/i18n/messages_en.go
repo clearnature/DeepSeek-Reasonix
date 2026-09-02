@@ -313,6 +313,7 @@ var English = Messages{
 		CmdTeamAsk:     "/team-ask",
 		CmdTeamSpawn:   "/team-spawn",
 		CmdTeamBroadcast: "/team-broadcast",
+		CmdCompressFast: "/compress-fast",
 	CmdCopy:             "pick a response to copy to clipboard",
 	CmdExport:           "export session as markdown",
 	SlashCopyDone:       "copied response to clipboard",

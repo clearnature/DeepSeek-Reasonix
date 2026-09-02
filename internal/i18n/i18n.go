@@ -613,6 +613,8 @@ type Messages struct {
 	CmdTeamAsk     string
 	CmdTeamSpawn   string
 	CmdTeamBroadcast string
+	// compress-fast command
+	CmdCompressFast string
 }
 
 // ProviderStatusMessage returns an actionable explanation for a known provider

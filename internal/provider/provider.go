@@ -69,8 +69,9 @@ type Message struct {
 	// replayed on the next turn when a tool call followed thinking; providers
 	// without signed reasoning (e.g. the openai-compatible ones) leave it empty.
 	// Round-tripped alongside ReasoningContent.
-	ReasoningSignature string     `json:"reasoning_signature,omitempty"`
-	ToolCalls          []ToolCall `json:"tool_calls,omitempty"` // set by assistant
+	ReasoningSignature string        `json:"reasoning_signature,omitempty"`
+	Origin             MessageOrigin `json:"origin,omitempty"` // who authored this persisted user-role message
+	ToolCalls          []ToolCall    `json:"tool_calls,omitempty"` // set by assistant
 	// ResponsesItems preserves provider-issued Responses API output items for
 	// stateless replay. omitempty keeps old session files byte-compatible.
 	ResponsesItems  []json.RawMessage  `json:"responses_items,omitempty"`

@@ -300,6 +300,7 @@ var ChineseTraditional = Messages{
 		CmdTeamAsk:     "/team-ask",
 		CmdTeamSpawn:   "/team-spawn",
 		CmdTeamBroadcast: "/team-broadcast",
+		CmdCompressFast: "/compress-fast",
 	CmdCopy:             "選擇回覆複製到剪貼簿",
 	CmdExport:           "將會話匯出為 Markdown",
 	SlashCopyDone:       "已複製到剪貼簿",

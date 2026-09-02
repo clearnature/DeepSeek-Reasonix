@@ -314,6 +314,7 @@ var Chinese = Messages{
 		CmdTeamAsk:     "/team-ask",
 		CmdTeamSpawn:   "/team-spawn",
 		CmdTeamBroadcast: "/team-broadcast",
+		CmdCompressFast: "/compress-fast",
 	CmdCopy:             "选择回复复制到剪贴板",
 	CmdExport:           "将会话导出为 Markdown",
 	SlashCopyDone:       "已复制到剪贴板",
