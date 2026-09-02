@@ -47,13 +47,10 @@ type ActiveReaderTransaction = TranscriptReaderTransaction & {
   lastBottomDistance: number;
   transient: boolean;
   visualOffset: number;
-  postCorrectionDeadline: number;
-  /** Wall-clock bound for a history-prepend geometry commit. Reader input may
-   *  extend its own settle window, but must not postpone the prepend forever. */
-  commitAt: number;
+  postCorrectionSettleDeadline: number;
   /** Last tick's native height: a rebound correction spends its budget only
    *  after one unchanged-height interval with mounted viewport coverage. */
-  correctionHeight: number;
+  correctionHeightSample: number;
   /** A blank rebound scroll delivery spends the single correction budget
    *  synchronously before the next paint instead of waiting for a frame. */
   prepaint: boolean;
@@ -111,7 +108,6 @@ export function useTranscriptReaderExtentStability({
   onIdleDeadline,
   onStabilitySample,
   onTailHandoff,
-  onGeometryCommitReady,
   onEnd,
 }: {
   generationRef: RefObject<number>;
@@ -124,7 +120,6 @@ export function useTranscriptReaderExtentStability({
   onIdleDeadline: (transaction: TranscriptReaderTransaction) => void;
   onStabilitySample: (transaction: TranscriptReaderTransaction, stable: boolean, tailEligible: boolean) => void;
   onTailHandoff: (transaction: TranscriptReaderTransaction) => void;
-  onGeometryCommitReady: () => void;
   onEnd: (transaction: TranscriptReaderTransaction, reason: "stable-manual" | "timeout" | "cancelled") => void;
 }) {
   const transactionRef = useRef<ActiveReaderTransaction | null>(null);
@@ -142,8 +137,8 @@ export function useTranscriptReaderExtentStability({
   // cancel(). A new reader epoch must inherit the same lease without toggling
   // the Virtuoso range in between.
   const [readerLayoutLease, setReaderLayoutLease] = useState(false);
-  const callbacksRef = useRef({ onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onGeometryCommitReady, onEnd });
-  callbacksRef.current = { onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onGeometryCommitReady, onEnd };
+  const callbacksRef = useRef({ onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onEnd });
+  callbacksRef.current = { onStart, onIdleDeadline, onStabilitySample, onTailHandoff, onEnd };
   const finish = useCallback((transaction: ActiveReaderTransaction, reason: "stable-manual" | "timeout" | "cancelled", notify = true) => {
     if (transactionRef.current !== transaction) return;
     transactionRef.current = null;
@@ -223,7 +218,7 @@ export function useTranscriptReaderExtentStability({
     transaction.transient = remainsCollapsed && transaction.transientStableFrames < STABLE_FRAMES_REQUIRED;
     if (rejected) {
       if (transaction.correctionWritten && anchorDisplaced) {
-        transaction.postCorrectionDeadline = Math.min(
+        transaction.postCorrectionSettleDeadline = Math.min(
           transaction.settleDeadline,
           Date.now() + POST_CORRECTION_SETTLE_MS,
         );
@@ -346,8 +341,8 @@ export function useTranscriptReaderExtentStability({
       // One unchanged-height interval per tick: a restored native extent can
       // surface one or two paints before Virtuoso mounts rows for it, so the
       // correction below must not spend its budget on the appearance frame.
-      const correctionHeightStable = transaction.correctionHeight === element.scrollHeight;
-      transaction.correctionHeight = element.scrollHeight;
+      const correctionHeightStable = transaction.correctionHeightSample === element.scrollHeight;
+      transaction.correctionHeightSample = element.scrollHeight;
       const now = Date.now();
       const beforeIdleDeadline = now < transaction.deadline;
       if (!beforeIdleDeadline && !transaction.idleDelivered) {
@@ -430,7 +425,7 @@ export function useTranscriptReaderExtentStability({
           });
           transaction.correctionWritten = correctionWrittenThisFrame;
           if (correctionWrittenThisFrame) {
-            transaction.postCorrectionDeadline = Math.min(
+            transaction.postCorrectionSettleDeadline = Math.min(
               transaction.settleDeadline,
               now + POST_CORRECTION_SETTLE_MS,
             );
@@ -476,7 +471,7 @@ export function useTranscriptReaderExtentStability({
         // well after the first two quiet animation frames. Keep observing (but
         // never reopen the writer budget) through one bounded quiet window so
         // a delayed commit is visually guarded before paint.
-        if (now < transaction.postCorrectionDeadline) {
+        if (now < transaction.postCorrectionSettleDeadline) {
           transaction.frame = requestAnimationFrame(tick);
           return;
         }
@@ -515,24 +510,7 @@ export function useTranscriptReaderExtentStability({
     // Exposed so a blank rebound delivery can run the correction before paint.
     transaction.tick = tick;
     if (transaction.frame === null) transaction.frame = requestAnimationFrame(tick);
-  }, [finish, generationRef, geometryCommitBlockedRef, geometryCommitReadyRef, geometryRevisionRef, modeRef, observe, ownershipEpochRef, scrollRef, stableAnchorRequiredRef, writeCorrection]);
-
-  const holdGeometryCommit = useCallback((captureAnchor: boolean) => {
-    geometryCommitReadyRef.current = false;
-    const transaction = transactionRef.current;
-    if (!transaction) return;
-    const now = Date.now();
-    const mutationDeadline = now + TRANSCRIPT_READER_IDLE_MS + TRANSCRIPT_READER_SETTLE_MS;
-    if (captureAnchor) transaction.anchor = captureLogicalAnchor(transaction.element) ?? transaction.anchor;
-    transaction.settleDeadline = Math.max(transaction.settleDeadline, mutationDeadline);
-    transaction.commitAt = Math.max(transaction.commitAt, mutationDeadline);
-    transaction.stableFrames = 0;
-    if (captureAnchor) {
-      transaction.correctionWritten = false;
-      transaction.mountAnchorWritten = false;
-    }
-    schedule(transaction);
-  }, [geometryCommitReadyRef, schedule]);
+  }, [finish, generationRef, geometryRevisionRef, modeRef, observe, ownershipEpochRef, scrollRef, writeCorrection]);
 
   const arm = useCallback((deltaY: number, canClaimTail: boolean) => {
     const element = scrollRef.current;
@@ -612,9 +590,8 @@ export function useTranscriptReaderExtentStability({
       lastBottomDistance: nativeTranscriptDistanceFromBottom(element),
       transient: inheritedCollapse,
       visualOffset: 0,
-      postCorrectionDeadline: 0,
-      commitAt: now + TRANSCRIPT_READER_IDLE_MS + TRANSCRIPT_READER_SETTLE_MS,
-      correctionHeight: element.scrollHeight,
+      postCorrectionSettleDeadline: 0,
+      correctionHeightSample: element.scrollHeight,
       prepaint: false,
     };
     transactionRef.current = transaction;
