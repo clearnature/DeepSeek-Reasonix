@@ -252,12 +252,30 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // scroll delivery can restore mounted coverage before the next visible frame.
 // Retain 0.096 KiB of headroom without widening gzip or chunk ceilings.
 // The reader transaction contract then adds a measured 15.317 KiB raw on the
-// merged main-v2 baseline (including its own prepaint port), bringing the
-// path to 2437.892 KiB; retain 0.108 KiB of bounded headroom.
-// Merged dev panels (team/retrieval) push the initial path to 2439.4 KiB raw.
-// The cold-start session-turns readout (bootTurns plumbing through Meta and
-// the reducer) adds ~0.2 KiB to that dev baseline; retain a narrow 0.4 KiB
-// raw ratchet over the measured path instead of tightening an equality gate.
-const rawInitialBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 2_440.0 : 2_440.0;
+// merged main-v2 baseline (including its own prepaint port). MCP elicitation
+// and Apps add their bounded payload on the shared graph; the combined path
+// measures 2442.6 KiB. Retain 0.4 KiB of bounded build/toolchain headroom.
+// The browser MCP interaction preview adds 0.6 KiB of route wiring while its
+// 0.75 KiB form fixture and lifecycle remain lazy. The combined path measures
+// 2443.2 KiB; retain 0.1 KiB of bounded build/toolchain headroom.
+// Generic field copy adds 1.134 KiB raw to the startup dictionary; all schema
+// parsing, rendering, and CSS remain lazy. The measured path is 2444.334 KiB;
+// retain 0.166 KiB of bounded build/toolchain headroom.
+// The off-flow composer measurement mirror adds 0.472 KiB raw while removing
+// live-textarea layout mutation. The merged path measures 2444.806 KiB; retain
+// 0.194 KiB of bounded toolchain headroom without widening gzip/chunk gates.
+// Stream-failure visibility and corrected proxy guidance bring the merged path
+// to 2446.6 KiB; retain the smallest existing decimal ratchet.
+// The stranded-tail recovery transition plus the WebView2 reachable-tail clamp
+// bring the measured initial payload to 2447.953 KiB. Retain 0.047 KiB with
+// the smallest one-decimal ratchet.
+// The extracted history-prepend owner and compact session-version host measure
+// 2452.7 KiB together; the recovery coordinator and dialog remain lazy. Retain
+// the smallest one-decimal headroom without widening unrelated chunk ceilings.
+// Latest-base transcript settle ownership brings the measured path to
+// 2452.773 KiB; isolated conversation forks bring the combined tree to
+// 2454.719 KiB on the release toolchain. Retain 0.081 KiB with the smallest
+// one-decimal ratchet.
+const rawInitialBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 2_454.8 : 2_454.8;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
