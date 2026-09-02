@@ -574,9 +574,9 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 		// stop when reasoning carried the substance of the answer and treat
 		// the turn as a final answer instead of retrying.
 		if a.requireVisibleFinal || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
-			state.emptyFinalBlocks++
-			if state.emptyFinalBlocks >= maxEmptyFinalBlocks {
-				return false, fmt.Errorf("model finished without a visible final answer %d times", state.emptyFinalBlocks)
+			state.terminal.emptyFinalBlocks++
+			if state.terminal.emptyFinalBlocks >= maxEmptyFinalBlocks {
+				return false, fmt.Errorf("model finished without a visible final answer %d times", state.terminal.emptyFinalBlocks)
 			}
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeEmptyFinal, Text: emptyFinalNotice(), Detail: emptyFinalNoticeDetail(a.svc.prov.Name(), usage, len(reasoning))})
 			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage())})
@@ -584,8 +584,8 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 			return true, nil
 		}
 	}
-	if state.executorHandoff && !state.usedAnyTool && state.handoffNudges < maxExecutorHandoffNudges && shouldNudgeExecutorHandoff(state.input, text) {
-		state.handoffNudges++
+	if state.executorHandoff && !state.usedAnyTool && state.terminal.handoffNudges < maxExecutorHandoffNudges && shouldNudgeExecutorHandoff(state.input, text) {
+		state.terminal.handoffNudges++
 		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeExecutorHandoff, Text: executorHandoffNoticeText(), Detail: "executor answered without taking any action; nudging it to use its tools"})
 		a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(executorHandoffRetryMessage())})
 		a.contextManager().ObserveUsage(usage)
@@ -614,10 +614,10 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 // max-steps grace round. cont=true continues the tool loop; cont=false returns
 // err from Run.
 func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step int, text, reasoning string, calls []provider.ToolCall, usage *provider.Usage) (cont bool, err error) {
-	state.emptyFinalBlocks = 0
+	state.terminal.emptyFinalBlocks = 0
 	state.usedAnyTool = true
 	unavailableContextTools := a.unavailableContextualToolCalls(ctx, calls)
-	if len(unavailableContextTools) > 0 && state.contextToolRepairs > 0 {
+	if len(unavailableContextTools) > 0 && state.terminal.contextToolRepairs > 0 {
 		msg := fmt.Sprintf("blocked: context-unavailable tools were called again after the repair instruction: %s", strings.Join(unavailableContextTools, ", "))
 		for _, call := range calls {
 			a.sess.conversation.Add(provider.Message{Role: provider.RoleTool, Content: msg, ToolCallID: call.ID, Name: call.Name})
@@ -691,7 +691,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 			// but accept a co-streamed answer without another repair request.
 			return a.handleFinalResponse(ctx, state, text, reasoning, usage)
 		}
-		state.contextToolRepairs++
+		state.terminal.contextToolRepairs++
 		nudge := fmt.Sprintf("The following tools are unavailable in the current workflow phase: %s. Do not call them again. Respond to the user's request with visible answer text now; call a different tool only if it is still needed to complete the request.", strings.Join(unavailableContextTools, ", "))
 		a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(nudge)})
 	}

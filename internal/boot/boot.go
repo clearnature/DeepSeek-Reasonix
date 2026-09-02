@@ -1551,7 +1551,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	var capLedger *capability.Ledger
 	var capAudit *capability.Audit
 	capEntries, capSpecs := capabilityServerInventory(cfg.Plugins, root, pluginSpecOptions, extraSpecs, enabledMCPNames)
-	cachedTools, cacheKeyOK := capability.LoadCachedToolsForSpecs(capSpecs)
+	cachedTools, cacheKeyOK := capability.LoadCachedToolsForSpecs(capSpecs, opts.MCPHostProfile)
 	skillStore.ConfigureToolBindings(func(sk skill.Skill) []tool.MCPBinding {
 		return skillMCPBindings(sk, reg, capSpecs, cachedTools, cacheKeyOK)
 	})

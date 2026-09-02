@@ -724,3 +724,11 @@ func (a *Agent) applyLimitMode(adm *contextAdmission, userMax int, policy provid
 		}
 	}
 }
+
+// outputBudgetReserveForWindow returns the reserve tokens for a given context window.
+func outputBudgetReserveForWindow(window int) int {
+	if window <= 0 {
+		return outputBudgetReserve
+	}
+	return min(outputBudgetReserve, window/4)
+}

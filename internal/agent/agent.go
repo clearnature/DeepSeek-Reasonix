@@ -10,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -1111,6 +1110,9 @@ type Options struct {
 	// delete_range to the pre-fingerprint full-file fresh-read requirement.
 	// It never enters provider-visible prompts or tool schemas.
 	LegacyAnchorSafetyGate bool
+	CompletionValidation   string
+	CompletionEvaluator    CompletionEvaluator
+	CompletionEvaluatorFactory CompletionEvaluatorFactory
 }
 
 // New constructs an Agent. MaxSteps <= 0 means no cap — the run loop continues
@@ -2880,17 +2882,6 @@ func truncateToolOutputFor(s, toolName, toolCallID string) (string, string) {
 	return head + marker + tail, notice
 }
 
-// snapToRuneBoundary returns s[lo:hi] with the bounds nudged outward until
-// both land on rune-start positions.
-func snapToRuneBoundary(s string, lo, hi int) string {
-	for lo > 0 && !utf8.RuneStart(s[lo]) {
-		lo--
-	}
-	for hi < len(s) && !utf8.RuneStart(s[hi]) {
-		hi++
-	}
-	return s[lo:hi]
-}
 
 // finishReasonMessage maps an abnormal finish_reason to a one-line warning,
 // returning ok=false for the normal terminations ("stop", "tool_calls") and a

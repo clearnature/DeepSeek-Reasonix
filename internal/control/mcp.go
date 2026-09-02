@@ -34,6 +34,20 @@ func newMcpManager(host *plugin.Host, reg *tool.Registry, pluginCtx context.Cont
 	return mcpManager{host: host, reg: reg, pluginCtx: pluginCtx}
 }
 
+// mcpHostProfile returns the MCP host's profile for capability routing.
+func (c *Controller) mcpHostProfile() plugin.HostProfile { return c.mcp.hostProfileOf() }
+
+// hostProfileOf returns the MCP host's profile. Zero (HostProfileCore) when
+// no host exists yet.
+func (m *mcpManager) hostProfileOf() plugin.HostProfile {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.host == nil {
+		return plugin.HostProfileCore
+	}
+	return m.host.Profile()
+}
+
 // hostRef returns the live plugin host (nil until one is injected or lazily
 // created), for the SessionAPI Host() accessor and the nil-safe read wrappers.
 func (m *mcpManager) hostRef() *plugin.Host {

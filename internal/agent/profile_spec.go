@@ -139,6 +139,10 @@ type ContextRequest struct {
 	// Ephemeral forces a non-persisted transcript for entry points that promise
 	// no durable host side effects, such as read_only_task.
 	Ephemeral bool
+	Decisions       []acceptedDecision
+	EvidenceSummary string
+	FileAnchors     []string
+	OutputFormat    string
 }
 
 // SchedulerPolicy is when and how the run executes. It never changes what the
@@ -146,6 +150,8 @@ type ContextRequest struct {
 type SchedulerPolicy struct {
 	// MaxSteps is the optional per-call step budget (0 = default).
 	MaxSteps int
+	// MaxOutputTokens is an optional child completion cap (0 = inherit).
+	MaxOutputTokens int
 	// RunInBackground starts a jobs.Manager background job.
 	RunInBackground bool
 	// BackgroundWriter marks work already hosted by a parent background job
