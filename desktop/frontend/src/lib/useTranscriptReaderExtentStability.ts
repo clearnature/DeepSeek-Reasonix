@@ -47,10 +47,13 @@ type ActiveReaderTransaction = TranscriptReaderTransaction & {
   lastBottomDistance: number;
   transient: boolean;
   visualOffset: number;
-  postCorrectionSettleDeadline: number;
+  postCorrectionDeadline: number;
+  /** Wall-clock bound for a history-prepend geometry commit. Reader input may
+   *  extend its own settle window, but must not postpone the prepend forever. */
+  commitAt: number;
   /** Last tick's native height: a rebound correction spends its budget only
    *  after one unchanged-height interval with mounted viewport coverage. */
-  correctionHeightSample: number;
+  correctionHeight: number;
   /** A blank rebound scroll delivery spends the single correction budget
    *  synchronously before the next paint instead of waiting for a frame. */
   prepaint: boolean;
@@ -218,7 +221,7 @@ export function useTranscriptReaderExtentStability({
     transaction.transient = remainsCollapsed && transaction.transientStableFrames < STABLE_FRAMES_REQUIRED;
     if (rejected) {
       if (transaction.correctionWritten && anchorDisplaced) {
-        transaction.postCorrectionSettleDeadline = Math.min(
+        transaction.postCorrectionDeadline = Math.min(
           transaction.settleDeadline,
           Date.now() + POST_CORRECTION_SETTLE_MS,
         );
@@ -341,8 +344,8 @@ export function useTranscriptReaderExtentStability({
       // One unchanged-height interval per tick: a restored native extent can
       // surface one or two paints before Virtuoso mounts rows for it, so the
       // correction below must not spend its budget on the appearance frame.
-      const correctionHeightStable = transaction.correctionHeightSample === element.scrollHeight;
-      transaction.correctionHeightSample = element.scrollHeight;
+      const correctionHeightStable = transaction.correctionHeight === element.scrollHeight;
+      transaction.correctionHeight = element.scrollHeight;
       const now = Date.now();
       const beforeIdleDeadline = now < transaction.deadline;
       if (!beforeIdleDeadline && !transaction.idleDelivered) {
@@ -425,7 +428,7 @@ export function useTranscriptReaderExtentStability({
           });
           transaction.correctionWritten = correctionWrittenThisFrame;
           if (correctionWrittenThisFrame) {
-            transaction.postCorrectionSettleDeadline = Math.min(
+            transaction.postCorrectionDeadline = Math.min(
               transaction.settleDeadline,
               now + POST_CORRECTION_SETTLE_MS,
             );
@@ -471,7 +474,7 @@ export function useTranscriptReaderExtentStability({
         // well after the first two quiet animation frames. Keep observing (but
         // never reopen the writer budget) through one bounded quiet window so
         // a delayed commit is visually guarded before paint.
-        if (now < transaction.postCorrectionSettleDeadline) {
+        if (now < transaction.postCorrectionDeadline) {
           transaction.frame = requestAnimationFrame(tick);
           return;
         }
@@ -510,7 +513,24 @@ export function useTranscriptReaderExtentStability({
     // Exposed so a blank rebound delivery can run the correction before paint.
     transaction.tick = tick;
     if (transaction.frame === null) transaction.frame = requestAnimationFrame(tick);
-  }, [finish, generationRef, geometryRevisionRef, modeRef, observe, ownershipEpochRef, scrollRef, writeCorrection]);
+  }, [finish, generationRef, geometryCommitBlockedRef, geometryCommitReadyRef, geometryRevisionRef, modeRef, observe, ownershipEpochRef, scrollRef, stableAnchorRequiredRef, writeCorrection]);
+
+  const holdGeometryCommit = useCallback((captureAnchor: boolean) => {
+    geometryCommitReadyRef.current = false;
+    const transaction = transactionRef.current;
+    if (!transaction) return;
+    const now = Date.now();
+    const mutationDeadline = now + TRANSCRIPT_READER_IDLE_MS + TRANSCRIPT_READER_SETTLE_MS;
+    if (captureAnchor) transaction.anchor = captureLogicalAnchor(transaction.element) ?? transaction.anchor;
+    transaction.settleDeadline = Math.max(transaction.settleDeadline, mutationDeadline);
+    transaction.commitAt = Math.max(transaction.commitAt, mutationDeadline);
+    transaction.stableFrames = 0;
+    if (captureAnchor) {
+      transaction.correctionWritten = false;
+      transaction.mountAnchorWritten = false;
+    }
+    schedule(transaction);
+  }, [geometryCommitReadyRef, schedule]);
 
   const arm = useCallback((deltaY: number, canClaimTail: boolean) => {
     const element = scrollRef.current;
@@ -590,8 +610,9 @@ export function useTranscriptReaderExtentStability({
       lastBottomDistance: nativeTranscriptDistanceFromBottom(element),
       transient: inheritedCollapse,
       visualOffset: 0,
-      postCorrectionSettleDeadline: 0,
-      correctionHeightSample: element.scrollHeight,
+      postCorrectionDeadline: 0,
+      commitAt: now + TRANSCRIPT_READER_IDLE_MS + TRANSCRIPT_READER_SETTLE_MS,
+      correctionHeight: element.scrollHeight,
       prepaint: false,
     };
     transactionRef.current = transaction;
