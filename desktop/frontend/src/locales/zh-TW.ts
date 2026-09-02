@@ -3510,4 +3510,17 @@ export const zhTW: Record<DictKey, string> = {
 	"team.readonly": "唯讀",
 	"team.pendingApprovals": "待審批",
 	"team.approveHint": "審批或拒絕待處理的請求",
+	// recovery keys
+	"history.confirmClearRecoveryCopies": "確認清除恢復副本",
+	"history.clearRecoveryCopies": "清除恢復副本",
+	"history.clearRecoveryCopiesMenu": "清除恢復副本…",
+	"history.confirmTrashRecoveryCopies": "確認將恢復副本移至回收站",
+	"history.trashRecoveryCopies": "將恢復副本移至回收站",
+	"history.recoveryCopiesGroup": "恢復副本",
+	"recovery.badge": "恢復",
+	"projectTree.recoveryCopies": "{count} 個恢復副本",
+	"recovery.cleanupConfirm": "確認清理（{count} 個符合條件）",
+	"recovery.cleanupResult": "清理結果：{moved} 個已移動，{busy} 個忙碌，{kept} 個保留",
+	"recovery.previewCleanup": "預覽清理",
+	"recovery.applyCleanup": "應用清理",
 };

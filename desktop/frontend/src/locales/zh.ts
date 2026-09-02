@@ -3514,4 +3514,17 @@ export const zh: Record<DictKey, string> = {
 	"team.readonly": "只读",
 	"team.pendingApprovals": "待审批",
 	"team.approveHint": "审批或拒绝待处理的请求",
+	// recovery keys
+	"history.confirmClearRecoveryCopies": "确认清除恢复副本",
+	"history.clearRecoveryCopies": "清除恢复副本",
+	"history.clearRecoveryCopiesMenu": "清除恢复副本…",
+	"history.confirmTrashRecoveryCopies": "确认将恢复副本移至回收站",
+	"history.trashRecoveryCopies": "将恢复副本移至回收站",
+	"history.recoveryCopiesGroup": "恢复副本",
+	"recovery.badge": "恢复",
+	"projectTree.recoveryCopies": "{count} 个恢复副本",
+	"recovery.cleanupConfirm": "确认清理（{count} 个符合条件）",
+	"recovery.cleanupResult": "清理结果：{moved} 个已移动，{busy} 个忙碌，{kept} 个保留",
+	"recovery.previewCleanup": "预览清理",
+	"recovery.applyCleanup": "应用清理",
 };
