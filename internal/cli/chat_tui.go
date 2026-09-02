@@ -431,6 +431,9 @@ type chatTUI struct {
 	// is already being restored.
 	oldControllers []control.SessionAPI
 
+	// elicit holds the pending MCP elicitation card (nil when none).
+	elicit *elicitCard
+
 	// completion is the live autocomplete menu (slash commands; @-refs later).
 	completion completion
 	// fileSearchCache memoizes fileref.Search by query so the bounded walk runs
