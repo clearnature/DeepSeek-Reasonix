@@ -138,14 +138,6 @@ console.log("\nbundle budgets");
 // The final 0.266 KiB retains jump ownership through paint-ready instead of
 // allowing a native scrollend to release it. Keep only 0.213 KiB headroom;
 // native validation hosts and test fixtures stay outside the production graph.
-// Notification volume plus per-source loudness normalization moves current
-// main-v2 from 447.639 to 447.882 KiB gzip (+0.243 KiB). Retain 0.118 KiB of
-// bounded build/toolchain headroom.
-// Pre-paint live-tail stabilization and its monotonic live-footer guard then
-// add 0.695 KiB after extracting ownership modules below repolint's source
-// ceilings. Surface- and resize-scoped floor fencing adds another 0.113 KiB;
-// the combined path measures 448.692 KiB. Retain 0.108 KiB of bounded
-// build/toolchain headroom.
 // Cross-platform shell inventory, current-session vs after-reload rows,
 // manual repair guidance, and exact download-host allowlisting move the merged
 // path from 448.692 to 449.758 KiB (+1.066 KiB). Retain 0.142 KiB of bounded
@@ -153,12 +145,34 @@ console.log("\nbundle budgets");
 // The reader transaction contract (geometry revisions, generation-fenced
 // writer requests, gesture travel proof, stabilized-shrink extent acceptance,
 // and the blank-rebound prepaint lane) adds a measured 3.978 KiB gzip on the
-// merged main-v2 baseline, bringing the path to 453.736 KiB; retain 0.064
-// KiB of bounded headroom.
-// Merged main-v2 additions (remote parity, transcript transactions, shell
-// support, notification volume) plus dev-side panels measure 454.0 KiB gzip;
-// retain 0.2 KiB of deterministic toolchain headroom.
-const initialJSBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 454.2 : 454.2;
+// merged main-v2 baseline. MCP elicitation and the inline Apps lifecycle remain
+// on that startup graph; the combined path measures 455.0 KiB. Retain 0.2 KiB
+// of bounded build/toolchain headroom.
+// Generic elicitation validation adds field-specific localized accessibility
+// copy to the English startup dictionary. The interaction code and CSS remain
+// lazy; the measured path is 455.437 KiB. Retain 0.163 KiB of headroom.
+// Stream-failure visibility (#9560) adds the last-discard reason and one
+// terminal-notice dedupe flag, while provider no_proxy copy now states the
+// custom-proxy precedence. The merged path measures 455.9 KiB; retain 0.1 KiB
+// of bounded build/toolchain headroom.
+// Exhausted tail repair now releases ownership so jump-bottom remains usable
+// after a stranded native WebView extent. The WebView2 reachable-tail clamp
+// then absorbs a second post-quiet extent without an unbounded write loop.
+// The combined path measures 456.316 KiB; retain 0.084 KiB with the smallest
+// one-decimal ratchet.
+// The generation-bound history-prepend lease adds stable-key reader anchoring,
+// full mounted coverage, and one final arbiter-owned correction. The measured
+// path is 457.406 KiB after extracting the lease owner to satisfy repolint.
+// Latest-base transcript settle ownership measures 457.518 KiB with this UX;
+// isolated conversation forks and their extracted browser mock adapter bring
+// the combined tree to 458.158 KiB. Retain 0.042 KiB with the smallest
+// one-decimal ratchet. Completion uncertainty adds a terminal outcome and
+// notice without exposing evaluator audits to the frontend; the final merged
+// build measures 458.287 KiB gzip.
+// Transactional Ask resolution and authoritative rejected-submit recovery add
+// 0.3 KiB gzip to the initial controller path. Retain the exact turn fence,
+// bounded ListTabs retry, and stale-prompt guard with a 0.1 KiB headroom.
+const initialJSBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 458.7 : 458.7;
 assertBudget("initial JavaScript gzip", initialJSGzip, initialJSBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk gzip", largestInitialJS, 280 * 1024);
 // Render-blocking CSS is intentionally absent: styles.css loads deferred via
@@ -205,7 +219,15 @@ for (const path of localeChunks) {
   // choices from the primary UI; keep that complete guidance with a bounded
   // 0.4–0.5 KiB locale-only ratchet.
   // Git-Bash installation guidance adds localized copy across dialects.
-  const budget = name.startsWith("zh-TW-") ? 59.0 * 1024 : 58.5 * 1024;
+  // MCP elicitation adds fourteen short labels per locale (~40 B gzip).
+  // Generic schema validation adds complete field-error, privacy, and safe-
+  // fallback copy. Measured chunks are 58.574 KiB zh and 59.368 KiB zh-TW;
+  // retain roughly 0.13 KiB of platform headroom for each.
+  // Stream-failure diagnostics add five strings per dialect. Together with the
+  // reachable-tail recovery copy, the merged chunks measure 58.923 KiB zh and
+  // 59.710 KiB zh-TW. The isolated-fork guidance brings the measured chunks
+  // to 59.1 KiB zh and 59.9 KiB zh-TW; retain a narrow one-decimal ratchet.
+  const budget = name.startsWith("zh-TW-") ? 60.0 * 1024 : 59.2 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -269,13 +291,18 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // The stranded-tail recovery transition plus the WebView2 reachable-tail clamp
 // bring the measured initial payload to 2447.953 KiB. Retain 0.047 KiB with
 // the smallest one-decimal ratchet.
-// The extracted history-prepend owner and compact session-version host measure
-// 2452.7 KiB together; the recovery coordinator and dialog remain lazy. Retain
-// the smallest one-decimal headroom without widening unrelated chunk ceilings.
+// The extracted history-prepend owner adds 3.953 KiB of bounded transaction
+// state and stable-key coverage checks. Together with the compact
+// session-version host, they measure 2452.7 KiB; the recovery coordinator and
+// dialog remain lazy. Completion uncertainty adds a distinct terminal notice
+// and localized startup copy without collapsing into recovery-paused UX.
 // Latest-base transcript settle ownership brings the measured path to
 // 2452.773 KiB; isolated conversation forks bring the combined tree to
-// 2454.719 KiB on the release toolchain. Retain 0.081 KiB with the smallest
-// one-decimal ratchet.
-const rawInitialBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 2_454.8 : 2_454.8;
+// 2454.719 KiB on the release toolchain. Completion uncertainty brings the
+// final merged payload to 2455.154 KiB; retain the smallest one-decimal
+// ratchet.
+// Ask turn fencing, rejection reconciliation, and the localized submit-failure
+// notice measure 2456.044 KiB raw; retain 0.056 KiB of one-decimal headroom.
+const rawInitialBudgetKiB = process.env.REASONIX_CHANNEL === "test" ? 2_456.1 : 2_456.1;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);
