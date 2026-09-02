@@ -147,6 +147,10 @@ type Options struct {
 	// instead of creating new subprocesses, and the caller manages the host's
 	// lifecycle. When nil, Build creates and owns a new host as before.
 	SharedHost *plugin.Host
+	// MCPHostProfile is the capability surface for hosts Build creates;
+	// desktop passes HostProfileDesktopApps, other frontends leave it zero
+	// (HostProfileCore). Nil-equivalent zero keeps the old NewHost() default.
+	MCPHostProfile plugin.HostProfile
 	// CleanupPendingReconciler retries delayed physical cleanup for session
 	// artifacts left by a previous process. Nil uses the core physical-delete
 	// reconciler; frontends with different deletion semantics can override it.
@@ -726,7 +730,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// instead of one per tab). Otherwise construct a private host per controller.
 	pluginHost := opts.SharedHost
 	if pluginHost == nil {
-		pluginHost = plugin.NewHost()
+		pluginHost = plugin.NewHostWithProfile(opts.MCPHostProfile)
 	}
 
 	// Enabled MCP servers enter the tool catalog at boot. Cached schemas

@@ -12,6 +12,8 @@
 package event
 
 import (
+	"encoding/json"
+
 	"reasonix/internal/billing"
 	"reasonix/internal/evidence"
 	"reasonix/internal/nilutil"
@@ -130,6 +132,9 @@ const (
 	PromptAnswered
 	// SessionChanged is a content-free Serve routing barrier for all-session clients.
 	SessionChanged
+	// MCPInteractionRequest carries a server-initiated MCP elicitation (form
+	// or URL prompt). Appended last to keep earlier Kind values wire-stable.
+	MCPInteractionRequest
 	// KindCount is a sentinel one past the last real Kind. New event kinds must
 	// be inserted above it so completeness tests cover them automatically.
 	KindCount
@@ -432,6 +437,18 @@ type Compaction struct {
 
 // ContextMaintenance is the typed wire-safe receipt for snip/prune/noop/
 // blocked operations. Transcript bytes are represented by hashes and counts.
+// MCPInteraction carries one MCPInteractionRequest: a server-initiated
+// elicitation (form or URL prompt).
+type MCPInteraction struct {
+	ID              string
+	Server          string
+	Mode            string
+	Message         string
+	RequestedSchema json.RawMessage
+	URL             string
+	ElicitationID   string
+}
+
 type ContextMaintenance struct {
 	Status              string `json:"status,omitempty"`
 	Action              string `json:"action,omitempty"`
@@ -560,7 +577,8 @@ type Event struct {
 	// PhaseName is set on TurnPhase events (working|checking|verifying|reviewing).
 	PhaseName TurnPhaseName
 	// Completion is set on CompletionSummary events.
-	Completion *CompletionSummaryInfo
+	Completion    *CompletionSummaryInfo
+	MCPInteraction MCPInteraction // MCPInteractionRequest
 }
 
 type WorkspaceWatchState string
