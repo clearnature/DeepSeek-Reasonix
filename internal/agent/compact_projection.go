@@ -858,3 +858,14 @@ func (a *Agent) runCompactionSummary(ctx context.Context, prefix, fold []provide
 	}
 	return summary, CompactionModeSummarized, usage, "", nil
 }
+
+// foldSummaryWithChunkedFallback retries summary size failures through the
+// chunked fallback path. This is a stub that delegates to foldToSummary.
+func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger string, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
+	res, err := a.foldToSummary(ctx, nil, fold, instructions)
+	if err != nil {
+		return foldSummary{}, CompactionTelemetry{}, err
+	}
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	return res, tele, nil
+}

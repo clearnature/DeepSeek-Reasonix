@@ -217,7 +217,7 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 		rawContent = a.turn.turnInput
 	}
 	a.sess.conversation.Add(provider.Message{
-		Role: provider.RoleUser, Content: input, RawContent: rawContent,
+		Role: provider.RoleUser, Origin: inputMessageOrigin(ctx), Content: input, RawContent: rawContent,
 		Images: userImages(ctx), VisionSummary: VisionSummaryFromContext(ctx), CreatedAt: userCreatedAt,
 	})
 
@@ -248,7 +248,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		// guidance (with a prefix), not a new task. One cache miss per
 		// steer is unavoidable — the model must see the new instruction.
 		if text, itemID, ok := a.consumeSteer(); ok {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(midTurnSteerMessage(text))})
+			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Origin: provider.MessageOriginUser, Content: a.withTurnPreferences(midTurnSteerMessage(text))})
 			a.svc.sink.Emit(event.Event{Kind: event.Steer, Text: text, ItemID: itemID})
 		} else if itemID != "" {
 			// Loader failed after dequeue: durable entry stays for inspection

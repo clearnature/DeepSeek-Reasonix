@@ -106,3 +106,19 @@ func TestManualCompactReservesSummaryOutputSpaceAtCeiling(t *testing.T) {
 		t.Fatalf("receipt = %+v, want applied projection", receipt)
 	}
 }
+
+// opaqueWindowProvider declares no ContextBudgetPolicy (Unknown window mode)
+// so the test exercises the fallback path.
+type opaqueWindowProvider struct {
+	requests []provider.Request
+}
+
+func (p *opaqueWindowProvider) Name() string { return "opaque-window" }
+
+func (p *opaqueWindowProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+	p.requests = append(p.requests, req)
+	ch := make(chan provider.Chunk, 1)
+	ch <- provider.Chunk{Type: provider.ChunkDone, Usage: &provider.Usage{}}
+	close(ch)
+	return ch, nil
+}
