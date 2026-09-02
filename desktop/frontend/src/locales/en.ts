@@ -3511,6 +3511,19 @@ export const en = {
 	"team.readonly": "Read-only",
 	"team.pendingApprovals": "Pending approvals",
 	"team.approveHint": "Approve or reject pending requests",
+	// recovery keys
+	"history.confirmClearRecoveryCopies": "Confirm clear recovery copies",
+	"history.clearRecoveryCopies": "Clear recovery copies",
+	"history.clearRecoveryCopiesMenu": "Clear recovery copies…",
+	"history.confirmTrashRecoveryCopies": "Confirm move recovery copies to trash",
+	"history.trashRecoveryCopies": "Move recovery copies to trash",
+	"history.recoveryCopiesGroup": "Recovery copies",
+	"recovery.badge": "recovery",
+	"projectTree.recoveryCopies": "{count} recovery copies",
+	"recovery.cleanupConfirm": "Confirm cleanup ({count} eligible)",
+	"recovery.cleanupResult": "Cleanup result: {moved} moved, {busy} busy, {kept} kept",
+	"recovery.previewCleanup": "Preview cleanup",
+	"recovery.applyCleanup": "Apply cleanup",
 };
 
 export type DictKey = keyof typeof en;
