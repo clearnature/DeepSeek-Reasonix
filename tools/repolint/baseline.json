@@ -2,14 +2,14 @@
   "limits": {
     "banner": 46,
     "commented-code": 1,
-    "complexity": 1997,
-    "essay": 2112,
-    "file-size": 102577,
-    "function-size": 8417,
+    "complexity": 2033,
+    "essay": 2179,
+    "file-size": 110188,
+    "function-size": 8759,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "struct-state": 103,
+    "struct-state": 126,
     "test-file-size": 70759
   },
   "files": {
@@ -272,6 +272,13 @@
     },
     "desktop/subagents_app_test.go": {
       "test-file-size": 151
+    },
+    "desktop/tabs.go": {
+      "complexity": 36,
+      "essay": 67,
+      "file-size": 7611,
+      "function-size": 342,
+      "struct-state": 23
     },
     "desktop/tabs_order_test.go": {
       "test-file-size": 395
