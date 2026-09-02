@@ -63,6 +63,7 @@ func SessionsShareContent(pathA, pathB string) (bool, error) {
 type SessionUserMessage struct {
 	Message provider.Message
 	At      time.Time
+	Text    string // resolved user text content (convenience field)
 }
 
 // LoadSessionUserMessages returns the session's user-role messages in
