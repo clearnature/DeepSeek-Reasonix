@@ -3,6 +3,8 @@ package openai
 import (
 	"context"
 	"encoding/json"
+
+	"reasonix/internal/netclient"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +35,7 @@ const (
 type FetchModelsOptions struct {
 	Headers  map[string]string
 	AuthMode ModelFetchAuthMode
+	Proxy netclient.ProxySpec
 }
 
 func (e modelFetchStatusError) Error() string {
