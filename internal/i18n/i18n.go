@@ -24,32 +24,45 @@ import (
 // fmt.Sprintf. Catalogue values do not include trailing newlines — call sites
 // add framing whitespace, so the same field works wherever it appears.
 type Messages struct {
-	WelcomeTitleFmt                        string // first-run box title — %s = product name (styled)
-	NoConfigYet                            string // first-run cue under the welcome box
-	InitHint                               string
-	ChatTip                                string // tip line under the chat banner
-	TurnCancelled                          string // shown when Ctrl-C aborts the in-flight turn but the chat keeps running
-	InterruptedRecovery                    string // replay notice for a durable interrupted turn
-	FinalReadinessRecovery                 string // replay hint for a durable final-readiness pause
-	RecoveryPaused                         string // controlled Auto retry pause; user can continue in the next message
-	ReceiptVerified                        string // end-of-turn receipt, nothing unproven
-	ReceiptGapsHeader                      string // end-of-turn receipt, header above the unproven list
-	ReceiptRisksHeader                     string // end-of-turn receipt, header above declared risks
-	ReceiptMore                            string // end-of-turn receipt, "and N more" tail
-	ReceiptGapKinds                        map[string]string
-	NoSessionToResume                      string // shown when --continue / --resume finds nothing
-	ResumeRequiresTTY                      string // shown when --resume runs piped instead of on a terminal
-	PickSessionLabel                       string // header on the --resume picker
-	ResumeBusy                             string // shown when /resume is used mid-turn
-	ResumeBadIndexFmt                      string // shown when /resume gets an out-of-range index (one %d)
-	ResumeAlreadyActive                    string // shown when /resume targets the current session
-	ResumedTitle                           string // banner title after a /resume switch
-	RenameUsage                            string // /rename with no args
-	RenameNoSession                        string // /rename with no active session
-	RenameDoneFmt                          string // /rename succeeded (one %s = new title)
-	ResumePickTitle                        string // header in the interactive resume picker
-	ResumePickHint                         string // keyboard hint in the interactive resume picker
-	ResumeRecoveryBadgeFmt                 string // recovery-copy badge — %s = short parent session id
+	// welcome / status screen
+	WelcomeTitleFmt string // first-run box title — %s = product name (styled)
+	NoConfigYet     string // first-run cue under the welcome box
+
+	// `reasonix init` — points to the in-session /init skill + setup
+	InitHint string
+
+	// chat REPL
+	ChatTip                string // tip line under the chat banner
+	TurnCancelled          string // shown when Ctrl-C aborts the in-flight turn but the chat keeps running
+	InterruptedRecovery    string // replay notice for a durable interrupted turn
+	FinalReadinessRecovery string // replay hint for a durable final-readiness pause
+	ReadinessContinuing    string // host is automatically finishing known readiness gaps
+	RecoveryPaused         string // controlled Auto retry pause; user can continue in the next message
+	CompletionUncertain    string // completion validator could not confirm the result; work is kept
+	ReceiptVerified        string // end-of-turn receipt, nothing unproven
+	ReceiptGapsHeader      string // end-of-turn receipt, header above the unproven list
+	ReceiptRisksHeader     string // end-of-turn receipt, header above declared risks
+	ReceiptMore            string // end-of-turn receipt, "and N more" tail
+	// ReceiptGapKinds maps a completion gap kind to its short human phrase.
+	ReceiptGapKinds   map[string]string
+	NoSessionToResume string // shown when --continue / --resume finds nothing
+	ResumeRequiresTTY string // shown when --resume runs piped instead of on a terminal
+	PickSessionLabel  string // header on the --resume picker
+
+	// in-chat /resume command
+	ResumeBusy          string // shown when /resume is used mid-turn
+	ResumeBadIndexFmt   string // shown when /resume gets an out-of-range index (one %d)
+	ResumeAlreadyActive string // shown when /resume targets the current session
+	ResumedTitle        string // banner title after a /resume switch
+
+	RenameUsage            string // /rename with no args
+	RenameNoSession        string // /rename with no active session
+	RenameDoneFmt          string // /rename succeeded (one %s = new title)
+	ResumePickTitle        string // header in the interactive resume picker
+	ResumePickHint         string // keyboard hint in the interactive resume picker
+	ResumeRecoveryBadgeFmt string // recovery-copy badge — %s = short parent session id
+
+	// chat TUI status line / approval banner.
 	ChatThinking                           string // live reasoning marker label, e.g. "thinking…"
 	ChatThoughtForFmt                      string // collapsed reasoning summary, "%d" = elapsed s
 	ChatStatusThinkingFmt                  string // "%s thinking… (%ds · <cancel hint>)" — %s = spinner, %d = elapsed s
@@ -79,6 +92,9 @@ type Messages struct {
 	ChatStatusCycleHint                    string // plan-toggle shortcut hint shown when no modal prompt owns the status row
 	ChatStatusCycleHintCompact             string // readable shortcut hint used by the persistent footer
 	ChatTurnReceiptLabel                   string // compact per-turn usage receipt attached to the completed assistant response
+	RateBandPeak                           string
+	RateBandOffPeak                        string
+	RateBandMixed                          string
 	ChatStatusModelLabel                   string
 	ChatStatusEffortLabel                  string
 	ChatStatusPresetLabel                  string
@@ -87,6 +103,7 @@ type Messages struct {
 	ChatStatusCompactLabel                 string
 	ChatStatusJobsLabel                    string
 	ChatStatusBalanceLabel                 string
+	ChatStatusCostLabel                    string
 	ChatStatusCacheNowFmt                  string // cache status tag, "%s" = latest-turn hit rate with percent sign
 	ChatStatusCacheAvgFmt                  string // cache status tag, "%s" = session-average hit rate with percent sign
 	ChatStatusPlanApproval                 string // shortcuts hint while a plan is pending
