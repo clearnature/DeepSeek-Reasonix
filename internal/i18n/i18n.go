@@ -81,6 +81,7 @@ type Messages struct {
 	ChatTurnReceiptLabel                   string // compact per-turn usage receipt attached to the completed assistant response
 	ChatStatusModelLabel                   string
 	ChatStatusEffortLabel                  string
+	ChatStatusPresetLabel                  string
 	ChatStatusCacheLabel                   string
 	ChatStatusContextLabel                 string
 	ChatStatusCompactLabel                 string
@@ -149,429 +150,440 @@ type Messages struct {
 	DiffFoldedFmt                          string // "… +%d more lines" footer when a writer diff is folded
 	DiffFoldEnabledFmt                     string // notice when /diff-fold enables folding, %d = line limit
 	DiffFoldDisabled                       string // notice when /diff-fold disables folding (shows all lines)
-	AskTypeSomething                       string // the "type your own answer" option label
-	AskTypingHint                          string // shown on that row while entering free text
-	AskChatInstead                         string // the "don't pick, just chat" option label
-	ChatStatusQuestion                     string // shortcuts hint while a question card is open
-	StatusResumePicker                     string // status tag while the resume picker is open (e.g. "select session")
-	AskSubmitTitle                         string // submit-tab title in the ask tool question card
-	AskUnanswered                          string // placeholder for an unanswered ask question
-	AskSubmitHint                          string // submit-tab keyboard hint
-	OutputStyleNone                        string // no styles available
-	ThemeHeader                            string // header above the /theme listing
-	ThemeHint                              string // how to select a theme
-	ThemeChangedFmt                        string // "/theme <name>" succeeded
-	ThemeUnknownFmt                        string // "/theme <name>" unknown
-	LanguageHeader                         string // header above the /language listing
-	LanguageHint                           string // how to select a language
-	LanguageChangedFmt                     string // "/language <tag>" succeeded, %s = saved tag, %s = resolved tag
-	CurrencyHeader                         string // header above the /currency listing
-	CurrencyHint                           string // how to select a pricing currency
-	CurrencyChangedFmt                     string // "/currency <mode>" succeeded, %s = saved mode, %s = resolved currency
-	RuntimeRefreshBusy                     string // runtime-affecting setting cannot change while work is active
-	RuntimeRefreshUnavailable              string // current session cannot rebuild after a runtime-affecting setting change
-	CompactionWorking                      string // shown while the summarizer runs
-	CompactionTitle                        string // card header before "· N messages · <trigger>"
-	CompactionUnit                         string // the noun counted, e.g. "messages"
-	CompactionAuto                         string // trigger label: reached the window threshold
-	CompactionManual                       string // trigger label: user ran /compact
-	ExtFormFieldsHint                      string // form card: field values are collected through the usual prompts
-	ExtRunActionFmt                        string // card action hint, one %s = the /<plugin>:<action> slash name
-	SlashCompactFailed                     string // "/compact" errored, prefixed before the underlying error
-	SlashNewDone                           string // "/new" succeeded
-	SlashNewFailed                         string // "/new" errored
-	SlashClearPrompt                       string // "/clear" destructive confirmation prompt
-	SlashClearDone                         string // "/clear" succeeded
-	SlashClearFailed                       string // "/clear" errored
-	SlashClsDone                           string // "/cls" succeeded
-	SlashTodoCleared                       string // "/todo" dismissed the pinned task list
-	SlashUnknown                           string // shown when the user types an unrecognised "/cmd"
-	SlashUnknownSentAsMessage              string // suffix: the unrecognised "/cmd" line was sent as a regular message
-	SlashPromptEmpty                       string // an MCP prompt returned no text to send
-	SlashMCPNone                           string // /mcp when no MCP servers are connected
-	CtrlCQuitHint                          string // shown on first Ctrl+C while idle; second press exits
-	CompHintSlash                          string // key hint footer under the slash-command menu
-	CompHintFile                           string // key hint footer under the @ file/resource menu
-	MouseCopiedHint                        string // transient status-line hint after a mouse/Ctrl+C selection copy
-	ClipboardCopyOSC52Hint                 string // copy was sent through OSC 52 because the session is remote
-	ClipboardCopyFallbackHint              string // native clipboard failed and copy fell back to OSC 52
-	ClipboardTextPasteRemoteHint           string // mouse paste cannot read the user's local clipboard/PRIMARY selection over SSH
-	ClipboardTextPasteFailedFmt            string // text clipboard read failed, one %v
-	ClipboardImagePastingHint              string // shown while an image is being read from the system clipboard
-	ClipboardImagePasteFailedFmt           string // image clipboard read failed, one %v
-	MouseCaptureOnHint                     string // "/mouse" turned in-app mouse handling back on
-	MouseCaptureOffHint                    string // "/mouse" released mouse capture to the terminal
-	MouseCaptureTag                        string // persistent status-line marker while mouse capture is off
-	ShellExecEmpty                         string // bare "!" with no command
-	ShellExecFailedFmt                     string // "shell command failed: %v"
-	ShellExecTimeoutFmt                    string // "shell command timed out (> %s)"
-	ShellModeHint                          string // status line hint when input starts with !
-	CmdNew                                 string // /new
-	CmdClear                               string // /clear
-	CmdCls                                 string // /cls
-	CmdCompact                             string // /compact
-	CmdContinueChecks                      string // /continue-checks
-	CmdContext                             string // /context
-	CmdRewind                              string // /rewind
-	CmdTree                                string // /tree
-	CmdBranch                              string // /branch
-	CmdSwitchBranch                        string // /switch
-	CmdResume                              string // /resume
-	CmdRename                              string // /rename
-	CmdModel                               string // /model
-	CmdStatus                              string // /status
-	CmdWorkMode                            string // /work-mode
-	CmdDocs                                string // /docs
-	CmdMemory                              string // /memory
-	CmdMigrate                             string // /migrate
-	CmdGoal                                string // /goal
-	CmdRemember                            string // /remember
-	CmdForget                              string // /forget
-	CmdMcp                                 string // /mcp
-	CmdRemote                              string // /remote
-	CmdHooks                               string // /hooks
-	CmdPlugins                             string // /plugins
-	CmdPasteImage                          string // /paste-image
-	CmdOutputStyle                         string // /output-style
-	CmdTheme                               string // /theme
-	CmdLanguage                            string // /language
-	CmdCurrency                            string // /currency
-	CmdSkill                               string // /skills
-	CmdVerbose                             string // /verbose
-	CmdReloadCmd                           string // /reload-cmd
-	CmdReload                              string // /reload
-	CmdDiffFold                            string // /diff-fold
-	CmdSandbox                             string // /sandbox
-	CmdEffort                              string // /effort
-	CmdMouse                               string // /mouse
-	CmdReasonLang                          string // /reasoning-language
-	CmdHelp                                string // /help
-	CmdWeb                                 string // /web
-	CmdTodo                                string // /todo
-	CmdQuit                                string // /quit (also accepts /exit as hidden alias)
-	CmdCopy                                string // /copy
-	CmdExport                              string // /export
-	SlashCopyDone                          string // "/copy" succeeded
-	SlashCopyEmpty                         string // no assistant response to copy
-	SlashCopyListHeader                    string // header shown before the numbered list
-	SlashExportDoneFmt                     string // "/export" succeeded, %s = file path
-	SlashExportEmpty                       string // no messages to export
-	ArgSkillShow                           string // /skills show
-	ArgSkillNew                            string // /skills new
-	ArgSkillPaths                          string // /skills paths
-	ArgMcpAdd                              string // /mcp add
-	ArgMcpRemove                           string // /mcp remove
-	ArgMcpConnected                        string // /mcp remove <server> tag
-	ArgHooksList                           string // /hooks list
-	ArgModelCurrent                        string // /model <ref> active tag
-	ArgEffortAuto                          string // /effort auto
-	ArgEffortLow                           string // /effort low
-	ArgEffortMedium                        string // /effort medium
-	ArgEffortHigh                          string // /effort high
-	ArgEffortXHigh                         string // /effort xhigh
-	ArgEffortMax                           string // /effort max
-	ArgThemeCurrent                        string // /theme <style> active tag
-	ArgLanguageAuto                        string // /language auto
-	ArgLanguageEn                          string // /language en
-	ArgLanguageZh                          string // /language zh
-	ListModelsHeaderFmt                    string // "models (active: %s)"
-	ListModelsHint                         string // how to switch
-	ListMemorySaved                        string // "saved memories"
-	ListMemoryArchived                     string // "archived memories"
-	ListMemoryNone                         string // no memory docs
-	ListSkillsHeaderFmt                    string // "skills (%d)"
-	ListSkillsNone                         string // no skills
-	ListHooksHeaderFmt                     string // "hooks (%d active)"
-	ListHooksNone                          string // no hooks
-	ListMcpHeader                          string // "mcp servers"
-	ListMcpNone                            string // no mcp servers
-	MemoryEditHint                         string
-	ForgetUsage                            string
-	ForgetDoneFmt                          string
-	QuickRememberEmpty                     string
-	QuickRememberDoneFmt                   string
-	GoalEmpty                              string
-	GoalCurrentFmt                         string
-	GoalSetFmt                             string
-	GoalCleared                            string
-	GoalNotRunning                         string
-	GoalNotPaused                          string
-	GoalPaused                             string
-	GoalPausedReason                       string
-	GoalPausedFmt                          string // %s = stop cause
-	GoalRuntimeFmt                         string // turns, requests, tokens, work duration
-	GoalRuntimeLastReason                  string
-	ModelSwitchUnavailable                 string
-	ModelSwitchBusy                        string
-	ModelAlreadyOnFmt                      string
-	ModelSwitchingFmt                      string
-	ModelSwitchedFmt                       string
-	ModelListHeader                        string
-	RuntimeSwitchPending                   string
-	RuntimeReloadQueued                    string // /reload queued behind active work; the idle drain runs it
-	RuntimeReloaded                        string // /reload completed (no generation available)
-	RuntimeReloadedGenerationFmt           string // /reload completed; %d is the runtime build generation
-	WorkModeUsage                          string
-	WorkModeDeprecatedNotice               string
-	RewindNone                             string
-	RewindCodeConversation                 string
-	RewindConversationOnly                 string
-	RewindCodeOnly                         string
-	RewindFork                             string
-	RewindSummarizeFrom                    string
-	RewindSummarizeUpto                    string
-	RewindPickTitle                        string
-	RewindPickHint                         string
-	RewindRestoreTitleFmt                  string
-	RewindApplyHint                        string
-	RewindCoverageTitle                    string
-	RewindCoverageWarningFmt               string
-	RewindConfirmHint                      string
-	RewindUnavailableFmt                   string
-	RewindEmpty                            string
-	SkillPickerAvailableFmt                string
-	SkillPickerMatchingFmt                 string // "%d matching · %d total" when searching
-	SkillPickerHint                        string
-	SkillPickerDetailHint                  string
-	SkillPickerSearchEmpty                 string
-	SkillPickerSearchPlaceholder           string
-	SkillPickerSourceTitle                 string
-	SkillPickerSourceActiveFmt             string
-	SkillPickerSourceHint                  string
-	SkillPickerDiagHidden                  string
-	SkillPickerDiagShown                   string
-	SkillPickerBuiltinSource               string
-	SkillPickerRescanned                   string
-	SkillPickerNoDescription               string
-	SkillPickerScopeProject                string
-	SkillPickerScopeCustom                 string
-	SkillPickerScopeGlobal                 string
-	SkillPickerScopeBuiltin                string
-	SkillPickerSubagent                    string
-	SkillPickerAvailableLabel              string
-	SkillPickerDisabledLabel               string
-	SkillPickerNoChanges                   string
-	SkillPickerSourceSkillsHint            string
-	SkillPickerSourceSkillsEmpty           string
-	SkillPickerActionToggle                string
-	SkillPickerActionDelete                string
-	SkillPickerDeleteTitleFmt              string // "Delete skill %s?"
-	SkillPickerDeleteConfirm               string
-	SkillPickerDeleteCancel                string
-	SkillPickerDeleteHint                  string
-	SkillPickerDeletedFmt                  string // "deleted skill %s"
-	SkillPickerMoreAboveFmt                string // "↑ %d more above"
-	SkillPickerMoreBelowFmt                string // "↓ %d more below"
-	SkillPickerTokenFmt                    string // "~%d tok"
-	SkillPickerDetailMetaFmt               string // "Scope: %s  Run as: %s"
-	SkillPickerSkillsUnit                  string // "skills" (used as "%d skills")
-	SkillPickerLinesUnit                   string // "lines" (used as "+N more lines")
-	SkillPickerStatusLabel                 string // shown in the TUI status bar while picker is open
-	SkillPickerStatusOK                    string // "ok" path status label
-	SkillPickerStatusMissing               string // "missing" path status label
-	SkillPickerStatusNotDir                string // "not-directory" path status label
-	SkillPickerStatusUnreadable            string // "unreadable" path status label
-	EnterAPIKeysHeader                     string // header before the per-env-var prompts
-	WroteFileFmt                           string // "Wrote %s" — used for reasonix.toml and .env both
-	SetupComplete                          string // success line at end of init
-	SetupCancelled                         string // shown when the user aborts the wizard
-	TryHintFmt                             string // "Try: %s" — %s = command to try (styled)
-	NextHint                               string // non-interactive post-write hint
-	ConfirmReconfigureFmt                  string // "%s already exists. Reconfigure and overwrite?"
-	NotOverwritingFmt                      string // non-interactive overwrite refusal
-	SetupManagerTitle                      string
-	SetupAddOpenAI                         string
-	SetupAddAnthropic                      string
-	SetupProviderExistsFmt                 string
-	SetupSaveExit                          string
-	SetupSaveExitDesc                      string
-	SetupCancel                            string
-	SetupCancelDesc                        string
-	SetupModelsUnit                        string
-	SetupKeySet                            string
-	SetupKeyMissing                        string
-	SetupDefaultBadge                      string
-	SetupProviderActionsFmt                string
-	SetupEditProvider                      string
-	SetupUpdateKey                         string
-	SetupTestRefresh                       string
-	SetupSetDefault                        string
-	SetupRemoveProvider                    string
-	SetupBack                              string
-	SetupPromptModels                      string
-	SetupSharedKeyWarningFmt               string
-	SetupPromptAPIKeyFmt                   string
-	SetupSelectDefaultModel                string
-	SetupConfirmRemoveFmt                  string
-	SetupSummaryTitle                      string
-	SetupSummaryAddedFmt                   string
-	SetupSummaryEditedFmt                  string
-	SetupSummaryRemovedFmt                 string
-	SetupSummaryDefaultFmt                 string
-	SetupSummaryKeysFmt                    string
-	SetupSummaryNoChanges                  string
-	SetupConfirmSave                       string
-	SetupConcurrentChangeFmt               string
-	FetchingModelsFmt                      string // "Fetching models for %s..."
-	FetchModelsSuccessFmt                  string // "Found %d models for %s"
-	FetchModelsFailedFmt                   string // "Failed to fetch models for %s: %v"
-	FetchModelsUsingPresetsFmt             string // "Live fetch unavailable for %s, using preset model list"
-	SelectModelsLabel                      string // "Select models to enable for %s"
-	CustomFetchEmpty                       string // "/models returned an empty list — falling back to manual entry"
-	AnthropicFetchEmpty                    string // "/models returned an empty list — Anthropic-compatible providers usually don't expose one, falling back to manual entry"
-	APIKeyAlreadySetFmt                    string // "reusing existing value for %s"
-	APIKeyResetPromptFmt                   string // "Re-enter %s?"
-	InvalidAPIKeyEnvFmt                    string // "%q is not a valid API Key variable name..."
-	RepairedAPIKeyEnvFmt                   string // "provider %s: replaced invalid api_key_env %q with %q"
-	CustomProviderDesc                     string // "Add third-party OpenAI compatible model"
-	CustomAddMethodLabel                   string // "Select add method"
-	CustomMethodManual                     string // "Enter model name manually"
-	CustomMethodURL                        string // "Fetch models from URL"
-	CustomPromptModel                      string // "Enter model name"
-	CustomPromptBaseURL                    string // "Enter Base URL"
-	CustomPromptKeyEnv                     string // "Enter API Key env var name"
-	CustomPromptAPIKey                     string // "Enter API Key"
-	CustomPromptWindow                     string // "Enter context window in tokens"
-	CustomAddedFmt                         string // "Added custom model: %s"
-	AnthropicProviderDesc                  string // "Add Anthropic API compatible model"
-	AnthropicAddMethodLabel                string // "Select add method"
-	AnthropicMethodManual                  string // "Enter model name manually"
-	AnthropicMethodURL                     string // "Fetch models from URL"
-	AnthropicPromptModel                   string // "Enter model name"
-	AnthropicPromptBaseURL                 string // "Enter Base URL"
-	AnthropicPromptKeyEnv                  string // "Enter API Key env var name"
-	AnthropicPromptAPIKey                  string // "Enter API Key"
-	AnthropicAddedFmt                      string // "Added Anthropic compatible model: %s"
-	AnthropicFetchingModelsFmt             string // "Fetching models for %s..."
-	AnthropicFetchModelsSuccessFmt         string // "Found %d models for %s"
-	AnthropicFetchModelsFailedFmt          string // "Failed to fetch models for %s: %v"
-	AnthropicSelectModelsLabel             string // "Select models to enable for %s"
-	RemoteConnectingFmt                    string // "connecting to %s…"
-	RemoteConnectedFmt                     string // "connected to %s"
-	RemoteReconnectingFmt                  string // "reconnecting to %s (attempt %d)…"
-	RemoteDegradedFmt                      string // "connected to %s but some forwards are down"
-	RemoteDisconnected                     string // "disconnected"
-	RemoteServeReadyFmt                    string // "remote serve ready: %s"
-	RemoteHostKeyPromptFmt                 string // "host %s key (%s): %s"
-	RemotePassphrasePromptFmt              string // "passphrase for %s:"
-	RemotePasswordPromptFmt                string // "password for %s:"
-	RemoteBootstrapStepFmt                 string // "remote serve: %s %s"
-	RemoteNoHostsHint                      string // "no remote hosts configured; add one with `reasonix remote add`"
-	UnknownCommandFmt                      string // "unknown command %q"
-	UsageRunHint                           string // "usage: reasonix run [--model NAME] <task>"
-	ErrorPrefix                            string // "error:" — prefix for fatal-error output
-	ReconfigureOnUnknownModel              string // shown when the configured model no longer resolves and setup is re-run
-	WriteConfigErr                         string // "write config:" — prefix for write failure
-	WriteEnvErr                            string // "write .env:" — prefix for env-write failure
-	ProviderErrBadRequest                  string // 400
-	ProviderErrAuth                        string // 401 — no key configured / sent
-	ProviderErrAuthRejected                string // 401 — a key was sent but the server rejected it
-	ProviderErrInsufficientBalance         string // 402
-	ProviderErrModelFormatMismatch         string // model format mismatch
-	ProviderErrOpenCodeGoGrokRoute         string // open code grok route
-	ProviderErrUnprocessable               string // 422
-	ProviderErrInputSensitive              string // MiniMax 1026
-	ProviderErrOutputSensitive             string // MiniMax 1027
-	ProviderErrRateLimited                 string // 429
-	ProviderErrServer                      string // 500
-	ProviderErrServerBusy                  string // 503
-	SelectOneHint                          string // "(↑/↓ · Enter · q to cancel)"
-	SelectManyHint                         string // "(↑/↓ · Space · Enter · q)"
-	SelectMoreAboveFmt                     string // "↑ %d more above"
-	SelectMoreBelowFmt                     string // "↓ %d more below"
-	SelectSearchHint                       string // "/ to search · Esc to cancel"
-	CmdProvider                            string // /provider
-	ProviderListHeader                     string // header for /provider list
-	ProviderAlreadyOnFmt                   string // already on provider
-	ProviderUnknownFmt                     string // unknown provider
-	ProviderPickLabel                      string // label for provider model picker
-	ProviderNoModelsFmt                    string // provider has no models
-	UpgradeChecking                        string // "Checking for updates…"
-	UpgradeChannelDeprecated               string // legacy channel selection is ignored
-	UpgradeDevBuild                        string // dev builds cannot self-update
-	UpgradeFetchFailed                     string // "failed to check for updates: %v"
-	UpgradeInvalidVersion                  string // remote version not valid semver
-	UpgradeAlreadyLatest                   string // already on the latest version
-	UpgradeForcing                         string // "Reinstalling the same version…"
-	UpgradeAvailableFmt                    string // "Current: %s → Latest: %s"
-	UpgradeNoAssetFmt                      string // "no binary found for %s"
-	UpgradeDownloadingFmt                  string // "Downloading %s (%s)…"
-	UpgradeDownloadFailed                  string // "download failed: %v"
-	UpgradeVerifying                       string // "Verifying checksum…"
-	UpgradeChecksumFailed                  string // "could not fetch checksum file: %v"
-	UpgradeChecksumMismatchFmt             string // SHA256 mismatch detail
-	UpgradeChecksumNotFoundFmt             string // asset not listed in SHA256SUMS
-	UpgradeExtractFailed                   string // "failed to extract binary: %v"
-	UpgradeApplying                        string // "Replacing binary…"
-	UpgradeApplyFailed                     string // "failed to apply update: %v"
-	UpgradeSuccessFmt                      string // "Updated %s → %s"
-	ReportNoPending                        string
-	ReportHeaderFmt                        string
-	ReportCapturedFmt                      string
-	ReportPreviewOnlyFmt                   string
-	ReportSendPrompt                       string
-	ReportKept                             string
-	ReportDeletedFmt                       string
-	ReportSentFmt                          string
-	ReportConfigFailedFmt                  string
-	ReportUploadFailedFmt                  string
-	ReportSentDeleteFailedFmt              string
-	ReportUsageBody                        string
-	CLITelemetryConsentNotice              string
-	CLITelemetryConsentPrompt              string
-	CLITelemetryConsentInvalid             string
-	CLITelemetryConsentSaveFailedFmt       string
-	CLITelemetryConsentCleanupFailedFmt    string
-	UsageBody                              string // full multi-line help text
-	EstimatedCostSuffix                    string // appended to the per-turn cost when the price is a third-party estimate
-	ChatStatusWorkLabel                    string
-	CmdCompressFast                        string // /compress-fast
-	CmdTeamCreate                          string // /team-create
-	CmdTeamAdd                             string // /team-add
-	CmdTeamStatus                          string // /team-status
-	CmdTeamRemove                          string // /team-remove
-	CmdTeamStop                            string // /team-stop
-	CmdTeamGrant                           string // /team-grant
-	CmdTeamRevoke                          string // /team-revoke
-	CmdTeamApprove                         string // /team-approve
-	CmdTeamAsk                             string // /team-ask
-	CmdTeamSpawn                           string // /team-spawn
-	TeamPanelTitle                         string // team panel header
-	TeamMembers                            string // roster count label (%d members)
-	TeamEmpty                              string // no team configured
-	TeamName                               string // roster column: name
-	TeamRole                               string // roster column: role
-	TeamState                              string // roster column: state
-	TeamPosture                            string // roster column: write posture
-	TeamJob                                string // roster column: job
-	TeamWorktree                           string // posture: worktree-isolated
-	TeamWritable                           string // posture: writable
-	TeamToken                              string // posture: write token
-	TeamReadonly                           string // posture: read-only
-	TeamPendingApprovals                   string // approvals heading
-	TeamApproveHint                        string // /team-approve hint
-	CmdTeamBroadcast                       string // /team-broadcast
-	WorkModeStatusFmt                      string
-	WorkModeListHeaderFmt                  string
-	WorkModeListHint                       string
-	WorkModeEconomyLabel                   string
-	WorkModeBalancedLabel                  string
-	WorkModeDeliveryLabel                  string
-	WorkModeEconomyDesc                    string
-	WorkModeBalancedDesc                   string
-	WorkModeDeliveryDesc                   string
-	WorkModeSwitchUnavailable              string
-	WorkModeSwitchBusy                     string
-	WorkModeAlreadyOnFmt                   string
-	WorkModeSwitchingFmt                   string
-	WorkModeSwitchedFmt                    string
-	ProviderErrContextOverflowFmt          string // 400/413/422 shared-window overflow with numbers
-	ReadinessContinuing                    string // host is automatically finishing known readiness gaps
-	RateBandPeak                           string
-	RateBandOffPeak                        string
-	RateBandMixed                          string
-	ChatStatusCostLabel                    string
-	QualityFloorApplied                    string
+
+	// `ask` tool question card.
+	AskTypeSomething   string // the "type your own answer" option label
+	AskTypingHint      string // shown on that row while entering free text
+	AskChatInstead     string // the "don't pick, just chat" option label
+	ChatStatusQuestion string // shortcuts hint while a question card is open
+	StatusResumePicker string // status tag while the resume picker is open (e.g. "select session")
+	AskSubmitTitle     string // submit-tab title in the ask tool question card
+	AskUnanswered      string // placeholder for an unanswered ask question
+	AskSubmitHint      string // submit-tab keyboard hint
+	ElicitURLHint      string // url-mode elicitation keyboard hint
+	ElicitConfirmOnly  string // schema-less form elicitation hint
+	ElicitUnanswered   string // placeholder for an unanswered elicitation field
+	ElicitSubmit       string // elicitation submit row label
+	ElicitSubmitHint   string // elicitation keyboard hint
+
+	// output style listing (/output-style).
+	OutputStyleNone           string // no styles available
+	ThemeHeader               string // header above the /theme listing
+	ThemeHint                 string // how to select a theme
+	ThemeChangedFmt           string // "/theme <name>" succeeded
+	ThemeUnknownFmt           string // "/theme <name>" unknown
+	LanguageHeader            string // header above the /language listing
+	LanguageHint              string // how to select a language
+	LanguageChangedFmt        string // "/language <tag>" succeeded, %s = saved tag, %s = resolved tag
+	CurrencyHeader            string // header above the /currency listing
+	CurrencyHint              string // how to select a pricing currency
+	CurrencyChangedFmt        string // "/currency <mode>" succeeded, %s = saved mode, %s = resolved currency
+	RuntimeRefreshBusy        string // runtime-affecting setting cannot change while work is active
+	RuntimeRefreshUnavailable string // current session cannot rebuild after a runtime-affecting setting change
+
+	// context compaction card (CompactionStarted / CompactionDone events).
+	CompactionWorking string // shown while the summarizer runs
+	CompactionTitle   string // card header before "· N messages · <trigger>"
+	CompactionUnit    string // the noun counted, e.g. "messages"
+	CompactionAuto    string // trigger label: reached the window threshold
+	CompactionManual  string // trigger label: user ran /compact
+
+	// extension structured-UI surfaces (ExtensionSurface / ExtensionStatus events).
+	ExtFormFieldsHint string // form card: field values are collected through the usual prompts
+	ExtRunActionFmt   string // card action hint, one %s = the /<plugin>:<action> slash name
+
+	// chat TUI slash commands.
+	SlashCompactFailed           string // "/compact" errored, prefixed before the underlying error
+	SlashNewDone                 string // "/new" succeeded
+	SlashNewFailed               string // "/new" errored
+	SlashClearPrompt             string // "/clear" destructive confirmation prompt
+	SlashClearDone               string // "/clear" succeeded
+	SlashClearFailed             string // "/clear" errored
+	SlashClsDone                 string // "/cls" succeeded
+	SlashTodoCleared             string // "/todo" dismissed the pinned task list
+	SlashUnknown                 string // shown when the user types an unrecognised "/cmd"
+	SlashUnknownSentAsMessage    string // suffix: the unrecognised "/cmd" line was sent as a regular message
+	SlashPromptEmpty             string // an MCP prompt returned no text to send
+	SlashMCPNone                 string // /mcp when no MCP servers are connected
+	CtrlCQuitHint                string // shown on first Ctrl+C while idle; second press exits
+	CompHintSlash                string // key hint footer under the slash-command menu
+	CompHintFile                 string // key hint footer under the @ file/resource menu
+	MouseCopiedHint              string // transient status-line hint after a mouse/Ctrl+C selection copy
+	ClipboardCopyOSC52Hint       string // copy was sent through OSC 52 because the session is remote
+	ClipboardCopyFallbackHint    string // native clipboard failed and copy fell back to OSC 52
+	ClipboardTextPasteRemoteHint string // mouse paste cannot read the user's local clipboard/PRIMARY selection over SSH
+	ClipboardTextPasteFailedFmt  string // text clipboard read failed, one %v
+	ClipboardImagePastingHint    string // shown while an image is being read from the system clipboard
+	ClipboardImagePasteFailedFmt string // image clipboard read failed, one %v
+	MouseCaptureOnHint           string // "/mouse" turned in-app mouse handling back on
+	MouseCaptureOffHint          string // "/mouse" released mouse capture to the terminal
+	MouseCaptureTag              string // persistent status-line marker while mouse capture is off
+
+	// shell execution (! prefix).
+	ShellExecEmpty      string // bare "!" with no command
+	ShellExecFailedFmt  string // "shell command failed: %v"
+	ShellExecTimeoutFmt string // "shell command timed out (> %s)"
+	ShellModeHint       string // status line hint when input starts with !
+
+	// slash command + sub-command descriptions shown in the menu (CLI and desktop
+	// share these via i18n.M, so both frontends localize identically).
+	CmdNew              string // /new
+	CmdClear            string // /clear
+	CmdCls              string // /cls
+	CmdCompact          string // /compact
+	CmdContinueChecks   string // /continue-checks
+	CmdContext          string // /context
+	CmdRewind           string // /rewind
+	CmdTree             string // /tree
+	CmdBranch           string // /branch
+	CmdSwitchBranch     string // /switch
+	CmdResume           string // /resume
+	CmdRename           string // /rename
+	CmdModel            string // /model
+	CmdStatus           string // /status
+	CmdWorkMode         string // /work-mode
+	CmdDocs             string // /docs
+	CmdMemory           string // /memory
+	CmdMigrate          string // /migrate
+	CmdGoal             string // /goal
+	CmdRemember         string // /remember
+	CmdForget           string // /forget
+	CmdMcp              string // /mcp
+	CmdRemote           string // /remote
+	CmdHooks            string // /hooks
+	CmdPlugins          string // /plugins
+	CmdPasteImage       string // /paste-image
+	CmdOutputStyle      string // /output-style
+	CmdTheme            string // /theme
+	CmdLanguage         string // /language
+	CmdCurrency         string // /currency
+	CmdSkill            string // /skills
+	CmdVerbose          string // /verbose
+	CmdReloadCmd        string // /reload-cmd
+	CmdReload           string // /reload
+	CmdDiffFold         string // /diff-fold
+	CmdSandbox          string // /sandbox
+	CmdEffort           string // /effort
+	CmdMouse            string // /mouse
+	CmdReasonLang       string // /reasoning-language
+	CmdHelp             string // /help
+	CmdWeb              string // /web
+	CmdTodo             string // /todo
+	CmdQuit             string // /quit (also accepts /exit as hidden alias)
+	CmdCopy             string // /copy
+	CmdExport           string // /export
+	SlashCopyDone       string // "/copy" succeeded
+	SlashCopyEmpty      string // no assistant response to copy
+	SlashCopyListHeader string // header shown before the numbered list
+	SlashExportDoneFmt  string // "/export" succeeded, %s = file path
+	SlashExportEmpty    string // no messages to export
+	ArgSkillShow        string // /skills show
+	ArgSkillNew         string // /skills new
+	ArgSkillPaths       string // /skills paths
+	ArgMcpAdd           string // /mcp add
+	ArgMcpRemove        string // /mcp remove
+	ArgMcpConnected     string // /mcp remove <server> tag
+	ArgHooksList        string // /hooks list
+	ArgModelCurrent     string // /model <ref> active tag
+	ArgEffortAuto       string // /effort auto
+	ArgEffortLow        string // /effort low
+	ArgEffortMedium     string // /effort medium
+	ArgEffortHigh       string // /effort high
+	ArgEffortXHigh      string // /effort xhigh
+	ArgEffortMax        string // /effort max
+	ArgPresetStandard   string // /preset standard
+	ArgPresetDelivery   string // /preset delivery
+	ArgThemeCurrent     string // /theme <style> active tag
+	ArgLanguageAuto     string // /language auto
+	ArgLanguageEn       string // /language en
+	ArgLanguageZh       string // /language zh
+
+	// management listing notices (the Submit path: desktop / HTTP frontends)
+	ListModelsHeaderFmt string // "models (active: %s)"
+	ListModelsHint      string // how to switch
+	ListMemorySaved     string // "saved memories"
+	ListMemoryArchived  string // "archived memories"
+	ListMemoryNone      string // no memory docs
+	ListSkillsHeaderFmt string // "skills (%d)"
+	ListSkillsNone      string // no skills
+	ListHooksHeaderFmt  string // "hooks (%d active)"
+	ListHooksNone       string // no hooks
+	ListMcpHeader       string // "mcp servers"
+	ListMcpNone         string // no mcp servers
+
+	// in-chat memory/model/rewind notices.
+
+	MemoryEditHint               string
+	ForgetUsage                  string
+	ForgetDoneFmt                string
+	QuickRememberEmpty           string
+	QuickRememberDoneFmt         string
+	GoalEmpty                    string
+	GoalCurrentFmt               string
+	GoalSetFmt                   string
+	GoalCleared                  string
+	GoalNotRunning               string
+	GoalNotPaused                string
+	GoalPaused                   string
+	GoalPausedReason             string
+	GoalPausedFmt                string // %s = stop cause
+	GoalRuntimeFmt               string // turns, requests, tokens, work duration
+	GoalRuntimeLastReason        string
+	ModelSwitchUnavailable       string
+	ModelSwitchBusy              string
+	ModelAlreadyOnFmt            string
+	ModelSwitchingFmt            string
+	ModelSwitchedFmt             string
+	ModelListHeader              string
+	RuntimeSwitchPending         string
+	RuntimeReloadQueued          string // /reload queued behind active work; the idle drain runs it
+	RuntimeReloaded              string // /reload completed (no generation available)
+	RuntimeReloadedGenerationFmt string // /reload completed; %d is the runtime build generation
+	WorkModeUsage                string
+	// WorkModeDeprecatedNotice is shown once when a legacy /work-mode or
+	// /profile command is used. Prefer /preset.
+	WorkModeDeprecatedNotice string
+	// QualityFloorApplied confirms a quality floor switch.
+	QualityFloorApplied      string
+	RewindNone               string
+	RewindCodeConversation   string
+	RewindConversationOnly   string
+	RewindCodeOnly           string
+	RewindFork               string
+	RewindSummarizeFrom      string
+	RewindSummarizeUpto      string
+	RewindPickTitle          string
+	RewindPickHint           string
+	RewindRestoreTitleFmt    string
+	RewindApplyHint          string
+	RewindCoverageTitle      string
+	RewindCoverageWarningFmt string
+	RewindConfirmHint        string
+	RewindUnavailableFmt     string
+	RewindEmpty              string
+
+	// skill picker overlay (/skills interactive panel in CLI TUI)
+	SkillPickerAvailableFmt      string
+	SkillPickerMatchingFmt       string // "%d matching · %d total" when searching
+	SkillPickerHint              string
+	SkillPickerDetailHint        string
+	SkillPickerSearchEmpty       string
+	SkillPickerSearchPlaceholder string
+	SkillPickerSourceTitle       string
+	SkillPickerSourceActiveFmt   string
+	SkillPickerSourceHint        string
+	SkillPickerDiagHidden        string
+	SkillPickerDiagShown         string
+	SkillPickerBuiltinSource     string
+	SkillPickerRescanned         string
+	SkillPickerNoDescription     string
+	SkillPickerScopeProject      string
+	SkillPickerScopeCustom       string
+	SkillPickerScopeGlobal       string
+	SkillPickerScopeBuiltin      string
+	SkillPickerSubagent          string
+	SkillPickerAvailableLabel    string
+	SkillPickerDisabledLabel     string
+	SkillPickerNoChanges         string
+	SkillPickerSourceSkillsHint  string
+	SkillPickerSourceSkillsEmpty string
+	SkillPickerActionToggle      string
+	SkillPickerActionDelete      string
+	SkillPickerDeleteTitleFmt    string // "Delete skill %s?"
+	SkillPickerDeleteConfirm     string
+	SkillPickerDeleteCancel      string
+	SkillPickerDeleteHint        string
+	SkillPickerDeletedFmt        string // "deleted skill %s"
+	SkillPickerMoreAboveFmt      string // "↑ %d more above"
+	SkillPickerMoreBelowFmt      string // "↓ %d more below"
+	SkillPickerTokenFmt          string // "~%d tok"
+	SkillPickerDetailMetaFmt     string // "Scope: %s  Run as: %s"
+	SkillPickerSkillsUnit        string // "skills" (used as "%d skills")
+	SkillPickerLinesUnit         string // "lines" (used as "+N more lines")
+	SkillPickerStatusLabel       string // shown in the TUI status bar while picker is open
+	SkillPickerStatusOK          string // "ok" path status label
+	SkillPickerStatusMissing     string // "missing" path status label
+	SkillPickerStatusNotDir      string // "not-directory" path status label
+	SkillPickerStatusUnreadable  string // "unreadable" path status label
+
+	// init wizard
+	EnterAPIKeysHeader       string // header before the per-env-var prompts
+	WroteFileFmt             string // "Wrote %s" — used for reasonix.toml and .env both
+	SetupComplete            string // success line at end of init
+	SetupCancelled           string // shown when the user aborts the wizard
+	TryHintFmt               string // "Try: %s" — %s = command to try (styled)
+	NextHint                 string // non-interactive post-write hint
+	ConfirmReconfigureFmt    string // "%s already exists. Reconfigure and overwrite?"
+	NotOverwritingFmt        string // non-interactive overwrite refusal
+	SetupManagerTitle        string
+	SetupAddOpenAI           string
+	SetupAddAnthropic        string
+	SetupProviderExistsFmt   string
+	SetupSaveExit            string
+	SetupSaveExitDesc        string
+	SetupCancel              string
+	SetupCancelDesc          string
+	SetupModelsUnit          string
+	SetupKeySet              string
+	SetupKeyMissing          string
+	SetupDefaultBadge        string
+	SetupProviderActionsFmt  string
+	SetupEditProvider        string
+	SetupUpdateKey           string
+	SetupTestRefresh         string
+	SetupSetDefault          string
+	SetupRemoveProvider      string
+	SetupBack                string
+	SetupPromptModels        string
+	SetupSharedKeyWarningFmt string
+	SetupPromptAPIKeyFmt     string
+	SetupSelectDefaultModel  string
+	SetupConfirmRemoveFmt    string
+	SetupSummaryTitle        string
+	SetupSummaryAddedFmt     string
+	SetupSummaryEditedFmt    string
+	SetupSummaryRemovedFmt   string
+	SetupSummaryDefaultFmt   string
+	SetupSummaryKeysFmt      string
+	SetupSummaryNoChanges    string
+	SetupConfirmSave         string
+	SetupConcurrentChangeFmt string
+
+	// model fetching
+	FetchingModelsFmt          string // "Fetching models for %s..."
+	FetchModelsSuccessFmt      string // "Found %d models for %s"
+	FetchModelsFailedFmt       string // "Failed to fetch models for %s: %v"
+	FetchModelsUsingPresetsFmt string // "Live fetch unavailable for %s, using preset model list"
+	SelectModelsLabel          string // "Select models to enable for %s"
+	CustomFetchEmpty           string // "/models returned an empty list — falling back to manual entry"
+	AnthropicFetchEmpty        string // "/models returned an empty list — Anthropic-compatible providers usually don't expose one, falling back to manual entry"
+	APIKeyAlreadySetFmt        string // "reusing existing value for %s"
+	APIKeyResetPromptFmt       string // "Re-enter %s?"
+	InvalidAPIKeyEnvFmt        string // "%q is not a valid API Key variable name..."
+	RepairedAPIKeyEnvFmt       string // "provider %s: replaced invalid api_key_env %q with %q"
+
+	// custom provider
+	CustomProviderDesc   string // "Add third-party OpenAI compatible model"
+	CustomAddMethodLabel string // "Select add method"
+	CustomMethodManual   string // "Enter model name manually"
+	CustomMethodURL      string // "Fetch models from URL"
+	CustomPromptModel    string // "Enter model name"
+	CustomPromptBaseURL  string // "Enter Base URL"
+	CustomPromptKeyEnv   string // "Enter API Key env var name"
+	CustomPromptAPIKey   string // "Enter API Key"
+	CustomPromptWindow   string // "Enter context window in tokens"
+	CustomAddedFmt       string // "Added custom model: %s"
+
+	// Anthropic compatible provider
+	AnthropicProviderDesc          string // "Add Anthropic API compatible model"
+	AnthropicAddMethodLabel        string // "Select add method"
+	AnthropicMethodManual          string // "Enter model name manually"
+	AnthropicMethodURL             string // "Fetch models from URL"
+	AnthropicPromptModel           string // "Enter model name"
+	AnthropicPromptBaseURL         string // "Enter Base URL"
+	AnthropicPromptKeyEnv          string // "Enter API Key env var name"
+	AnthropicPromptAPIKey          string // "Enter API Key"
+	AnthropicAddedFmt              string // "Added Anthropic compatible model: %s"
+	AnthropicFetchingModelsFmt     string // "Fetching models for %s..."
+	AnthropicFetchModelsSuccessFmt string // "Found %d models for %s"
+	AnthropicFetchModelsFailedFmt  string // "Failed to fetch models for %s: %v"
+	AnthropicSelectModelsLabel     string // "Select models to enable for %s"
+
+	// remote SSH module
+	RemoteConnectingFmt       string // "connecting to %s…"
+	RemoteConnectedFmt        string // "connected to %s"
+	RemoteReconnectingFmt     string // "reconnecting to %s (attempt %d)…"
+	RemoteDegradedFmt         string // "connected to %s but some forwards are down"
+	RemoteDisconnected        string // "disconnected"
+	RemoteServeReadyFmt       string // "remote serve ready: %s"
+	RemoteHostKeyPromptFmt    string // "host %s key (%s): %s"
+	RemotePassphrasePromptFmt string // "passphrase for %s:"
+	RemotePasswordPromptFmt   string // "password for %s:"
+	RemoteBootstrapStepFmt    string // "remote serve: %s %s"
+	RemoteNoHostsHint         string // "no remote hosts configured; add one with `reasonix remote add`"
+
+	// top-level / runAgent
+	UnknownCommandFmt         string // "unknown command %q"
+	UsageRunHint              string // "usage: reasonix run [--model NAME] <task>"
+	ErrorPrefix               string // "error:" — prefix for fatal-error output
+	ReconfigureOnUnknownModel string // shown when the configured model no longer resolves and setup is re-run
+	WriteConfigErr            string // "write config:" — prefix for write failure
+	WriteEnvErr               string // "write .env:" — prefix for env-write failure
+
+	// provider HTTP error explanations — actionable, reason + fix per status code
+	ProviderErrBadRequest          string // 400
+	ProviderErrContextOverflowFmt  string // 400/413/422 shared-window overflow with numbers
+	ProviderErrAuth                string // 401 — no key configured / sent
+	ProviderErrAuthRejected        string // 401 — a key was sent but the server rejected it
+	ProviderErrModelFormatMismatch string // provider rejected the model on the selected wire format
+	ProviderErrOpenCodeGoGrokRoute string // recovery hint for OpenCode Go Grok routing
+	ProviderErrInsufficientBalance string // 402
+	ProviderErrUnprocessable       string // 422
+	ProviderErrInputSensitive      string // MiniMax 1026
+	ProviderErrOutputSensitive     string // MiniMax 1027
+	ProviderErrRateLimited         string // 429
+	ProviderErrServer              string // 500
+	ProviderErrServerBusy          string // 503
+
+	// selection menus
+	SelectOneHint      string // "(↑/↓ · Enter · q to cancel)"
+	SelectManyHint     string // "(↑/↓ · Space · Enter · q)"
+	SelectMoreAboveFmt string // "↑ %d more above"
+	SelectMoreBelowFmt string // "↓ %d more below"
+	SelectSearchHint   string // "/ to search · Esc to cancel"
+
+	// /provider command
+	CmdProvider          string // /provider
+	ProviderListHeader   string // header for /provider list
+	ProviderAlreadyOnFmt string // already on provider
+	ProviderUnknownFmt   string // unknown provider
+	ProviderPickLabel    string // label for provider model picker
+	ProviderNoModelsFmt  string // provider has no models
+
+	// `reasonix upgrade` / `reasonix update` — self-update
+	UpgradeChecking            string // "Checking for updates…"
+	UpgradeChannelDeprecated   string // legacy channel selection is ignored
+	UpgradeDevBuild            string // dev builds cannot self-update
+	UpgradeFetchFailed         string // "failed to check for updates: %v"
+	UpgradeInvalidVersion      string // remote version not valid semver
+	UpgradeAlreadyLatest       string // already on the latest version
+	UpgradeForcing             string // "Reinstalling the same version…"
+	UpgradeAvailableFmt        string // "Current: %s → Latest: %s"
+	UpgradeNoAssetFmt          string // "no binary found for %s"
+	UpgradeDownloadingFmt      string // "Downloading %s (%s)…"
+	UpgradeDownloadFailed      string // "download failed: %v"
+	UpgradeVerifying           string // "Verifying checksum…"
+	UpgradeChecksumFailed      string // "could not fetch checksum file: %v"
+	UpgradeChecksumMismatchFmt string // SHA256 mismatch detail
+	UpgradeChecksumNotFoundFmt string // asset not listed in SHA256SUMS
+	UpgradeExtractFailed       string // "failed to extract binary: %v"
+	UpgradeApplying            string // "Replacing binary…"
+	UpgradeApplyFailed         string // "failed to apply update: %v"
+	UpgradeSuccessFmt          string // "Updated %s → %s"
+
+	// `reasonix report` — local CLI crash review and explicit upload
+	ReportNoPending           string
+	ReportHeaderFmt           string
+	ReportCapturedFmt         string
+	ReportPreviewOnlyFmt      string
+	ReportSendPrompt          string
+	ReportKept                string
+	ReportDeletedFmt          string
+	ReportSentFmt             string
+	ReportConfigFailedFmt     string
+	ReportUploadFailedFmt     string
+	ReportSentDeleteFailedFmt string
+	ReportUsageBody           string
+
+	// First eligible interactive CLI telemetry consent.
+	CLITelemetryConsentNotice           string
+	CLITelemetryConsentPrompt           string
+	CLITelemetryConsentInvalid          string
+	CLITelemetryConsentSaveFailedFmt    string
+	CLITelemetryConsentCleanupFailedFmt string
+
+	// usage / help
+	UsageBody string // full multi-line help text
 }
 
 // ProviderStatusMessage returns an actionable explanation for a known provider
