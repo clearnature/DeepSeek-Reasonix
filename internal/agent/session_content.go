@@ -100,7 +100,7 @@ func loadSessionUserMessagesWithLimits(path string, limits sessionReplayLimits) 
 				if m.CreatedAt > 0 {
 					at = time.UnixMilli(m.CreatedAt)
 				}
-				out = append(out, SessionUserMessage{Message: m, At: at})
+				out = append(out, SessionUserMessage{Message: m, At: at, Text: m.Content})
 			}
 			return out, nil
 		}
@@ -118,7 +118,7 @@ func loadSessionUserMessagesWithLimits(path string, limits sessionReplayLimits) 
 		if m.CreatedAt > 0 {
 			at = time.UnixMilli(m.CreatedAt)
 		}
-		out = append(out, SessionUserMessage{Message: m, At: at})
+		out = append(out, SessionUserMessage{Message: m, At: at, Text: m.Content})
 	}
 	return out, nil
 }
