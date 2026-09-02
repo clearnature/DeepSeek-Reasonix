@@ -2415,17 +2415,7 @@ func (m *chatTUI) streamReasoning(chunk string) {
 // positive maxLines keeps only the trailing visual lines (the live view); 0
 // renders all (verbose collapse).
 func reasoningBlock(raw string, width, maxLines int) string {
-	w := max(width-len([]rune(connector)), 8)
-	var lines []string
-	for ln := range strings.SplitSeq(strings.TrimRight(raw, "\n"), "\n") {
-		for wl := range strings.SplitSeq(ansi.Wrap(expandTabs(ln), w, ""), "\n") {
-			lines = append(lines, dim(wl))
-		}
-	}
-	if maxLines > 0 && len(lines) > maxLines {
-		lines = lines[len(lines)-maxLines:]
-	}
-	return connectorBlock(lines)
+	return connectorBlock(reasoningBlockLines(raw, width, maxLines))
 }
 
 // toolStreamTailLines caps how many trailing output lines a running tool shows;
@@ -2485,7 +2475,7 @@ func (m *chatTUI) streamToolOutput(id, chunk string) {
 				m.toolStreamIdx = -1
 			} else {
 				m.toolStreamIdx = len(m.transcript)
-				m.commitLine("")
+				m.commitConnectorBlock(nil)
 			}
 		}
 	}
@@ -2516,7 +2506,7 @@ func (m *chatTUI) streamToolOutput(id, chunk string) {
 	for i, ln := range vis {
 		lines[i] = dim(clampPlain(ln, m.width-len([]rune(connector))))
 	}
-	m.rewriteTranscriptBlock(m.toolStreamIdx, connectorBlock(lines))
+	m.rewriteConnectorBlock(m.toolStreamIdx, lines)
 }
 
 // pushToolLine appends a completed output line to the bounded tail, dropping the
@@ -2810,17 +2800,17 @@ func (m *chatTUI) collapseToolOutput(id, resultOutput string) {
 						preview[i] = dim(clampPlain(lines[i], m.width-len([]rune(connector))))
 					}
 					preview[shellPreviewLines] = dim(fmt.Sprintf("… %d more lines (Ctrl+B)", total-shellPreviewLines))
-					m.commitLine(connectorBlock(preview))
+					m.commitConnectorBlock(preview)
 				} else {
 					rendered := make([]string, total)
 					for i, ln := range lines {
 						rendered[i] = dim(clampPlain(ln, m.width-len([]rune(connector))))
 					}
-					m.commitLine(connectorBlock(rendered))
+					m.commitConnectorBlock(rendered)
 				}
 				m.shellTranscriptIdx[id] = len(m.transcript) - 1
 			} else {
-				m.commitLine(connectorBlock([]string{dim(fmt.Sprintf("%d lines", n))}))
+				m.commitConnectorBlock([]string{dim(fmt.Sprintf("%d lines", n))})
 			}
 		}
 		m.toolStreamIdx = -1
@@ -2886,7 +2876,7 @@ func (m *chatTUI) collapseShellSlot(id string, idx int, resultOutput string) {
 	if n == 0 {
 		// Tool finished with no output: clear the "working…" placeholder but
 		// keep the slot (shellTranscriptIdx still points here for late progress).
-		m.rewriteTranscriptBlock(idx, "")
+		m.rewriteConnectorBlock(idx, nil)
 		return
 	}
 	if full, ok := m.shellOutputs[id]; ok {
@@ -2899,16 +2889,16 @@ func (m *chatTUI) collapseShellSlot(id string, idx int, resultOutput string) {
 				preview[i] = dim(clampPlain(lines[i], m.width-len([]rune(connector))))
 			}
 			preview[shellPreviewLines] = dim(fmt.Sprintf("… %d more lines (Ctrl+B)", total-shellPreviewLines))
-			m.rewriteTranscriptBlock(idx, connectorBlock(preview))
+			m.rewriteConnectorBlock(idx, preview)
 		} else {
 			rendered := make([]string, total)
 			for i, ln := range lines {
 				rendered[i] = dim(clampPlain(ln, m.width-len([]rune(connector))))
 			}
-			m.rewriteTranscriptBlock(idx, connectorBlock(rendered))
+			m.rewriteConnectorBlock(idx, rendered)
 		}
 	} else {
-		m.rewriteTranscriptBlock(idx, connectorBlock([]string{dim(fmt.Sprintf("%d lines", n))}))
+		m.rewriteConnectorBlock(idx, []string{dim(fmt.Sprintf("%d lines", n))})
 	}
 	m.shellTranscriptIdx[id] = idx
 }
@@ -2949,7 +2939,7 @@ func (m *chatTUI) toggleShellOutput() {
 				preview[i] = dim(clampPlain(lines[i], innerW))
 			}
 			preview[shellPreviewLines] = dim(fmt.Sprintf("… %d more lines (Ctrl+B)", total-shellPreviewLines))
-			m.rewriteTranscriptBlock(lastIdx, connectorBlock(preview))
+			m.rewriteConnectorBlock(lastIdx, preview)
 		}
 	} else {
 		// Expand: show up to shellExpandMaxLines lines.
@@ -2962,7 +2952,7 @@ func (m *chatTUI) toggleShellOutput() {
 		if total > shellExpandMaxLines {
 			rendered = append(rendered, dim(fmt.Sprintf("… %d more lines", total-shellExpandMaxLines)))
 		}
-		m.rewriteTranscriptBlock(lastIdx, connectorBlock(rendered))
+		m.rewriteConnectorBlock(lastIdx, rendered)
 	}
 	if m.nativeScrollback {
 		m.commitLine(m.transcript[lastIdx])
@@ -2995,7 +2985,7 @@ func (m *chatTUI) beginToolRunning(id string) {
 		return
 	}
 	m.toolStreamIdx = len(m.transcript)
-	m.commitLine(connectorBlock([]string{dim(fmt.Sprintf(i18n.M.ChatToolWorkingFmt, toolWorkingFrames[0], 0))}))
+	m.commitConnectorBlock([]string{dim(fmt.Sprintf(i18n.M.ChatToolWorkingFmt, toolWorkingFrames[0], 0))})
 	// Remember the transcript slot for this id so a late ToolProgress for a
 	// previously dispatched (and possibly already collapsed) tool can reuse
 	// it instead of appending a fresh slot at the end of the transcript. For
@@ -3016,7 +3006,7 @@ func (m *chatTUI) tickToolRunning() {
 	m.toolStreamFrame++
 	frame := toolWorkingFrames[m.toolStreamFrame%len(toolWorkingFrames)]
 	secs := int(time.Since(m.toolStreamStart).Seconds())
-	m.rewriteTranscriptBlock(m.toolStreamIdx, connectorBlock([]string{dim(fmt.Sprintf(i18n.M.ChatToolWorkingFmt, frame, secs))}))
+	m.rewriteConnectorBlock(m.toolStreamIdx, []string{dim(fmt.Sprintf(i18n.M.ChatToolWorkingFmt, frame, secs))})
 }
 
 // commitReasoning closes the live thinking block: the "▎ thinking…" marker is
@@ -5438,6 +5428,15 @@ func replaySectionsForWithAssistantRenderer(
 	width int,
 	renderAssistant func(string, int) string,
 ) []string {
+	return replaySectionsForWithRenderers(history, width, renderAssistant, reasoningBlock)
+}
+
+func replaySectionsForWithRenderers(
+	history []provider.Message,
+	width int,
+	renderAssistant func(string, int) string,
+	renderReasoning func(string, int, int) string,
+) []string {
 	var out []string
 	for _, m := range history {
 		if m.LocalOnly {
@@ -5446,7 +5445,7 @@ func replaySectionsForWithAssistantRenderer(
 				continue
 			}
 			if reasoning := strings.TrimSpace(m.ReasoningContent); reasoning != "" {
-				out = append(out, dim("  ▎ "+i18n.M.ChatThinking)+"\n"+reasoningBlock(reasoning, width, 0)+"\n\n")
+				out = append(out, dim("  ▎ "+i18n.M.ChatThinking)+"\n"+renderReasoning(reasoning, width, 0)+"\n\n")
 			}
 			if body := strings.TrimSpace(m.Content); body != "" {
 				out = append(out, renderAssistant(body, width)+"\n\n")
@@ -5472,7 +5471,7 @@ func replaySectionsForWithAssistantRenderer(
 			out = append(out, renderUserBubble(content, width, false)+"\n\n")
 		case provider.RoleAssistant:
 			if reasoning := strings.TrimSpace(m.ReasoningContent); reasoning != "" {
-				out = append(out, dim("  ▎ "+i18n.M.ChatThinking)+"\n"+reasoningBlock(reasoning, width, 0)+"\n\n")
+				out = append(out, dim("  ▎ "+i18n.M.ChatThinking)+"\n"+renderReasoning(reasoning, width, 0)+"\n\n")
 			}
 			body := strings.TrimSpace(m.Content)
 			if body != "" {
