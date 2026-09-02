@@ -232,6 +232,9 @@ type ToolSchema struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters"`
+	Deferred    bool            `json:"deferred,omitempty"`
+	Strict      bool            `json:"strict,omitempty"`
+	Namespace   string          `json:"namespace,omitempty"`
 }
 
 // ToolChoice controls how the model picks tools. The zero value (nil
@@ -270,6 +273,7 @@ type Request struct {
 	// entirely — the common path must stay byte-stable for prompt caching.
 	ResponseFormat *ResponseFormat `json:"ResponseFormat,omitempty"`
 	EffortOverride string          `json:"EffortOverride,omitempty"` // per-call reasoning-depth override; adapters apply it only when the endpoint's effort vocabulary accepts it
+	ToolSearch     *ToolSearch     `json:"-"`
 }
 
 // ResponseFormat asks a provider to constrain its output shape.
