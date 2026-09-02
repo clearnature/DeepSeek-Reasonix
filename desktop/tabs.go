@@ -1710,15 +1710,7 @@ func (s *tabEventSink) Emit(e event.Event) {
 		}
 		if m := app.metrics.Load(); m != nil {
 			m.observe(e)
-			if e.Kind == event.TurnDone {
-				// Display persistence and its projection acknowledgement run first,
-				// so successful compaction is included in this content-free snapshot.
-				if tab := app.tabByID(tabID); tab != nil && tab.Ctrl != nil {
-					observeControllerRecoveryMetrics(m, tab.Ctrl)
-					observeControllerTurnEventMetrics(m, tab.Ctrl)
-				}
-				m.persist()
-			}
+			persistMetricsEvent(app, m, tabID, e)
 		}
 	}
 	s.emitRuntimeEvent(eventChannel, toWireTabWithSubmission(e, tabID, s.runtimeEpochSnapshot(), s.submissionIDSnapshot(), turnStartedAt))
@@ -2398,7 +2390,6 @@ func (a *App) tabMeta(tab *WorkspaceTab, active bool) TabMeta {
 		m.TurnStatus = string(status.Status)
 		m.TurnEventSeq = status.TurnEventSeq
 		m.TurnReplayAfter = status.ReplayAfterSeq
-		m.BootTurns = status.BootTurns
 	}
 	if a.botBridge != nil {
 		m.RemoteControlled = a.botBridge.remoteControlledTabs()[tab.ID]
@@ -4862,14 +4853,14 @@ func topicTitleUserTurnsFromSession(path string) []string {
 		// mid-turn steers are persisted as role "user" but are not user-authored:
 		// counting them inflated userTurns past the stage-3 threshold and let
 		// "Host final-answer readiness check failed…" become a topic title.
-		if !agent.IsUserAuthoredTurn(msg.Text) {
+		if !agent.IsUserAuthoredTurnMessage(msg.Message) {
 			continue
 		}
 		// UserPreviewText is the canonical user-authored view: it unwraps
 		// memory-compiler execution contracts and strips transient blocks
 		// (and runs HandoffTask), so internal wrappers can never become a
 		// title basis (#5666).
-		content := control.StripComposePrefixes(agent.UserPreviewText(msg.Text))
+		content := control.StripComposePrefixes(agent.UserPreviewText(agent.UserMessageText(msg.Message)))
 		content = control.StripReferencedContextPrefix(content)
 		if strings.TrimSpace(content) != "" {
 			users = append(users, content)
@@ -4994,35 +4985,9 @@ func (a *App) saveTabsCollectLocked() (string, []desktopTabEntry, string, uint64
 	var entries []desktopTabEntry
 	for _, id := range a.orderedTabIDsLocked() {
 		if tab := a.tabs[id]; tab != nil {
-<<<<<<< HEAD
-<<<<<<< HEAD
-||||||| parent of ff1b21d0b (Fix failed session archive recovery)
-			// A session that failed to recover must not be re-added to the
-			// startup restore list: it re-enters the holding-but-unbound
-			// state on every launch, so its runtime lease never releases and
-			// the topic archive stalls (write-authority stale loop). Keep the
-			// tab in-memory so the UI can still surface/recover/archive it,
-			// but skip persisting it to desktop-tabs.json.
-			if a.failedStartupTabLocked(tab) {
-				continue
-			}
-=======
 			if a.suppressTabStartupRestoreLocked(tab) {
 				continue
 			}
->>>>>>> ff1b21d0b (Fix failed session archive recovery)
-||||||| parent of c38a67f50 (fix(desktop): let failed sessions be archived / stop recovery-failed tab loop (#9393 backend))
-=======
-			// A session that failed to recover must not be re-added to the
-			// startup restore list: it re-enters the holding-but-unbound
-			// state on every launch, so its runtime lease never releases and
-			// the topic archive stalls (write-authority stale loop). Keep the
-			// tab in-memory so the UI can still surface/recover/archive it,
-			// but skip persisting it to desktop-tabs.json.
-			if a.failedStartupTabLocked(tab) {
-				continue
-			}
->>>>>>> c38a67f50 (fix(desktop): let failed sessions be archived / stop recovery-failed tab loop (#9393 backend))
 			entries = append(entries, desktopTabEntry{
 				ID:               tab.ID,
 				Scope:            tab.Scope,
@@ -5042,69 +5007,9 @@ func (a *App) saveTabsCollectLocked() (string, []desktopTabEntry, string, uint64
 		}
 	}
 	a.tabsSaveVersion++
-<<<<<<< HEAD
-	return dir, entries, a.activeTabID, a.tabsSaveVersion
-}
-
-<<<<<<< HEAD
-||||||| parent of ff1b21d0b (Fix failed session archive recovery)
-	return dir, entries, a.activeTabID, a.tabsSaveVersion
-}
-
-// failedStartupTabLocked reports whether a tab has NOT reached a usable runtime
-// and should be excluded from the startup-restore snapshot. A session whose
-// recovery failed (or is lease-blocked without a retry path) would otherwise be
-// persisted and re-created on the next launch, re-entering the holding-but-
-// unbound state and blocking clean archive of its topic. Must be called with
-// a.mu held; it reads the runtime registry owned by App.mu.
-func (a *App) failedStartupTabLocked(tab *WorkspaceTab) bool {
-	if tab == nil {
-		return false
-	}
-	if rt := a.runtimeForTabLocked(tab); rt != nil {
-		// A ready or starting runtime is healthy and may be persisted. Only a
-		// clearly failed phase is excluded. Lease-blocked sessions have a
-		// deferred retry (scheduleDeferredStartupBuild), so they are retained
-		// for the retry to re-attempt rather than dropped.
-		return rt.Phase == sessionRuntimeFailed
-	}
-	// No runtime registry entry: fall back to the tab's projected state. Only
-	// non-retryable startup failure is excluded; a lease-held error keeps its
-	// retry path.
-	return !tab.Ready && tab.StartupErr != "" && !tab.StartupErrLeaseHeld
-}
-
-=======
 	return dir, entries, persistedActiveTabID(entries, a.activeTabID), a.tabsSaveVersion
 }
 
->>>>>>> ff1b21d0b (Fix failed session archive recovery)
-||||||| parent of c38a67f50 (fix(desktop): let failed sessions be archived / stop recovery-failed tab loop (#9393 backend))
-=======
-// failedStartupTabLocked reports whether a tab has NOT reached a usable runtime
-// and should be excluded from the startup-restore snapshot. A session whose
-// recovery failed (or is lease-blocked without a retry path) would otherwise be
-// persisted and re-created on the next launch, re-entering the holding-but-
-// unbound state and blocking clean archive of its topic. Must be called with
-// a.mu held; it reads the runtime registry owned by App.mu.
-func (a *App) failedStartupTabLocked(tab *WorkspaceTab) bool {
-	if tab == nil {
-		return false
-	}
-	if rt := a.runtimeForTabLocked(tab); rt != nil {
-		// A ready or starting runtime is healthy and may be persisted. Only a
-		// clearly failed phase is excluded. Lease-blocked sessions have a
-		// deferred retry (scheduleDeferredStartupBuild), so they are retained
-		// for the retry to re-attempt rather than dropped.
-		return rt.Phase == sessionRuntimeFailed
-	}
-	// No runtime registry entry: fall back to the tab's projected state. Only
-	// non-retryable startup failure is excluded; a lease-held error keeps its
-	// retry path.
-	return !tab.Ready && tab.StartupErr != "" && !tab.StartupErrLeaseHeld
-}
-
->>>>>>> c38a67f50 (fix(desktop): let failed sessions be archived / stop recovery-failed tab loop (#9393 backend))
 // saveTabsWrite writes the tab-snapshot to disk. It does not require a.mu, but
 // writes must be serialized because every save uses the same destination and
 // fixed .tmp path.
@@ -6264,8 +6169,7 @@ func (a *App) handleTabSessionRecovered(tab *WorkspaceTab) func(control.SessionR
 				_ = saveTelemetry(info.RecoveryPath+".telemetry.json", tab.telemetrySnapshot())
 			}
 		}
-		a.emitProjectTreeChangedForSessionDirs(sessionDirectoryForPath(info.RecoveryPath))
-		a.emitRuntimeEvent("session:recovered", sessionRecoveryEvent{
+		a.emitSessionRecoveredAndRefresh(sessionDirectoryForPath(info.RecoveryPath), sessionRecoveryEvent{
 			OriginalPath:     info.OriginalPath,
 			RecoveryPath:     info.RecoveryPath,
 			Scope:            scope,
@@ -6280,6 +6184,13 @@ func (a *App) handleTabSessionRecovered(tab *WorkspaceTab) func(control.SessionR
 		a.invalidatePromptHistoryCache()
 		return nil
 	}
+}
+
+// emitSessionRecoveredAndRefresh registers the frontend pending item before a
+// catalog reconcile can publish the revision that classifies it.
+func (a *App) emitSessionRecoveredAndRefresh(dir string, recovered sessionRecoveryEvent) {
+	a.emitRuntimeEvent("session:recovered", recovered)
+	a.emitProjectTreeChangedForSessionDirs(dir)
 }
 
 func setTopicTitle(workspaceRoot, topicID, title string) error {
@@ -6504,9 +6415,9 @@ type ProjectNode struct {
 	RecoveryBranchCount          int    `json:"recoveryBranchCount,omitempty"`
 	RecoveryUnresolvedCount      int    `json:"recoveryUnresolvedCount,omitempty"`
 	RecoveryCleanupEligibleCount int    `json:"recoveryCleanupEligibleCount,omitempty"`
-	// RecoveryCopyCount is the number of recovery copies folded behind this
-	// logical row (covered or diverged). The ordinary tree renders it as a
-	// muted "恢复副本" count badge; History still owns the full copy list.
+	// RecoveryCopyCount is retained for Wails compatibility with older desktop
+	// frontends. Ordinary project-tree payloads intentionally leave it at zero:
+	// physical recovery copies are an internal persistence detail.
 	RecoveryCopyCount int           `json:"recoveryCopyCount,omitempty"`
 	IsolatedWorktree  bool          `json:"isolatedWorktree,omitempty"`
 	Remote            *RemoteTabRef `json:"remote,omitempty"`
@@ -7716,7 +7627,7 @@ func loadPinnedTabSessionWithPreloadAndMigrationFallback(dir, sessionPath string
 		}
 		return preloaded.Session, path, true, nil
 	}
-	loaded, err := loadResumableSession(path)
+	loaded, err := agent.LoadSession(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, path, true, nil
