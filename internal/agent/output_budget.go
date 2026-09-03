@@ -15,7 +15,10 @@ import (
 	"reasonix/internal/provider"
 )
 
-const outputBudgetReserve = 8 * 1024
+const (
+	outputBudgetReserve    = 8 * 1024
+	minOutputBudgetReserve = protocolReserveTokens
+)
 
 const learnedOutputBudgetTTL = 24 * time.Hour
 
@@ -730,5 +733,5 @@ func outputBudgetReserveForWindow(window int) int {
 	if window <= 0 {
 		return outputBudgetReserve
 	}
-	return min(outputBudgetReserve, window/4)
+	return min(outputBudgetReserve, max(minOutputBudgetReserve, window/128))
 }

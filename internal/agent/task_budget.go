@@ -23,5 +23,11 @@ func (t *TaskTool) childMaxStepsForContext(_ context.Context, requested int) int
 
 // childMaxStepsForSpec computes the max steps for a child sub-agent.
 func (t *TaskTool) childMaxStepsForSpec(ctx context.Context, spec *ProfileExecSpec) (context.Context, int) {
-	return ctx, t.maxSteps
+	applyReviewBudget(spec)
+	fillChildFacts(ctx, spec)
+	if spec == nil {
+		return ctx, t.childMaxStepsForContext(ctx, 0)
+	}
+	ctx = withChildOutputBudget(ctx, spec.Sched.MaxOutputTokens)
+	return ctx, t.childMaxStepsForContext(ctx, spec.Sched.MaxSteps)
 }

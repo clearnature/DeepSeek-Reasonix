@@ -80,6 +80,17 @@ func (m ContextManager) Prepare(ctx context.Context, policy ContextPreparePolicy
 	return m.prepareOnce(ctx, policy)
 }
 
+func shouldPruneBeforeFold(trigger string, overHardCeiling bool) bool {
+	switch trigger {
+	case CompactionTriggerPressure, CompactionTriggerOverflow:
+		return true
+	case CompactionTriggerManual:
+		return overHardCeiling
+	default:
+		return false
+	}
+}
+
 func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePolicy) (PreparedContext, error) {
 	a := m.agent
 	if a == nil || a.sess.conversation == nil {
@@ -134,7 +145,9 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 		return prepared, nil
 	}
 
-	if policy.Trigger == CompactionTriggerPressure || policy.Trigger == CompactionTriggerOverflow {
+	// A manual compact over the hard ceiling is a rescue, not a convenience:
+	// prune first so the never-folded recent tail can shrink too.
+	if shouldPruneBeforeFold(policy.Trigger, est >= hard) {
 		applied, err := a.pruneToolResultsToProjectionLocked(policy.Trigger)
 		if err != nil {
 			return PreparedContext{}, err
@@ -153,11 +166,18 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	return m.foldContext(ctx, prepared, policy, inputHash, est, fold, hard, forceFold)
 }
 
+// manualRecoverySummaries bounds the rescue loop for a manual compact that
+// starts at or above the hard input ceiling.
+const manualRecoverySummaries = 4
+
 func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContext, policy ContextPreparePolicy, inputHash string, est, fold, hard int, forceFold bool) (PreparedContext, error) {
 	a := m.agent
 	maxSummaries := 1
 	if policy.Trigger == CompactionTriggerPressure {
 		maxSummaries = 2
+	}
+	if policy.Trigger == CompactionTriggerManual && est >= hard {
+		maxSummaries = manualRecoverySummaries
 	}
 	result := prepared
 	for range maxSummaries {
@@ -204,7 +224,7 @@ func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContex
 		}
 
 		result = m.currentPrepared()
-		if policy.Trigger == CompactionTriggerManual || result.InputTokens < fold ||
+		if (policy.Trigger == CompactionTriggerManual && result.InputTokens < hard) || result.InputTokens < fold ||
 			(policy.Trigger == CompactionTriggerOverflow && result.InputTokens < hard) {
 			a.sess.compaction.stuck = false
 			a.sess.compaction.stuckInputHash = ""
