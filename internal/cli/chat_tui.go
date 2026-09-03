@@ -94,9 +94,10 @@ type chatTUI struct {
 	nextPasteID          int
 	usedPasteIDs         map[int]struct{}
 
-	state    tuiState
-	runStart time.Time
-	elapsed  int
+	state                 tuiState
+	runStart              time.Time
+	elapsed               int
+	elapsedTickGeneration uint64
 	// retryAttempt/retryMax drive the transient "retrying (n/m)" indicator while
 	// the provider re-attempts the connection; cleared by the next stream event.
 	retryAttempt int
@@ -499,8 +500,8 @@ type tuiShutdownMsg struct {
 func shutdownNow() tea.Msg { return tuiShutdownMsg{} }
 
 // elapsedTickMsg fires once a second while a turn runs, driving the "thinking
-// Ns" counter in the status line.
-type elapsedTickMsg struct{}
+// Ns" counter in the status line. generation rejects a prior turn's timer.
+type elapsedTickMsg struct{ generation uint64 }
 
 // balanceMsg carries the result of an async wallet-balance fetch; text is the
 // formatted readout ("" when none/failed).
@@ -1815,7 +1816,7 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirmBubbleSent() // shell events arrive instantly
 				m.noteWatchdogRunning()
 				m.ctrl.RunShell(cmd)
-				return m, tea.Batch(m.spinner.Tick, elapsedTick())
+				return m, m.startRunningTicks()
 			}
 
 			// Slash commands run locally without going through the model. A
@@ -1857,6 +1858,11 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Agent/shell/controller work events prove the event loop is servicing
 		// the active turn. Record before ingest so TurnDone still counts.
 		m.noteWatchdogHeartbeat(watchdogAgentSource(e.Kind))
+		if e.Kind == event.TurnStarted {
+			if cmd := m.noteControllerTurnStarted(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
 		m.ingestEvent(e)
 		turnDone := e.Kind == event.TurnDone
 		gitMaybeChanged := e.Kind == event.ToolResult && !e.Tool.ReadOnly
@@ -1871,6 +1877,11 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			select {
 			case e2 := <-m.eventCh:
 				m.noteWatchdogHeartbeat(watchdogAgentSource(e2.Kind))
+				if e2.Kind == event.TurnStarted {
+					if cmd := m.noteControllerTurnStarted(); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
+				}
 				m.ingestEvent(e2)
 				if e2.Kind == event.TurnDone {
 					turnDone = true
@@ -2080,14 +2091,14 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case elapsedTickMsg:
-		if m.state == tuiRunning {
+		if m.state == tuiRunning && msg.generation == m.elapsedTickGeneration {
 			// elapsedTick is the primary active-turn heartbeat: long turns that
 			// emit no agent events still prove the Bubble Tea loop is alive.
 			m.noteWatchdogHeartbeat("elapsed_tick")
 			m.elapsed = int(time.Since(m.runStart).Seconds())
 			m.tickToolRunning()
 			m.tickSubagentProgress()
-			cmds = append(cmds, elapsedTick())
+			cmds = append(cmds, elapsedTick(m.elapsedTickGeneration))
 		}
 
 	case spinner.TickMsg:
@@ -4227,7 +4238,7 @@ func (m *chatTUI) startTurn(sent, displayed, restore string) tea.Cmd {
 // keeps reference-expanded model input separate from the text shown/restored by
 // the frontend.
 func (m *chatTUI) startTurnWithRaw(sent, displayed, restore, raw string) tea.Cmd {
-	return m.startControllerTurn(displayed, restore, func() { m.ctrl.SendWithRaw(sent, raw) })
+	return m.startControllerTurnWithQueue(displayed, restore, raw, func() { m.ctrl.SendWithRaw(sent, raw) })
 }
 
 // startControllerTurn owns the TUI-side turn setup for controller entry points.
@@ -4235,6 +4246,27 @@ func (m *chatTUI) startTurnWithRaw(sent, displayed, restore, raw string) tea.Cmd
 // controller can choose inline vs isolated subagent execution from the live
 // skill's RunAs metadata without the TUI reimplementing that policy.
 func (m *chatTUI) startControllerTurn(displayed, restore string, start func()) tea.Cmd {
+	return m.startControllerTurnWithQueue(displayed, restore, displayed, start)
+}
+
+func (m *chatTUI) startControllerTurnWithQueue(displayed, restore, queued string, start func()) tea.Cmd {
+	// The composer can read idle while the controller already runs a
+	// dispatched queued follow-up (TurnStarted not yet ingested): queue rather
+	// than race the admission guard's silent drop (#9575).
+	if m.ctrl != nil && m.ctrl.Running() {
+		receipt, err := m.enqueueFollowup(displayed, queued)
+		if err != nil {
+			m.notice("queue: " + err.Error())
+			if m.input.Value() == "" {
+				m.input.SetValue(restore)
+				m.growInputToFit()
+			}
+			return nil
+		}
+		m.notice("durable follow-up queued #" + shortID(receipt.ItemID) + " — will run when idle")
+		m.clearQueuedPastes(restore)
+		return nil
+	}
 	// Flush any half-streamed leftover before the new turn (defensive).
 	m.commitReasoning()
 	m.commitPending()
@@ -4261,7 +4293,7 @@ func (m *chatTUI) startControllerTurn(displayed, restore string, start func()) t
 	// streams events to eventCh and emits TurnDone when the turn settles.
 	m.noteWatchdogRunning()
 	start()
-	return tea.Batch(m.spinner.Tick, elapsedTick())
+	return m.startRunningTicks()
 }
 
 // confirmBubbleSent marks the already-echoed user bubble as really sent once a
@@ -4273,6 +4305,46 @@ func (m *chatTUI) confirmBubbleSent() {
 	}
 	m.bubblePending = false
 	m.pendingRestore = ""
+}
+
+// noteControllerTurnStarted enters running state for a turn the TUI did not
+// submit itself — the controller auto-dispatching a queued follow-up. Without
+// it the composer reads as ready while the dispatched turn streams, so an
+// Enter races the dispatch (silently dropped, or preempting the queue) and the
+// elapsed-tick heartbeat chain stays dead (#9575).
+func (m *chatTUI) noteControllerTurnStarted() tea.Cmd {
+	if m.state == tuiRunning {
+		return nil
+	}
+	m.state = tuiRunning
+	m.runStart = time.Now()
+	m.elapsed = 0
+	m.turnTokens = 0
+	m.noteWatchdogRunning()
+	return m.startRunningTicks()
+}
+
+func (m *chatTUI) startRunningTicks() tea.Cmd {
+	m.elapsedTickGeneration++
+	return tea.Batch(m.spinner.Tick, elapsedTick(m.elapsedTickGeneration))
+}
+
+func (m *chatTUI) clearQueuedPastes(restore string) {
+	labels := m.pasteLabelsIn(restore)
+	if len(labels) == 0 {
+		return
+	}
+	queued := make(map[string]struct{}, len(labels))
+	for _, label := range labels {
+		queued[label] = struct{}{}
+	}
+	kept := m.pastedBlocks[:0]
+	for _, block := range m.pastedBlocks {
+		if _, ok := queued[block.label]; !ok {
+			kept = append(kept, block)
+		}
+	}
+	m.pastedBlocks = kept
 }
 
 // unsendPending "un-sends" the in-flight turn while the server hasn't replied yet
@@ -4616,8 +4688,8 @@ func waitForAgentEvent(ch chan event.Event) tea.Cmd {
 	return func() tea.Msg { return agentEventMsg(<-ch) }
 }
 
-func elapsedTick() tea.Cmd {
-	return tea.Tick(time.Second, func(_ time.Time) tea.Msg { return elapsedTickMsg{} })
+func elapsedTick(generation uint64) tea.Cmd {
+	return tea.Tick(time.Second, func(_ time.Time) tea.Msg { return elapsedTickMsg{generation: generation} })
 }
 
 // runSlashCommand handles "/<cmd> <args>" input. Local commands queue their
