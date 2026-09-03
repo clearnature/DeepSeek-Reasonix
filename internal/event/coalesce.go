@@ -228,6 +228,10 @@ func (c *coalescer) RecordCompletionReport(a CompletionReportAudit) {
 	c.enqueueCapability(func() { RecordCompletionReport(c.inner, a) })
 }
 
+func (c *coalescer) RecordCompletionValidation(info CompletionValidationInfo) {
+	c.enqueueCapability(func() { RecordCompletionValidation(c.inner, info) })
+}
+
 func (c *coalescer) RecordOutcomeProgress(sample evidence.OutcomeSample) {
 	c.enqueueCapability(func() { RecordOutcomeProgress(c.inner, sample) })
 }

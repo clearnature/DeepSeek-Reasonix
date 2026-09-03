@@ -589,7 +589,7 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 		// "still thinking after the task is done" symptom), so honour the
 		// stop when reasoning carried the substance of the answer and treat
 		// the turn as a final answer instead of retrying.
-		if a.requireVisibleFinal || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
+		if a.requireVisibleFinal || a.completionEnforced() || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
 			state.terminal.emptyFinalBlocks++
 			if state.terminal.emptyFinalBlocks >= maxEmptyFinalBlocks {
 				return false, fmt.Errorf("model finished without a visible final answer %d times", state.terminal.emptyFinalBlocks)
@@ -617,6 +617,16 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 	a.emitTurnShadows(a.turn.turnInput)
 	if !a.closeSteerIntakeIfIdle() {
 		return true, nil
+	}
+	// Host repairs are done. The validator now judges the already-streamed
+	// answer; only this decision gates TurnDone.
+	switch decision, pause := a.validateCandidateCompletion(ctx, state, text); decision {
+	case completionResume:
+		a.contextManager().ObserveUsage(usage)
+		return true, nil
+	case completionStop:
+		a.contextManager().ObserveUsage(usage)
+		return false, pause
 	}
 	// A final-answer turn otherwise skips compaction, so a large context
 	// carries into the next turn un-folded and can overflow the model window.

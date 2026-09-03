@@ -1186,6 +1186,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 			recentKeep:             opts.RecentKeep,
 			archiveDir:             opts.ArchiveDir,
 			legacyAnchorSafetyGate: opts.LegacyAnchorSafetyGate,
+			completionAgentConfig:  newCompletionAgentConfig(opts, sink),
 		},
 		sess: sessionRuntime{
 			conversation: session,
