@@ -860,12 +860,26 @@ func (a *Agent) runCompactionSummary(ctx context.Context, prefix, fold []provide
 }
 
 // foldSummaryWithChunkedFallback retries summary size failures through the
-// chunked fallback path. This is a stub that delegates to foldToSummary.
-func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger string, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
-	res, err := a.foldToSummary(ctx, nil, fold, instructions)
-	if err != nil {
-		return foldSummary{}, CompactionTelemetry{}, err
+// chunked fallback path. When the initial fold produces a truncated or
+// oversized summary, it splits the fold into smaller chunks and retries.
+func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger string, prefix, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
+	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
+	if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired)) {
+		return res, tele, err
 	}
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
-	return res, tele, nil
+	chunked, chunkedErr := a.chunkedFoldSummary(ctx, fold, instructions, nil)
+	chunked.Usage = mergeSamplingUsage(res.Usage, chunked.Usage)
+	chunked.Spans += res.Spans
+	if chunked.FoldTokens <= 0 {
+		chunked.FoldTokens = res.FoldTokens
+	}
+	if chunked.RequestID == "" {
+		chunked.RequestID = res.RequestID
+	}
+	if chunkedErr != nil {
+		tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked)
+		tele.Error = fmt.Sprintf("%v (chunked fallback: %v)", err, chunkedErr)
+		return chunked, tele, chunkedErr
+	}
+	return chunked, compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked), nil
 }
