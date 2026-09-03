@@ -349,7 +349,7 @@ func IsSyntheticUserText(content string) bool {
 		}
 	}
 	for _, prefix := range SyntheticUserPrefixes {
-		if strings.HasPrefix(trimmed, prefix) || strings.HasPrefix(strings.TrimSpace(content), prefix) || (isSteer && strings.HasPrefix(steerText, prefix)) {
+		if strings.HasPrefix(trimmed, prefix) || (isSteer && strings.HasPrefix(steerText, prefix)) {
 			return true
 		}
 	}

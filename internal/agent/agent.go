@@ -1767,6 +1767,19 @@ Do not answer as the planner and do not ask how to trigger the executor.
 Use your available tools now to carry out the task. If carrying out the planner's instructions requires a user-owned choice or review, call the ask tool with concrete options and wait for its tool result; do not ask in prose, and do not claim the user answered unless an actual ask tool result or a new user message says so. If a write or command is blocked by permissions or workspace boundaries, state that specific blocker and ask for the needed approval/path.`
 }
 
+func streamInterruptNotice(err error) (code, text string) {
+	switch provider.StreamInterruptReason(err) {
+	case provider.StreamInterruptIdleTimeout:
+		return event.NoticeCodeStreamInterruptedIdleTimeout, "model stream stalled: no data arrived before the idle timeout; check the provider gateway or network proxy"
+	case provider.StreamInterruptPrematureEOF:
+		return event.NoticeCodeStreamInterruptedPrematureEOF, "model stream ended before completion; the provider gateway or network proxy dropped the connection"
+	case provider.StreamInterruptConnectionReset:
+		return event.NoticeCodeStreamInterruptedConnectionReset, "model connection was reset; check the provider gateway or network proxy"
+	default:
+		return "", ""
+	}
+}
+
 func hasVisibleFinalAnswer(text string) bool {
 	return strings.TrimSpace(text) != ""
 }

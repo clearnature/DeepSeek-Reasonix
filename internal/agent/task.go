@@ -1150,6 +1150,17 @@ type restrictedCapabilityProxy struct {
 	servers map[string]bool
 }
 
+func (t *restrictedCapabilityProxy) ClassifyCall(args json.RawMessage) tool.CallClass {
+	if t == nil || t.check(args) != nil {
+		return tool.CallClass{}
+	}
+	classifier, ok := t.Tool.(tool.BatchClassifier)
+	if !ok {
+		return tool.CallClass{}
+	}
+	return classifier.ClassifyCall(args)
+}
+
 // Description is fixed: never embed dynamic capability IDs (they change with
 // MCP install/tool-list and would break the stable provider tool prefix).
 func (t *restrictedCapabilityProxy) Description() string {

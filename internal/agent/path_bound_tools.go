@@ -59,6 +59,18 @@ func (p pathBoundCapabilityProxy) Description() string     { return p.inner.Desc
 func (p pathBoundCapabilityProxy) Schema() json.RawMessage { return p.inner.Schema() }
 func (p pathBoundCapabilityProxy) ReadOnly() bool          { return p.inner.ReadOnly() }
 
+func (p pathBoundCapabilityProxy) ClassifyCall(args json.RawMessage) tool.CallClass {
+	classifier, ok := p.inner.(tool.BatchClassifier)
+	if !ok {
+		return tool.CallClass{}
+	}
+	class := classifier.ClassifyCall(args)
+	if class.Known && (!class.ReadOnly || !class.ParallelSafe) {
+		return tool.CallClass{}
+	}
+	return class
+}
+
 func (p pathBoundCapabilityProxy) ResolveCall(ctx context.Context, args json.RawMessage) (tool.ResolvedCall, error) {
 	resolved, err := p.resolver.ResolveCall(ctx, args)
 	if err != nil {
