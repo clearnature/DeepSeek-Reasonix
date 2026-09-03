@@ -603,16 +603,16 @@ type Messages struct {
 	// usage / help
 	UsageBody string // full multi-line help text
 	// team commands
-	CmdTeamCreate  string
-	CmdTeamAdd     string
-	CmdTeamStatus  string
-	CmdTeamRemove  string
-	CmdTeamStop    string
-	CmdTeamGrant   string
-	CmdTeamRevoke  string
-	CmdTeamApprove string
-	CmdTeamAsk     string
-	CmdTeamSpawn   string
+	CmdTeamCreate    string
+	CmdTeamAdd       string
+	CmdTeamStatus    string
+	CmdTeamRemove    string
+	CmdTeamStop      string
+	CmdTeamGrant     string
+	CmdTeamRevoke    string
+	CmdTeamApprove   string
+	CmdTeamAsk       string
+	CmdTeamSpawn     string
 	CmdTeamBroadcast string
 	// compress-fast command
 	CmdCompressFast string
