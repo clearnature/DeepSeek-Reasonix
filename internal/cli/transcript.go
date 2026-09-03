@@ -35,12 +35,13 @@ const (
 // instead of replacing it: the rendered slice remains the fast path for every
 // frame and preserves the many index-based live tool/reasoning updates.
 type transcriptSource struct {
-	kind     transcriptSourceKind
-	raw      string
-	aux      string
-	planMode bool
-	maxLines int
-	history  []provider.Message
+	kind         transcriptSourceKind
+	raw          string
+	aux          string
+	copyRendered string
+	planMode     bool
+	maxLines     int
+	history      []provider.Message
 }
 
 func (m *chatTUI) ensureTranscriptSources() {
