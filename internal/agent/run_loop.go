@@ -644,17 +644,15 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 	state.usedAnyTool = true
 	unavailableContextTools := a.unavailableContextualToolCalls(ctx, calls)
 	if len(unavailableContextTools) > 0 && state.terminal.contextToolRepairs > 0 {
+		// Second violation ends the batch: every call is paired, none executes,
+		// and same-turn answer text cannot bypass — it predates the host error.
 		msg := fmt.Sprintf("blocked: context-unavailable tools were called again after the repair instruction: %s", strings.Join(unavailableContextTools, ", "))
-		for _, call := range calls {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleTool, Content: msg, ToolCallID: call.ID, Name: call.Name})
+		a.pairUnexecutedGraceCalls(calls, msg)
+		a.contextManager().ObserveUsage(usage)
+		return false, &CompletionUncertainError{
+			Cause:  CompletionUncertainContextTool,
+			Detail: strings.Join(unavailableContextTools, ", "),
 		}
-		if hasVisibleFinalAnswer(text) {
-			return a.handleFinalResponse(ctx, state, text, reasoning, usage)
-		}
-		if len(unavailableContextTools) == 1 && unavailableContextTools[0] == "update_goal" {
-			return false, fmt.Errorf("model repeatedly called update_goal outside Goal mode without a visible answer")
-		}
-		return false, fmt.Errorf("model repeatedly called context-unavailable tools without a visible answer: %s", strings.Join(unavailableContextTools, ", "))
 	}
 
 	boundaryFinalizer := a.allowsBoundaryTurnFinalizer(ctx, state, calls)
@@ -709,14 +707,11 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 		return false, a.gracePause(state)
 	}
 	if len(unavailableContextTools) > 0 {
-		if hasVisibleFinalAnswer(text) {
-			// Keep the assistant tool call and host error paired in the transcript,
-			// but accept a co-streamed answer without another repair request.
-			return a.handleFinalResponse(ctx, state, text, reasoning, usage)
-		}
+		// First violation: legal tools already ran once. Co-streamed answer
+		// text cannot skip repair; only a later clean round may validate.
 		state.terminal.contextToolRepairs++
 		nudge := fmt.Sprintf("The following tools are unavailable in the current workflow phase: %s. Do not call them again. Respond to the user's request with visible answer text now; call a different tool only if it is still needed to complete the request.", strings.Join(unavailableContextTools, ", "))
-		a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(nudge)})
+		a.sess.conversation.Add(HostGeneratedUserMessage(a.withTurnPreferences(nudge)))
 	}
 	a.trackTodoProgress(ctx, state, receiptMark)
 
