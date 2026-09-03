@@ -414,12 +414,16 @@ func buildVisibleCompressionProjection(visible []provider.Message, plan visibleC
 }
 
 func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary) CompactionTelemetry {
+	spans := 1
+	if res.Spans > 0 {
+		spans = res.Spans
+	}
 	tele := CompactionTelemetry{
 		Trigger: trigger, CacheState: cacheState, Mode: res.Mode,
 		SourceTokens:      sourceTokens,
 		ProviderRequestID: res.RequestID,
 		FoldTokens:        res.FoldTokens,
-		Spans:             1, // one application-layer summary request per transaction
+		Spans:             spans,
 		SummaryInputMode:  res.InputMode,
 	}
 	usage := res.Usage
@@ -518,6 +522,12 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, nil
 	}
+	if mustFree || trigger != CompactionTriggerManual {
+		if err := a.validateSafeSummaryRequest(msgs[:head], fold, instructions); err != nil {
+			a.emitCompactionAborted(trigger)
+			return CompactionNoop, err
+		}
+	}
 
 	sourceTokens := a.estimatedVisibleRequestTokens(msgs)
 	inputMode := SummaryInputCachePrefix
@@ -536,7 +546,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	if foldAnchors != "" {
 		instructions += foldAnchors
 	}
-	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, summaryPrefix, foldExtra, instructions, sourceTokens, inputMode)
+	res, tele, err := a.foldSummaryWithChunkedFallback(ctx, trigger, summaryPrefix, foldExtra, instructions, sourceTokens, inputMode)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
@@ -867,7 +877,12 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 	if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired)) {
 		return res, tele, err
 	}
-	chunked, chunkedErr := a.chunkedFoldSummary(ctx, fold, instructions, nil)
+	// When foldExtra is nil (view replay fits), the full fold region is in prefix.
+	chunkedInput := fold
+	if len(chunkedInput) == 0 {
+		chunkedInput = prefix
+	}
+	chunked, chunkedErr := a.chunkedFoldSummary(ctx, chunkedInput, instructions, nil)
 	chunked.Usage = mergeSamplingUsage(res.Usage, chunked.Usage)
 	chunked.Spans += res.Spans
 	if chunked.FoldTokens <= 0 {
@@ -882,4 +897,25 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 		return chunked, tele, chunkedErr
 	}
 	return chunked, compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked), nil
+}
+
+func (a *Agent) safeSummaryPromptTokenLimit() (int, bool) {
+	window := a.effectiveContextWindow()
+	if window <= 0 || contextBudgetPolicyOf(a.svc.prov).WindowMode == provider.ContextWindowIndependent {
+		return 0, false
+	}
+	return window - a.summaryOutputBudget() - protocolReserveTokens, true
+}
+
+func (a *Agent) validateSafeSummaryRequest(prefix, fold []provider.Message, instructions string) error {
+	maxPromptTokens, enforce := a.safeSummaryPromptTokenLimit()
+	if !enforce {
+		return nil
+	}
+	requestTokens := a.estimatedRequestTokens(a.summaryRequest(prefix, fold, instructions))
+	if maxPromptTokens <= 0 || requestTokens > maxPromptTokens {
+		return fmt.Errorf("%w: prepared summary request (%d tokens) exceeds safe prompt budget (%d)",
+			errCheckpointRejected, requestTokens, maxPromptTokens)
+	}
+	return nil
 }
