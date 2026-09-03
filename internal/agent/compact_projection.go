@@ -522,12 +522,6 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, nil
 	}
-	if mustFree || trigger != CompactionTriggerManual {
-		if err := a.validateSafeSummaryRequest(msgs[:head], fold, instructions); err != nil {
-			a.emitCompactionAborted(trigger)
-			return CompactionNoop, err
-		}
-	}
 
 	sourceTokens := a.estimatedVisibleRequestTokens(msgs)
 	inputMode := SummaryInputCachePrefix
@@ -897,25 +891,4 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 		return chunked, tele, chunkedErr
 	}
 	return chunked, compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked), nil
-}
-
-func (a *Agent) safeSummaryPromptTokenLimit() (int, bool) {
-	window := a.effectiveContextWindow()
-	if window <= 0 || contextBudgetPolicyOf(a.svc.prov).WindowMode == provider.ContextWindowIndependent {
-		return 0, false
-	}
-	return window - a.summaryOutputBudget() - protocolReserveTokens, true
-}
-
-func (a *Agent) validateSafeSummaryRequest(prefix, fold []provider.Message, instructions string) error {
-	maxPromptTokens, enforce := a.safeSummaryPromptTokenLimit()
-	if !enforce {
-		return nil
-	}
-	requestTokens := a.estimatedRequestTokens(a.summaryRequest(prefix, fold, instructions))
-	if maxPromptTokens <= 0 || requestTokens > maxPromptTokens {
-		return fmt.Errorf("%w: prepared summary request (%d tokens) exceeds safe prompt budget (%d)",
-			errCheckpointRejected, requestTokens, maxPromptTokens)
-	}
-	return nil
 }
