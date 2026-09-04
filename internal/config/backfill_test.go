@@ -2014,8 +2014,6 @@ price = { cache_hit = 0.0028, input = 0.14, output = 0.28, currency = "$" }
 		t.Fatal("official template without custom price must remain standard")
 	}
 }
-||||||| parent of 09aaa5511 (fix(provider): complete curated vision catalog migration)
-
 func TestNormalizeLegacyOpenCodeGoVisionCatalogMigratesOnlyUntouchedPreset(t *testing.T) {
 	base := ProviderEntry{
 		Name: "opencode-go", Kind: "openai", BaseURL: "https://opencode.ai/zen/go/v1",
