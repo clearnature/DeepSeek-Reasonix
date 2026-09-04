@@ -1,0 +1,127 @@
+package agent
+
+import (
+	"sync"
+	"sync/atomic"
+
+	"reasonix/internal/evidence"
+	"reasonix/internal/provider"
+)
+
+// sessionRuntime is the host state one conversation owns. Its lifetime sits
+// between the process and the task: SetSession replaces the conversation and
+// reset restarts everything here that belongs to it. Atomics and mutexes make
+// the whole-value assignment taskRuntime uses illegal, so the "no field is
+// forgotten" property is enforced by sessionstate_test.go instead.
+// mainRequestBytes freezes the exact provider-visible byte unit of the last
+// sampling request. The server caches system+tools+messages as one prefix, so
+// the summarizer replays all three to hit the cached unit; messages alone
+// leaves the tools seam unaligned whenever the live tool set changes.
+type mainRequestBytes struct {
+	messages []provider.Message
+	tools    []provider.ToolSchema
+}
+
+type sessionRuntime struct {
+	mu           sync.Mutex // guards conversation for external Session()/SetSession
+	conversation *Session
+	output       outputBudgetState
+
+	// cacheHit/cacheMiss are the session aggregate, which compaction must not
+	// reset — the hit-rate would crater every time the visible prefix is folded.
+	// Atomic: the run loop accumulates while the status line reads.
+	cacheHit  atomic.Int64
+	cacheMiss atomic.Int64
+
+	missingReasoning missingReasoningWatch
+
+	// lastWireFP: normalized bytes actually sent last request; vs the next
+	// wire fp it separates payload divergence from server-side expiry.
+	lastWireFP atomic.Pointer[string]
+
+	// lastMainReq freezes the last main (sampling) request's provider-visible
+	// unit — messages AND tool schemas. The server caches system+tools+messages
+	// as one prefix, so the summarizer must replay all three; freezing only
+	// messages left the tools seam unaligned when the live tool set changed
+	// (MCP registration, interceptors) and every summary missed past the
+	// system prefix (2026-08-31: hit=16896 of 256122 on desktop).
+	lastMainReq atomic.Pointer[mainRequestBytes]
+
+	// lastMainReqPersist is the last time the frozen main-request bytes were
+	// written to the sidecar (unix nano), throttling fresh-wire refreshes.
+	lastMainReqPersist atomic.Int64
+
+	// compactionMu guards projection snapshots/install and the in-memory sidecar
+	// generation. Network summarization never runs while this lock is held.
+	compactionMu sync.Mutex
+	// compactionRunMu singleflights the expensive summary transaction without
+	// holding the session lock during network I/O.
+	compactionRunMu sync.Mutex
+	compaction      compactionProgress
+	compactionState CompactionState
+	cacheState      string // legacy resume telemetry; never provider-visible
+
+	// path and checkpointState are rebound by preflight when a transcript is
+	// bound, so reset leaves them to their owner rather than blanking them.
+	path            string // bound transcript path for projection sidecars
+	checkpointState string // none|restored|applied; runtime-only
+
+	// todoState is the host's canonical task list. It never rides in the prompt,
+	// so it survives compaction, and SetSession rebuilds it from the incoming
+	// snapshot rather than letting reset blank it.
+	todoMu    sync.Mutex
+	todoState []evidence.TodoItem
+
+	// lastPrefixShape records the previous provider request's cacheable prefix
+	// so usage events can explain prefix churn on the next request. Carried
+	// across a conversation swap; see sessionCarryOver.
+	lastPrefixShape     PrefixShape
+	haveLastPrefixShape bool
+}
+
+// reset rebinds the runtime to a new conversation. Every field is named here or
+// in sessionCarryOver, and sessionstate_test.go checks both lists against the
+// struct: an atomic-bearing type cannot be replaced by one assignment, so the
+// guarantee has to be tested rather than compiled.
+func (r *sessionRuntime) reset(s *Session) {
+	r.mu.Lock()
+	r.conversation = s
+	r.mu.Unlock()
+	r.cacheHit.Store(0)
+	r.cacheMiss.Store(0)
+	r.output.reset()
+	r.missingReasoning = missingReasoningWatch{}
+	r.lastWireFP.Store(nil)
+	r.lastMainReq.Store(nil) // a new conversation starts with no sent prefix
+	r.lastMainReqPersist.Store(0)
+	r.compactionMu.Lock()
+	r.compactionState = CompactionState{} // lineage change; disk reloaded on Resume
+	r.cacheState = CacheStateUnknown
+	r.compactionMu.Unlock()
+	r.compaction.stuck = false
+	r.compaction.stuckInputHash = ""
+	r.compaction.consecutive = 0
+	r.compaction.failedTurn.Store(0)
+	r.compaction.lastTurn.Store(0)
+}
+
+// wireFP returns the fingerprint of the normalized bytes sent last request.
+func (r *sessionRuntime) wireFP() string {
+	if p := r.lastWireFP.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// setWireFP records the normalized bytes about to go on the wire.
+func (r *sessionRuntime) setWireFP(fp string) {
+	r.lastWireFP.Store(&fp)
+}
+
+// session returns the bound conversation under the lock that guards the
+// pointer against a concurrent SetSession.
+func (r *sessionRuntime) session() *Session {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.conversation
+}

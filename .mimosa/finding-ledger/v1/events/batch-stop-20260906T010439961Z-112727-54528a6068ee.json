@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260906T010439961Z-112727-54528a6068ee",
+  "runId": "20260906T010439961Z-112727-54528a6068ee",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "bash_discovery_incomplete",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "project enumeration exceeded 5000 reviewable files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "baseline exceeded 5000 candidate files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "baseline_partial: baseline exceeded 5000 candidate files",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "3ef64dc8fc04950bd3f23a3e0ccf94e15cbd072c",
+  "diffHash": "8fcb3a892057491f4a526ec031ac30e47464eff4937447b0abaf7c8700829151",
+  "rulesVersion": "unavailable",
+  "sessionHash": "621322a67acebf9b85e92376de2de0e4c0a0a66009857ac5e70ba93cc2bebbec",
+  "reportRef": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T010439961Z-112727-54528a6068ee.json",
+  "events": [],
+  "observedFindingIds": [
+    "mimosa-b3bcc0f535224cc476ac3292"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "internal/agent/agent.go",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "internal/agent/debug_fold2_test.go",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "internal/agent/profile_spec.go",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-09-06T01:04:40.642Z"
+}

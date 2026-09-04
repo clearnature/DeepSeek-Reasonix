@@ -1,0 +1,419 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20260906T011956698Z-142112-cbf258b85f25",
+  "run_status": "inconclusive",
+  "errors": [
+    {
+      "stage": "bash-discovery",
+      "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+      "reason": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files"
+    },
+    {
+      "stage": "baseline",
+      "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+      "reason": "baseline_partial: baseline exceeded 5000 candidate files"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/provider.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/openai/fetch_models.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/event/audit_forwarder.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/event/event.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/config/config.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/coordinator.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/subagent_progress.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "supply-chain-check",
+      "target": ".",
+      "reason": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget"
+    }
+  ],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "partial",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": false,
+      "captured_files": 5000,
+      "candidate_limit": 5000,
+      "truncated": true,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 11
+    },
+    "change_tracking": {
+      "touched_observed": 0,
+      "touched_retained": 0,
+      "truncated": false,
+      "bash_mutation": true,
+      "bash_discovered": 11,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 11,
+      "selected_files": 11,
+      "limit": 20,
+      "truncated": false
+    },
+    "scanning": {
+      "required_files": 7,
+      "scanned_files": 0,
+      "skipped_files": 0,
+      "failed_files": 7,
+      "project_checks_required": 1,
+      "project_checks_completed": 0
+    },
+    "notification": {
+      "eligible_findings": 0,
+      "detailed_findings": 0,
+      "detail_limit": 3,
+      "truncated": false
+    },
+    "reason_counts": {
+      "bash_discovery_incomplete": 1,
+      "baseline_partial": 1,
+      "scanner_failed": 7,
+      "stop_budget_exhausted": 1,
+      "project_check_failed": 10
+    },
+    "reasons": [
+      {
+        "code": "bash_discovery_incomplete",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "project enumeration exceeded 5000 reviewable files",
+        "affects_completion": true
+      },
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "baseline exceeded 5000 candidate files",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/provider.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/fetch_models.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/event/audit_forwarder.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/event/event.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/config/config.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/coordinator.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/subagent_progress.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "stop_budget_exhausted",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "baseline_partial: baseline exceeded 5000 candidate files",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/provider.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/fetch_models.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/event/audit_forwarder.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/event/event.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/config/config.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/coordinator.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/subagent_progress.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      }
+    ],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-09-06T01:19:56.698Z",
+  "session_id": "sess_ef80bc9b-c70d-429a-aff0-f23942e69c79",
+  "target": ".",
+  "revision": "108c01fe8844a840db9ce712055a7e25ba506ef8",
+  "rules_version": "unavailable",
+  "diff_hash": "4b8688992c81ae12f839204bf59c8d06a976ee961aafa93627bf75be887354bd",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 9,
+    "changed_files": [
+      {
+        "file": "go.mod",
+        "ranges": [
+          {
+            "start": 3,
+            "end": 3
+          },
+          {
+            "start": 39,
+            "end": 39
+          }
+        ],
+        "before_hash": "abc11f27a33d4c23d84cc4910cc6b16f0175a0db7cc90a2ebf56a22e99d2fdd8",
+        "after_hash": "f1c86e2c1cd566a3176104f059f58a22b7de987ed6f23d6bbde600e28e7ea404"
+      },
+      {
+        "file": "go.sum",
+        "ranges": [
+          {
+            "start": 176,
+            "end": 177
+          }
+        ],
+        "before_hash": "e624e1bad745dd5969000a9d7f92a26909e65bf03ae4a06fd8a02508b53edf05",
+        "after_hash": "916ce52c14373f755f51fbeb639def122f66a25e8a0970b3dc0d141ad9e4b16f"
+      },
+      {
+        "file": "internal/agent/coordinator.go",
+        "ranges": [
+          {
+            "start": 646,
+            "end": 651
+          }
+        ],
+        "before_hash": "4ab0969a001e6972cd7a7b35bf6ba6a0609c248428d46f71d913de95dba27af8",
+        "after_hash": "f7982b2d923e8aa6226ce8f6e86c2f8b9ea7ffc9a16ece4d70ac871cb264d38b"
+      },
+      {
+        "file": "internal/agent/subagent_progress.go",
+        "ranges": [
+          {
+            "start": 611,
+            "end": 616
+          }
+        ],
+        "before_hash": "9495decd070c21792dd1fbf693785159e335c153635e6c9ecd7a3057211b0083",
+        "after_hash": "0cf504c6f79318fdf0f7e2e95e3283b538f6129cdf0ee0d7b58cd3a9e33ab423"
+      },
+      {
+        "file": "internal/config/config.go",
+        "ranges": [
+          {
+            "start": 1363,
+            "end": 1363
+          }
+        ],
+        "before_hash": "70a997d339ac6d6d1501673ac94424275964cf2d40c3bfab196919a6e192a95d",
+        "after_hash": "d9c17193e7f7bf0d24898f74195a641455cb80486d58b518db99231a1ff038b1"
+      },
+      {
+        "file": "internal/event/audit_forwarder.go",
+        "ranges": [
+          {
+            "start": 24,
+            "end": 50
+          }
+        ],
+        "before_hash": "b47183d45a381d0d382bc909fa70fd9a2410cf60a05f348e456e193ffdda852a",
+        "after_hash": "50acca267a0468f58613fe14e41e7ada2a8e770a3386a88823dadda67d00ffca"
+      },
+      {
+        "file": "internal/event/event.go",
+        "ranges": [
+          {
+            "start": 580,
+            "end": 580
+          }
+        ],
+        "before_hash": "fde20a1fde4280a107c9504f08b039297186b66585e5de94aa68c86845aa24f5",
+        "after_hash": "4ae2e6c3657ab2ae5e68deb1acd0bbacf681ed2846758521d4f8bf49bd00cb8e"
+      },
+      {
+        "file": "internal/provider/openai/fetch_models.go",
+        "ranges": [
+          {
+            "start": 11,
+            "end": 11
+          },
+          {
+            "start": 38,
+            "end": 38
+          }
+        ],
+        "before_hash": "ef60215e179b8758f58a463bf02f33ebc85eb03e0e8acc7d784e7e87ea529b24",
+        "after_hash": "1b45f20556f34c44946fc21f0bc63f0905086893697c20eda071c458d48f474c"
+      },
+      {
+        "file": "internal/provider/provider.go",
+        "ranges": [
+          {
+            "start": 73,
+            "end": 73
+          }
+        ],
+        "before_hash": "573ff0aa0d4e9dd5d58f7f304f6e60c16ddd3db78300800030081b17a82ee5cd",
+        "after_hash": "928b555fd462d9f07c32dc9820623c7dab24e9b904dd91970e18884b788d7c49"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-09-06T01:19:53.847Z",
+    "completed_at": "2026-09-06T01:19:56.698Z",
+    "duration_ms": 2851,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "partial/INCONCLUSIVE",
+    "latencyMs": 2851,
+    "peakMemoryBytes": 123621376,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 0,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 0,
+  "rewake_finding_count": 0,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [],
+  "findings": [],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T011956698Z-142112-cbf258b85f25.json",
+    "latest_report": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79.json",
+    "history_summary": ".mimosa/history/run-20260906T011956698Z-142112-cbf258b85f25.json"
+  }
+}
