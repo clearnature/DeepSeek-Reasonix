@@ -90,8 +90,19 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	extraBody, _ := cfg.Extra["extra_body"].(map[string]any)
 	vision, _ := cfg.Extra["vision"].(bool)
 	officialDeepSeek := IsDeepSeek(cfg.BaseURL)
-	// Official DeepSeek image input is pinned to one SKU. Ignore Extra["vision"]
-	// so stale config or extension metadata cannot send image_url to Flash/Pro.
+	modelInfo := provider.ModelInfo{ID: cfg.Model, InputModalities: []provider.ModelModality{provider.ModalityText}}
+	if cfg.ModelInfo != nil {
+		modelInfo = *cfg.ModelInfo
+		modelInfo.ID = cfg.Model
+	}
+	if modelInfo.InputModalities == nil {
+		modelInfo.InputModalities = []provider.ModelModality{provider.ModalityText}
+	}
+	if cfg.ModelInfo != nil {
+		vision = modelInfo.SupportsInput(provider.ModalityImage)
+	}
+	// Official DeepSeek image input is pinned to one SKU even when a catalog
+	// or gateway metadata entry claims otherwise.
 	if officialDeepSeek {
 		vision = IsOfficialDeepSeekVisionModel(cfg.Model)
 	}

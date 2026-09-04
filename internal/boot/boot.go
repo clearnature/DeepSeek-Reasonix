@@ -385,6 +385,9 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		baseResolver = NewLocalProviderResolver(cfg, proxySpec)
 	}
 	effectiveResolver := opts.ProviderResolver
+	if effectiveResolver == nil {
+		effectiveResolver = baseResolver
+	}
 	var extensionResolver provider.Resolver
 	if extensionMgr != nil {
 		declares := false
