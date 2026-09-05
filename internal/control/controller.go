@@ -1119,6 +1119,10 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 		ItemID:         activeInboxID,
 	}
 	done = c.applyTurnDoneProtocol(done, cancelRequested)
+	done.Diagnostic = provider.DiagnoseFailure(err)
+	if !cancelRequested {
+		done.ProtocolRecovery = c.executor.PendingProtocolRecovery()
+	}
 	var readinessErr *agent.FinalReadinessError
 	if errors.As(err, &readinessErr) {
 		done.Readiness = &event.FinalReadiness{Attempts: readinessErr.Attempts, Missing: append([]string(nil), readinessErr.Missing...)}
@@ -1519,6 +1523,10 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		runGoalLoop = func(ctx context.Context, input, raw, display string) error {
 			return c.runEditedGoalLoopWithRawDisplay(ctx, input, raw, display, editedOriginal)
 		}
+	}
+	if id, guidance, ok := ParseProtocolRecoveryCommand(trimmed); ok {
+		c.SubmitProtocolRecovery(id, guidance)
+		return
 	}
 	if c.submitFinalReadinessCommand(trimmed, display) {
 		return
@@ -4769,14 +4777,21 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 			m.Role = provider.RoleTool
 			m.ToolCallID = provider.LocalOnlyToolID
 			m.Name = provider.LocalOnlyToolName
+			previousRecovery := m.InterruptedTurn
 			m.InterruptedTurn = nil
-			m.ToolCalls = displayOnlyToolCalls(m.ToolCalls)
 			next = append(next, m)
 			localIndexes = append(localIndexes, len(next)-1)
 			recovery.DroppedPartialText = recovery.DroppedPartialText || strings.TrimSpace(m.Content) != ""
 			recovery.DroppedPartialReasoning = recovery.DroppedPartialReasoning || strings.TrimSpace(m.ReasoningContent) != ""
-			for _, call := range m.ToolCalls {
-				recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, call.Name)
+			if previousRecovery != nil {
+				recovery.CompletedTools = append(recovery.CompletedTools, previousRecovery.CompletedTools...)
+				recovery.InterruptedTools = append(recovery.InterruptedTools, previousRecovery.InterruptedTools...)
+				recovery.NotStartedTools = append(recovery.NotStartedTools, previousRecovery.NotStartedTools...)
+				recovery.UnknownTools = append(recovery.UnknownTools, previousRecovery.UnknownTools...)
+			} else {
+				for _, call := range m.ToolCalls {
+					provider.RecordToolRecovery(recovery, interruptedToolSummary(call), provider.ToolRunUnknown)
+				}
 			}
 			i++
 			continue
@@ -4790,15 +4805,11 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 			i++
 			continue
 		}
+		if m.Role == provider.RoleAssistant {
+			recordInterruptedAssistantRecovery(recovery, msgs, i)
+		}
 		if end, ok := completeToolTurnEnd(msgs, i); ok && c.executor.CanReplayAssistantMessage(m) {
 			next = append(next, msgs[i:end]...)
-			for k, call := range m.ToolCalls {
-				if toolResultWasInterrupted(msgs[i+1+k].Content) {
-					recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, call.Name)
-					continue
-				}
-				recovery.CompletedTools = append(recovery.CompletedTools, interruptedToolSummary(call))
-			}
 			i = end
 			continue
 		}
@@ -4810,20 +4821,14 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 			local.ToolCallID = provider.LocalOnlyToolID
 			local.Name = provider.LocalOnlyToolName
 			local.InterruptedTurn = nil
-			local.ReasoningSignature = ""
-			local.ToolCalls = displayOnlyToolCalls(local.ToolCalls)
 			next = append(next, local)
 			localIndexes = append(localIndexes, len(next)-1)
 			recovery.DroppedPartialText = recovery.DroppedPartialText || strings.TrimSpace(local.Content) != ""
 			recovery.DroppedPartialReasoning = recovery.DroppedPartialReasoning || strings.TrimSpace(local.ReasoningContent) != ""
-			for _, call := range local.ToolCalls {
-				recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, call.Name)
-			}
 		case provider.RoleTool:
 			local := m
 			local.LocalOnly = true
 			local.ToolCalls = []provider.ToolCall{{ID: m.ToolCallID, Name: m.Name}}
-			recovery.InterruptedTools = appendUniqueString(recovery.InterruptedTools, m.Name)
 			local.ToolCallID = provider.LocalOnlyToolID
 			local.Name = provider.LocalOnlyToolName
 			next = append(next, local)
@@ -4948,30 +4953,6 @@ func completeToolTurnEnd(msgs []provider.Message, i int) (int, bool) {
 		}
 	}
 	return end, true
-}
-
-func toolResultWasInterrupted(content string) bool {
-	content = strings.ToLower(strings.TrimSpace(content))
-	return strings.HasPrefix(content, "cancelled:") || strings.Contains(content, "context canceled") || strings.Contains(content, "context cancelled")
-}
-
-func displayOnlyToolCalls(calls []provider.ToolCall) []provider.ToolCall {
-	out := make([]provider.ToolCall, 0, len(calls))
-	for _, call := range calls {
-		out = append(out, provider.ToolCall{ID: call.ID, Name: strings.TrimSpace(call.Name)})
-	}
-	return out
-}
-
-func appendUniqueString(dst []string, value string) []string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return dst
-	}
-	if slices.Contains(dst, value) {
-		return dst
-	}
-	return append(dst, value)
 }
 
 func interruptedToolSummary(call provider.ToolCall) provider.InterruptedToolSummary {

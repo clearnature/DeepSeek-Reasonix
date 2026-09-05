@@ -131,11 +131,6 @@ type RateCard struct {
 	Input    float64 // per 1M uncached prompt tokens
 	Output   float64 // per 1M completion tokens
 	Currency string  // ISO or symbol; normalized on quote
-	// Peak* carry the peak-hours rates (DeepSeek 8/17 schedule: 2x off-peak,
-	// Mon–Fri 09:00–12:00 & 14:00–18:00 Beijing). Zero means no peak schedule.
-	PeakCacheHit float64
-	PeakInput    float64
-	PeakOutput   float64
 }
 
 // UsageTokens is the token breakdown needed for cost. Mirrors provider.Usage
@@ -230,8 +225,6 @@ type quoteBuildState struct {
 }
 
 func newQuoteBuildState(in QuoteInput) *quoteBuildState {
-	// Peak/off-peak schedule selection happens once, before any rate use.
-	in.Rates = SelectRates(in.Rates, in.OccurredAt)
 	currency := NormalizeCurrency(in.Rates.Currency)
 	if currency == "" {
 		currency = "CNY"
@@ -254,14 +247,6 @@ func newQuoteBuildState(in QuoteInput) *quoteBuildState {
 			in.Rates = resolved.Card
 			resolvedBand = resolved.RateBand
 			resolvedSchedule = true
-		}
-	} else if in.Rates.PeakCacheHit > 0 || in.Rates.PeakInput > 0 || in.Rates.PeakOutput > 0 {
-		// Config dual-rate without an official catalog anchor: report the band
-		// SelectRates chose so telemetry still shows peak/off_peak.
-		if IsPeakHour(occurred) {
-			resolvedBand = RateBandPeak
-		} else {
-			resolvedBand = RateBandOffPeak
 		}
 	}
 	fingerprint := strings.TrimSpace(in.PricingFingerprint)
@@ -585,14 +570,9 @@ func (a *quoteAccumulator) add(quote CostQuote) {
 }
 
 func (a *quoteAccumulator) addOriginal(original Money, currency string) {
-	if currency == "" {
-		// No original currency: the entry carries no original-currency charge
-		// (unpriced title/subagent/auxiliary work). It must not poison the
-		// aggregate's original total or completeness — the priced entries
-		// still form a valid partial total.
-		return
+	if currency != "" {
+		a.originalTotals[currency] = a.originalTotals[currency].Add(original.AmountValue())
 	}
-	a.originalTotals[currency] = a.originalTotals[currency].Add(original.AmountValue())
 	if a.originalCurrency == "" {
 		a.originalCurrency = currency
 		a.originalTotal = original.AmountValue()
@@ -678,18 +658,6 @@ func (a *quoteAccumulator) finish() CostQuote {
 	a.out.DisplayComplete = false
 	a.out.Complete = false
 	if !a.costFactsComplete {
-		if valuation, ok := a.out.Valuations[a.display]; ok && a.display != "" {
-			// Partial facts: unpriced entries (title/auxiliary) have no
-			// original charge, but the priced entries form a valid estimate.
-			// Show it with an incomplete marker instead of hiding the entire
-			// session cost behind DisplayStatusUnavailable.
-			selected := valuation.Money
-			a.out.Selected = &selected
-			a.out.DisplayStatus = DisplayStatusMatched
-			a.out.AggregateMode = AggregateModeSingleCurrency
-			a.out.IncompleteReason = firstNonEmpty(a.out.IncompleteReason, "incomplete_cost_fact")
-			return a.out
-		}
 		a.out.DisplayStatus = DisplayStatusUnavailable
 		a.out.IncompleteReason = firstNonEmpty(a.out.IncompleteReason, "incomplete_cost_fact")
 	} else if a.originalComplete && a.originalCurrency != "" {

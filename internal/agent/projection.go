@@ -497,6 +497,7 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 		ToolCallID         string                      `json:"tid,omitempty"`
 		Name               string                      `json:"n,omitempty"`
 		ToolCalls          []wireCall                  `json:"tc,omitempty"`
+		ThinkingBlocks     []provider.ThinkingBlock    `json:"tb,omitempty"`
 		ResponsesItems     []json.RawMessage           `json:"ri,omitempty"`
 		ServerSearch       []provider.ServerSearchCall `json:"ss,omitempty"`
 	}
@@ -510,6 +511,7 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 			ReasoningID:        m.ReasoningID,
 			ReasoningStatus:    m.ReasoningStatus,
 			ReasoningSignature: m.ReasoningSignature,
+			ThinkingBlocks:     m.ThinkingBlocks,
 			ToolCallID:         m.ToolCallID,
 			Name:               m.Name,
 		}

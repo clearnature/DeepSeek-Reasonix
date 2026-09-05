@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 
 	"reasonix/internal/evidence"
-	"reasonix/internal/provider"
 )
 
 // sessionRuntime is the host state one conversation owns. Its lifetime sits
@@ -13,15 +12,6 @@ import (
 // reset restarts everything here that belongs to it. Atomics and mutexes make
 // the whole-value assignment taskRuntime uses illegal, so the "no field is
 // forgotten" property is enforced by sessionstate_test.go instead.
-// mainRequestBytes freezes the exact provider-visible byte unit of the last
-// sampling request. The server caches system+tools+messages as one prefix, so
-// the summarizer replays all three to hit the cached unit; messages alone
-// leaves the tools seam unaligned whenever the live tool set changes.
-type mainRequestBytes struct {
-	messages []provider.Message
-	tools    []provider.ToolSchema
-}
-
 type sessionRuntime struct {
 	mu           sync.Mutex // guards conversation for external Session()/SetSession
 	conversation *Session
@@ -35,21 +25,11 @@ type sessionRuntime struct {
 
 	missingReasoning missingReasoningWatch
 
-	// lastWireFP: normalized bytes actually sent last request; vs the next
-	// wire fp it separates payload divergence from server-side expiry.
-	lastWireFP atomic.Pointer[string]
-
-	// lastMainReq freezes the last main (sampling) request's provider-visible
-	// unit — messages AND tool schemas. The server caches system+tools+messages
-	// as one prefix, so the summarizer must replay all three; freezing only
-	// messages left the tools seam unaligned when the live tool set changed
-	// (MCP registration, interceptors) and every summary missed past the
-	// system prefix (2026-08-31: hit=16896 of 256122 on desktop).
-	lastMainReq atomic.Pointer[mainRequestBytes]
-
-	// lastMainReqPersist is the last time the frozen main-request bytes were
-	// written to the sidecar (unix nano), throttling fresh-wire refreshes.
-	lastMainReqPersist atomic.Int64
+	// reasoningReplayStrongProjection records the provider-visible history cutoff
+	// after thinking-400 repair; later messages use normal replay. Its anchor
+	// resolves the cutoff after old tool-result messages are removed.
+	reasoningReplayStrongProjection       int
+	reasoningReplayStrongProjectionAnchor string
 
 	// compactionMu guards projection snapshots/install and the in-memory sidecar
 	// generation. Network summarization never runs while this lock is held.
@@ -91,9 +71,8 @@ func (r *sessionRuntime) reset(s *Session) {
 	r.cacheMiss.Store(0)
 	r.output.reset()
 	r.missingReasoning = missingReasoningWatch{}
-	r.lastWireFP.Store(nil)
-	r.lastMainReq.Store(nil) // a new conversation starts with no sent prefix
-	r.lastMainReqPersist.Store(0)
+	r.reasoningReplayStrongProjection = 0
+	r.reasoningReplayStrongProjectionAnchor = ""
 	r.compactionMu.Lock()
 	r.compactionState = CompactionState{} // lineage change; disk reloaded on Resume
 	r.cacheState = CacheStateUnknown
@@ -105,17 +84,15 @@ func (r *sessionRuntime) reset(s *Session) {
 	r.compaction.lastTurn.Store(0)
 }
 
-// wireFP returns the fingerprint of the normalized bytes sent last request.
-func (r *sessionRuntime) wireFP() string {
-	if p := r.lastWireFP.Load(); p != nil {
-		return *p
+// clearReasoningReplayStrongProjection drops the process-local repair overlay.
+// The overlay is tied to one canonical history shape; any rewind, branch, or
+// other lineage rewrite must not let an old cutoff/anchor govern the new view.
+func (r *sessionRuntime) clearReasoningReplayStrongProjection() {
+	if r == nil {
+		return
 	}
-	return ""
-}
-
-// setWireFP records the normalized bytes about to go on the wire.
-func (r *sessionRuntime) setWireFP(fp string) {
-	r.lastWireFP.Store(&fp)
+	r.reasoningReplayStrongProjection = 0
+	r.reasoningReplayStrongProjectionAnchor = ""
 }
 
 // session returns the bound conversation under the lock that guards the
