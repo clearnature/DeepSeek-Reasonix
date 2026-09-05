@@ -1714,6 +1714,10 @@ export interface ProviderModelCatalogUpdate {
 }
 
 export interface ProviderModelCapabilityView {
+	automaticState?: string;
+	automaticSource?: string;
+	imageInputEnableAllowed?: boolean;
+	imageInputBlockReason?: string;
   model: string;
   inputModalities: string[];
   state: "supported" | "unsupported" | "unknown" | string;

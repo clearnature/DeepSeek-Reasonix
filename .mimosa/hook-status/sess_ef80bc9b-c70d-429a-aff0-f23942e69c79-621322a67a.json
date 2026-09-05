@@ -1,14 +1,14 @@
 {
   "schemaVersion": "mimosa-hook-status/v1",
-  "recordedAt": "2026-09-06T01:56:08.548Z",
+  "recordedAt": "2026-09-06T02:02:18.348Z",
   "sessionId": "sess_ef80bc9b-c70d-429a-aff0-f23942e69c79",
   "event": "PostToolUse",
   "toolName": "Edit",
-  "file": "internal/control/controller.go",
+  "file": "internal/provider/openai/fetch_models_test.go",
   "outcome": "clear",
   "coverage": "complete",
   "findingCount": 0,
-  "durationMs": 29,
+  "durationMs": 22,
   "hostState": "hook_complete",
   "reportHint": ".mimosa/reports/"
 }

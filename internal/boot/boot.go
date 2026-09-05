@@ -1767,6 +1767,11 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		}
 		return "", false
 	}
+	imageEnabled := modelCapabilities.Resolve(entry).State == config.CapabilitySupported
+	if infoProvider, ok := execProv.(provider.ModelInfoProvider); ok {
+		imageEnabled = infoProvider.ModelInfo().SupportsInput(provider.ModalityImage)
+	}
+	imageSnapshot := config.ModelCapabilitySnapshot(cfg, modelCapabilities)
 
 	// P6.2 production wiring (reinstated after the 2026-08-12 upstream merge
 	// dropped it — team commands were disabled); ablation builds keep nil.
@@ -1780,8 +1785,12 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		teammates.SetSnapshotPath(filepath.Join(sessionDir, "team-state.json"))
 		teammates.SetSink(sink)
 	}
-
 	ctrlOpts := control.Options{
+		FrozenImageInput: &imageEnabled,
+		ImageCapabilityChanged: func() bool {
+			current, err := config.LoadForRootReadOnly(root)
+			return err == nil && config.ModelCapabilitySnapshot(current, config.NewModelCapabilityResolver()) != imageSnapshot
+		},
 		TaskBudget:                     taskBudgetFromConfig(cfg),
 		GoalTokenBudget:                cfg.Agent.GoalTokenBudget,
 		Runner:                         runner,
@@ -2539,6 +2548,10 @@ func NewProviderWithProxy(e *config.ProviderEntry, proxy netclient.ProxySpec) (p
 // NewProviderWithProxyAndModelInfo builds a provider while preserving the
 // adapter-resolved metadata for the exact model instance.
 func NewProviderWithProxyAndModelInfo(e *config.ProviderEntry, proxy netclient.ProxySpec, modelInfo *provider.ModelInfo) (provider.Provider, error) {
+	if modelInfo == nil {
+		resolved := config.NewModelCapabilityResolver().Resolve(e)
+		modelInfo = &resolved.ModelInfo
+	}
 	return provider.New(e.Kind, provider.Config{
 		Name:      e.Name,
 		BaseURL:   e.BaseURL,

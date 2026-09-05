@@ -8,9 +8,11 @@ import { useDeferredClose } from "../lib/useMountTransition";
 import { app, COMPACT_RATIO_MAX_PERCENT, COMPACT_RATIO_MIN_PERCENT, openExternal } from "../lib/bridge";
 import { normalizeLangPref, useI18n, useT, type DictKey, type LangPref } from "../lib/i18n";
 import { apiKeyEnvFromProviderName, createLatestRequestGate, mergedFetchedProviderModels, mergeProviderModelContextWindows, providerApiKeyEnvForSave, providerDefaultModel, providerIsConfigured, providerModelCandidates, providerModelContextWindowDrafts, providerModelContextWindowIsSmall, providerRequiresKey } from "../lib/providerModels";
-import { cachedFetchProviderModelCatalog, cachedFetchProviderModels, invalidateProviderCacheByAPIKeyEnv, shouldSkipAutoRefresh } from "../lib/providerModelCache";
+import { cachedFetchProviderModelCatalog, cachedFetchProviderModels, invalidateProviderCacheByAPIKeyEnv, providerDiscoveryIdentity, shouldSkipAutoRefresh } from "../lib/providerModelCache";
 import { providerBaseURLForSave, providerRequestURLFromConfig, trimmedBaseURL } from "../lib/providerEndpoint";
 import { providerModelVisionCapability, providerVisionModelsForView } from "../lib/providerVisionCapability";
+import { ModelImageInputControl } from "./ModelImageInputControl";
+import { imageInputModeForModel, imageInputModes, mergeImageInputModes, modelCapabilityForModel, type ImageInputMode } from "../lib/providerImageInput";
 import { opencodeGoPresetDescriptionKeys } from "../lib/providerPresetDescriptions";
 import { useUpdater } from "../lib/useUpdater";
 import {
@@ -1368,6 +1370,10 @@ export function normalizeProviderView(p: ProviderView): ProviderView {
     const model = String(raw.model ?? "").trim();
     if (!model) return [];
     return [{
+      automaticState: raw.automaticState,
+      automaticSource: raw.automaticSource,
+      imageInputEnableAllowed: raw.imageInputEnableAllowed,
+      imageInputBlockReason: raw.imageInputBlockReason,
       model,
       inputModalities: asArray(raw.inputModalities).map(String),
       state: String(raw.state ?? "unknown"),
@@ -4971,13 +4977,24 @@ function proxyModeLabel(mode: ProxyMode, t: ReturnType<typeof useT>): string {
   }
 }
 
+function providerModelDraftIdentity(provider: ProviderView): string {
+  return JSON.stringify([providerDiscoveryIdentity(provider), provider.models, provider.modelOverrides, provider.visionModels, provider.visionModelsConfigured]);
+}
+
 function ProvidersSection({ s, busy, apply }: SectionProps) {
   const t = useT();
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState<AddProviderMode>(null);
   const [revealedProvider, setRevealedProvider] = useState<string | null>(null);
   const [fetchingProviders, setFetchingProviders] = useState<Set<string>>(() => new Set());
-  const fetchGate = useMemo(createLatestRequestGate, []);
+  const discoveryIdentity = JSON.stringify(s.providers.map(providerModelDraftIdentity));
+  const fetchGate = useMemo(() => {
+    void discoveryIdentity;
+    const gate = createLatestRequestGate();
+    gate.begin("lifetime");
+    return gate;
+  }, [discoveryIdentity]);
+  useEffect(() => () => { fetchGate.cancel("lifetime"); setFetchingProviders(new Set()); }, [fetchGate]);
   const [fetchResults, setFetchResults] = useState<Record<string, ProviderFetchResult>>({});
   const [modelDrafts, setModelDrafts] = useState<Record<string, ProviderModelDraft>>({});
   const visibleProviders = useMemo(() => s.providers.filter((p) => p.added || p.name === revealedProvider), [s.providers, revealedProvider]);
@@ -5020,7 +5037,7 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
   };
 
   const groupFetchIsCurrent = (groupID: string, generation: number): boolean => (
-    fetchGate.isCurrent(groupID, generation)
+    fetchGate.isCurrent("lifetime", 1) && fetchGate.isCurrent(groupID, generation)
   );
 
   const finishGroupFetch = (groupID: string, generation: number) => {
@@ -5043,18 +5060,20 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
     });
   };
 
-  const modelDraftForFetch = (p: ProviderView, fetched: string[], capabilities: ProviderModelCapabilityView[] = []): ProviderModelDraft => {
-    const candidates = providerModelCandidates(p.models, fetched);
-    const selected = mergedFetchedProviderModels(p.models, fetched, { preserveCurated: true });
-    const configuredVision = providerVisionModelsForView(p, candidates);
+  const modelDraftForFetch = (p: ProviderView, fetched: string[], capabilities: ProviderModelCapabilityView[] = [], previous?: ProviderModelDraft): ProviderModelDraft => {
+    const candidates = providerModelCandidates(previous?.candidates ?? p.models, fetched);
+    const selected = previous?.selected ?? mergedFetchedProviderModels(p.models, fetched, { preserveCurated: true });
+    const configuredVision = p.visionModels;
     return {
       providerName: p.name,
+      baseURL: p.baseUrl,
+      providerIdentity: providerModelDraftIdentity(p),
       candidates,
       selected: candidates.filter((model) => selected.includes(model)),
       visionModels: configuredVision,
-      visionModelsConfigured: p.visionModelsConfigured,
-      visionCapability: p.visionCapability,
-      modelCapabilities: capabilities,
+      visionModelsConfigured: p.visionModelsConfigured, visionCapability: p.visionCapability,
+      modelCapabilities: [...(previous?.modelCapabilities ?? p.modelCapabilities ?? []).filter((old) => !modelCapabilityForModel(capabilities, old.model)), ...capabilities],
+      imageInputModes: previous?.imageInputModes ?? imageInputModes(p.modelOverrides),
     };
   };
 
@@ -5077,7 +5096,6 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
   const refreshModels = async (group: ProviderAccessGroup, p: ProviderView) => {
     const generation = beginGroupFetch(group.id);
     setGroupFetchResult(group.id, null);
-    setGroupModelDraft(group.id, null);
     try {
       let fetched: string[];
       let fetchedCapabilities: ProviderModelCapabilityView[] = [];
@@ -5100,7 +5118,7 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
         });
         return;
       }
-      const draft = modelDraftForFetch(p, fetched, fetchedCapabilities);
+      const draft = modelDraftForFetch(p, fetched, fetchedCapabilities, modelDrafts[group.id]);
       startTransition(() => {
         setGroupModelDraft(group.id, draft);
         setGroupFetchResult(group.id, {
@@ -5124,11 +5142,17 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
         await app.SaveProviderKey(apiKeyEnv, value);
         invalidateProviderCacheByAPIKeyEnv(apiKeyEnv);
         try {
-          const fetchedCapabilities = await cachedFetchProviderModelCatalog((provider) => app.FetchProviderModelCatalog(provider), { ...probe, apiKeyEnv });
+          // Saving a key changes the backend discovery fingerprint. Keep the
+          // resulting draft attached to that new identity after apply reloads.
+          const updatedSettings = normalizeSettingsView(await app.Settings());
+          const updatedProbe = updatedSettings?.providers.find((provider) => provider.name === probe.name) ?? probe;
+          const discoveryProbe = { ...updatedProbe, apiKeyEnv };
+          if (!groupFetchIsCurrent(group.id, generation)) return;
+          const fetchedCapabilities = await cachedFetchProviderModelCatalog((provider) => app.FetchProviderModelCatalog(provider), discoveryProbe);
           const fetched = fetchedCapabilities.map((item) => item.model);
           if (!groupFetchIsCurrent(group.id, generation)) return;
           if (fetched.length > 0) {
-            const draft = modelDraftForFetch({ ...probe, apiKeyEnv }, fetched, fetchedCapabilities);
+            const draft = modelDraftForFetch(discoveryProbe, fetched, fetchedCapabilities);
             setGroupModelDraft(group.id, draft);
             setGroupFetchResult(group.id, {
               kind: "ok",
@@ -5187,12 +5211,13 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
     const draft = modelDrafts[group.id];
     const provider = draft ? group.providers.find((p) => p.name === draft.providerName) : null;
     const models = uniqueStrings(draft?.selected ?? []);
-    if (!draft || !provider || models.length === 0) return;
+    if (!draft || !provider || models.length === 0 || (draft.providerIdentity && draft.providerIdentity !== providerModelDraftIdentity(provider))) return;
     let saved = false;
     await apply(async () => {
       await app.SaveProvider({
         ...provider,
         models,
+        modelOverrides: mergeImageInputModes(provider.modelOverrides, models, draft.imageInputModes),
         // Vision capability is derived from model metadata. Keep legacy
         // fields untouched so old configurations remain readable.
         default: providerDefaultModel(provider.default, models),
@@ -5259,7 +5284,7 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
             busy={busy}
             fetching={fetchingProviders.has(group.id)}
             fetchResult={fetchResults[group.id]}
-            modelDraft={modelDrafts[group.id]}
+            modelDraft={group.providers.some((p) => p.name === modelDrafts[group.id]?.providerName && (!modelDrafts[group.id]?.providerIdentity || modelDrafts[group.id]?.providerIdentity === providerModelDraftIdentity(p))) ? modelDrafts[group.id] : undefined}
             editing={editing}
             kinds={s.providerKinds}
             onEdit={setEditing}
@@ -5278,6 +5303,10 @@ function ProvidersSection({ s, busy, apply }: SectionProps) {
                 : [...draft.selected, model]
             ))}
             onSelectAllDraftModels={() => updateModelDraftSelection(group.id, (draft) => draft.candidates)}
+            onImageInputChange={(model, mode) => setModelDrafts((prev) => {
+              const draft = prev[group.id];
+              return draft ? { ...prev, [group.id]: { ...draft, imageInputModes: { ...draft.imageInputModes, [model]: mode } } } : prev;
+            })}
             onClearDraftModels={() => updateModelDraftSelection(group.id, () => [])}
             onCancelDraftModels={() => {
               setGroupModelDraft(group.id, null);
@@ -5352,6 +5381,9 @@ type ProviderFetchResult = {
 };
 
 type ProviderModelDraft = {
+  baseURL?: string;
+  providerIdentity?: string;
+  imageInputModes: Record<string, ImageInputMode>;
   providerName: string;
   candidates: string[];
   selected: string[];
@@ -5879,6 +5911,7 @@ export function ProviderAccessCard({
   onSave,
   onRefresh,
   onToggleDraftModel,
+  onImageInputChange,
   onSelectAllDraftModels,
   onClearDraftModels,
   onCancelDraftModels,
@@ -5901,6 +5934,7 @@ export function ProviderAccessCard({
   onSave: (p: ProviderView, key?: string) => void | Promise<void>;
   onRefresh: (p: ProviderView) => void;
   onToggleDraftModel: (model: string) => void;
+  onImageInputChange?: (model: string, mode: ImageInputMode) => void;
   onSelectAllDraftModels: () => void;
   onClearDraftModels: () => void;
   onCancelDraftModels: () => void;
@@ -6043,6 +6077,7 @@ export function ProviderAccessCard({
           busy={busy}
           fetching={fetching}
           onToggle={onToggleDraftModel}
+          onImageInputChange={onImageInputChange}
           onSelectAll={onSelectAllDraftModels}
           onClear={onClearDraftModels}
           onCancel={onCancelDraftModels}
@@ -6231,6 +6266,7 @@ function ProviderModelDraftPicker({
   busy,
   fetching,
   onToggle,
+  onImageInputChange,
   onSelectAll,
   onClear,
   onCancel,
@@ -6240,6 +6276,7 @@ function ProviderModelDraftPicker({
   busy: boolean;
   fetching: boolean;
   onToggle: (model: string) => void;
+  onImageInputChange?: (model: string, mode: ImageInputMode) => void;
   onSelectAll: () => void;
   onClear: () => void;
   onCancel: () => void;
@@ -6298,7 +6335,7 @@ function ProviderModelDraftPicker({
             draft.visionModels,
           );
           return (
-            <div className="provider-model-draft__option" key={model} role="listitem" style={{ contentVisibility: "auto", containIntrinsicSize: "auto 48px" }}>
+            <div className="provider-model-draft__option" key={model} role="listitem" style={{ contentVisibility: "auto", containIntrinsicSize: "auto 72px" }}>
               <label className="provider-model-draft__model">
                 <input
                   type="checkbox"
@@ -6308,14 +6345,10 @@ function ProviderModelDraftPicker({
                 />
                 <span>{model}</span>
               </label>
-              <div className="provider-model-draft__capabilities" aria-label={t("settings.modelCapabilitiesAria", { model })}>
-                <span>{t("settings.textInput")}</span>
-                <span>{capability === "supported"
-                  ? t("settings.visionModel")
-                  : capability === "unsupported"
-                    ? t("settings.imageInputUnsupported")
-                    : t("settings.imageInputUnknown")}</span>
-              </div>
+              <ModelImageInputControl model={model} fallback={capability} baseURL={draft.baseURL}
+                capability={modelCapabilityForModel(draft.modelCapabilities, model)}
+                mode={imageInputModeForModel(draft.imageInputModes ?? {}, model)} disabled={disabled || !enabled}
+                onChange={onImageInputChange ? (mode) => onImageInputChange(model, mode) : undefined} />
             </div>
           );
         }) : (
@@ -6599,12 +6632,15 @@ function parseBotListInput(value: string): string[] {
 }
 
 export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker({
+  baseURL,
   candidates,
   selectedModels,
   visionModels,
   visionModelsConfigured,
   visionCapability,
   modelCapabilities,
+  imageModes = {},
+  onImageInputChange,
   contextWindows,
   disabled,
   onToggleModel,
@@ -6614,10 +6650,13 @@ export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker
 }: {
   candidates: string[];
   selectedModels: string[];
+  baseURL?: string;
   visionModels: string[];
   visionModelsConfigured: boolean;
   visionCapability?: ProviderVisionCapability;
   modelCapabilities: ProviderModelCapabilityView[];
+  imageModes?: Record<string, ImageInputMode>;
+  onImageInputChange?: (model: string, mode: ImageInputMode) => void;
   contextWindows: Record<string, string>;
   disabled: boolean;
   onToggleModel: (model: string) => void;
@@ -6674,7 +6713,7 @@ export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker
             visionModels,
           );
           return (
-            <div className="provider-model-draft__option" key={model} role="listitem" style={{ contentVisibility: "auto", containIntrinsicSize: "auto 48px" }}>
+            <div className="provider-model-draft__option provider-model-draft__option--with-context" key={model} role="listitem" style={{ contentVisibility: "auto", containIntrinsicSize: "auto 72px" }}>
               <label className="provider-model-draft__model">
                 <input
                   type="checkbox"
@@ -6684,14 +6723,10 @@ export const ProviderEditorModelPicker = memo(function ProviderEditorModelPicker
                 />
                 <span>{model}</span>
               </label>
-              <div className="provider-model-draft__capabilities" aria-label={t("settings.modelCapabilitiesAria", { model })}>
-                <span>{t("settings.textInput")}</span>
-                <span>{capability === "supported"
-                  ? t("settings.visionModel")
-                  : capability === "unsupported"
-                    ? t("settings.imageInputUnsupported")
-                    : t("settings.imageInputUnknown")}</span>
-              </div>
+              <ModelImageInputControl model={model} fallback={capability} baseURL={baseURL}
+                capability={modelCapabilityForModel(modelCapabilities, model)}
+                mode={imageInputModeForModel(imageModes, model)} disabled={disabled || !enabled}
+                onChange={onImageInputChange ? (mode) => onImageInputChange(model, mode) : undefined} />
               <div className="provider-model-draft__context-field">
                 <label className="provider-model-draft__context">
                   <span>{t("settings.modelContextWindow")}</span>
@@ -6757,10 +6792,8 @@ export function ProviderEditor({
   const [models, setModels] = useState((initial?.models ?? []).join(", "));
   const [modelCandidates, setModelCandidates] = useState<string[]>(initial?.models ?? []);
   const [legacyVisionModels] = useState(initial?.visionModels ?? []);
+  const [imageModes, setImageModes] = useState(() => imageInputModes(initial?.modelOverrides));
   const [modelCapabilities, setModelCapabilities] = useState<ProviderModelCapabilityView[]>(initial?.modelCapabilities ?? []);
-  const [visionModels, setVisionModels] = useState(() => providerVisionModelsForView(
-    initial ?? { models: [], visionModels: [], modelOverrides: [] },
-  ).join(", "));
   const visionModelsConfigured = Boolean(initial?.visionModelsConfigured ?? legacyVisionModels.length > 0);
   const [modelsUrl, setModelsUrl] = useState(initial?.modelsUrl ?? "");
   const [apiKeyEnv, setApiKeyEnv] = useState(initial?.apiKeyEnv ?? "");
@@ -6804,6 +6837,16 @@ export function ProviderEditor({
   const effectiveServerWebSearchCapability = retainedServerWebSearchCapability ??
     providerSupportsServerWebSearch(effectiveKind, effectiveBaseUrl);
   const effectiveHeaders = parseProviderHeaders(headersDraft);
+  const discoveryIdentity = JSON.stringify([name, effectiveKind, effectiveRequestUrl, effectiveBaseUrl, effectiveModelsUrl, apiKeyEnv, headersDraft, authHeader, noProxy, initial?.modelCatalogFingerprint]);
+  const [capabilitiesIdentity, setCapabilitiesIdentity] = useState(discoveryIdentity);
+  const discoveryGate = useMemo(() => {
+    void discoveryIdentity;
+    void keyDraft;
+    const gate = createLatestRequestGate();
+    gate.begin("lifetime");
+    return gate;
+  }, [discoveryIdentity, keyDraft]);
+  useEffect(() => () => { discoveryGate.cancel("lifetime"); setFetchingModels(false); }, [discoveryGate]);
   const extraBodyParse = useMemo(() => {
     try {
       return { value: parseProviderExtraBody(extraBodyDraft, t), error: "" };
@@ -6822,8 +6865,8 @@ export function ProviderEditor({
     [modelCandidates, modelNames],
   );
   const visionModelNames = useMemo(
-    () => parseProviderListInput(visionModels).filter((model) => modelNames.includes(model)),
-    [modelNames, visionModels],
+    () => legacyVisionModels.filter((model) => modelNames.includes(model)),
+    [modelNames, legacyVisionModels],
   );
 
   // Empty supportedEfforts means "use protocol defaults". The simplified
@@ -6841,16 +6884,18 @@ export function ProviderEditor({
 
   const fetchModels = async () => {
     if (extraBodyInvalid) return;
+    const generation = discoveryGate.begin("fetch");
+    const isCurrent = () => discoveryGate.isCurrent("lifetime", 1) && discoveryGate.isCurrent("fetch", generation);
     setFetchingModels(true);
     setFetchStatus(null);
     setFetchFallback(null);
     try {
       const effectiveApiKeyEnv = providerApiKeyEnvForSave(name, apiKeyEnv, keyDraft);
-      if (!apiKeyEnv.trim()) setApiKeyEnv(effectiveApiKeyEnv);
       if (keyDraft.trim()) {
         await app.SaveProviderKey(effectiveApiKeyEnv, keyDraft.trim());
         invalidateProviderCacheByAPIKeyEnv(effectiveApiKeyEnv);
       }
+      if (!isCurrent()) return;
       const fetchedCapabilities = await cachedFetchProviderModelCatalog((provider) => app.FetchProviderModelCatalog(provider), {
         name: name.trim() || t("settings.newProviderDraftName"),
         builtIn: initial?.builtIn ?? false,
@@ -6861,8 +6906,8 @@ export function ProviderEditor({
         requestUrl: effectiveRequestUrl,
         modelsUrl: effectiveModelsUrl,
         models: [],
-        visionModels: [],
-        visionModelsConfigured: false,
+        visionModels: legacyVisionModels,
+        visionModelsConfigured,
         default: "",
         apiKeyEnv: effectiveApiKeyEnv,
         headers: effectiveHeaders,
@@ -6879,6 +6924,7 @@ export function ProviderEditor({
         defaultEffort: cleanDefaultEffort,
         modelOverrides: mergeProviderModelContextWindows(initial?.modelOverrides, parseProviderListInput(models), modelContextWindows),
       }, true);
+      if (!isCurrent()) return;
       const fetched = fetchedCapabilities.map((item) => item.model);
       if (fetched.length === 0) {
         setFetchFallback(t("settings.fetchModelsManualFallbackEmpty"));
@@ -6886,16 +6932,15 @@ export function ProviderEditor({
       }
       setModelCandidates(fetched);
       setModelCapabilities(fetchedCapabilities);
-      setModels(fetched.join(", "));
-      setVisionModels((current) => {
-        return parseProviderListInput(current).filter((model) => fetched.includes(model)).join(", ");
-      });
+      setCapabilitiesIdentity(discoveryIdentity);
+      setModels((current) => uniqueStrings([...parseProviderListInput(current), ...fetched]).join(", "));
       if (keyDraft.trim()) setKeyDraft("");
       setFetchStatus(t("settings.fetchModelsSuccess", { n: fetched.length }));
     } catch (e) {
+      if (!isCurrent()) return;
       setFetchFallback(providerModelFetchFallbackMessage(e, t));
     } finally {
-      setFetchingModels(false);
+      if (isCurrent()) setFetchingModels(false);
     }
   };
 
@@ -6934,7 +6979,7 @@ export function ProviderEditor({
       // Clear the stored default if no levels are selected; the backend's
       // NormalizeEffort would otherwise silently ignore an unsupported value.
       defaultEffort: cleanedSupportedEfforts.length > 0 ? cleanDefaultEffort : "",
-      modelOverrides: mergeProviderModelContextWindows(initial?.modelOverrides, ms, modelContextWindows),
+      modelOverrides: mergeImageInputModes(mergeProviderModelContextWindows(initial?.modelOverrides, ms, modelContextWindows), ms, imageModes),
       modelCapabilities,
     };
     try {
@@ -7194,12 +7239,14 @@ export function ProviderEditor({
       <input className="mem-input" placeholder={t("settings.providerModels")} value={models} onChange={(e) => updateManualModels(e.target.value)} />
       <div className="mem-hint">{t("settings.manualModelsHint")}</div>
       <ProviderEditorModelPicker
+        baseURL={effectiveBaseUrl}
         candidates={modelCandidateNames}
         selectedModels={modelNames}
         visionModels={visionModelNames}
-        visionModelsConfigured={visionModelsConfigured}
-        visionCapability={initial?.visionCapability}
-        modelCapabilities={modelCapabilities}
+        visionModelsConfigured={visionModelsConfigured} visionCapability={initial?.visionCapability}
+        modelCapabilities={capabilitiesIdentity === discoveryIdentity && !keyDraft.trim() ? modelCapabilities : []}
+        imageModes={imageModes}
+        onImageInputChange={(model, mode) => setImageModes((current) => ({ ...current, [model]: mode }))}
         contextWindows={modelContextWindows}
         disabled={busy || fetchingModels}
         onToggleModel={toggleEditorModel}
