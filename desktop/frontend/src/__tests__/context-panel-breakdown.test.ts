@@ -189,7 +189,7 @@ console.log("\ncontext panel cost");
 
 const infoCost = contextCostDisplay({
   info: { sessionCost: 0.1759, sessionCurrency: "$", sessionCostUsd: 0.1759 },
-  sessionCost: undefined, // no cycle data yet → persisted quote/info fallback
+  sessionCost: 0,
   sessionCurrency: "¥",
   usage: { cost: 0, costUsd: 0, currency: "¥" },
 });
@@ -206,8 +206,8 @@ const singleRequestOnly = contextCostDisplay({
 });
 eq(
   singleRequestOnly,
-  { amount: 0, currency: "¥", estimated: true, complete: true, labelKind: "estimated" },
-  "session cost shows the cold-start cycle accumulator (0 on launch), not a single request's cost",
+  { amount: 0, currency: "¥", estimated: true, complete: false, labelKind: "unavailable" },
+  "a single request's cost never renders under the session-cost label",
 );
 const localAccumulated = contextCostDisplay({
   info: { sessionCost: 0, sessionCurrency: "", sessionCostUsd: 0 },
@@ -238,8 +238,8 @@ const incompleteStructured = contextCostDisplay({
 });
 eq(
   incompleteStructured,
-  { amount: 1, currency: "USD", estimated: true, complete: true, labelKind: "estimated" },
-  "the cold-start cycle accumulator renders even when the persisted quote is incomplete",
+  { amount: 0, currency: "USD", estimated: true, complete: false, labelKind: "unavailable" },
+  "an incomplete structured quote never renders a partial selected total",
 );
 
 console.log("\ncontext panel session cache scope");

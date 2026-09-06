@@ -6,6 +6,7 @@ export function PromptShelf({
   className,
   cardClassName,
   titleId,
+  descriptionId,
   title,
   badges,
   meta,
@@ -27,6 +28,7 @@ export function PromptShelf({
   className?: string;
   cardClassName?: string;
   titleId: string;
+  descriptionId?: string;
   title: ReactNode;
   badges?: ReactNode;
   meta?: ReactNode;
@@ -79,6 +81,7 @@ export function PromptShelf({
         role={role}
         aria-modal={role === "dialog" ? "false" : undefined}
         aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         tabIndex={cardCollapsible ? 0 : -1}
         onClick={cardCollapsible ? (event) => {
           const target = event.target as HTMLElement;

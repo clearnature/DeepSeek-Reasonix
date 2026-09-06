@@ -1,6 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { isStaleResidentProjection, type HydrateLiveState, type HydrateProjection } from "../lib/hydrateHistoryApply";
+// Run: tsx src/__tests__/hydrate-history-apply.test.ts
 
 import {
   activeTabHydrationPlan,
@@ -12,26 +10,6 @@ import {
   sameSessionPlaceholderItems,
   shouldPreferResidentHistory,
 } from "../lib/hydrateHistoryApply";
-
-
-test("isStaleResidentProjection allows a longer or equal page", () => {
-  const resident: HydrateLiveState = { historyRevision: 7, historyDigest: "d", items: [{ kind: "user" }] };
-  assert.equal(
-    isStaleResidentProjection(resident, { items: [{ kind: "user" }, { kind: "assistant" }], revision: 8, digest: "d" }),
-    false,
-  );
-  assert.equal(
-    isStaleResidentProjection(resident, { items: [{ kind: "user" }], revision: 8, digest: "d" }),
-    false,
-    "equal length is not stale",
-  );
-});
-
-test("isStaleResidentProjection allows a same-length different fingerprint", () => {
-  const resident: HydrateLiveState = { historyRevision: 1, historyDigest: "d1", items: [{ kind: "user" }] };
-  assert.equal(isStaleResidentProjection(resident, { items: [{ kind: "assistant" }], revision: 2, digest: "d2" }), false);
-});
-
 
 let passed = 0;
 let failed = 0;
@@ -211,4 +189,3 @@ ok(
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
-

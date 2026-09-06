@@ -7,7 +7,6 @@
 // the lazy-content entry id derivation.
 
 import {
-  isLongAnswer,
   buildTranscriptRows,
   buildTurnModels,
   defaultFoldOpen,
@@ -193,6 +192,39 @@ const keys = (rows: TranscriptRow[]) => rows.map((row) => row.key).join(",");
   const group = rows.find((row) => row.kind === "tool-group");
   ok(group && "items" in group && group.items.length === 2 && group.groupKind === "explore", "creation mode batches groupable read tools into a ToolGroup row");
   ok(!rows.some((row) => row.kind === "tool-batch"), "creation mode never emits read-only batches");
+}
+
+{
+  const models = buildTurnModels([
+    { kind: "user", id: "u-shell", text: "run checks" },
+    { kind: "tool", id: "shell-a", name: "bash", args: "{}", readOnly: false, status: "done" },
+    { kind: "tool", id: "shell-b", name: "bash", args: "{}", readOnly: false, status: "done" },
+    { kind: "tool", id: "shell-error", name: "bash", args: "{}", readOnly: false, status: "error", error: "failed" },
+    { kind: "tool", id: "shell-diff", name: "bash", args: "{}", readOnly: false, status: "done", fileDiff: { diff: "+change", added: 1, removed: 0 } },
+    { kind: "tool", id: "shell-running", name: "bash", args: "{}", readOnly: false, status: "running" },
+    { kind: "tool", id: "shell-stopped", name: "bash", args: "{}", readOnly: false, status: "stopped" },
+    { kind: "assistant", id: "a-shell", text: "done", reasoning: "", streaming: false },
+  ]);
+  const rows = buildTranscriptRows(models, rowOptions(EMPTY_FOLDS, "expanded"));
+  const shellGroup = rows.find((row) => row.kind === "tool-group" && row.groupKind === "shell");
+  eq(shellGroup?.kind === "tool-group" ? shellGroup.items.map((item) => item.id).join(",") : "", "shell-a,shell-b", "ordinary mode groups consecutive successful shell cards");
+  for (const id of ["shell-error", "shell-diff", "shell-running", "shell-stopped"]) {
+    ok(rows.some((row) => row.kind === "tool" && row.item.id === id), `${id} remains a standalone visible card`);
+  }
+}
+
+{
+  const models = buildTurnModels([
+    { kind: "user", id: "u-single-shell", text: "one command" },
+    { kind: "tool", id: "only-shell", name: "bash", args: "{}", readOnly: false, status: "done" },
+    { kind: "tool", id: "reader-a", name: "read_file", args: "{}", readOnly: true, status: "done" },
+    { kind: "tool", id: "reader-b", name: "grep", args: "{}", readOnly: true, status: "done" },
+    { kind: "assistant", id: "a-single-shell", text: "done", reasoning: "", streaming: false },
+  ]);
+  const rows = buildTranscriptRows(models, rowOptions(EMPTY_FOLDS, "expanded"));
+  ok(rows.some((row) => row.kind === "tool" && row.item.id === "only-shell"), "a single successful shell card is not grouped");
+  const readBatch = rows.find((row) => row.kind === "tool-batch");
+  eq(readBatch?.kind === "tool-batch" ? readBatch.items.length : 0, 2, "existing read-only tool batching remains unchanged");
 }
 
 {
@@ -429,13 +461,5 @@ const keys = (rows: TranscriptRow[]) => rows.map((row) => row.key).join(",");
   ok(rows.every((row) => estimateTranscriptRowSize(row) > 0), "every row kind has a positive size estimate");
 }
 
-
-ok(isLongAnswer(undefined) === false, "isLongAnswer: undefined is not long");
-ok(isLongAnswer("x".repeat(1999)) === false, "isLongAnswer: 1999 chars stays open");
-ok(isLongAnswer("x".repeat(2000)) === false, "isLongAnswer: 2000 chars boundary stays open");
-ok(isLongAnswer("x".repeat(2001)) === true, "isLongAnswer: 2001 chars folds");
-ok(isLongAnswer("x".repeat(8000)) === true, "isLongAnswer: 8000 chars folds (worker path also folds)");
-
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
-

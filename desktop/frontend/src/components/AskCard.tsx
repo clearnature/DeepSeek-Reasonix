@@ -143,6 +143,14 @@ export function AskCard({
 
   const currentAnswered = q ? answered(q) : false;
 
+  const submitAction = (action: () => void | Promise<void>) => {
+    if (submitting) return;
+    setSubmitting(true);
+    void Promise.resolve()
+      .then(action)
+      .catch(() => setSubmitting(false));
+  };
+
   const finishOrAdvance = (nextSel = sel, nextCustom = custom) => {
     if (submitting) return;
     if (isLast) {

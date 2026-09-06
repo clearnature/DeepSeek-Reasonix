@@ -255,26 +255,19 @@ export function StatusBar({
   const turnTokenLabel = markEstimated(formatTokenCount(turnTokens), turnEstimated);
   const statusQuote = context.sessionCostQuote;
   const statusBucketed = statusQuote?.displayStatus === "bucketed" || statusQuote?.aggregateMode === "currency_buckets";
+  const statusUnavailable = context.sessionCostComplete === false || statusQuote?.displayStatus === "unavailable" || statusQuote?.costComplete === false;
   const statusSelectedAmount = statusQuote?.selected?.amount ? Number(statusQuote.selected.amount) : NaN;
-  const hasStatusSelected = Number.isFinite(statusSelectedAmount) && statusSelectedAmount > 0;
-  // User design: the session cost is the cold-start cycle accumulator (starts
-  // at 0 on every app launch, accumulates this run's usage × local prices),
-  // with the persisted session-cumulative quote only as a fallback when the
-  // cycle has no usage data yet (history session reopened, no new requests).
-  const hasCycleCost = typeof cost === "number";
   const rawStatusCostLabel = statusBucketed
     ? t("context.sessionCostBucketed")
-    : hasCycleCost
-      ? costLabel
-      : hasStatusSelected
+    : statusUnavailable
+      ? "-"
+      : Number.isFinite(statusSelectedAmount) && statusSelectedAmount > 0
         ? markEstimated(formatMoneyLocalized(statusSelectedAmount, statusQuote?.selected?.currency || context.sessionCurrency || currency, { locale }), statusQuote?.estimated !== false)
-        : "-";
+        : costLabel;
   const statusCostLabel = appendRateBand(rawStatusCostLabel, statusQuote?.rateBand, t);
   const rateBandTooltip = t("billing.rateBand.tooltip");
   const turnCostTooltip = rateBandLabel(turnRateBand, t) ? `${t("status.turnCostTitle")} ${rateBandTooltip}` : t("status.turnCostTitle");
-  const sessionCostTooltip = hasStatusSelected
-    ? `${t("status.spendTitle")} · 会话累计 ${formatMoneyLocalized(statusSelectedAmount, statusQuote?.selected?.currency || context.sessionCurrency || currency, { locale })}`
-    : t("status.spendTitle");
+  const sessionCostTooltip = rateBandLabel(statusQuote?.rateBand, t) ? `${t("status.spendTitle")} ${rateBandTooltip}` : t("status.spendTitle");
   const balanceLabel = balance?.available && balance.display ? balance.display : "-";
   const balanceTitle = balance?.available
     ? (balance.detail
