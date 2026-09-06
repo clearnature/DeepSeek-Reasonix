@@ -97,15 +97,21 @@ component code and the CSS positioning contract:
 
 ```sh
 cd desktop
-wails build          # → build/bin/Reasonix(.app/.exe)
+# Dated local build (main.version feeds the auto-updater):
+VERSION="v$(git -C .. describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo dev)-local-$(date +%Y%m%d)"
+wails build -tags webkit2_41 \
+  -ldflags "-X main.version=$VERSION -X main.gitCommit=$(git rev-parse --short=12 HEAD) -X main.buildTimeUTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# → build/bin/reasonix-desktop(.app/.exe)
 ```
+
+**From the repo root, `make desktop-build` does the same** (dated version +
+`-tags webkit2_41`, DESKTOP_TAGS/DATE_VERSION overridable).
 
 **Linux on WebKitGTK 4.1 only** (Fedora 40+, Ubuntu 24.04+, Arch — no
 `webkit2gtk-4.0` package): pass the Wails build tag so cgo links against 4.1.
 
 ```sh
-wails build -tags webkit2_41
-wails dev   -tags webkit2_41   # same tag for hot-reload
+wails dev -tags webkit2_41   # hot-reload needs the same tag
 ```
 
 Fedora deps: `sudo dnf install webkit2gtk4.1-devel gtk3-devel`.

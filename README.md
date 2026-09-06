@@ -140,13 +140,14 @@ The desktop build additionally requires:
 - **Wails CLI** matching the shared `.wails-version` pin
 
 ```sh
-make wails-install
-cd desktop
-wails build
+make wails-install   # first time: install the pinned Wails CLI
+make desktop-build    # dated local version + Linux webkit2_41 tag
+# equivalent: cd desktop && wails build -tags webkit2_41 -ldflags "-X main.version=v<ver>-local-$(date +%Y%m%d) …"
 ```
 
-See the [desktop build guide](desktop/README.md#prerequisites) for platform
-webview dependencies and Linux build tags.
+See the [desktop build guide](desktop/README.md#build) for the dated-version
+ldflags, platform webview dependencies, and the Linux `webkit2_41` build tag
+(required on WebKitGTK 4.1 hosts — without it Wails probes the absent 4.0).
 
 ## Quick start
 
