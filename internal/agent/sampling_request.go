@@ -175,7 +175,7 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	if err := a.applyAdmissionToRequest(&frozen.req); err != nil {
+	if err := a.applySummaryAdmissionToRequest(&frozen.req); err != nil {
 		// One-shot physical overflow recovery. Do not loop.
 		startProjectionVersion := a.currentProjectionVersion()
 		if _, perr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
@@ -191,7 +191,7 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		if rerr != nil {
 			return samplingRequest{}, rerr
 		}
-		if aerr := a.applyAdmissionToRequest(&rebuilt.req); aerr != nil {
+		if aerr := a.applySummaryAdmissionToRequest(&rebuilt.req); aerr != nil {
 			return samplingRequest{}, aerr
 		}
 		shape := a.requestCalibrationShape(rebuilt.req)

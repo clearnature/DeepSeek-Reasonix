@@ -537,8 +537,12 @@ func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (i
 }
 
 func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error) {
+	return a.admitOutputBudgetWithReserve(req, outputBudgetReserve)
+}
+
+func (a *Agent) admitOutputBudgetWithReserve(req provider.Request, reserveTokens int) (contextAdmission, error) {
 	adm := contextAdmission{
-		ReserveTokens: outputBudgetReserve,
+		ReserveTokens: reserveTokens,
 		LastRecovery:  a.lastAdmission().LastRecovery,
 		Source:        provider.ContextBudgetSourceUnknown,
 	}
@@ -642,6 +646,20 @@ func (a *Agent) applyAdmissionToRequest(req *provider.Request) error {
 		return nil
 	}
 	adm, err := a.admitOutputBudget(*req)
+	if err != nil {
+		return err
+	}
+	if adm.ApplyMaxTokens && adm.EffectiveOutputTokens > 0 {
+		req.MaxTokens = adm.EffectiveOutputTokens
+	}
+	return nil
+}
+
+func (a *Agent) applySummaryAdmissionToRequest(req *provider.Request) error {
+	if a == nil || req == nil {
+		return nil
+	}
+	adm, err := a.admitOutputBudgetWithReserve(*req, protocolReserveTokens)
 	if err != nil {
 		return err
 	}

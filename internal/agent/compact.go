@@ -469,7 +469,7 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 	}()
 	defer trackPublishedHostStream(ctx, cancel)()
 	req := a.summaryRequest(prefix, region, instructions)
-	if err := a.applyAdmissionToRequest(&req); err != nil {
+	if err := a.applySummaryAdmissionToRequest(&req); err != nil {
 		return "", usage, err
 	}
 	if req.MaxTokens > a.summaryOutputBudget() {

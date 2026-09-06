@@ -512,6 +512,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		return CompactionNoop, nil
 	}
 	originalFoldHash := providerVisibleFingerprint(modelInputMessages(fold))
+	origInstructions := instructions
 	var err error
 	fold, instructions, err = a.interceptCompactionPrepare(ctx, fold, instructions)
 	if err != nil {
@@ -523,9 +524,11 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		return CompactionNoop, nil
 	}
 	// After extension interception, re-validate if the extension expanded the
-	// fold beyond what maximumSafeSummaryPrefixEnd already approved.
-	if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
-		if err := a.validateSafeSummaryRequest(msgs, head, start, instructions); err != nil {
+	// fold or instructions beyond what maximumSafeSummaryPrefixEnd already approved.
+	foldChanged := providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash
+	instructionsChanged := instructions != origInstructions
+	if foldChanged || instructionsChanged {
+		if err := a.validateSafeFold(fold, instructions); err != nil {
 			a.emitCompactionAborted(trigger)
 			return CompactionNoop, err
 		}
@@ -782,7 +785,10 @@ func (a *Agent) summaryFoldEstimate(msgs []provider.Message, head, candidate int
 		if region := msgs[head:candidate]; len(region) > 0 {
 			anchors = foldAnchorInstruction(region)
 		}
-		return a.summaryRequest(msgs, nil, instructions+anchors)
+		// For estimation, use only the fold region as prefix (matching v1.36.0).
+		// The actual summaryFoldPlan may use all visible messages for cache
+		// alignment, but the estimate should reflect the minimal request shape.
+		return a.summaryRequest(msgs[head:candidate], nil, instructions+anchors)
 	}
 	return a.summaryRequest(msgs[:head], msgs[head:candidate], instructions)
 }
@@ -901,15 +907,30 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 	return chunked, compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked), nil
 }
 
-// validateSafeSummaryRequest checks that the final summary request (after
-// extension interception) fits within the safe summary budget. Uses the same
-// estimate as maximumSafeSummaryPrefixEnd for consistency.
+// validateSafeSummaryRequest checks that a summary request fits within the
+// safe budget. Uses the same estimate as maximumSafeSummaryPrefixEnd.
 func (a *Agent) validateSafeSummaryRequest(msgs []provider.Message, head, end int, instructions string) error {
 	maxPromptTokens := a.summaryMaxPromptTokens()
 	if maxPromptTokens <= 0 {
 		return nil
 	}
 	requestTokens := a.estimatedRequestTokens(a.summaryFoldEstimate(msgs, head, end, instructions))
+	if requestTokens > maxPromptTokens {
+		return fmt.Errorf("%w: prepared summary request (%d tokens) exceeds safe prompt budget (%d)",
+			errCheckpointRejected, requestTokens, maxPromptTokens)
+	}
+	return nil
+}
+
+// validateSafeFold checks that an extension-modified fold fits within the
+// safe budget. Unlike validateSafeSummaryRequest, this validates the actual
+// fold content after interception, not the original msgs[head:end] range.
+func (a *Agent) validateSafeFold(fold []provider.Message, instructions string) error {
+	maxPromptTokens := a.summaryMaxPromptTokens()
+	if maxPromptTokens <= 0 {
+		return nil
+	}
+	requestTokens := a.estimatedRequestTokens(a.summaryRequest(fold, nil, instructions))
 	if requestTokens > maxPromptTokens {
 		return fmt.Errorf("%w: prepared summary request (%d tokens) exceeds safe prompt budget (%d)",
 			errCheckpointRejected, requestTokens, maxPromptTokens)
