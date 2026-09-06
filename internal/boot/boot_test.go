@@ -899,6 +899,10 @@ func requestToolDescriptionContains(req provider.Request, name, want string) boo
 // tools plus the permission-classified read-only bash wrapper.
 func TestBuildRunSkillSubagentRegistryHonorsReadOnlyFlag(t *testing.T) {
 	isolateConfigHome(t)
+	// The factory under test here is the skill-registry split; keep the
+	// completion evaluator out so the provider-request sequence stays exactly
+	// the five turns the mock defines.
+	t.Setenv("REASONIX_COMPLETION_VALIDATION_MODE", "off")
 	dir := robustTempDir(t)
 	t.Chdir(dir)
 

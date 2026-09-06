@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"reasonix/internal/netclient"
 	"reasonix/internal/provider"
 )
 
