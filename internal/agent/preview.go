@@ -373,6 +373,23 @@ func IsHostGeneratedUserMessage(msg provider.Message) bool {
 
 // IsUserAuthoredTurnMessage reports whether a persisted message begins a real
 // visible user turn. Mid-turn steers are user-authored but do not start turns.
+// IsUserAuthoredTurn reports whether the given user-turn content is a visible
+// user turn: not a host-injected synthetic message and not a mid-turn steer.
+// Preview/title/turn-count derivations share this so a delivery readiness
+// nudge can never become a session title or inflate turn counts.
+func IsUserAuthoredTurn(content string) bool {
+	if strings.TrimSpace(StripTransientUserBlocks(content)) == "" {
+		return false
+	}
+	if IsSyntheticUserText(content) {
+		return false
+	}
+	if _, isSteer := SteerText(content); isSteer {
+		return false
+	}
+	return true
+}
+
 func IsUserAuthoredTurnMessage(msg provider.Message) bool {
 	if msg.Role != provider.RoleUser || IsHostGeneratedUserMessage(msg) {
 		return false

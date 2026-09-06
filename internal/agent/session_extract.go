@@ -101,14 +101,13 @@ func extractMergeInstructionWithFocus(instructions string) string {
 }
 
 type chunkedSummaryRun struct {
-	a      *Agent
-	prefix []provider.Message // frozen main-request prefix replayed for every chunk
-	calls  int
-	usage  *provider.Usage
+	a     *Agent
+	calls int
+	usage *provider.Usage
 }
 
-func newChunkedSummaryRun(a *Agent, prefix []provider.Message) *chunkedSummaryRun {
-	return &chunkedSummaryRun{a: a, prefix: prefix}
+func newChunkedSummaryRun(a *Agent) *chunkedSummaryRun {
+	return &chunkedSummaryRun{a: a}
 }
 
 func (r *chunkedSummaryRun) requireCalls(required int) error {
@@ -121,7 +120,7 @@ func (r *chunkedSummaryRun) requireCalls(required int) error {
 	return nil
 }
 
-func (r *chunkedSummaryRun) summarize(ctx context.Context, prefix, fold []provider.Message, instructions string, reserveAfter int) (foldSummary, error) {
+func (r *chunkedSummaryRun) summarize(ctx context.Context, fold []provider.Message, instructions string, reserveAfter int) (foldSummary, error) {
 	if err := ctx.Err(); err != nil {
 		return foldSummary{}, err
 	}
@@ -129,7 +128,7 @@ func (r *chunkedSummaryRun) summarize(ctx context.Context, prefix, fold []provid
 		return foldSummary{}, err
 	}
 	r.calls++
-	res, err := r.a.foldToSummary(ctx, prefix, fold, instructions)
+	res, err := r.a.foldToSummary(ctx, nil, fold, instructions)
 	r.usage = mergeSamplingUsage(r.usage, res.Usage)
 	return res, err
 }
@@ -227,7 +226,7 @@ func splitExtractChunks(msgs []provider.Message, overlap int, policy provider.Sh
 // #9572 follow-up): the projection still installs in the same session, so
 // work continues in place. progress, when non-nil, reports (chunks
 // summarized, total chunks); the total grows when a fragment splits.
-func (a *Agent) chunkedFoldSummary(ctx context.Context, prefix, fold []provider.Message, instructions string, progress func(done, total int)) (result foldSummary, err error) {
+func (a *Agent) chunkedFoldSummary(ctx context.Context, fold []provider.Message, instructions string, progress func(done, total int)) (result foldSummary, err error) {
 	fold = modelInputMessages(fold)
 	result = foldSummary{
 		Mode:       CompactionModeChunked,
@@ -237,7 +236,7 @@ func (a *Agent) chunkedFoldSummary(ctx context.Context, prefix, fold []provider.
 	if len(fold) == 0 {
 		return result, fmt.Errorf("fold is empty")
 	}
-	run := newChunkedSummaryRun(a, prefix)
+	run := newChunkedSummaryRun(a)
 	defer func() {
 		result.Usage = run.usage
 		result.Spans = run.calls
@@ -310,7 +309,7 @@ func (a *Agent) summarizeExtractChunks(ctx context.Context, chunks [][]provider.
 // shared call budget bound the recovery. report(true) grows the progress total
 // (one fragment became two); report(false) marks one leaf fragment summarized.
 func (a *Agent) extractFragmentResilient(ctx context.Context, chunk []provider.Message, instructions, mergeInstructions string, report func(grown bool), run *chunkedSummaryRun, reserveAfter int) (string, error) {
-	res, err := run.summarize(ctx, run.prefix, chunk, instructions, reserveAfter)
+	res, err := run.summarize(ctx, chunk, instructions, reserveAfter)
 	if err == nil {
 		return strings.TrimSpace(res.Text), nil
 	}
@@ -361,7 +360,7 @@ func (a *Agent) mergeInputBudget() int {
 // recurses — the briefings are already in hand, so the merge must not fail
 // with them discarded (#9082 follow-up).
 func (a *Agent) mergeGroup(ctx context.Context, group []string, instructions string, run *chunkedSummaryRun, depth, reserveAfter int) (string, error) {
-	merged, err := run.summarize(ctx, run.prefix, mergeDigestMessages(group), instructions, reserveAfter)
+	merged, err := run.summarize(ctx, mergeDigestMessages(group), instructions, reserveAfter)
 	if err == nil {
 		return strings.TrimSpace(merged.Text), nil
 	}
@@ -396,7 +395,7 @@ func (a *Agent) mergeGroup(ctx context.Context, group []string, instructions str
 // provider window), it is merged pairwise first — tree-reduce, so the merge
 // never fails with every fragment briefing already in hand.
 func (a *Agent) mergeFragments(ctx context.Context, parts []string) (string, error) {
-	run := newChunkedSummaryRun(a, nil)
+	run := newChunkedSummaryRun(a)
 	return a.mergeFragmentsWithRun(ctx, parts, extractMergeInstruction, run, 0)
 }
 

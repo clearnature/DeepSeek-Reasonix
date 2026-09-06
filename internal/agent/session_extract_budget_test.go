@@ -97,7 +97,7 @@ func TestSummarizeExtractChunksPreflightsMinimumPlan(t *testing.T) {
 			for i := range chunks {
 				chunks[i] = chunk
 			}
-			_, err := a.summarizeExtractChunks(context.Background(), chunks, "", nil, newChunkedSummaryRun(a, nil))
+			_, err := a.summarizeExtractChunks(context.Background(), chunks, "", nil, newChunkedSummaryRun(a))
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("summarizeExtractChunks error = %v, wantErr %v", err, tc.wantErr)
 			}
@@ -111,9 +111,9 @@ func TestSummarizeExtractChunksPreflightsMinimumPlan(t *testing.T) {
 func TestChunkedSummaryRunReservesCallsAfterRequest(t *testing.T) {
 	prov := &extractStubProvider{reply: "digest"}
 	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-	run := newChunkedSummaryRun(a, nil)
+	run := newChunkedSummaryRun(a)
 	run.calls = maxChunkedSummaryCalls - 1
-	_, err := run.summarize(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "x"}}, extractMergeInstruction, 1)
+	_, err := run.summarize(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "x"}}, extractMergeInstruction, 1)
 	if err == nil || !strings.Contains(err.Error(), "call budget exhausted") {
 		t.Fatalf("reservation error = %v", err)
 	}
@@ -126,7 +126,7 @@ func TestRecursiveRecoveryPreservesOuterCallBudget(t *testing.T) {
 	t.Run("fragment split", func(t *testing.T) {
 		prov := &extractStubProvider{failFirst: 1, reply: "digest"}
 		a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-		run := newChunkedSummaryRun(a, nil)
+		run := newChunkedSummaryRun(a)
 		run.calls = maxChunkedSummaryCalls - 4
 		chunk := []provider.Message{
 			{Role: provider.RoleUser, Content: "left"},
@@ -144,7 +144,7 @@ func TestRecursiveRecoveryPreservesOuterCallBudget(t *testing.T) {
 	t.Run("merge split", func(t *testing.T) {
 		prov := &extractStubProvider{failFirst: 1, reply: "digest"}
 		a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-		run := newChunkedSummaryRun(a, nil)
+		run := newChunkedSummaryRun(a)
 		run.calls = maxChunkedSummaryCalls - 4
 		_, err := a.mergeGroup(context.Background(), []string{"left", "right"}, extractMergeInstruction, run, 0, 1)
 		if err == nil || !strings.Contains(err.Error(), "call budget exhausted") {
@@ -159,7 +159,7 @@ func TestRecursiveRecoveryPreservesOuterCallBudget(t *testing.T) {
 func TestMergeTreeRechecksBudgetBeforeNewRound(t *testing.T) {
 	prov := &extractStubProvider{reply: strings.Repeat("digest ", 320)}
 	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{ContextWindow: 2000}, event.Discard)
-	run := newChunkedSummaryRun(a, nil)
+	run := newChunkedSummaryRun(a)
 	run.calls = maxChunkedSummaryCalls - 3
 	parts := []string{
 		strings.Repeat("one ", 320),

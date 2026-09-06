@@ -2,6 +2,7 @@ package stats
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -139,7 +140,64 @@ func (r *Recorder) Emit(e event.Event) {
 		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, nil, "")
 	} else if r != nil && r.writer != nil && e.Kind == event.TurnDone {
 		r.recordTurnCompletion()
+	} else if r != nil && r.dispatcher != nil && e.Kind == event.Notice && isEstimateTelemetry(e.Text) {
+		r.recordEstimateAnomaly(e)
 	}
+}
+
+// isEstimateTelemetry matches the agent's estimate-anomaly notices so every
+// unreliable admission-time estimate lands in the stats file for post-hoc
+// diagnosis (the estimate is otherwise only shown on the desktop).
+func isEstimateTelemetry(text string) bool {
+	return text == "estimate telemetry"
+}
+
+// recordEstimateAnomaly parses an estimate telemetry detail line
+// (reason/est/window/obs/chars/cchars/cjk/cjkb/msgs/top_role/top_chars/cal)
+// into a structured record. Best-effort; never interrupts the event stream.
+func (r *Recorder) recordEstimateAnomaly(e event.Event) {
+	if r == nil || r.dispatcher == nil {
+		return
+	}
+	rec := EstimateAnomalyRecord{}
+	for _, tok := range strings.Fields(e.Detail) {
+		k, v, ok := strings.Cut(tok, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "reason":
+			rec.Reason = v
+		case "est":
+			rec.EstTok, _ = strconv.Atoi(v)
+		case "window":
+			rec.WindowTok, _ = strconv.Atoi(v)
+		case "obs":
+			rec.ObsTok, _ = strconv.Atoi(v)
+		case "chars":
+			rec.Chars, _ = strconv.ParseInt(v, 10, 64)
+		case "cchars":
+			rec.CompactChars, _ = strconv.ParseInt(v, 10, 64)
+		case "cjk":
+			rec.CJKRunes, _ = strconv.ParseInt(v, 10, 64)
+		case "cjkb":
+			rec.CJKBytes, _ = strconv.ParseInt(v, 10, 64)
+		case "msgs":
+			rec.Messages, _ = strconv.Atoi(v)
+		case "top_role":
+			rec.TopRole = v
+		case "top_chars":
+			rec.TopChars, _ = strconv.Atoi(v)
+		case "cal":
+			rec.Calibrated = v == "true"
+		}
+	}
+	r.dispatcher.enqueue(record{
+		Timestamp: time.Now(),
+		ModelRef:  e.ModelRef,
+		Source:    r.source,
+		Estimate:  &rec,
+	})
 }
 
 // RecordTurnCompletion records synchronous controller runs that deliberately do

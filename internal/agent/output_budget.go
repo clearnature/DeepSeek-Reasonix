@@ -496,6 +496,19 @@ func outputBudgetReserveForWindow(window int) int {
 	return min(outputBudgetReserve, max(minOutputBudgetReserve, window/128))
 }
 
+// summaryOutputBudgetForWindow scales the digest output budget down for small
+// shared windows: a 10k gateway cannot fit an 8k digest plus the replayed
+// prefix, so the budget yields to the prefix (window/4 floor at the protocol
+// reserve). Large windows keep the vendor/default budget unchanged.
+func (a *Agent) summaryOutputBudgetForWindow() int {
+	base := a.summaryOutputBudget()
+	window := a.effectiveContextWindow()
+	if window <= 0 {
+		return base
+	}
+	return min(base, max(minOutputBudgetReserve, window/4))
+}
+
 // admitSummaryOutputBudget uses the summary request's dedicated protocol
 // reserve instead of the ordinary-turn reserve. Unknown gateways are treated
 // as shared when an effective window exists: summary planning already makes

@@ -436,7 +436,12 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 	if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired)) {
 		return res, tele, err
 	}
-	chunked, chunkedErr := a.chunkedFoldSummary(ctx, prefix, fold, instructions, nil)
+	// When foldExtra is nil (view replay fits), the full fold region is in prefix.
+	chunkedInput := fold
+	if len(chunkedInput) == 0 {
+		chunkedInput = prefix
+	}
+	chunked, chunkedErr := a.chunkedFoldSummary(ctx, chunkedInput, instructions, nil)
 	chunked.Usage = mergeSamplingUsage(res.Usage, chunked.Usage)
 	chunked.Spans += res.Spans
 	if chunked.FoldTokens <= 0 {
@@ -583,6 +588,12 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		generation: startGeneration, activeTurn: activeTurn, trigger: trigger,
 		summary: summary, inputHash: viewInputHash, outputHash: viewOutputHash,
 		sourceTokens: sourceTokens, projectionTokens: projTokens, covered: covered,
+		// Persist the wire form (normalized): a resumed process re-normalizes
+		// the restored bytes inside summaryRequest, so they must already match
+		// what this request actually sent. The tools ride along as the same
+		// cached unit (system+tools+messages).
+		wirePrefix: a.normalizeModelRequestMessages(summaryPrefix),
+		wireTools:  a.summaryRequestToolsForCommit(summaryPrefix),
 	})
 	if err != nil {
 		a.emitCompactionAborted(trigger)
@@ -730,7 +741,7 @@ func (a *Agent) safeSummaryPromptTokenLimit() (int, bool) {
 	if window <= 0 || contextBudgetPolicyOf(a.svc.prov).WindowMode == provider.ContextWindowIndependent {
 		return 0, false
 	}
-	return window - a.summaryOutputBudget() - protocolReserveTokens, true
+	return window - a.summaryOutputBudgetForWindow() - protocolReserveTokens, true
 }
 
 func (a *Agent) validateSafeSummaryRequest(fold []provider.Message, instructions string) error {

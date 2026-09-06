@@ -213,7 +213,7 @@ func extractStubSession() *Session {
 func TestChunkedFoldSummarySplitsOnOutputTruncation(t *testing.T) {
 	prov := &extractStubProvider{failFirst: 1, reply: "digest"}
 	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-	res, err := a.chunkedFoldSummary(context.Background(), nil, a.Session().Snapshot(), compactionInstruction, nil)
+	res, err := a.chunkedFoldSummary(context.Background(), a.Session().Snapshot(), compactionInstruction, nil)
 	if err != nil {
 		t.Fatalf("chunkedFoldSummary: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestSplitExtractFragmentKeepsToolTurnAtomic(t *testing.T) {
 func TestChunkedFoldSummaryDoesNotRetryTransportErrors(t *testing.T) {
 	prov := &extractStubProvider{streamErr: errors.New("provider down")}
 	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-	if _, err := a.chunkedFoldSummary(context.Background(), nil, a.Session().Snapshot(), compactionInstruction, nil); err == nil {
+	if _, err := a.chunkedFoldSummary(context.Background(), a.Session().Snapshot(), compactionInstruction, nil); err == nil {
 		t.Fatal("expected the transport error to surface")
 	}
 	if prov.calls != 1 {
@@ -287,7 +287,7 @@ func TestChunkedFoldSummaryDoesNotRetryTransportErrors(t *testing.T) {
 func TestChunkedFoldSummarySplitsDeepOnRepeatedTruncation(t *testing.T) {
 	prov := &extractStubProvider{failFirst: 2, reply: "digest"}
 	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-	res, err := a.chunkedFoldSummary(context.Background(), nil, a.Session().Snapshot(), compactionInstruction, nil)
+	res, err := a.chunkedFoldSummary(context.Background(), a.Session().Snapshot(), compactionInstruction, nil)
 	if err != nil {
 		t.Fatalf("chunkedFoldSummary: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestChunkedFoldSummarySingleMessageFragmentCannotSplit(t *testing.T) {
 	sess := NewSession("sys")
 	sess.Add(provider.Message{Role: provider.RoleUser, Content: "only"})
 	a := New(prov, tool.NewRegistry(), sess, Options{}, event.Discard)
-	if _, err := a.chunkedFoldSummary(context.Background(), nil, a.Session().Snapshot(), compactionInstruction, nil); err == nil {
+	if _, err := a.chunkedFoldSummary(context.Background(), a.Session().Snapshot(), compactionInstruction, nil); err == nil {
 		t.Fatal("expected failure when every split level truncates and no split remains")
 	}
 }
@@ -316,7 +316,7 @@ func TestChunkedFoldSummarySingleAtomicToolTurnCannotSplit(t *testing.T) {
 		{Role: provider.RoleAssistant, ToolCalls: []provider.ToolCall{{ID: "c1", Name: "bash", Arguments: `{}`}}},
 		{Role: provider.RoleTool, ToolCallID: "c1", Name: "bash", Content: "actual"},
 	}
-	run := newChunkedSummaryRun(a, nil)
+	run := newChunkedSummaryRun(a)
 	if _, err := a.extractFragmentResilient(context.Background(), chunk, extractFragmentInstruction(1, 1, ""), extractMergeInstruction, func(bool) {}, run, 0); err == nil {
 		t.Fatal("expected failure rather than splitting one atomic tool turn")
 	}
@@ -351,7 +351,7 @@ func TestChunkedFoldSummarySkipsGroupingWithinBudget(t *testing.T) {
 	// Unknown window (budget = MaxInt): the merge stays a single request.
 	prov := &extractStubProvider{reply: "digest"}
 	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-	if _, err := a.chunkedFoldSummary(context.Background(), nil, a.Session().Snapshot(), compactionInstruction, nil); err != nil {
+	if _, err := a.chunkedFoldSummary(context.Background(), a.Session().Snapshot(), compactionInstruction, nil); err != nil {
 		t.Fatalf("chunkedFoldSummary: %v", err)
 	}
 	// Single chunk fast path: 1 fragment request, no merge needed.
@@ -428,13 +428,13 @@ func TestMergeFragmentsStopsWhenRecoveryMakesNoProgress(t *testing.T) {
 func TestChunkedSummaryRunEnforcesCallBudget(t *testing.T) {
 	prov := &extractStubProvider{reply: "digest"}
 	a := New(prov, tool.NewRegistry(), extractStubSession(), Options{}, event.Discard)
-	run := newChunkedSummaryRun(a, nil)
+	run := newChunkedSummaryRun(a)
 	for i := range maxChunkedSummaryCalls {
-		if _, err := run.summarize(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "x"}}, extractMergeInstruction, 0); err != nil {
+		if _, err := run.summarize(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "x"}}, extractMergeInstruction, 0); err != nil {
 			t.Fatalf("call %d: %v", i+1, err)
 		}
 	}
-	if _, err := run.summarize(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "x"}}, extractMergeInstruction, 0); err == nil || !strings.Contains(err.Error(), "call budget exhausted") {
+	if _, err := run.summarize(context.Background(), []provider.Message{{Role: provider.RoleUser, Content: "x"}}, extractMergeInstruction, 0); err == nil || !strings.Contains(err.Error(), "call budget exhausted") {
 		t.Fatalf("budget error = %v", err)
 	}
 	if prov.calls != maxChunkedSummaryCalls {
@@ -479,7 +479,7 @@ func TestChunkedFoldSummaryIgnoresLocalRawContentForChunking(t *testing.T) {
 	sess.Add(provider.Message{Role: provider.RoleUser, Content: "visible-one", RawContent: strings.Repeat("r", 1<<20)})
 	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "visible-two", RawContent: strings.Repeat("p", 1<<20)})
 	a := New(prov, tool.NewRegistry(), sess, Options{}, event.Discard)
-	if _, err := a.chunkedFoldSummary(context.Background(), nil, a.Session().Snapshot(), "", nil); err != nil {
+	if _, err := a.chunkedFoldSummary(context.Background(), a.Session().Snapshot(), "", nil); err != nil {
 		t.Fatalf("chunkedFoldSummary: %v", err)
 	}
 	if prov.calls != 1 {

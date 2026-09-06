@@ -68,6 +68,19 @@ What is still in progress or unstarted, and the single most concrete next action
 
 Rules: be terse — bullet points and fragments, not prose. Preserve identifiers, paths, and numbers exactly. Merge valid facts from any existing <compaction-summary> and remove facts superseded by later messages. Do NOT invent anything not present in the messages; if something is unknown, leave it out rather than guessing. Output only the structured Markdown briefing. Do not call tools. Do not output reasoning.`
 
+// priceAwareCompactRatio defers compaction when cache hits are nearly free
+// relative to full input (hit/in < 1.5%): retaining history at hit price then
+// beats a full-price fold. Applied only when the user did not set a ratio.
+const cheapHitRatioThreshold = 0.015
+const cheapHitCompactRatio = 0.90
+
+func priceAwareCompactRatio(p *provider.Pricing) float64 {
+	if p != nil && p.CacheHit > 0 && p.Input > 0 && p.CacheHit/p.Input < cheapHitRatioThreshold {
+		return cheapHitCompactRatio
+	}
+	return defaultCompactRatio
+}
+
 // compactTrigger is the sole automatic context-maintenance boundary. Output
 // budgets are intentionally absent: they are clipped against the final request
 // at send time and must never make compaction happen earlier than the user's
@@ -434,7 +447,7 @@ func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions s
 	return provider.Request{
 		Messages:       messages,
 		Tools:          schemas,
-		MaxTokens:      a.summaryOutputBudget(),
+		MaxTokens:      a.summaryOutputBudgetForWindow(),
 		Temperature:    provider.OptionalTemperature(a.temperature),
 		EffortOverride: "none", // 摘要必须无推理：effort 继承会让 thinking 挤占输出预算致压缩失败
 	}

@@ -1116,17 +1116,17 @@ func (a *App) submitToTabResult(tabID, input string, fromBridge, classifyManagem
 	if strings.HasPrefix(trimmed, "/") {
 		tab, _ := a.tabAndCtrlByID(tabID)
 		if a.tabIsReadOnly(tab) {
-			return readOnlyChannelErr()
+			return control.SubmitResult{}, readOnlyChannelErr()
 		}
 		if tab == nil {
-			return a.workspaceNotReadyErr(tab)
+			return control.SubmitResult{}, a.workspaceNotReadyErr(tab)
 		}
 		if !fromBridge && a.botBridge != nil {
 			a.botBridge.reclaimFromDesktop(tab.ID)
 		}
 		ctrl := a.controllerForTab(tab)
 		if ctrl == nil {
-			return a.workspaceNotReadyErr(tab)
+			return control.SubmitResult{}, a.workspaceNotReadyErr(tab)
 		}
 		// Local management verbs still correlate one optimistic UI item: the
 		// submission id tags the notice/TurnDone that answers the command.

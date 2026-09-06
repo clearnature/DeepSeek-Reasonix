@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"reasonix/internal/provider"
@@ -63,6 +64,9 @@ func SessionsShareContent(pathA, pathB string) (bool, error) {
 type SessionUserMessage struct {
 	Message provider.Message
 	At      time.Time
+	// Text is the resolved user text content (convenience field populated by
+	// LoadSessionUserMessages for desktop surfaces).
+	Text string
 }
 
 // LoadSessionUserMessages returns the session's user-role messages in
@@ -99,7 +103,7 @@ func loadSessionUserMessagesWithLimits(path string, limits sessionReplayLimits) 
 				if m.CreatedAt > 0 {
 					at = time.UnixMilli(m.CreatedAt)
 				}
-				out = append(out, SessionUserMessage{Message: m, At: at})
+				out = append(out, SessionUserMessage{Message: m, At: at, Text: strings.TrimSpace(m.Content)})
 			}
 			return out, nil
 		}
@@ -117,7 +121,7 @@ func loadSessionUserMessagesWithLimits(path string, limits sessionReplayLimits) 
 		if m.CreatedAt > 0 {
 			at = time.UnixMilli(m.CreatedAt)
 		}
-		out = append(out, SessionUserMessage{Message: m, At: at})
+		out = append(out, SessionUserMessage{Message: m, At: at, Text: strings.TrimSpace(m.Content)})
 	}
 	return out, nil
 }

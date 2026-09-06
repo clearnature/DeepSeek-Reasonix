@@ -73,6 +73,28 @@ type record struct {
 	ValuationUSD string `json:"valuation_usd,omitempty"`
 	// SelectedCost is a float compatibility mirror of SelectedAmount.
 	SelectedCost float64 `json:"selected_cost,omitempty"`
+	// Estimate records one admission-time prompt-estimate anomaly (overflow or
+	// inflated vs observed) with the request shape behind it. Nil otherwise.
+	Estimate *EstimateAnomalyRecord `json:"estimate,omitempty"`
+}
+
+// EstimateAnomalyRecord is the structured form of the agent's estimate
+// telemetry detail line (reason/est/window/obs/chars/cchars/cjk/cjkb/msgs/
+// top_role/top_chars/cal), persisted so an inflated desktop context percentage
+// or a false ErrCompactionRequired can be traced back to its request shape.
+type EstimateAnomalyRecord struct {
+	Reason       string `json:"reason,omitempty"`
+	EstTok       int    `json:"est_tokens,omitempty"`
+	WindowTok    int    `json:"window,omitempty"`
+	ObsTok       int    `json:"obs_tokens,omitempty"`
+	Chars        int64  `json:"chars,omitempty"`
+	CompactChars int64  `json:"compact_chars,omitempty"`
+	CJKRunes     int64  `json:"cjk_runes,omitempty"`
+	CJKBytes     int64  `json:"cjk_bytes,omitempty"`
+	Messages     int    `json:"messages,omitempty"`
+	TopRole      string `json:"top_role,omitempty"`
+	TopChars     int    `json:"top_chars,omitempty"`
+	Calibrated   bool   `json:"calibrated,omitempty"`
 }
 
 // Writer appends records to the daily stats file for a given stats dir.
