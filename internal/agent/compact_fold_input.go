@@ -73,9 +73,32 @@ func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, prefix, 
 	return res, err
 }
 
+// fillCompactionWireTelemetry attributes the summary request's actual wire
+// shape: the fold-view fingerprint, the normalized bytes sent last request,
+// and which tool set the summary carried. These let a system-only cache hit
+// or a post-resume miss be traced to tool-seam or byte divergence.
+func (a *Agent) fillCompactionWireTelemetry(tele *CompactionTelemetry, prefix, fold []provider.Message) {
+	view := append(append([]provider.Message(nil), prefix...), fold...)
+	tele.ViewFP = providerVisibleFingerprint(modelInputMessages(view))
+	tele.WireFP = a.sess.wireFP()
+	if schemas, source := a.summaryToolsSource(); source != "none" {
+		tele.ToolsCount = len(schemas)
+		tele.ToolsFP = toolsFingerprint(schemas)
+		tele.ToolsSource = source
+	}
+}
+
+// telemetryFromSummary builds a compaction record for a fold region and
+// attributes its wire shape in one call, so every emit site stays one line.
+func (a *Agent) telemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary, prefix, fold []provider.Message) CompactionTelemetry {
+	tele := compactionTelemetryFromSummary(trigger, cacheState, sourceTokens, res)
+	a.fillCompactionWireTelemetry(&tele, prefix, fold)
+	return tele
+}
+
 func (a *Agent) foldSummaryWithTelemetry(ctx context.Context, trigger string, prefix, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
 	res, err := a.foldToSummaryMode(ctx, prefix, fold, instructions, inputMode)
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	tele := a.telemetryFromSummary(trigger, a.CacheState(), sourceTokens, res, prefix, fold)
 	if err != nil {
 		tele.Error = err.Error()
 	}

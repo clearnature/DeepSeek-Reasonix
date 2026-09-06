@@ -189,6 +189,11 @@ type CompactionTelemetry struct {
 	RequestCount      int    `json:"request_count"`
 	ProviderRequestID string `json:"provider_request_id,omitempty"`
 	SummaryInputMode  string `json:"summary_input_mode,omitempty"`
+	ViewFP            string `json:"view_fp,omitempty"`     // fold view fingerprint (resume-divergence diagnosis)
+	WireFP            string `json:"wire_fp,omitempty"`     // normalized bytes actually sent (vs view_fp)
+	ToolsCount        int    `json:"tools_count,omitempty"` // tool schema set the summary sent
+	ToolsFP           string `json:"tools_fp,omitempty"`
+	ToolsSource       string `json:"tools_source,omitempty"` // frozen | live | none
 	Error             string `json:"error,omitempty"`
 }
 

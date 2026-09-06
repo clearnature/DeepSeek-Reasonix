@@ -202,7 +202,7 @@ func (a *Agent) compressVisibleRange(
 
 	res, err := a.foldToSummaryMode(ctx, nil, prepared.fold, prepared.instructions, prepared.inputMode)
 	summary := res.Text
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
+	tele := a.telemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res, nil, prepared.fold)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -451,11 +451,11 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 		chunked.RequestID = res.RequestID
 	}
 	if chunkedErr != nil {
-		tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked)
+		tele = a.telemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked, nil, chunkedInput)
 		tele.Error = fmt.Sprintf("%v (chunked fallback: %v)", err, chunkedErr)
 		return chunked, tele, chunkedErr
 	}
-	return chunked, compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked), nil
+	return chunked, a.telemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked, nil, chunkedInput), nil
 }
 
 // compact writes a context projection; trigger stays "auto"/"manual" for UI cards.
