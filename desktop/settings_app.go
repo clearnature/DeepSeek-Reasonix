@@ -27,6 +27,7 @@ import (
 	"reasonix/internal/botruntime"
 	"reasonix/internal/config"
 	"reasonix/internal/control"
+	"reasonix/internal/netclient"
 	"reasonix/internal/provider"
 	"reasonix/internal/sandbox"
 )
@@ -3056,6 +3057,7 @@ func (a *App) FetchAllProviderModels(providers []ProviderView) map[string][]stri
 	root := a.activeWorkspaceRoot()
 	for i := range providers {
 		p := providers[i]
+		proxy := a.networkProxySpecForRoot(root)
 		g.Go(func() error {
 			e := config.ProviderEntry{
 				Name: p.Name, Kind: p.Kind, BaseURL: p.BaseURL, ChatURL: p.ChatURL, RequestURL: p.RequestURL,
@@ -3774,4 +3776,37 @@ func trimList(in []string) []string {
 		}
 	}
 	return out
+}
+
+// networkProxySpecForRoot resolves the effective proxy policy chat requests use
+// for this workspace. The load includes project reasonix.toml and project .env
+// expansion but never pins provider credentials into the process environment.
+// A missing or unreadable config falls back to the default policy rather than
+// blocking model discovery.
+func (a *App) networkProxySpecForRoot(root string) netclient.ProxySpec {
+	cfg, err := config.LoadForRootWithoutCredentialsReadOnly(root)
+	if err != nil || cfg == nil {
+		return netclient.ProxySpec{}
+	}
+	return cfg.NetworkProxySpec()
+}
+
+// withProbeDirectHost mirrors the runtime's per-provider no_proxy bypass for the
+// unsaved editor state: when the edited provider is marked no_proxy, its
+// endpoint must also be probed directly. Custom proxy mode wins over provider
+// no_proxy, matching NetworkProxySpec's behavior.
+func withProbeDirectHost(spec netclient.ProxySpec, baseURL string, noProxy bool) netclient.ProxySpec {
+	if !noProxy || netclient.NormalizeMode(spec.Mode) == netclient.ModeCustom {
+		return spec
+	}
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return spec
+	}
+	host := u.Hostname()
+	if host == "" || slices.Contains(spec.DirectHosts, host) {
+		return spec
+	}
+	spec.DirectHosts = append([]string{host}, spec.DirectHosts...)
+	return spec
 }

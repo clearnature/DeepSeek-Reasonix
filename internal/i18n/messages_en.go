@@ -300,6 +300,7 @@ var English = Messages{
 	CmdClear:            "discard current context",
 	CmdCls:              "clear screen only (keep LLM context)",
 	CmdCompact:          "compact context",
+	CmdCompressFast:     "/compress-fast",
 	CmdContinueChecks:   "continue a paused final-readiness check",
 	CmdContext:          "show context window, thresholds, and last maintenance",
 	CmdRewind:           "rewind to an earlier turn",

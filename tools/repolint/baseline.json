@@ -2,10 +2,10 @@
   "limits": {
     "banner": 46,
     "commented-code": 1,
-    "complexity": 1934,
-    "essay": 2081,
-    "file-size": 109562,
-    "function-size": 8408,
+    "complexity": 1943,
+    "essay": 2101,
+    "file-size": 110169,
+    "function-size": 8430,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -32,7 +32,7 @@
     "desktop/app.go": {
       "complexity": 60,
       "essay": 71,
-      "file-size": 11387,
+      "file-size": 11409,
       "function-size": 355,
       "struct-state": 15
     },
@@ -76,7 +76,7 @@
       "essay": 2
     },
     "desktop/frontend/src/App.tsx": {
-      "file-size": 4751
+      "file-size": 4753
     },
     "desktop/frontend/src/__tests__/app-chrome-tabs.test.ts": {
       "test-file-size": 27
@@ -246,6 +246,12 @@
     "desktop/session_runtime.go": {
       "essay": 2
     },
+    "desktop/session_takeover.go": {
+      "complexity": 9,
+      "essay": 20,
+      "file-size": 514,
+      "function-size": 22
+    },
     "desktop/sessions.go": {
       "essay": 4,
       "file-size": 422
@@ -256,7 +262,7 @@
     "desktop/settings_app.go": {
       "complexity": 29,
       "essay": 6,
-      "file-size": 2977
+      "file-size": 3012
     },
     "desktop/settings_app_test.go": {
       "test-file-size": 1813
@@ -276,13 +282,8 @@
     "desktop/tabs.go": {
       "complexity": 36,
       "essay": 67,
-      "file-size": 7613,
+      "file-size": 7632,
       "function-size": 342,
-||||||| parent of 758c67798 (Merge pull request #9842 from SivanCola/fix/session-runtime-9839)
-      "complexity": 42,
-      "essay": 68,
-      "file-size": 7595,
-      "function-size": 364,
       "struct-state": 23
     },
     "desktop/tabs_order_test.go": {

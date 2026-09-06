@@ -284,6 +284,16 @@ type App struct {
 	// It is process-local by design: shutdown closes every detached controller.
 	detachedSessions map[string]*WorkspaceTab
 
+	// takeover mirrors forward tab events to the serve that used to own the
+	// session after a local takeover; takeoverMu guards the map.
+	takeoverMirrors        map[string]*takeoverMirror
+	takeoverAdoptRevisions map[string]uint64
+	takeoverMu             sync.Mutex
+	// serveProbeUntil suppresses serve probing after a failed handshake
+	// (rotated token file); guarded by serveProbeMu.
+	serveProbeUntil map[string]time.Time
+	serveProbeMu    sync.Mutex
+
 	// sharedHosts holds one *plugin.Host per workspace root, shared by all
 	// controllers/tabs in that root so MCP subprocesses (CodeGraph, etc.) are
 	// spawned once instead of N times. Lifecycle: first Acquire creates the
@@ -1160,10 +1170,10 @@ func (a *App) submitToTabResult(tabID, input string, fromBridge, classifyManagem
 			if !ctrl.RuntimeStatus().Running {
 				tab.sink.cancelTurnStart()
 			}
-			return nil
+			return management, nil
 		}
 		ctrl.SubmitDisplay(trimmed, trimmed)
-		return nil
+		return management, nil
 	}
 	admission, ctrl, err := a.beginTabTurn(tabID, !fromBridge, submissionID...)
 	if err != nil {

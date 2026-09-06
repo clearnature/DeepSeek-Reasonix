@@ -286,6 +286,7 @@ type Messages struct {
 	CmdClear            string // /clear
 	CmdCls              string // /cls
 	CmdCompact          string // /compact
+	CmdCompressFast     string // /compress-fast
 	CmdContinueChecks   string // /continue-checks
 	CmdContext          string // /context
 	CmdRewind           string // /rewind

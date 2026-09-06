@@ -3,6 +3,8 @@
 package main
 
 import (
+	"log/slog"
+	"os"
 	"runtime"
 
 	"fyne.io/systray"

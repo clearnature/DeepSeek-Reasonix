@@ -157,23 +157,22 @@ func (b *displayTurnBuffer) materialize() []HistoryMessage {
 // memory, permissions) scoped to a workspace root, so multiple projects and
 // topics can be active concurrently without interfering.
 type WorkspaceTab struct {
-	ID                  string                   // stable random id
-	Scope               string                   // "project" | "global"
-	WorkspaceRoot       string                   // project root dir (empty for global)
-	SharedHostKey       string                   // opaque key for the shared plugin host (set by buildTabController)
-	TopicID             string                   // topic within the project
-	TopicTitle          string                   // display title
-	topicTitleSource    string                   // auto or manual; controls localization at API boundaries
-	SessionPath         string                   // exact .jsonl file this tab continues
-	SessionGeneration   uint64                   // bumps on session rotation (clear/new); frontend hydrate identity
-	ReadOnly            bool                     // true for external channel transcripts opened for browsing
-	Takeover            struct{ Spectator bool } // handoff state grouped by its cross-runtime lifetime
-	Ctrl                control.SessionAPI       // nil while booting / on error
-	Label               string                   // model label (for the tab badge)
-	Ready               bool                     // true once boot.Build completes
-	StartupErr          string                   // build error, surfaced to the frontend
-	StartupErrLeaseHeld bool                     // true when StartupErr can be retried after a session lease releases
-	runtimeID           string                   // process-local SessionRuntime registry identity
+	ID                  string             // stable random id
+	Scope               string             // "project" | "global"
+	WorkspaceRoot       string             // project root dir (empty for global)
+	SharedHostKey       string             // opaque key for the shared plugin host (set by buildTabController)
+	TopicID             string             // topic within the project
+	TopicTitle          string             // display title
+	topicTitleSource    string             // auto or manual; controls localization at API boundaries
+	SessionPath         string             // exact .jsonl file this tab continues
+	SessionGeneration   uint64             // bumps on session rotation (clear/new); frontend hydrate identity
+	ReadOnly            bool               // true for external channel transcripts opened for browsing
+	Ctrl                control.SessionAPI // nil while booting / on error
+	Label               string             // model label (for the tab badge)
+	Ready               bool               // true once boot.Build completes
+	StartupErr          string             // build error, surfaced to the frontend
+	StartupErrLeaseHeld bool               // true when StartupErr can be retried after a session lease releases
+	runtimeID           string             // process-local SessionRuntime registry identity
 	sessionLease        *agent.SessionLease
 	sessionLeaseMu      sync.Mutex
 	sessionLeaseKey     atomic.Pointer[string] // lock-free mirror; updated with sessionLease under sessionLeaseMu
@@ -1647,16 +1646,22 @@ func retryPendingDisplayWrites(state *tabDisplayState) {
 // live under mu like ctx does (a bare field write would data-race Emit). Read
 // them via binding(), write via setBinding().
 type tabEventSink struct {
-	tabID             string
-	app               *App
-	mu                sync.RWMutex
-	ctx               context.Context
-	runtimeEpoch      string
-	runtimeEvents     asyncRuntimeEmitter
-	botSink           event.Sink // optional: when set, events are also forwarded here
-	botSinkGen        uint64
-	sessionGeneration uint64
-	turn              turnSubmissionState // stays reserved through the end of TurnDone fan-out
+	tabID         string
+	app           *App
+	mu            sync.RWMutex
+	ctx           context.Context
+	runtimeEpoch  string
+	runtimeEvents asyncRuntimeEmitter
+	botSink       event.Sink // optional: when set, events are also forwarded here
+	botSinkGen    uint64
+	turn          turnSubmissionState // stays reserved through the end of TurnDone fan-out
+	mu            sync.RWMutex
+	ctx           context.Context
+	runtimeEpoch  string
+	runtimeEvents asyncRuntimeEmitter
+	botSink       event.Sink // optional: when set, events are also forwarded here
+	botSinkGen    uint64
+	turn          turnSubmissionState // stays reserved through the end of TurnDone fan-out
 	// takeoverMirror, when set, forwards every event to the serve that used to
 	// own this session so the remote tab keeps rendering after a local
 	// takeover. Atomic so Emit reads it without the sink lock.
