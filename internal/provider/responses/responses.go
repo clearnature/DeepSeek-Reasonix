@@ -189,7 +189,7 @@ func New(cfg Config) provider.Provider {
 		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache, search: provider.SearchPolicy{NativeEnabled: cfg.WebSearch, ClientEnabled: clientWebSearch}, maxOutputTokens: maxOutputTokens,
 		vision:    vision,
 		modelInfo: modelInfo,
-		http:      httpClient, idleTimeout: defaultStreamIdleTimeout,
+		http:      httpClient, idleTimeout: cap.streamIdleTimeout, // 0 = readStream falls back to default
 	}
 }
 
@@ -304,20 +304,11 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	messages := provider.SanitizeToolPairing(provider.ModelMessages(req.Messages))
 	body := map[string]any{"model": c.model, "stream": true}
 
-	effort := strings.ToLower(strings.TrimSpace(c.effort))
-	if c.vendor == "deepseek" && (strings.EqualFold(strings.TrimSpace(c.model), "deepseek-v4-flash") || strings.EqualFold(strings.TrimSpace(c.model), "deepseek-v4-pro")) {
-		if effort == "medium" || effort == "xhigh" {
-			effort = "high"
-		}
-	}
-	switch effort {
-	case "auto":
-		effort = ""
-	case "disabled", "off":
-		effort = "none"
-	}
-	if effort != "" {
-		body["reasoning"] = map[string]any{"effort": effort}
+	// EffortOverride (e.g. "none" on summary/compaction calls) wins over the
+	// client-level configured effort; vendor aliasing normalizes both.
+	effort := normalizeEffort(requestEffort(req, c.effort), c.model)
+	if reasoning := reasoningBody(effort, c.caps.summaryMode); reasoning != nil {
+		body["reasoning"] = reasoning
 	}
 	maxOutputTokens := req.MaxTokens
 	if maxOutputTokens == 0 {

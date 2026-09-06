@@ -3,6 +3,7 @@ package responses
 import (
 	"net/url"
 	"strings"
+	"time"
 
 	"reasonix/internal/provider"
 )
@@ -53,10 +54,18 @@ type vendorCapabilities struct {
 	// let the server use its own default". MiMo's server default (32768)
 	// covers reasoning + visible output, and its thinking mode can spend a
 	// large chunk of that budget on reasoning before the visible answer —
-	// truncating tool calls mid-JSON on long turns. Raise it to the next
-	// documented tier (65536, within the allowed [1, 131072] range) so the
-	// answer survives long reasoning.
+	// truncating tool calls mid-JSON on long turns. Raise it to 128000
+	// (MiMo-Code's MIMO_OUTPUT_TOKEN_MAX, within the allowed [1, 131072]
+	// range) so the answer survives long reasoning.
 	defaultMaxOutputTokens int
+
+	// summaryMode, when non-empty, is sent as reasoning.summary in the
+	// request body. MiMo-Code sends "detailed" or "none" to control
+	// whether the server emits reasoning summaries that consume output
+	// budget. DashScope requires "detailed" (handled via summaryRequired
+	// on input items, not this field). Empty means "do not send
+	// reasoning.summary" (the OpenAI default).
+	summaryMode string
 
 	// compactionOutputTokens is the separate budget for native/summary
 	// compaction calls. Zero means "no dedicated compaction budget; fall
@@ -72,6 +81,12 @@ type vendorCapabilities struct {
 	// chain-of-thought echoed each turn and inflating reasoning output
 	// until truncation. Only send it where the wire demands it.
 	summaryRequired bool
+
+	// streamIdleTimeout overrides the default SSE stream idle timeout for
+	// this vendor. MiMo's cold-path TTFT can reach ~5 minutes for long
+	// reasoning turns; the default 120s would abort prematurely. Zero means
+	// use defaultStreamIdleTimeout.
+	streamIdleTimeout time.Duration
 }
 
 var vendorTable = map[string]vendorCapabilities{
@@ -81,7 +96,12 @@ var vendorTable = map[string]vendorCapabilities{
 		toolCallReasoning:      false,
 		singleSegmentReasoning: false,
 		ignoresTemperature:     false,
-		summaryRequired:        true,
+		// summaryRequired: input reasoning items 需要 summary 列表（回传历史推理时）。
+		// summaryMode 不设置：DashScope Responses API 无 reasoning.summary
+		// 请求参数。推理摘要始终通过 response.reasoning_summary_text.delta
+		// 输出，无法通过参数关闭。控制推理开关用 enable_thinking，不用
+		// reasoning.summary。
+		summaryRequired: true,
 		// No native compact endpoint yet; summarize fallback only.
 		compactionOutputTokens: 8192,
 	},
@@ -93,8 +113,9 @@ var vendorTable = map[string]vendorCapabilities{
 		ignoresTemperature:     false,
 		// 0 = omit max_output_tokens; official server ceiling is 384K.
 		defaultMaxOutputTokens: 0,
+		summaryMode:            "detailed",
 		// Compaction summaries use a dedicated 16K-class budget, independent of
-		// ordinary answer output.
+		// ordinary answer output so a summary call cannot inherit 128K.
 		compactionOutputTokens: provider.DefaultOrdinaryOutputTokens,
 	},
 	"mimo": {
@@ -103,9 +124,13 @@ var vendorTable = map[string]vendorCapabilities{
 		toolCallReasoning:      true,
 		singleSegmentReasoning: true,
 		ignoresTemperature:     true,
-		// Coding-agent default 32K; users may raise explicitly. Not 128K auto.
-		defaultMaxOutputTokens: provider.DefaultReasoningOutputTokens,
-		compactionOutputTokens: provider.DefaultOrdinaryOutputTokens,
+		defaultMaxOutputTokens: 128000,
+		summaryMode:            "none",
+		// MiMo only accepts effort values: none, low, medium, high
+		// (case-sensitive lowercase). auto/disabled/off/HIGH are rejected
+		// with HTTP 400. NormalizeEffort in effort.go handles the mapping.
+		streamIdleTimeout:      8 * time.Minute, // cold-path TTFT ~5min
+		compactionOutputTokens: 4096,
 	},
 	// StepFun's Responses API accepts reasoning items only with a `summary`
 	// list and silently ignores previous_response_id (verified live: a
@@ -144,7 +169,7 @@ func DetectVendor(baseURL string) string {
 	switch {
 	case host == "dashscope.aliyuncs.com", strings.HasSuffix(host, ".dashscope.aliyuncs.com"), strings.HasSuffix(host, ".maas.aliyuncs.com"):
 		return "dashscope"
-	case host == "api.deepseek.com", strings.HasSuffix(host, ".deepseek.com"):
+	case host == "api.deepseek.com", host == "eu.deepseek.com", strings.HasSuffix(host, ".deepseek.com"):
 		return "deepseek"
 	case host == "api.xiaomimimo.com", strings.HasSuffix(host, ".xiaomimimo.com"):
 		return "mimo"

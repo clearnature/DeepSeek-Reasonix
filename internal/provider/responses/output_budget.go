@@ -5,6 +5,11 @@ import "reasonix/internal/provider"
 // OutputBudget reports the default total output budget sent by this client.
 func (c *client) OutputBudget() int { return c.maxOutputTokens }
 
+// CompactionOutputTokens reports the vendor's dedicated summary digest budget
+// (deepseek 16K, dashscope 8192, mimo 4096); the agent's summary output budget
+// prefers it over the default.
+func (c *client) CompactionOutputTokens() int { return c.caps.compactionOutputTokens }
+
 // SharesContextWindow is true only for the official DeepSeek vendor mode.
 func (c *client) SharesContextWindow() bool { return c.vendor == "deepseek" }
 

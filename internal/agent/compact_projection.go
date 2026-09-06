@@ -831,9 +831,15 @@ func (a *Agent) summaryMaxPromptTokens() int {
 // ceiling). Over-ceiling views must crop instead, at the cost of the prefix
 // cache match.
 func (a *Agent) summaryViewReplayFits(msgs []provider.Message) bool {
-	maxPromptTokens := a.summaryMaxPromptTokens()
-	if maxPromptTokens <= 0 {
+	// The safe ceiling already subtracts the (window-scaled) summary output
+	// budget: a view that leaves no room for the digest must crop to the
+	// frozen-prefix branch instead of replaying past the window.
+	maxPromptTokens, enforce := a.safeSummaryPromptTokenLimit()
+	if !enforce {
 		return true
+	}
+	if maxPromptTokens <= 0 {
+		return false
 	}
 	return a.estimatedRequestTokens(a.summaryRequest(msgs, nil, "")) <= maxPromptTokens
 }
