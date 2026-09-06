@@ -101,3 +101,8 @@ websearch-smoke
 
 # Committed pointer at REASONIX.md; overrides a global CLAUDE.md ignore rule.
 !/CLAUDE.md
+
+# Mimosa hook state (local scan ledger/history; never versioned)
+.mimosa/
+desktop/.mimosa/
+desktop/frontend/.mimosa/
