@@ -138,7 +138,7 @@ type ContextRequest struct {
 	Writable bool
 	// Ephemeral forces a non-persisted transcript for entry points that promise
 	// no durable host side effects, such as read_only_task.
-	Ephemeral bool
+	Ephemeral       bool
 	Decisions       []acceptedDecision
 	EvidenceSummary string
 	FileAnchors     []string

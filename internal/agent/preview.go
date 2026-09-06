@@ -373,7 +373,6 @@ func IsUserAuthoredTurn(content string) bool {
 	return true
 }
 
-
 // IsUserAuthoredTurnMessage reports whether a user-role message was authored by
 // the user (not host-injected synthetic turns or steers). This is a simplified
 // version of the upstream function that does not depend on IsHostGeneratedUserMessage.

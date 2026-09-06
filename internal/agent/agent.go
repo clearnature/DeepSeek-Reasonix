@@ -1109,9 +1109,9 @@ type Options struct {
 	// LegacyAnchorSafetyGate is an internal kill switch for reverting
 	// delete_range to the pre-fingerprint full-file fresh-read requirement.
 	// It never enters provider-visible prompts or tool schemas.
-	LegacyAnchorSafetyGate bool
-	CompletionValidation   string
-	CompletionEvaluator    CompletionEvaluator
+	LegacyAnchorSafetyGate     bool
+	CompletionValidation       string
+	CompletionEvaluator        CompletionEvaluator
 	CompletionEvaluatorFactory CompletionEvaluatorFactory
 }
 
@@ -2901,8 +2901,6 @@ func truncateToolOutputFor(s, toolName, toolCallID string) (string, string) {
 	notice := fmt.Sprintf("tool output truncated: %d of %d bytes elided", len(s)-len(head)-len(tail), len(s))
 	return head + marker + tail, notice
 }
-
-
 
 // finishReasonMessage maps an abnormal finish_reason to a one-line warning,
 // returning ok=false for the normal terminations ("stop", "tool_calls") and a
