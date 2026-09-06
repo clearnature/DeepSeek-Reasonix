@@ -71,7 +71,6 @@ import { ShortcutsCheatsheet } from "./components/ShortcutsCheatsheet";
 import { WorktreeBadge } from "./components/WorktreeBadge";
 import { CopyButton } from "./components/CopyButton";
 import { ExternalOpener, shouldMountExternalOpener } from "./components/ExternalOpener";
-import { TopicbarMoreMenu } from "./components/TopicbarMoreMenu";
 import { startTerminalEventBridge } from "./lib/terminalEvents";
 import { applyTerminalThemePreference } from "./lib/terminalTheme";
 import { formatTerminalOutputForComposer } from "./lib/terminalOutput";

@@ -6,6 +6,8 @@ import type { Todo } from "./tools";
 import type { ContextBudgetInfo, ContextMaintenanceInfo, WireContextMaintenance } from "./contextMaintenanceTypes";
 import type { WireApproval } from "./approvalTypes";
 import type { RemoteProjectNodeFields, RemoteSessionMetaFields, RemoteTabMetaFields } from "./remoteTypes";
+import type { PinnedFileInfo } from "./pinnedContextBridge";
+import type { RecoveryLineageView } from "./sessionRecoveryTypes";
 export * from "./remoteTypes";
 export type { ContextBudgetInfo, ContextMaintenanceInfo, ContextMaintenanceReceipt, WireContextMaintenance } from "./contextMaintenanceTypes";
 export type { ProjectGroupsSnapshot, ProjectRuntimeTopic, ProjectTopicKey, ProjectTopicPage, ProjectTopicPageRequest, ProjectTreeChangedV2, ProjectTreeOrganizationBindings, ProjectTreeRuntimeSnapshot, ProjectTreeSnapshot, SessionCatalogBindings, SessionCatalogStatus, SessionGroup, SessionReference } from "./sessionCatalogTypes";
@@ -259,6 +261,20 @@ export interface WireAsk {
   questions: WireAskQuestion[];
 }
 
+export type { MCPAppInstanceView, MCPAppPresentation } from "./mcpAppProtocol";
+
+// One server-initiated MCP elicitation awaiting accept/decline/cancel. Form
+// mode carries a flat primitive JSON schema; url mode a credential-free target.
+export interface WireMCPInteraction {
+  id: string;
+  server: string;
+  mode: "form" | "url";
+  message: string;
+  requestedSchema?: unknown;
+  url?: string;
+  elicitationId?: string;
+}
+
 // Extension UI surfaces (stage 8a) — structured-only documents published by
 // extension sidecars through the host UI hub. Exactly one sub-struct is set,
 // selected by `kind`.
@@ -362,6 +378,7 @@ export interface WireEvent extends RecoveryEventFields {
   usage?: WireUsage;
   approval?: WireApproval;
   ask?: WireAsk;
+  mcpInteraction?: WireMCPInteraction;
   compaction?: WireCompaction;
   maintenance?: WireContextMaintenance;
   guardian?: WireGuardian;
@@ -370,7 +387,7 @@ export interface WireEvent extends RecoveryEventFields {
   err?: string;
   checkpointTurn?: number; // Authoritative TurnDone rewind target; zero is valid.
   submissionId?: string; // Opaque correlation for the exact optimistic user submission.
-  outcome?: "completed" | "partial" | "blocked" | "final_readiness" | "recovery_paused";
+  outcome?: "completed" | "partial" | "blocked" | "final_readiness" | "recovery_paused" | "completion_uncertain";
   readiness?: WireFinalReadiness;
   protocolRecovery?: { id: string };
   diagnostic?: { kind: string; status?: number; traceId?: string };
@@ -455,6 +472,19 @@ export interface SessionRuntimeView {
   issue?: SessionRuntimeIssue;
 }
 
+/** Occupancy report for a session a local serve holds; drives the takeover dialog. */
+export interface SessionTakeoverView {
+  available: boolean;
+  reason?: string;
+  sessionPath?: string;
+  holder?: "serve" | "external" | "other" | "free";
+  remoteAttached?: boolean;
+  running?: boolean;
+  mirrored?: boolean;
+  holderPid?: number;
+  holderHost?: string;
+}
+
 export interface WireFinalReadiness {
   attempts?: number;
   missing?: string[];
@@ -477,6 +507,8 @@ export interface TabMeta extends RemoteTabMetaFields {
   sessionDigest?: string;
   sessionGeneration?: number;
   readOnly?: boolean;
+  /** Remote tab whose session a local runtime on the serve host took over. */
+  takenOver?: boolean;
   filePath?: string;
   projectColor?: string;
   label: string;
@@ -493,7 +525,6 @@ export interface TabMeta extends RemoteTabMetaFields {
   turnStatus?: TurnStatus;
   turnEventSeq?: number;
   turnReplayAfterSeq?: number;
-  bootTurns?: number;
   mode: Mode;
   collaborationMode?: CollaborationMode;
   toolApprovalMode?: ToolApprovalMode;
@@ -507,6 +538,9 @@ export interface TabMeta extends RemoteTabMetaFields {
   recoveryReason?: string;
   recoveryDigest?: string;
   recoveryParentId?: string;
+  versionKind?: "normal" | "recovery" | "subagent" | string;
+  versionState?: "active" | "pending" | "resolved" | "trashed" | string;
+  parentVersionId?: string;
   startupErr?: string;
   active: boolean;
   cwd: string;
@@ -541,6 +575,7 @@ export interface ProjectNode extends RemoteProjectNodeFields {
   label: string;
   root?: string;
   topicId?: string;
+  recoveryPath?: string;
   sessionPath?: string;
   preview?: string;
   projectColor?: string;
@@ -562,29 +597,13 @@ export interface ProjectNode extends RemoteProjectNodeFields {
   recoveryBranchCount?: number;
   recoveryUnresolvedCount?: number;
   recoveryCleanupEligibleCount?: number;
-  recoveryCopyCount?: number; // folded recovery copies behind this row (badge only)
+  recoveryCopyCount?: number; // Deprecated: ordinary trees hide physical copies.
   isolatedWorktree?: boolean;
   runtimeOnly?: boolean;
   children?: ProjectNode[];
 }
 
-export interface RecoveryLineageMember {
-  path: string;
-  role: "normal" | "covered_copy" | "adopted" | "preferred" | "diverged" | string;
-  canonical: boolean;
-  turns: number;
-  open: boolean;
-  running: boolean;
-}
-
-export interface RecoveryLineageView {
-  groupId: string;
-  state: string;
-  branchCount: number;
-  unresolved: number;
-  cleanupEligible: number;
-  members: RecoveryLineageMember[];
-}
+export type { RecoveryLineageMember, RecoveryLineageView } from "./sessionRecoveryTypes";
 
 export interface RecoveryCleanupRequest {
   scope: string;
@@ -627,10 +646,15 @@ export interface DeliveryWorktreeOpenResult {
   workspaceRoot: string;
   worktreeRoot: string;
   sourceRoot: string;
-  branch: string;
-  sourceDirty: boolean;
-  tab: TabMeta;
+	branch: string;
+	sourceDirty: boolean;
+	sourceRevision?: string;
+	taskId?: string;
+	conversationId?: string;
+	tab: TabMeta;
 }
+
+export * from "./worktreeMergeTypes";
 
 export type ProjectTopicStatus = "thinking" | "streaming" | "waiting_confirmation" | "background_job" | "paused" | "awaiting_delivery" | "error" | "diverged_recovery";
 
@@ -641,6 +665,9 @@ export interface TopicMeta {
 }
 
 export interface SessionRecoveryEvent {
+	conversationId?: string;
+	activeVersionId?: string;
+	recoveryVersionId?: string;
   originalPath?: string;
   recoveryPath: string;
   scope?: string;
@@ -650,11 +677,31 @@ export interface SessionRecoveryEvent {
   recoveryReason?: string;
   recoveryDigest?: string;
   recoveryParentId?: string;
-  existing?: boolean;
+	existing?: boolean;
+	baseRevision?: number;
+	diskRevision?: number;
+	canContinue?: boolean;
+	requiresChoice?: boolean;
+}
+
+export interface SessionVersionStateView {
+  conversationId?: string;
+  activeVersionId?: string;
+  activePath?: string;
+  recoveryVersionId?: string;
+  canContinue: boolean;
+  requiresChoice: boolean;
+  lineage: RecoveryLineageView;
 }
 
 export interface SessionRecoveryFailedEvent {
   reason?: "lease_held" | "lease_unavailable" | string;
+  conversationId?: string;
+  topicId?: string;
+  canContinue?: boolean;
+  recoveryPending?: boolean;
+  recoveryPath?: string;
+  workspaceRoot?: string;
 }
 
 export interface ContextPanelInfo {
@@ -979,11 +1026,8 @@ export interface Meta extends RemoteSessionMetaFields {
   goal?: string;
   goalStatus?: GoalStatus;
   goalRuntime?: GoalRuntime;
-  canonicalTodos?: Todo[]; dismissedTodoBatches?: string[];
-  /** Process-lifetime turn counter (cold-start cycle); preferred over checkpoint counts. */
-  bootTurns?: number;
+  canonicalTodos?: Todo[]; dismissedTodoBatches?: string[]; pinnedFiles?: PinnedFileInfo[];
 }
-
 export type CollaborationMode = "normal" | "plan" | "goal";
 export type ToolApprovalMode = "ask" | "auto" | "yolo";
 // TokenMode is the dual-write wire value for the session quality floor.
@@ -1691,6 +1735,7 @@ export interface ProviderView {
   headers?: Record<string, string> | null; // optional extra request headers for compatible gateways
   extraBody?: Record<string, unknown> | null; // optional extra top-level request body fields for compatible gateways
   authHeader?: boolean; // Anthropic-compatible: send Authorization: Bearer instead of x-api-key
+  noProxy?: boolean; // reach this provider's endpoint directly, bypassing the configured/system proxy
   keySet: boolean; // the env var currently resolves to a value
   requiresKey?: boolean; // false for explicit no-auth providers
   configured?: boolean; // selectable: key is set or no key is required

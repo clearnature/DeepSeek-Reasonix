@@ -8,9 +8,10 @@ import { makeMockSessionCatalogBindings } from "./sessionCatalogBridge";
 import { makeMockHistoryCatalogBindings, type HistoryCatalogBindings } from "./historyCatalogBridge";
 import { makeMockTaskCatalogBindings, type TaskCatalogBindings } from "./taskCatalogBridge";
 import { makeMockBlankProjectBindings, type BlankProjectBindings } from "./blankProjectBridge";
-import { makeMockMCPAppBindings, type MCPAppBindings } from "./mcpAppBridge";
 import { makeMockQualityFloorBindings, type QualityFloorBindings } from "./deliveryFloorBridge";
 import { t } from "./i18n";
+import { makeMockForkBindings } from "./forkWorktree";
+import { makeMockWorktreeMergeBindings } from "./worktreeMergeMock";
 import { providerIsConfigured, providerRequiresKey, removeProviderAccessesForMock } from "./providerModels";
 import { DEFAULT_STATUS_BAR_ITEMS, normalizeStatusBarItems } from "./statusBarItems";
 import { registerTrustedThemeBackgroundURLs } from "./themePack";
@@ -25,6 +26,8 @@ import { createMockRemoteProjects } from "./mockRemoteProjects";
 import { mockRemoteHostView } from "./mockRemoteHosts";
 import type { RemoteProjectBindings } from "./remoteProjectBridge";
 import type { ScrollDiagnosticBindings } from "./scrollDiagnosticBridge";
+import { makeMockMCPAppBindings, type MCPAppBindings } from "./mcpAppBridge";
+import { makeMockPinnedContextBindings, type PinnedContextBindings } from "./pinnedContextBridge";
 import type {
   RemoteHostView,
   RemoteHostInput,
@@ -57,6 +60,13 @@ import type {
   DesktopStartupSettingsView,
   DeliveryWorktreeAvailability,
   DeliveryWorktreeOpenResult,
+  WorktreeMergeInspection,
+  WorktreeMergeRequest,
+  WorktreeMergeResult,
+  WorktreeCleanupRequest,
+  WorktreeCleanupResult,
+  CloseMergedWorktreeTabRequest,
+  CloseMergedWorktreeTabResult,
   DroppedItem,
   EffortInfo,
   ExtensionActionView,
@@ -182,10 +192,9 @@ interface DesktopWindowState {
   y: number;
   maximised: boolean;
 }
-
 // AppBindings is the hand-written React-to-Go contract. _CheckGeneratedBindings
 // catches generated methods missing here; update this interface and typecheck.
-export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganizationBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, QualityFloorBindings, SessionTitleBindings, ScrollDiagnosticBindings, RemoteProjectBindings, MCPAppBindings {
+export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganizationBindings, HistoryCatalogBindings, TaskCatalogBindings, BlankProjectBindings, QualityFloorBindings, SessionTitleBindings, ScrollDiagnosticBindings, RemoteProjectBindings, MCPAppBindings, PinnedContextBindings {
   Platform(): Promise<string>;
   MinimiseMainWindow(): Promise<void>;
   ToggleMaximiseMainWindow(): Promise<void>;
@@ -202,7 +211,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   Submit(input: string): Promise<void>;
   SubmitToTab(tabID: string, input: string): Promise<void>;
   SubmitToTabWithID(tabID: string, input: string, submissionID: string): Promise<void>;
-  StartTurnForTab?(tabID: string, input: string, submissionID: string): Promise<{ turnId: string; status: string; runtimeEpoch?: string; submissionId?: string }>;
+  StartTurnForTab?(tabID: string, input: string, submissionID: string): Promise<{ turnId: string; status: string; disposition?: "turn_started" | "management_handled"; runtimeEpoch?: string; submissionId?: string }>;
   SubmitDisplay(display: string, input: string): Promise<void>;
   SubmitDisplayToTab(tabID: string, display: string, input: string): Promise<void>;
   SubmitDisplayToTabWithID(tabID: string, display: string, input: string, submissionID: string): Promise<void>;
@@ -283,6 +292,12 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   RecoveryCheckpointEnabledTab(tabID: string): Promise<boolean>;
   AnswerQuestion(id: string, answers: QuestionAnswer[]): Promise<void>;
   AnswerQuestionForTab(tabID: string, id: string, answers: QuestionAnswer[]): Promise<void>;
+  AnswerMCPInteractionForTab(
+    tabID: string,
+    id: string,
+    action: "accept" | "decline" | "cancel",
+    content: Record<string, unknown> | null,
+  ): Promise<void>;
   AnswerPromptForTab?(tabID: string, turnID: string, id: string, answers: QuestionAnswer[]): Promise<void>;
   ReplayPendingPrompts(): Promise<void>;
   ReplayPendingPromptsForTab(tabID: string): Promise<void>;
@@ -330,6 +345,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   CommitWorkspaceFileRevertForTab(tabID: string, planID: string, resolution: string): Promise<import("./types").RewindResultView>;
   Fork(turn: number): Promise<TabMeta>;
   ForkForTab(tabID: string, turn: number): Promise<TabMeta>;
+  ForkWorktreeForTab(tabID: string, turn: number): Promise<import("./forkWorktree").ForkWorktreeResultView>;
   SummarizeFrom(turn: number): Promise<void>;
   SummarizeFromForTab(tabID: string, turn: number): Promise<void>;
   SummarizeUpTo(turn: number): Promise<void>;
@@ -344,9 +360,15 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   OpenChannelSessionForTab(tabID: string, path: string): Promise<HistoryMessage[]>;
   OpenChannelSessionPageForTab(tabID: string, path: string, limit: number): Promise<HistoryPage>;
   PreviewSession(path: string): Promise<HistoryMessage[]>;
+  QuerySessionTakeover(tabId: string): Promise<import("./types").SessionTakeoverView | null>;
+  TakeoverSession(tabId: string, mode: "wait" | "interrupt"): Promise<void>;
   DeleteSession(path: string): Promise<void>;
   DeleteRecoveryCopy(path: string): Promise<void>;
-  GetRecoveryLineage(key: { scope: string; workspaceRoot?: string; topicId: string }): Promise<RecoveryLineageView>;
+  GetRecoveryLineage(key: { scope: string; workspaceRoot?: string; topicId: string; path?: string; recordClassification?: boolean }): Promise<RecoveryLineageView>;
+  GetSessionVersionState(key: { scope: string; workspaceRoot?: string; topicId: string; path?: string; recordClassification?: boolean }): Promise<import("./types").SessionVersionStateView>;
+  SetActiveSessionVersion(request: import("./types").RecoveryPreferenceRequest): Promise<void>;
+  RetrySessionRecovery(request: import("./types").RecoveryPreferenceRequest): Promise<void>;
+  ReconcileRecoveryVersions(key: { scope: string; workspaceRoot?: string; topicId: string; path?: string }): Promise<void>;
   ChooseRecoveryBranch(request: import("./types").RecoveryPreferenceRequest): Promise<void>;
   CleanRecoveryLineage(request: RecoveryCleanupRequest): Promise<RecoveryCleanupResult>;
   RestoreSession(path: string): Promise<void>;
@@ -389,12 +411,16 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   WorkspaceConflictForTab(tabID: string): Promise<WorkspaceConflictView>;
   RevealWorkspaceWriterForTab(tabID: string): Promise<TabMeta>;
   CloseTabWithPolicy(tabID: string, policy: "keep_running" | "stop_and_close"): Promise<void>;
-  ToolResultForTab(tabID: string, toolID: string): Promise<{ args: string; output: string; execution?: import("./types").WireShellExecution } | null>;
+  ToolResultForTab(tabID: string, toolID: string): Promise<{ args: string; output: string; execution?: import("./types").WireShellExecution; mcpApp?: import("./types").MCPAppPresentation } | null>;
   Meta(): Promise<Meta>;
   MetaForTab(tabID: string): Promise<Meta>; DismissTodoBatchForTab(tabID: string, batchKey: string): Promise<void>;
   Commands(): Promise<CommandInfo[]>;
   Capabilities(): Promise<CapabilitiesView>;
   MCPServers(): Promise<ServerView[]>;
+  MCPCapabilityMatrix(): Promise<{
+    views: Array<{ id: string; layer: string; state: string; negotiated: boolean; detail: string }>;
+    hostProfile: string;
+  }>;
   MCPMarketplace(query: string): Promise<MCPMarketplaceView>;
   MCPMarketplaceResolve(registryName: string): Promise<MCPMarketplaceEntry>;
   SkillsSettings(): Promise<SkillsSettingsView>;
@@ -535,6 +561,8 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   ResetProviderPresetAccess(id: string): Promise<void>;
   FetchProviderModels(p: ProviderView): Promise<string[]>;
   FetchProviderModelCatalog(p: ProviderView): Promise<ProviderModelCapabilityView[]>;
+  FetchProviderModelCatalogDraft(p: ProviderView, key: string): Promise<ProviderModelCapabilityView[]>;
+  TestProviderModel(p: ProviderView, model: string, key: string): Promise<void>;
   FetchAllProviderModelCatalogs(providers: ProviderView[]): Promise<Record<string, ProviderModelCapabilityView[]>>;
   FetchAllProviderModels(providers: ProviderView[]): Promise<Record<string, string[]>>;
   DeleteProvider(name: string): Promise<void>;
@@ -626,6 +654,13 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   OpenProjectTab(workspaceRoot: string, topicID: string): Promise<TabMeta>;
   IsolatedWorktreeAvailability(workspaceRoot: string): Promise<DeliveryWorktreeAvailability>;
   CreateIsolatedWorktree(workspaceRoot: string): Promise<DeliveryWorktreeOpenResult>;
+  InspectWorktreeMerge(tabID: string): Promise<WorktreeMergeInspection>;
+  GetWorktreeStatus(tabID: string): Promise<WorktreeMergeInspection>;
+  PrepareWorktreeMerge(tabID: string): Promise<WorktreeMergeInspection>;
+  MergeWorktreeBack(request: WorktreeMergeRequest): Promise<WorktreeMergeResult>;
+  RegisterNavigationIntent(token: string): Promise<void>;
+  CloseMergedWorktreeTab(request: CloseMergedWorktreeTabRequest): Promise<CloseMergedWorktreeTabResult>;
+  FinalizeWorktreeMerge(request: WorktreeCleanupRequest): Promise<WorktreeCleanupResult>;
   // Deprecated one-version aliases kept bound for older desktop clients.
   DeliveryWorktreeAvailability(workspaceRoot: string): Promise<DeliveryWorktreeAvailability>;
   CreateDeliveryWorktree(workspaceRoot: string): Promise<DeliveryWorktreeOpenResult>;
@@ -661,7 +696,6 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   RenameTopic(topicID: string, title: string): Promise<void>;
   DeleteTopic(topicID: string): Promise<void>;
   TrashTopic(topicID: string): Promise<void>;
-  TrashTopicForce(topicID: string): Promise<void>;
   SetTopicPinned(topicID: string, pinned: boolean): Promise<void>;
   ContextPanel(tabID: string): Promise<ContextPanelInfo>;
   // New native-feel bindings (added with the desktop native-feel plan).
@@ -696,13 +730,6 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   RemoteLastWorkspace(hostId: string): Promise<string>;
   ScanRemoteLegacyWorkbenchData(): Promise<RemoteLegacyWorkbenchData>;
   CleanRemoteLegacyWorkbenchData(target: "mirrors" | "trust"): Promise<void>;
-  // ── Job ──
-  JobOutputForTab(tabID: string, jobID: string): Promise<unknown>;
-  JobPanelJobsForTab(tabID: string): Promise<unknown[]>;
-  // ── Performance ──
-  ReportRenderingPerf(maxFrameMs: number, maxMs: number, avgMs: number): Promise<void>;
-  // ── Team ──
-  TeamPanelViewForTab(tabID: string): Promise<unknown>;
 }
 // Compile-time drift check. Exclude<A, B> extracts keys in A that are missing
 // from B. If that set is non-empty, AssertNever<non-never> fails with
@@ -1022,6 +1049,11 @@ export function onSessionRecovered(cb: (payload: SessionRecoveryEvent) => void):
   return () => {};
 }
 
+export function onSessionActiveVersionChanged(cb: (payload: SessionRecoveryEvent) => void): () => void {
+  if (typeof window === "undefined" || !window.runtime?.EventsOn) return () => {};
+  return window.runtime.EventsOn("session:active-version-changed", (payload?: unknown) => cb((payload ?? {}) as SessionRecoveryEvent));
+}
+
 export function onSessionRecoveryFailed(cb: (payload: SessionRecoveryFailedEvent) => void): () => void {
   if (realApp() && typeof window !== "undefined" && window.runtime) {
     return window.runtime.EventsOn("session:recovery-failed", (payload?: unknown) => cb((payload ?? {}) as SessionRecoveryFailedEvent));
@@ -1076,7 +1108,7 @@ function bridgeBreadcrumb(method: string): string {
     return `model ${method}`;
   if (/^(SetDesktop|SetCloseBehavior|SetDisplayMode|SetStatusBar|SetReasoningDisplayMode|SetExpandThinking|SetAutoPlan|SetDefaultToolApprovalMode|SetCompactRatio|SetReasoningLanguage)/.test(method))
     return `settings ${method}`;
-  if (/^(SaveProvider|SetProviderWebSearch|SaveProviderModelCatalogs|AddOfficialProviderAccess|UpgradeDeepSeekProviderAccess|AddProviderPresetAccess|ResetProviderPresetAccess|RemoveProviderAccess|RemoveProviderAccesses|DeleteProvider|SaveProviderKey|SetProviderKey|ClearProviderKey|FetchProviderModelCatalog|FetchAllProviderModelCatalogs|FetchProviderModels|FetchAllProviderModels|ConnectKey)/.test(method))
+  if (/^(SaveProvider|SetProviderWebSearch|SaveProviderModelCatalogs|AddOfficialProviderAccess|UpgradeDeepSeekProviderAccess|AddProviderPresetAccess|ResetProviderPresetAccess|RemoveProviderAccess|RemoveProviderAccesses|DeleteProvider|SaveProviderKey|SetProviderKey|ClearProviderKey|TestProviderModel|FetchProviderModelCatalog|FetchAllProviderModelCatalogs|FetchProviderModels|FetchAllProviderModels|ConnectKey)/.test(method))
     return `provider ${method}`;
   if (/^(CheckUpdate|ApplyUpdateRequest|OpenDownloadPage|OpenUserConfigPath|ReloadUserConfig)/.test(method)) return `update ${method}`;
   if (/^(AddMCPServer|InstallMCPServer|UpdateMCPServer|RemoveMCPServer|AuthorizeAndConnectMCPServer|AuthenticateMCPServer|ReconnectMCPServer|ClearMCPServerAuthentication|SetMCPServer)/.test(method))
@@ -1084,7 +1116,7 @@ function bridgeBreadcrumb(method: string): string {
   if (/^(AddSkillPath|RemoveSkillPath|SetSkillPathEnabled|RefreshSkills|SetSkillEnabled|SetSkillImplicitInvocation|AcceptSkillSuggestion|AvailableSubagentTools|CreateSubagentProfile|UpdateSubagentProfile|DeleteSubagentProfile|SetSubagentProfileModel|SetSubagentProfileEffort|TrySubagentProfile|CancelTrySubagentProfile)/.test(method))
     return `skill ${method}`;
   if (/^(MinimiseMainWindow|ToggleMaximiseMainWindow|IsMainWindowMaximised|CloseMainWindow)$/.test(method)) return `window ${method}`;
-  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|StartTopicActivation|EnsureBlankSurface|SetActiveTab|CloseTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|IsolatedWorktreeAvailability|CreateIsolatedWorktree|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
+  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|StartTopicActivation|EnsureBlankSurface|SetActiveTab|CloseTab|RegisterNavigationIntent|CloseMergedWorktreeTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|IsolatedWorktreeAvailability|CreateIsolatedWorktree|InspectWorktreeMerge|GetWorktreeStatus|PrepareWorktreeMerge|ReconcileRecoveryVersions|MergeWorktreeBack|FinalizeWorktreeMerge|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
     return `nav ${method}`;
   return "";
 }
@@ -1241,6 +1273,7 @@ function mockProviderTemplate(p: Pick<ProviderView, "name" | "kind" | "baseUrl" 
     headers: p.headers,
     extraBody: p.extraBody,
     authHeader: p.authHeader,
+    noProxy: p.noProxy,
     keySet: Boolean(p.keySet),
     balanceUrl: p.balanceUrl ?? "",
     contextWindow: p.contextWindow ?? 0,
@@ -1416,8 +1449,7 @@ function makeMockApp(): AppBindings {
   const benchMock = scenario === "bench";
   const mockAttachmentDataURLs = new Map<string, string>();
   let cancelled = false;
-  let pendingAskPreview = false;
-  let pendingApprovalPreview = false;
+  let pendingAskPreview = false, pendingApprovalPreview = false;
   // Mirrors the last emitted approval preview so mode switches can mirror the
   // backend drain contract: only non-fresh tools auto-allow; plan/sandbox
   // escape prompts stay pending and visible.
@@ -1867,7 +1899,7 @@ function makeMockApp(): AppBindings {
     metrics: true,
     configPath: "~/.reasonix/config.toml",
     shadowedByPath: "~/projects/reasonix/reasonix.toml",
-    providerKinds: ["openai", "anthropic"],
+    providerKinds: ["openai", "anthropic", "responses"],
     autoApproveTools: false,
     bypass: false,
   };
@@ -2473,7 +2505,6 @@ function makeMockApp(): AppBindings {
   return {
     ...makeMockSessionCatalogBindings(cloneProjectTree),
     ...makeMockBlankProjectBindings(),
-    ...makeMockMCPAppBindings(),
     async MinimiseMainWindow() {
       console.info("mock MinimiseMainWindow");
     },
@@ -2542,6 +2573,7 @@ function makeMockApp(): AppBindings {
         emitMockTurnDone(submissionID);
         return;
       }
+      if (decisionSurfaceMock === "mcp_interaction") return (await import("./mockMCPInteraction")).showMockMCPInteraction(delay, () => cancelled, emit);
       if (decisionSurfaceMock === "tool_approval") {
         pendingApprovalPreview = true;
         pendingApprovalPreviewPrompt = { id: "mock-approval-preview", tool: "bash" };
@@ -3102,6 +3134,10 @@ function makeMockApp(): AppBindings {
       emit({ kind: "message", text: `ask preview answered:\n\n${summary}` });
           emitMockTurnDone();
         },
+        async AnswerMCPInteractionForTab(_tabID, id, _action, _content) {
+          if (!cancelled && (await import("./mockMCPInteraction")).consumeMockMCPInteraction(id)) await withMockTabScope(_tabID, async () => { emit({ kind: "prompt_answered", itemId: id }); emitMockTurnDone(); });
+        },
+        ...makeMockMCPAppBindings(), ...makeMockPinnedContextBindings(),
         async AnswerQuestionForTab(_tabID, id, answers) {
           await withMockTabScope(_tabID, () => this.AnswerQuestion(id, answers));
         },
@@ -3263,23 +3299,11 @@ function makeMockApp(): AppBindings {
     async CommitWorkspaceFileRevertForTab() {
       return { ok: true, undoAvailable: true, transactionId: "mock-file-tx" };
     },
-    async Fork() {
-      const active = mockTabs.find((tab) => tab.active) ?? mockTabs[0];
-      const tab: TabMeta = {
-        ...active,
-        id: "tab_fork_" + Date.now(),
-        topicId: "topic_fork_" + Date.now(),
-        topicTitle: `${active.topicTitle || t("rewind.fork")} · fork`,
-        active: true,
-        running: false,
-      };
-      mockTabs = [...mockTabs.map((item) => ({ ...item, active: false })), tab];
-      return { ...tab };
-    },
-    async ForkForTab(tabID, turn) {
-      mockTabs = mockTabs.map((tab) => ({ ...tab, active: tab.id === tabID }));
-      return this.Fork(turn);
-    },
+    ...makeMockForkBindings(
+      () => mockTabs,
+      (tabs) => { mockTabs = tabs; },
+      t("rewind.fork"),
+    ),
     async SummarizeFrom() {},
     async SummarizeFromForTab() {},
     async SummarizeUpTo() {},
@@ -3371,7 +3395,11 @@ function makeMockApp(): AppBindings {
 	    async OpenChannelSessionPageForTab(tabID: string, path: string, limit = 60) {
 	      return mockHistoryPage(await this.OpenChannelSessionForTab(tabID, path), 0, limit);
 	    },
-	    async PreviewSession(path: string) {
+	    async QuerySessionTakeover(_tabId: string) {
+      return { available: false, reason: "mock" } as import("./types").SessionTakeoverView;
+    },
+    async TakeoverSession(_tabId: string, _mode: "wait" | "interrupt") {},
+    async PreviewSession(path: string) {
       const s = sessions.find((x) => x.path === path) ?? trashedSessions.find((x) => x.path === path);
       return [
         { role: "user", content: s?.preview || `(mock) preview ${path}` },
@@ -3412,6 +3440,13 @@ function makeMockApp(): AppBindings {
         members: [],
       };
     },
+    async GetSessionVersionState(key) {
+      const lineage = await this.GetRecoveryLineage(key);
+      return { conversationId: key.topicId, canContinue: true, requiresChoice: lineage.state === "diverged" && lineage.unresolved > 0, lineage };
+    },
+    async SetActiveSessionVersion() {},
+    async RetrySessionRecovery() {},
+    async ReconcileRecoveryVersions() {},
     async ChooseRecoveryBranch() {},
     async CleanRecoveryLineage(request) {
       const topic = findMockTopic(request.topicId);
@@ -3636,6 +3671,9 @@ function makeMockApp(): AppBindings {
     },
     async MCPServers() {
       return capServers.map((s) => ({ ...s }));
+    },
+    async MCPCapabilityMatrix() {
+      return { views: [], hostProfile: "desktop-apps-2026-01-26-v1" };
     },
     async MCPMarketplace(query: string) {
       const servers = [
@@ -4646,6 +4684,10 @@ function makeMockApp(): AppBindings {
       if (p.baseUrl.includes("xiaomimimo")) return ["mimo-v2.5-pro", "mimo-v2.5"];
       return ["gpt-5", "gpt-5-mini", "qwen3-coder"];
     },
+    async FetchProviderModelCatalogDraft(p: ProviderView, _key: string) {
+      return this.FetchProviderModelCatalog(p);
+    },
+    async TestProviderModel(_p: ProviderView, _model: string, _key: string) {},
     async FetchProviderModelCatalog(p: ProviderView) {
       const models = await this.FetchProviderModels(p);
       return models.map((model) => ({
@@ -5231,6 +5273,7 @@ function makeMockApp(): AppBindings {
     async CreateDeliveryWorktree(workspaceRoot: string) {
       return this.CreateIsolatedWorktree(workspaceRoot);
     },
+    ...makeMockWorktreeMergeBindings(() => mockTabs, (next) => { mockTabs = next; }),
     async OpenGlobalTab(_topicID: string) {
       const existing = mockTabs.find((tab) => tab.scope === "global" && tab.topicId === _topicID);
       if (existing) {
@@ -5494,9 +5537,6 @@ function makeMockApp(): AppBindings {
     async TrashTopic(topicID: string) {
       deleteMockTopic(topicID);
     },
-    async TrashTopicForce(topicID: string) {
-      deleteMockTopic(topicID);
-    },
     async SetTopicPinned(topicID: string, pinned: boolean) {
       setMockTopicPinned(topicID, pinned);
     },
@@ -5727,10 +5767,6 @@ function makeMockApp(): AppBindings {
     async SubmitExtensionForm() {},
     ...remoteProjects.bindings,
     async CleanRemoteLegacyWorkbenchData() {},
-    async JobOutputForTab() { return {}; },
-    async JobPanelJobsForTab() { return []; },
-    async ReportRenderingPerf() {},
-    async TeamPanelViewForTab() { return {}; },
   };
 }
 
