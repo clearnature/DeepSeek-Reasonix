@@ -1,0 +1,457 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20260906T084408241Z-185305-40101f9e1812",
+  "run_status": "inconclusive",
+  "errors": [
+    {
+      "stage": "bash-discovery",
+      "target": "benchmarks/e2e/tasks/mfix-id-prefix/workdir/index.py",
+      "reason": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files"
+    },
+    {
+      "stage": "baseline",
+      "target": "benchmarks/e2e/tasks/mfix-header-case/verify.sh",
+      "reason": "baseline_partial: baseline exceeded 5000 candidate files"
+    },
+    {
+      "stage": "scan",
+      "target": "desktop/frontend/src/lib/types.ts",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/session_content.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/tool/contract_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/compact.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/compact_commit.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/compact_projection.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/output_budget.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/preview.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "desktop/app.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    }
+  ],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "partial",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": false,
+      "captured_files": 5000,
+      "candidate_limit": 5000,
+      "truncated": true,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 9
+    },
+    "change_tracking": {
+      "touched_observed": 2,
+      "touched_retained": 2,
+      "truncated": false,
+      "bash_mutation": true,
+      "bash_discovered": 9,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 9,
+      "selected_files": 9,
+      "limit": 20,
+      "truncated": false
+    },
+    "scanning": {
+      "required_files": 9,
+      "scanned_files": 0,
+      "skipped_files": 0,
+      "failed_files": 9,
+      "project_checks_required": 0,
+      "project_checks_completed": 0
+    },
+    "notification": {
+      "eligible_findings": 0,
+      "detailed_findings": 0,
+      "detail_limit": 3,
+      "truncated": false
+    },
+    "reason_counts": {
+      "bash_discovery_incomplete": 1,
+      "baseline_partial": 1,
+      "scanner_failed": 9,
+      "project_check_failed": 11
+    },
+    "reasons": [
+      {
+        "code": "bash_discovery_incomplete",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/mfix-id-prefix/workdir/index.py",
+        "detail": "project enumeration exceeded 5000 reviewable files",
+        "affects_completion": true
+      },
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/mfix-header-case/verify.sh",
+        "detail": "baseline exceeded 5000 candidate files",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "desktop/frontend/src/lib/types.ts",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/session_content.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/tool/contract_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/compact.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/compact_commit.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/compact_projection.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/output_budget.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/preview.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "desktop/app.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/mfix-id-prefix/workdir/index.py",
+        "detail": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/mfix-header-case/verify.sh",
+        "detail": "baseline_partial: baseline exceeded 5000 candidate files",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "desktop/frontend/src/lib/types.ts",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/session_content.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/tool/contract_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/compact.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/compact_commit.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/compact_projection.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/output_budget.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/preview.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "desktop/app.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      }
+    ],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-09-06T08:44:08.241Z",
+  "session_id": "sess_ef80bc9b-c70d-429a-aff0-f23942e69c79",
+  "target": ".",
+  "revision": "bc9cc10873d5a3abb659e5e4d80b6fb536cf263c",
+  "rules_version": "unavailable",
+  "diff_hash": "f12f41ddfc336491eace8562d74d2b502b15ef31699ac99b4ae312cfe2c33c00",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 9,
+    "changed_files": [
+      {
+        "file": "desktop/app.go",
+        "ranges": [
+          {
+            "start": 1119,
+            "end": 1119
+          },
+          {
+            "start": 1122,
+            "end": 1122
+          },
+          {
+            "start": 1129,
+            "end": 1129
+          }
+        ],
+        "before_hash": "4c80ba01fd20c3a4bf09b84c03a98c870475f96b3e2d14894e57059937bf8a4b",
+        "after_hash": "8ed50c8df211f9b9080f00e5b2d0825a7373aa24e7d2e3914b7eb86360ebb461"
+      },
+      {
+        "file": "desktop/frontend/src/lib/types.ts",
+        "ranges": [
+          {
+            "start": 22,
+            "end": 22
+          }
+        ],
+        "before_hash": "4467084769bc9d3e3b5039d570e46064827d66a72af2f8ff01060239b4192d46",
+        "after_hash": "c9326c0803a52a69df29319e42ba0acb50ac31350436d1974938e31148dbf027"
+      },
+      {
+        "file": "internal/agent/compact_commit.go",
+        "ranges": [
+          {
+            "start": 21,
+            "end": 28
+          },
+          {
+            "start": 93,
+            "end": 98
+          }
+        ],
+        "before_hash": "24a16d394ea3ae0b23329c5f35b7a0653ca11ae6befa1df9b72bc59624e0991b",
+        "after_hash": "447980a368aef39e387dc1a1e09b9c9c975edfd543d003fb65137f39cbfd32ff"
+      },
+      {
+        "file": "internal/agent/compact_projection.go",
+        "ranges": [
+          {
+            "start": 591,
+            "end": 596
+          },
+          {
+            "start": 744,
+            "end": 744
+          }
+        ],
+        "before_hash": "d10a98fe51198b9e4efefcada06fd9d20cc9fcc89704b0260131693cda4ebcc5",
+        "after_hash": "48c210d9cee49bb06e99f7dcc37c9f88a7c0a12e5db1572cc768093f6cae7704"
+      },
+      {
+        "file": "internal/agent/compact.go",
+        "ranges": [
+          {
+            "start": 450,
+            "end": 450
+          }
+        ],
+        "before_hash": "631d33141fb415005dd9ee334c2e0abb672e3256498de7a04cb4d77091f503e0",
+        "after_hash": "8678f8b580d97133724e5089953662222780f433b0c7af734be7dd4b6d5c1b37"
+      },
+      {
+        "file": "internal/agent/output_budget.go",
+        "ranges": [
+          {
+            "start": 499,
+            "end": 511
+          }
+        ],
+        "before_hash": "941e653ea3106d0ba71fd4d95114969f6dd7bf0586d927c8c5af9aa6a685da5b",
+        "after_hash": "019e5af16ab6a7da3065d3d9a30507bb976bad9a6929cbfcb87ecc780e84cc34"
+      },
+      {
+        "file": "internal/agent/preview.go",
+        "ranges": [
+          {
+            "start": 376,
+            "end": 392
+          }
+        ],
+        "before_hash": "d62958e1d50aa04d369852ff0ac74fa5c6ff76519a5164e201986c285424511f",
+        "after_hash": "1a7d3fbe38782aad100c897bc3c19d139343688b948031d83a77bf58dc11e1b6"
+      },
+      {
+        "file": "internal/agent/session_content.go",
+        "ranges": [
+          {
+            "start": 7,
+            "end": 7
+          },
+          {
+            "start": 67,
+            "end": 69
+          },
+          {
+            "start": 106,
+            "end": 106
+          },
+          {
+            "start": 124,
+            "end": 124
+          }
+        ],
+        "before_hash": "98a75bcafe330732a4be97043df669491d2dab09bb47d7ce32c1cde7902cbc4c",
+        "after_hash": "6d8f6b744885155e288b4cc7b100b8edac455a503b1564b3f52cc491e1b537da"
+      },
+      {
+        "file": "internal/tool/contract_test.go",
+        "ranges": [
+          {
+            "start": 60,
+            "end": 77
+          }
+        ],
+        "before_hash": "4e3dfaebc2598d9a5cfa14b8604beed4f0b40a164a213baacb816f5b3ae21524",
+        "after_hash": "7fc5fb75ed2ff625f9221096902b90e573463658b973eaccc23a37df487d5c95"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-09-06T08:44:05.404Z",
+    "completed_at": "2026-09-06T08:44:08.241Z",
+    "duration_ms": 2837,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "partial/INCONCLUSIVE",
+    "latencyMs": 2837,
+    "peakMemoryBytes": 123248640,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 0,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 0,
+  "rewake_finding_count": 0,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [],
+  "findings": [],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T084408241Z-185305-40101f9e1812.json",
+    "latest_report": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79.json",
+    "history_summary": ".mimosa/history/run-20260906T084408241Z-185305-40101f9e1812.json"
+  }
+}

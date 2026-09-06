@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20260906T035801376Z-275167-23d31e476f4e",
+  "runStatus": "inconclusive",
+  "errors": [
+    "bash-discovery:benchmarks/e2e/tasks/explore-wide-defect-forced/workdir/pkg/oscar.py: bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+    "baseline:benchmarks/e2e/tasks/explore-wide-defect-forced/workdir/pkg/quebec.py: baseline_partial: baseline exceeded 5000 candidate files"
+  ],
+  "target": ".",
+  "revision": "319735f2adef7207311ea14ab8b3a4b71faa82c7",
+  "diffHash": "c64925f9eee768054b9a32aed804135222f66465ed0b504b57f6cd92a49802fb",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-09-06T03:58:01.376Z",
+  "timing": {
+    "startedAt": "2026-09-06T03:57:58.646Z",
+    "completedAt": "2026-09-06T03:58:01.376Z",
+    "durationMs": 2730
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "bash_discovery_incomplete": 1,
+      "baseline_partial": 1,
+      "project_check_failed": 2
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T035801376Z-275167-23d31e476f4e.json"
+}

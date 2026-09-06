@@ -200,6 +200,12 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   ToggleMaximiseMainWindow(): Promise<void>;
   IsMainWindowMaximised(): Promise<boolean>;
   CloseMainWindow(): Promise<void>;
+  // ── TeamPanel / jobs / trash ──
+  JobOutputForTab(tabID: string, jobID: string): Promise<unknown>;
+  JobPanelJobsForTab(tabID: string): Promise<unknown[]>;
+  ReportRenderingPerf(count: number, maxMs: number, avgMs: number): Promise<void>;
+  TeamPanelViewForTab(tabID: string): Promise<unknown>;
+  TrashTopicForce(topicID: string): Promise<void>;
   // ── Heartbeat ──
   HeartbeatListTasks(): Promise<unknown>;
   HeartbeatReloadTasks(): Promise<unknown>;
@@ -5113,6 +5119,11 @@ function makeMockApp(): AppBindings {
     },
     async HeartbeatTriggerNow(_id: string) {},
     async HeartbeatGenerateID() { return "mock-" + Date.now().toString(36); },
+    async JobOutputForTab() { return null; },
+    async JobPanelJobsForTab() { return []; },
+    async ReportRenderingPerf() {},
+    async TeamPanelViewForTab() { return null; },
+    async TrashTopicForce() {},
     async ListTasks() { return []; },
     async CurrentTaskSessionID() { return ""; },
     async ListTasksForSession() { return []; },

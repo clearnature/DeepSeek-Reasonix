@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260906T131243548Z-362041-ee22eb108a62",
+  "runId": "20260906T131243548Z-362041-ee22eb108a62",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "bash_discovery_incomplete",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/migrate-signature-3packages-forced/workdir/pkgs/gamma/quota_8.py",
+        "detail": "project enumeration exceeded 5000 reviewable files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/migrate-signature-3packages-forced/workdir/pkgs/gamma/quota_8.py",
+        "detail": "baseline exceeded 5000 candidate files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/migrate-signature-3packages-forced/workdir/pkgs/gamma/quota_8.py",
+        "detail": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/migrate-signature-3packages-forced/workdir/pkgs/gamma/quota_8.py",
+        "detail": "baseline_partial: baseline exceeded 5000 candidate files",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "2197ffd978aedd29aa02d3ed2f9334f04c40a4d3",
+  "diffHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "rulesVersion": "unavailable",
+  "sessionHash": "621322a67acebf9b85e92376de2de0e4c0a0a66009857ac5e70ba93cc2bebbec",
+  "reportRef": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T131243548Z-362041-ee22eb108a62.json",
+  "events": [],
+  "observedFindingIds": [],
+  "verifiedFiles": [],
+  "recordedAt": "2026-09-06T13:12:44.222Z"
+}

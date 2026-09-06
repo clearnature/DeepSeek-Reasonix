@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260906T113039825Z-324312-2bf5f9673c25",
+  "runId": "20260906T113039825Z-324312-2bf5f9673c25",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": [
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/migrate-signature-3packages/workdir/pkgs/alpha/rebate_4.py",
+        "detail": "baseline exceeded 5000 candidate files",
+        "affectsCompletion": false
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "be2f8020919d06933985145d88f0589a6ad26690",
+  "diffHash": "996876f8d0afd5386b76dbd6d46c74273f6f211b4adec69b6d752633a730d98a",
+  "rulesVersion": "unavailable",
+  "sessionHash": "621322a67acebf9b85e92376de2de0e4c0a0a66009857ac5e70ba93cc2bebbec",
+  "reportRef": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T113039825Z-324312-2bf5f9673c25.json",
+  "events": [],
+  "observedFindingIds": [
+    "mimosa-3a574aac7a07c764907e07a0"
+  ],
+  "verifiedFiles": [
+    {
+      "file": "internal/netclient/netclient_test.go",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-09-06T11:30:40.494Z"
+}

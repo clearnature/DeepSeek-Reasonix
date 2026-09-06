@@ -1,0 +1,332 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260906T044801151Z-74836-5c516e8af4cd",
+  "runId": "20260906T044801151Z-74836-5c516e8af4cd",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "bash_discovery_incomplete",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/diagnose-float-total/workdir/tests/test_invoice.py",
+        "detail": "project enumeration exceeded 5000 reviewable files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "bash_discovery_truncated",
+        "stage": "bash-discovery",
+        "target": "internal/agent/live_deepseek_recovery_test.go",
+        "detail": "changed-file discovery exceeded 80 files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "changed_file_unreadable",
+        "stage": "candidate-select",
+        "target": "internal/event/session_context_diagnostics.go",
+        "detail": "observed changed file no longer exists or cannot be read",
+        "affectsCompletion": true
+      },
+      {
+        "code": "candidate_limit_exceeded",
+        "stage": "candidate-select",
+        "target": "internal/provider/responses/reasoning_replay_test.go",
+        "detail": "62 changed reviewable file(s) were not scanned because the limit is 20",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/explore-wide-defect-forced/workdir/pkg/oscar.py",
+        "detail": "baseline exceeded 5000 candidate files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/sessionstate.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/sampling_request.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/event/event.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/provider.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/eventwire/wire_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/tool/builtin/editsource.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/tool/builtin/retrieve.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/tool/builtin/writefile.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/serve/final_readiness_recovery.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/serve/serve.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/serve/serve_portfile_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/serve/serve_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/projection.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/reasoning_replay.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/retry.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/server_search.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/responses/reasoning_replay.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/diagnose-float-total/workdir/tests/test_invoice.py",
+        "detail": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "internal/agent/live_deepseek_recovery_test.go",
+        "detail": "bash_discovery_truncated: changed-file discovery exceeded 80 files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "candidate-select",
+        "target": "internal/event/session_context_diagnostics.go",
+        "detail": "changed_file_unreadable: observed changed file no longer exists or cannot be read",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "candidate-select",
+        "target": "internal/provider/responses/reasoning_replay_test.go",
+        "detail": "candidate_limit_exceeded: 62 changed reviewable file(s) were not scanned because the limit is 20",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/explore-wide-defect-forced/workdir/pkg/oscar.py",
+        "detail": "baseline_partial: baseline exceeded 5000 candidate files",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/sessionstate.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/sampling_request.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/event/event.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/provider.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/eventwire/wire_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/tool/builtin/editsource.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/tool/builtin/retrieve.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/tool/builtin/writefile.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/serve/final_readiness_recovery.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/serve/serve.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/serve/serve_portfile_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/serve/serve_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/projection.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/reasoning_replay.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/retry.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/server_search.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/responses/reasoning_replay.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "dd8084f9ab1fba0a37f002ba1492893419b4134a",
+  "diffHash": "9df7d0d427e92f112ba39c603cf2e12e5615f204a853bd1ac001b85e9f2f5250",
+  "rulesVersion": "unavailable",
+  "sessionHash": "621322a67acebf9b85e92376de2de0e4c0a0a66009857ac5e70ba93cc2bebbec",
+  "reportRef": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T044801151Z-74836-5c516e8af4cd.json",
+  "events": [],
+  "observedFindingIds": [],
+  "verifiedFiles": [],
+  "recordedAt": "2026-09-06T04:48:01.821Z"
+}

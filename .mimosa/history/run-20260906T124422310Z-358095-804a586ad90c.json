@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20260906T124422310Z-358095-804a586ad90c",
+  "runStatus": "inconclusive",
+  "errors": [
+    "bash-discovery:benchmarks/e2e/tasks/migrate-signature-3packages-forced/workdir/pkgs/gamma/quota_8.py: bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+    "bash-discovery:internal/provider/server_search_test.go: bash_discovery_truncated: changed-file discovery exceeded 80 files",
+    "candidate-select:internal/tool/builtin/glob.go: candidate_limit_exceeded: 70 changed reviewable file(s) were not scanned because the limit is 20",
+    "baseline:benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py: baseline_partial: baseline exceeded 5000 candidate files",
+    "scan:internal/config/backfill_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/agent/agent.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/boot/boot.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/control/controller.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/provider/openai/fetch_models_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/capability/catalog_cache_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/provider/anthropic/anthropic.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/provider/openai/openai.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/boot/boot_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:sdk/go/types_generated.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/worktree/worktree.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/worktree/worktree_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/trajectory/recorder.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/tool/contract_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/tool/sessiontool/sessiontool.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/tool/sessiontool/sessiontool_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/tool/builtin/editsource.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "supply-chain-check:.: stop_budget_exhausted: focused supply-chain check was not run before the gate budget"
+  ],
+  "target": ".",
+  "revision": "c2fa477d6568c0d5afad63fdb55ea3daa5f4b525",
+  "diffHash": "89d76817ab4cd082af235fbfad8e3c1bff40830515819b676d0887b1baa7df70",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-09-06T12:44:22.310Z",
+  "timing": {
+    "startedAt": "2026-09-06T12:44:19.485Z",
+    "completedAt": "2026-09-06T12:44:22.310Z",
+    "durationMs": 2825
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "bash_discovery_incomplete": 1,
+      "bash_discovery_truncated": 1,
+      "candidate_limit_exceeded": 1,
+      "baseline_partial": 1,
+      "scanner_failed": 17,
+      "stop_budget_exhausted": 1,
+      "project_check_failed": 22
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T124422310Z-358095-804a586ad90c.json"
+}

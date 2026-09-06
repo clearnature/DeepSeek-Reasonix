@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20260906T112324633Z-305644-d7cfb19c92c3",
+  "runStatus": "inconclusive",
+  "errors": [
+    "bash-discovery:benchmarks/e2e/tasks/migrate-signature-3packages/workdir/pkgs/alpha/rebate_4.py: bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+    "baseline:benchmarks/e2e/tasks/migrate-signature-3packages/workdir/pkgs/alpha/shipment_6.py: baseline_partial: baseline exceeded 5000 candidate files",
+    "scan:desktop/tabs.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:desktop/session_catalog.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+  ],
+  "target": ".",
+  "revision": "cb93fa75be10d1e630c570d9f143cb3169386eb4",
+  "diffHash": "0c7481813fdc8f7a989f5f6aa51daa44a1298fb66e9122dcf48ad83d9660a1e4",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-09-06T11:23:24.633Z",
+  "timing": {
+    "startedAt": "2026-09-06T11:23:21.827Z",
+    "completedAt": "2026-09-06T11:23:24.633Z",
+    "durationMs": 2806
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "bash_discovery_incomplete": 1,
+      "baseline_partial": 1,
+      "scanner_failed": 2,
+      "project_check_failed": 4
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T112324633Z-305644-d7cfb19c92c3.json"
+}

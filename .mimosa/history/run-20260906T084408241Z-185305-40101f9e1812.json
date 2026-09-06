@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20260906T084408241Z-185305-40101f9e1812",
+  "runStatus": "inconclusive",
+  "errors": [
+    "bash-discovery:benchmarks/e2e/tasks/mfix-id-prefix/workdir/index.py: bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+    "baseline:benchmarks/e2e/tasks/mfix-header-case/verify.sh: baseline_partial: baseline exceeded 5000 candidate files",
+    "scan:desktop/frontend/src/lib/types.ts: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/agent/session_content.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/tool/contract_test.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/agent/compact.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/agent/compact_commit.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/agent/compact_projection.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/agent/output_budget.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:internal/agent/preview.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+    "scan:desktop/app.go: scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+  ],
+  "target": ".",
+  "revision": "bc9cc10873d5a3abb659e5e4d80b6fb536cf263c",
+  "diffHash": "f12f41ddfc336491eace8562d74d2b502b15ef31699ac99b4ae312cfe2c33c00",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-09-06T08:44:08.241Z",
+  "timing": {
+    "startedAt": "2026-09-06T08:44:05.404Z",
+    "completedAt": "2026-09-06T08:44:08.241Z",
+    "durationMs": 2837
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "bash_discovery_incomplete": 1,
+      "baseline_partial": 1,
+      "scanner_failed": 9,
+      "project_check_failed": 11
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T084408241Z-185305-40101f9e1812.json"
+}

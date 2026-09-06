@@ -1,0 +1,1001 @@
+{
+  "schema_version": "mimosa-task-review/v2",
+  "run_id": "20260906T023310331Z-221560-a99ed09cd7fb",
+  "run_status": "inconclusive",
+  "errors": [
+    {
+      "stage": "bash-discovery",
+      "target": "benchmarks/e2e/tasks/context-pressure-forced/workdir/pkgs/alpha/tenant_3.py",
+      "reason": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files"
+    },
+    {
+      "stage": "candidate-select",
+      "target": "internal/provider/openai/host.go",
+      "reason": "candidate_limit_exceeded: 59 changed reviewable file(s) were not scanned because the limit is 20"
+    },
+    {
+      "stage": "baseline",
+      "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+      "reason": "baseline_partial: baseline exceeded 5000 candidate files"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/config/backfill_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/agent/agent.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/boot/boot.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/control/controller.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/openai/fetch_models_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/boot/subagent_model_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/capability/catalog_cache_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/anthropic/anthropic.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/openai/openai.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/boot/boot_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "sdk/go/types_generated.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/opencode_go.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/opencode_go_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/provider.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/resolver.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/responses/image_test.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/responses/responses.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "scan",
+      "target": "internal/provider/openai/fetch_models.go",
+      "reason": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT"
+    },
+    {
+      "stage": "supply-chain-check",
+      "target": ".",
+      "reason": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget"
+    }
+  ],
+  "coverage": {
+    "schema_version": "mimosa-hook-coverage/v1",
+    "status": "partial",
+    "scope": "hook_observed_diff",
+    "baseline": {
+      "complete": false,
+      "captured_files": 5000,
+      "candidate_limit": 5000,
+      "truncated": true,
+      "enumeration_error_count": 0,
+      "snapshot_error_count": 0,
+      "compensated_target_count": 79
+    },
+    "change_tracking": {
+      "touched_observed": 10,
+      "touched_retained": 10,
+      "truncated": false,
+      "bash_mutation": true,
+      "bash_discovered": 79,
+      "bash_discovery_limit": 80,
+      "bash_discovery_truncated": false
+    },
+    "candidates": {
+      "eligible_files": 79,
+      "selected_files": 20,
+      "limit": 20,
+      "truncated": true
+    },
+    "scanning": {
+      "required_files": 18,
+      "scanned_files": 0,
+      "skipped_files": 0,
+      "failed_files": 18,
+      "project_checks_required": 1,
+      "project_checks_completed": 0
+    },
+    "notification": {
+      "eligible_findings": 0,
+      "detailed_findings": 0,
+      "detail_limit": 3,
+      "truncated": false
+    },
+    "reason_counts": {
+      "bash_discovery_incomplete": 1,
+      "candidate_limit_exceeded": 1,
+      "baseline_partial": 1,
+      "scanner_failed": 18,
+      "stop_budget_exhausted": 1,
+      "project_check_failed": 22
+    },
+    "reasons": [
+      {
+        "code": "bash_discovery_incomplete",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/context-pressure-forced/workdir/pkgs/alpha/tenant_3.py",
+        "detail": "project enumeration exceeded 5000 reviewable files",
+        "affects_completion": true
+      },
+      {
+        "code": "candidate_limit_exceeded",
+        "stage": "candidate-select",
+        "target": "internal/provider/openai/host.go",
+        "detail": "59 changed reviewable file(s) were not scanned because the limit is 20",
+        "affects_completion": true
+      },
+      {
+        "code": "baseline_partial",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "baseline exceeded 5000 candidate files",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/config/backfill_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/agent/agent.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/boot/boot.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/control/controller.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/fetch_models_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/boot/subagent_model_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/capability/catalog_cache_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/anthropic/anthropic.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/openai.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/boot/boot_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "sdk/go/types_generated.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/opencode_go.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/opencode_go_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/provider.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/resolver.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/responses/image_test.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/responses/responses.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/fetch_models.go",
+        "detail": "spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "stop_budget_exhausted",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "bash-discovery",
+        "target": "benchmarks/e2e/tasks/context-pressure-forced/workdir/pkgs/alpha/tenant_3.py",
+        "detail": "bash_discovery_incomplete: project enumeration exceeded 5000 reviewable files",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "candidate-select",
+        "target": "internal/provider/openai/host.go",
+        "detail": "candidate_limit_exceeded: 59 changed reviewable file(s) were not scanned because the limit is 20",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline",
+        "target": "benchmarks/e2e/tasks/context-pressure/workdir/pkgs/beta/batch_2.py",
+        "detail": "baseline_partial: baseline exceeded 5000 candidate files",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/config/backfill_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/agent/agent.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/boot/boot.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/control/controller.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/fetch_models_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/boot/subagent_model_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/capability/catalog_cache_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/anthropic/anthropic.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/openai.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/boot/boot_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "sdk/go/types_generated.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/opencode_go.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/opencode_go_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/provider.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/resolver.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/responses/image_test.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/responses/responses.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "internal/provider/openai/fetch_models.go",
+        "detail": "scanner_failed: spawnSync /home/yanli/.local/share/fnm/node-versions/v24.1.0/installation/bin/node ETIMEDOUT",
+        "affects_completion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "supply-chain-check",
+        "target": ".",
+        "detail": "stop_budget_exhausted: focused supply-chain check was not run before the gate budget",
+        "affects_completion": true
+      }
+    ],
+    "reasons_truncated": false
+  },
+  "generated_at": "2026-09-06T02:33:10.331Z",
+  "session_id": "sess_ef80bc9b-c70d-429a-aff0-f23942e69c79",
+  "target": ".",
+  "revision": "9b7d0122369129d7f4b878f626dc261de345de13",
+  "rules_version": "unavailable",
+  "diff_hash": "5ee6149033ed5137118c5788df40bef29898447f3ce3fa936928114380a27c85",
+  "diff": {
+    "algorithm": "sha256",
+    "changed_file_count": 20,
+    "changed_files": [
+      {
+        "file": "go.mod",
+        "ranges": [
+          {
+            "start": 30,
+            "end": 30
+          }
+        ],
+        "before_hash": "f1c86e2c1cd566a3176104f059f58a22b7de987ed6f23d6bbde600e28e7ea404",
+        "after_hash": "480969b1edaf697c9ad84371356122685f79ff5ddd0171f138138adabf1735a7"
+      },
+      {
+        "file": "go.sum",
+        "ranges": [
+          {
+            "start": 125,
+            "end": 126
+          }
+        ],
+        "before_hash": "916ce52c14373f755f51fbeb639def122f66a25e8a0970b3dc0d141ad9e4b16f",
+        "after_hash": "bc0c46955266c9dcc1596aca6203996af60488cfb68c4f622899131b0a3ac256"
+      },
+      {
+        "file": "internal/agent/agent.go",
+        "ranges": [
+          {
+            "start": 23,
+            "end": 23
+          },
+          {
+            "start": 882,
+            "end": 883
+          },
+          {
+            "start": 885,
+            "end": 885
+          },
+          {
+            "start": 1232,
+            "end": 1232
+          },
+          {
+            "start": 1804,
+            "end": 1804
+          },
+          {
+            "start": 1816,
+            "end": 1816
+          },
+          {
+            "start": 1820,
+            "end": 1820
+          },
+          {
+            "start": 2891,
+            "end": 2891
+          },
+          {
+            "start": 2904,
+            "end": 2904
+          },
+          {
+            "start": 2906,
+            "end": 2906
+          },
+          {
+            "start": 2908,
+            "end": 2908
+          },
+          {
+            "start": 2913,
+            "end": 2929
+          }
+        ],
+        "before_hash": "ffc6f87118ab900578ee208d5b8044ecb42d62b381c7ebc94ce5d1f5d550bbf7",
+        "after_hash": "2be5469941bb3ec0f0870707d483f8a95c9350e53f269eb2f479b93aa66b9dba"
+      },
+      {
+        "file": "internal/boot/boot_test.go",
+        "ranges": [
+          {
+            "start": 902,
+            "end": 905
+          }
+        ],
+        "before_hash": "0ed64b3bfdd01d35a21362a8ac7cfa17b6162b55926f01a6c21d2996eb12ee34",
+        "after_hash": "216cbff8394207fe3dd9358036c7b1446457ebe51dc8649d041326c36fc23c5a"
+      },
+      {
+        "file": "internal/boot/boot.go",
+        "ranges": [
+          {
+            "start": 383,
+            "end": 383
+          },
+          {
+            "start": 386,
+            "end": 386
+          },
+          {
+            "start": 389,
+            "end": 391
+          },
+          {
+            "start": 1763,
+            "end": 1763
+          },
+          {
+            "start": 1770,
+            "end": 1774
+          },
+          {
+            "start": 1789,
+            "end": 1793
+          },
+          {
+            "start": 1806,
+            "end": 1806
+          },
+          {
+            "start": 2545,
+            "end": 2554
+          },
+          {
+            "start": 2556,
+            "end": 2560
+          }
+        ],
+        "before_hash": "b1f02a770c7c328c0cdac3e3a81e8cacf986b2756a8541faa7220b2750b44d8d",
+        "after_hash": "e588b895e2b8dd73f0d8288549356364e1e5d30604ee496c4d32f47ecf50d4fc"
+      },
+      {
+        "file": "internal/boot/subagent_model_test.go",
+        "ranges": [
+          {
+            "start": 167,
+            "end": 167
+          }
+        ],
+        "before_hash": "9b351e9cbbcab3a5eb8d275fe8874227460c23207e890341974a624517787c89",
+        "after_hash": "0fdb3ababb24796bdc3143451328f1ff4363e97bbcbc3a54fc96956575d24e75"
+      },
+      {
+        "file": "internal/capability/catalog_cache_test.go",
+        "ranges": [
+          {
+            "start": 31,
+            "end": 31
+          }
+        ],
+        "before_hash": "596f08c8ced4aaac7d8f728537e160e37af6c2d54e862d7255369627905cbef4",
+        "after_hash": "0e2b59a9cae36614d5069a46dce3d1e7d513114320875fb94733746be687c271"
+      },
+      {
+        "file": "internal/config/backfill_test.go",
+        "ranges": [
+          {
+            "start": 14,
+            "end": 14
+          },
+          {
+            "start": 2017,
+            "end": 2040
+          }
+        ],
+        "before_hash": "ebf0d102fe25e6fd4348ac9d3ff187a524c79da078971d02c1259592ce95a989",
+        "after_hash": "cb397030aa9812b8fe2caf39fa00d0ac4ac65e889ac494648c7ba1ae444ee8cf"
+      },
+      {
+        "file": "internal/control/controller.go",
+        "ranges": [
+          {
+            "start": 137,
+            "end": 144
+          },
+          {
+            "start": 512,
+            "end": 517
+          },
+          {
+            "start": 693,
+            "end": 695
+          },
+          {
+            "start": 5744,
+            "end": 5746
+          },
+          {
+            "start": 5756,
+            "end": 5762
+          },
+          {
+            "start": 5769,
+            "end": 5783
+          }
+        ],
+        "before_hash": "672ef18b2b6baa26d119bb111766dc60168661ef9f54a89950ce10c3b9a86d17",
+        "after_hash": "d5123550b6cbfc924d03faa128c2b312e849cf3ea85176b6e5ad7dbe6315be6f"
+      },
+      {
+        "file": "internal/provider/anthropic/anthropic.go",
+        "ranges": [
+          {
+            "start": 113,
+            "end": 127
+          },
+          {
+            "start": 163,
+            "end": 163
+          },
+          {
+            "start": 197,
+            "end": 199
+          },
+          {
+            "start": 210,
+            "end": 218
+          }
+        ],
+        "before_hash": "b0c1034d494f1cabf9b86c5fd59b1ebd5321aa759ec746c84fa1471a6f6371d1",
+        "after_hash": "417862b3b5841e7264f5e7a364a0dbd138405619b9b99566b32105af2564c2f3"
+      },
+      {
+        "file": "internal/provider/openai/fetch_models_test.go",
+        "ranges": [
+          {
+            "start": 11,
+            "end": 12
+          },
+          {
+            "start": 47,
+            "end": 155
+          }
+        ],
+        "before_hash": "1515534cbf22c77bf7f88bc34c8f6ce42ebdb99c285dfc0e44e94c2c6615eaaa",
+        "after_hash": "bdd134b746062f017c3231a2073719e334e9f43260402b12730e887953105421"
+      },
+      {
+        "file": "internal/provider/openai/fetch_models.go",
+        "ranges": [
+          {
+            "start": 10,
+            "end": 10
+          },
+          {
+            "start": 14,
+            "end": 16
+          },
+          {
+            "start": 40,
+            "end": 43
+          },
+          {
+            "start": 66,
+            "end": 73
+          },
+          {
+            "start": 77,
+            "end": 95
+          },
+          {
+            "start": 128,
+            "end": 128
+          },
+          {
+            "start": 134,
+            "end": 152
+          },
+          {
+            "start": 154,
+            "end": 154
+          },
+          {
+            "start": 160,
+            "end": 161
+          },
+          {
+            "start": 166,
+            "end": 167
+          },
+          {
+            "start": 169,
+            "end": 169
+          },
+          {
+            "start": 175,
+            "end": 272
+          }
+        ],
+        "before_hash": "1b45f20556f34c44946fc21f0bc63f0905086893697c20eda071c458d48f474c",
+        "after_hash": "b8b97e03ad385ccdfd88f28af115246017e47786073b8c1187139ef8bb87deec"
+      },
+      {
+        "file": "internal/provider/openai/openai.go",
+        "ranges": [
+          {
+            "start": 93,
+            "end": 107
+          },
+          {
+            "start": 262,
+            "end": 262
+          },
+          {
+            "start": 295,
+            "end": 302
+          },
+          {
+            "start": 313,
+            "end": 321
+          }
+        ],
+        "before_hash": "f0d6c65499ff9927c59e5a50c2da1465e53de2006ecb09035a5eb3725adca40f",
+        "after_hash": "cfac37d677908c82a8d3acaeb176df2c9b0f0e0724afa8e6eaf83a33d228bdcd"
+      },
+      {
+        "file": "internal/provider/opencode_go_test.go",
+        "ranges": [
+          {
+            "start": 7,
+            "end": 18
+          },
+          {
+            "start": 68,
+            "end": 68
+          },
+          {
+            "start": 125,
+            "end": 207
+          }
+        ],
+        "before_hash": "eaa139e3745fc0619733b31b2f5d214acc0432dd10f52d9075fec59e940d61c4",
+        "after_hash": "e06ff9d209813d60238fceb4d7d20ca6c8edf1b7f3537e3c3fbb2c610203ff12"
+      },
+      {
+        "file": "internal/provider/opencode_go.go",
+        "ranges": [
+          {
+            "start": 4,
+            "end": 4
+          },
+          {
+            "start": 6,
+            "end": 6
+          },
+          {
+            "start": 33,
+            "end": 40
+          },
+          {
+            "start": 45,
+            "end": 48
+          },
+          {
+            "start": 50,
+            "end": 50
+          },
+          {
+            "start": 56,
+            "end": 57
+          },
+          {
+            "start": 59,
+            "end": 116
+          },
+          {
+            "start": 118,
+            "end": 118
+          },
+          {
+            "start": 199,
+            "end": 280
+          }
+        ],
+        "before_hash": "9c4351520268e8a64febf013ffb38125ab9f939568844271aa5e6ec59e7059ef",
+        "after_hash": "856e078806aedfc92db8893cffd34fe1752a90335252b4b4e84b7726a2f0241a"
+      },
+      {
+        "file": "internal/provider/provider.go",
+        "ranges": [
+          {
+            "start": 1136,
+            "end": 1138
+          }
+        ],
+        "before_hash": "928b555fd462d9f07c32dc9820623c7dab24e9b904dd91970e18884b788d7c49",
+        "after_hash": "654a0641182308bd199e150a5ade6f6b06c261b51e998108eef1eba9c4d447c5"
+      },
+      {
+        "file": "internal/provider/resolver.go",
+        "ranges": [
+          {
+            "start": 12,
+            "end": 28
+          }
+        ],
+        "before_hash": "69232201c5b71afabd56e4dca96606cbc94b4bb1d82ab80404859206cffae8a1",
+        "after_hash": "6729b873dd45781d48bf443f3dfb684b086dd747bfe6b38ce6a03eb1eb4f4623"
+      },
+      {
+        "file": "internal/provider/responses/image_test.go",
+        "ranges": [
+          {
+            "start": 36,
+            "end": 72
+          }
+        ],
+        "before_hash": "2750174e22959827a435459034de002a6b5d81a01e125593be0a7a41359754a2",
+        "after_hash": "77ced235a726ce6b5f4ffde7c6ae1b3954d4a79f2b7f3f829f3d5fe375588b6e"
+      },
+      {
+        "file": "internal/provider/responses/responses.go",
+        "ranges": [
+          {
+            "start": 55,
+            "end": 56
+          },
+          {
+            "start": 70,
+            "end": 70
+          },
+          {
+            "start": 120,
+            "end": 120
+          },
+          {
+            "start": 147,
+            "end": 148
+          },
+          {
+            "start": 150,
+            "end": 152
+          },
+          {
+            "start": 165,
+            "end": 174
+          },
+          {
+            "start": 179,
+            "end": 187
+          },
+          {
+            "start": 189,
+            "end": 191
+          }
+        ],
+        "before_hash": "48e2c475c25c9167805752ae9ad9ba5ec884870a98726747fcc0c463fb8e31f3",
+        "after_hash": "b72269a3996b7b57dfcc3bfceb05d6543b65f0f88278a291ffe692f576605bb1"
+      },
+      {
+        "file": "sdk/go/types_generated.go",
+        "ranges": [
+          {
+            "start": 223,
+            "end": 223
+          }
+        ],
+        "before_hash": "6b9eb3174037bafbca64b8cc84b7e889e9fe4650289b09463d24850523e7f241",
+        "after_hash": "e498dacd2990d4bc80df0fe62420f3f3256e9ee38d9e595457d3653f2faa2f70"
+      }
+    ]
+  },
+  "timing": {
+    "started_at": "2026-09-06T02:33:07.496Z",
+    "completed_at": "2026-09-06T02:33:10.331Z",
+    "duration_ms": 2835,
+    "measurement": "hook_wall_clock"
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "model_calls": 0,
+    "measurement": "known-zero"
+  },
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "Stop",
+    "outcome": "partial/INCONCLUSIVE",
+    "latencyMs": 2835,
+    "peakMemoryBytes": 125366272,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 0,
+    "cache": {
+      "hits": 0,
+      "misses": 0,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 0,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "finding_count": 0,
+  "rewake_finding_count": 0,
+  "evidence_boundary": {
+    "scan": "candidate",
+    "static_fix_verification": "observed_static_only",
+    "runtime_verification": "not_performed"
+  },
+  "finding_events": [],
+  "findings": [],
+  "artifacts": {
+    "immutable_report": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79-20260906T023310331Z-221560-a99ed09cd7fb.json",
+    "latest_report": ".mimosa/reports/task-review-sess_ef80bc9b-c70d-429a-aff0-f23942e69c79.json",
+    "history_summary": ".mimosa/history/run-20260906T023310331Z-221560-a99ed09cd7fb.json"
+  }
+}
