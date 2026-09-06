@@ -266,6 +266,34 @@ func (a *Agent) SetSessionPath(path string) {
 	a.sess.compactionMu.Unlock()
 }
 
+// ModelVisibleFingerprint fingerprints the agent's current model-visible view.
+// Resume telemetry compares it across reopens to separate view divergence from
+// server-side cache expiry.
+func (a *Agent) ModelVisibleFingerprint() string {
+	if a == nil {
+		return ""
+	}
+	return providerVisibleFingerprint(modelInputMessages(a.modelVisibleMessages()))
+}
+
+// ProjectionCoveredMatch reports whether the sidecar projection's covered
+// prefix byte-matches the transcript. True means the first send after resume
+// transmits projection + tail instead of the full history.
+func (a *Agent) ProjectionCoveredMatch() (match bool, covered int) {
+	if a == nil || a.sess.conversation == nil {
+		return false, 0
+	}
+	msgs, _ := a.sess.conversation.snapshotMessagesVersion()
+	a.sess.compactionMu.Lock()
+	st := a.sess.compactionState
+	a.sess.compactionMu.Unlock()
+	covered = st.Projection.CoveredCount
+	if covered <= 0 || covered > len(msgs) || st.Projection.CoveredPrefixHash == "" {
+		return false, covered
+	}
+	return coveredPrefixHash(msgs, covered) == st.Projection.CoveredPrefixHash, covered
+}
+
 // SessionPath returns the bound transcript path.
 func (a *Agent) SessionPath() string {
 	if a == nil {

@@ -142,9 +142,69 @@ func (r *Recorder) Emit(e event.Event) {
 		r.recordTurnCompletion()
 	} else if r != nil && r.dispatcher != nil && e.Kind == event.Notice && isCompactionTelemetry(e.Text) {
 		r.recordCompaction(e)
+	} else if r != nil && r.dispatcher != nil && e.Kind == event.Notice && isResumeTelemetry(e.Text) {
+		r.recordResume(e)
 	} else if r != nil && r.dispatcher != nil && e.Kind == event.Notice && isEstimateTelemetry(e.Text) {
 		r.recordEstimateAnomaly(e)
 	}
+}
+
+// isResumeTelemetry matches the controller's session-resume gate notices
+// (C1) so every reopen decision lands in the stats file with its cache
+// estimate and projection coverage.
+func isResumeTelemetry(text string) bool {
+	return text == "resume telemetry"
+}
+
+// recordResume parses a resume telemetry detail line
+// (path/state/idle_min/decision/proj_valid/proj_covered/view_fp/
+// covered_match/wire_fp/est) into a structured record. Best-effort; never
+// interrupts the event stream.
+func (r *Recorder) recordResume(e event.Event) {
+	if r == nil || r.dispatcher == nil {
+		return
+	}
+	rec := ResumeRecord{State: "unknown", Decision: "replay"}
+	for _, tok := range strings.Fields(e.Detail) {
+		k, v, ok := strings.Cut(tok, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "path":
+			rec.Path = v
+		case "state":
+			rec.State = v
+		case "idle_min":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.IdleMin = n
+			}
+		case "decision":
+			rec.Decision = v
+		case "proj_valid":
+			rec.ProjValid = v == "true"
+		case "proj_covered":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.ProjCovered = n
+			}
+		case "est":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.EstTok = n
+			}
+		case "view_fp":
+			rec.ViewFP = v
+		case "wire_fp":
+			rec.WireFP = v
+		case "covered_match":
+			rec.Covered = v == "true"
+		}
+	}
+	r.dispatcher.enqueue(record{
+		Timestamp: time.Now(),
+		ModelRef:  e.ModelRef,
+		Source:    r.source,
+		Resume:    &rec,
+	})
 }
 
 // isCompactionTelemetry matches the agent's compaction notices so every

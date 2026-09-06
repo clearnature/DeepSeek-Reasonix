@@ -79,6 +79,9 @@ type record struct {
 	// Compaction records one context-compaction pass (agent compaction
 	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
 	Compaction *CompactionRecord `json:"compaction,omitempty"`
+	// Resume records one session-resume gate decision (C1): how warm the
+	// provider cache was and whether the replay reused the projection.
+	Resume *ResumeRecord `json:"resume,omitempty"`
 }
 
 // CompactionRecord is the structured form of the agent's compaction telemetry
@@ -116,6 +119,23 @@ type CompactionRecord struct {
 	Results     int     `json:"results,omitempty"`
 	SavedChars  int     `json:"saved_chars,omitempty"`
 	PrefHash    string  `json:"pref_hash,omitempty"`
+}
+
+// ResumeRecord is the structured form of the agent's session-resume gate
+// notice (C1): the warm/cold/unknown cache estimate, the decision, and whether
+// the sidecar projection covered the transcript. Persisted so a historical
+// reopen's replay cost (projection+tail vs full history) is diagnosable.
+type ResumeRecord struct {
+	Path        string `json:"path,omitempty"`
+	State       string `json:"state,omitempty"` // warm | cold | unknown
+	IdleMin     int    `json:"idle_min,omitempty"`
+	Decision    string `json:"decision,omitempty"` // replay | compact-first | record-only
+	ProjValid   bool   `json:"proj_valid,omitempty"`
+	ProjCovered int    `json:"proj_covered,omitempty"`
+	EstTok      int    `json:"est,omitempty"`           // resume 决策时估算（超窗才 compact-first）
+	ViewFP      string `json:"view_fp,omitempty"`       // model-visible view fingerprint
+	Covered     bool   `json:"covered_match,omitempty"` // sidecar covered prefix byte-matches transcript
+	WireFP      string `json:"wire_fp,omitempty"`       // bytes sent on the last request
 }
 
 // EstimateAnomalyRecord is the structured form of the agent's estimate
