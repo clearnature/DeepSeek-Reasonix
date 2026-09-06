@@ -210,6 +210,12 @@ reasonix run "运行测试" --output-format stream-json
 执行失败时使用 `subtype: "error_during_execution"` 和 `is_error: true`。
 结构化模式会把运行时错误保留在 JSON 中，不再额外重复输出一份人类可读错误。
 
+完成校验器已移除。模型正常结束且没有工具调用时，当前轮次直接结束；包含工具调用时，
+继续进入工具循环；真正的空响应会在 frozen request 边界重试。旧的
+`completion_validation`、`completion_evaluator_model` 和
+`REASONIX_COMPLETION_VALIDATION_MODE` 设置仍可读取，但会被忽略，配置渲染器也不再生成；
+主机侧的就绪检查、预算、工具安全边界和恢复边界仍然有效。
+
 ### 脱敏机器接口
 
 自动化只需要生命周期遥测、不能接收 prompt、reasoning、工具参数/输出或审批文本时，

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"reasonix/internal/agent"
 	"reasonix/internal/event"
 	"reasonix/internal/provider"
 )
@@ -26,5 +25,5 @@ func historyLocalOnlyRows(m provider.Message) ([]HistoryMessage, bool) {
 			},
 		}}, true
 	}
-	return historySteerRows(agent.UserMessageText(m), true)
+	return historySteerRows(m.Content, true)
 }

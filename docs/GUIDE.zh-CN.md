@@ -541,7 +541,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | transcript 文本选择 | 复制 transcript 文本 | 应用内拖选松开后，本地会话通过可验证的系统剪贴板路径写入（macOS `pbcopy`、Linux 可用的 Wayland/X11 工具、Windows 系统剪贴板）；SSH 才回退到 OSC 52，并明确标记为回退而不是宣称原生复制成功。`Ctrl+C`/`Super+C`/`Meta+C` 或右键当前选区可再次复制。 |
 | 输入框文本选择 | 选中、复制或替换草稿文本 | 应用内拖选松开后，会通过与 transcript 相同的可验证剪贴板路径复制；输入或粘贴会替换选区，方向键会收起选区。 |
 | 没有活动选区时右键 | 在本地会话粘贴剪贴板文本 | 本地会话开启鼠标接管时，Reasonix 只读取文本并交给正常的 bracketed-paste 处理。SSH 下远端进程无法读取本机剪贴板，请使用终端粘贴快捷键；`/mouse` 可恢复终端原生右键菜单。存在活动选区时，右键仍优先复制该选区。 |
-| `/mouse` | 切换应用内鼠标接管 | 关闭后由终端处理原生拖选和右键菜单，但会失去应用内选区、滚动条和滚轮。可用 `REASONIX_DISABLE_MOUSE=1` 让每次会话默认关闭。SSH 远程会话默认即关闭，保证原生拖选/复制可用；`REASONIX_DISABLE_MOUSE=0` 可强制全局开启。 |
+| `/mouse` | 切换应用内鼠标接管 | 关闭后由终端处理原生拖选和右键菜单，但会失去应用内选区、滚动条和滚轮。可用 `REASONIX_DISABLE_MOUSE=1` 让每次会话默认关闭。SSH 远程会话默认即关闭，保证原生拖选/复制可用；`REASONIX_DISABLE_MOUSE=0` 可强制全局开启。SSH 下 TUI 还会开启同步输出（mode 2026）避免远端回传时整帧重绘闪烁；如需关闭可设置 `REASONIX_DISABLE_SYNC_OUTPUT=1`。 |
 | `Ctrl+C` | 复制、取消、清空或退出 | 有 transcript 或输入框活动选区时优先复制；否则取消运行中的 turn、清空非空输入，或在空输入下连按两次退出。 |
 | `Ctrl+D` | 退出 TUI | 立即退出。 |
 | 终端的文本粘贴快捷键 | 粘贴文本 | 文本保持终端原生 bracketed-paste 路径：macOS 通常是 `Cmd+V`，Linux 通常是 `Ctrl+Shift+V`，其它环境使用终端自身配置。Reasonix 只消费收到的文本粘贴事件，不会先探测图片。 |
@@ -573,7 +573,7 @@ CLI/TUI 文本输入可通过 `[ui].cursor_shape` 设置光标形状，支持 `u
 | 模型、provider 或 Resume 选择器 | `Up`/`Down` 或 `Ctrl+P`/`Ctrl+N`；搜索词为空时可用 `j`/`k`；输入文字过滤；`Enter`；`Esc` | 搜索、选择或关闭选择器；开始搜索后 `j`/`k` 会作为查询字符输入；`/provider` 会继续打开该 provider 的模型列表。 |
 | MCP 导入选择器 | `Up`/`Down` 或 `j`/`k`、`Space`、`Enter`、`Esc` / `Ctrl+C` | 移动、勾选服务器、导入勾选服务器，或取消。 |
 | MCP 管理器 | `Up`/`Down` 或 `j`/`k`、`Enter`、`Left`/`Right` 或 `h`/`l`、`r`、数字键、`q` / `Ctrl+C` | 导航服务器列表/详情、刷新、选择动作，或关闭。 |
-| `/clear` 确认 | 方向键或 `j`/`k` / `Tab`、`Enter`、`y`、`n`、`Esc` / `Ctrl+C` | 在 Clear/Cancel 间切换、确认清空，或取消。 |
+| `/clear` 确认 | 方向键或 `j`/`k` / `Tab`、`Enter`、`y`、`n`、`Esc` / `Ctrl+C` | 在 Clear/Cancel 间切换、确认清空，或取消。YOLO 模式下 `/clear` 直接清空，不再询问。 |
 
 模式含义：
 
@@ -802,7 +802,7 @@ RPC 调用。两者都可按服务器覆盖。
 并可通过 `run_skill` 调用（正文按需加载；只有索引行进入缓存稳定前缀）。配置或能力排障时
 用 `/reasonix-guide`，它会引导运行 `reasonix doctor capabilities`（见
 [能力诊断](./CAPABILITY_DIAGNOSTICS.zh-CN.md)）。
-`/new` 会开启新会话，同时保存之前的 transcript 供历史记录和恢复使用；`/clear` 会二次确认，确认后丢弃当前上下文且不保存。
+`/new` 会开启新会话，同时保存之前的 transcript 供历史记录和恢复使用；`/clear` 会丢弃当前上下文且不保存——默认需二次确认，但在 YOLO 模式下会立即清空（YOLO 本就承诺跳过确认）。
 `/tree` 查看已保存的对话分支，`/branch [name]` 从当前对话末端分支，`/branch <turn> [name]`
 从较早的 checkpoint 轮次分支，`/switch <id|name>` 切换到另一个分支。**自定义命令**
 是放在 `.reasonix/commands/`（项目）或 `~/.reasonix/commands/`（用户）下的 Markdown 文件——
@@ -996,13 +996,14 @@ Reasonix 会用确定性规则路由每一轮，不再调用额外的 classifier
 Planner 使用同一个稳定的 system prompt，单轮只追加很小的 `<planner-turn>` 标明
 显式路由，因此除本次 prompt 升级的一次缓存未命中外，不会持续破坏 Planner prefix
 cache。计划应区分已验证与候选触点，并在证据支持时补充非目标、风险、验收标准和
-命令级验证。若 Planner 在有界调研和最终总结轮后仍未给出最终计划，普通
-plan-and-execute 会用原始任务直接交给 Executor 继续；plan-only 与等待批准请求仍
-保持 fail-closed，并回滚不完整的 Planner 回合，避免留下无法继续的会话尾部。
+命令级验证。Planner 必须调用 `submit_plan`，没有提交计划的普通文本视为协议错误。
+若 Planner 在有界调研和最终总结轮后仍未给出最终计划，所有路由都 fail-closed，
+不会降级到 Executor，并回滚不完整的 Planner 回合，避免留下无法继续的会话尾部。
 
-Reasonix 会自动管理正常执行：活跃 Todo 连续 8 个工具调用轮次没有新的完成项、唯一读取、
-命令或修改时，宿主会要求执行器重新评估；Goal 到达后续阈值时会强制重新规划并继续，而不会因
-计数暂停。完全重复的操作不算进展，新的宿主可观测工作会自动续期。两级任务
+普通 clean final 即结束回合。Goal、review、guardian 仍保留各自的 continuation
+约束。Goal 中活跃 Todo 超过停滞阈值仍没有新的完成项、唯一读取、命令或修改时，
+宿主会强制缩小步骤、换工具/方法、聚焦委派或报告真实阻塞，然后继续执行。完全重复
+的操作不算进展，新的宿主可观测工作会自动续期。两级任务
 列表保持同一"唯一当前项"契约：唯一的 `in_progress` 是活跃的 level-1 子步骤，其 level-0
 阶段保持 `pending`；子步骤按顺序推进并签核，全部完成后阶段本身转为 `in_progress` 做
 最后签核。
@@ -1072,6 +1073,11 @@ destructive MCP 目标、来自未授权 server 的 reader，以及一切会改�
 可用 `read_subagent_result` 按 `offset_bytes` 分页读取该引用对应的完整答案；读取范围受当前
 会话 lineage 与工作区约束。没有持久化父会话的 headless 运行仍保持 ephemeral，只返回公平
 分配的有界预览，不能生成持久引用。
+
+已持久化的子 Agent 结果还会带有 `status`（`completed`、`partial`、`failed` 或
+`cancelled`）和 `retryable`。部分完成或可重试的失败会保留最后一条可见回答与引用，父 Agent
+可以用 `read_subagent_result` 查看，或通过 `task` / `run_skill` 的 `continue_from` 继续同一条
+transcript。
 
 交互式双模型 Planner 使用专用构造路径（`NewPlannerAgent`）：仍阻止 bash、文件写入与普通
 writer，但可通过固定的 `use_capability` 代理调用已授权、非 destructive 的 MCP，不再要求

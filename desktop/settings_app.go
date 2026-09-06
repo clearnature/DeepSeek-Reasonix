@@ -689,6 +689,7 @@ func providerViewFromEntryForRootWithResolverAndCredentials(p config.ProviderEnt
 		Headers:                     nonNilStringMap(p.Headers),
 		ExtraBody:                   nonNilAnyMap(p.ExtraBody),
 		AuthHeader:                  p.AuthHeader,
+		NoProxy:                     p.NoProxy,
 		KeySet:                      key.Set,
 		RequiresKey:                 requiresKey,
 		Configured:                  !requiresKey || key.Set,
@@ -2017,8 +2018,7 @@ func (a *App) rebuildSettingTurnLockedWithModel(setting string, tab *WorkspaceTa
 	return nil
 }
 
-// buildSettingReplacementController builds and migrates the replacement for rebuildSettingTurnLocked, returning the
-// controller, the runtime posture actually restored, and the session path it
+// buildSettingReplacementController builds and migrates the replacement for rebuildSettingTurnLocked, returning the controller, restored runtime, and session path it
 // bound. reload=false is the legacy settings path (boot.Build plus the
 // desktop's manual migration); reload=true is the stage-3b runtime reload,
 // routing build and migration through boot.Rebuild so history, approval mode
@@ -2040,6 +2040,7 @@ func (a *App) buildSettingReplacementController(tab *WorkspaceTab, snap tabRunti
 		CleanupPendingReconciler: reconcileDesktopCleanupPending,
 		SubagentParentLive:       a.subagentParentProbeForBuild(tab),
 		SessionRecoveryMeta:      a.tabSessionRecoveryMeta(tab),
+		PinnedContextLoader:      pinnedContextLoader(snap.workspaceRoot),
 		OnSessionRecovered:       a.handleTabSessionRecovered(tab),
 		OnSessionTransition:      a.handleTabSessionTransition(tab),
 		OnSessionTitleChanged:    a.onSessionTitleChanged,
@@ -2532,6 +2533,7 @@ func saveProviderConfig(c *config.Config, p ProviderView) error {
 	e.Headers = p.Headers
 	e.ExtraBody = p.ExtraBody
 	e.AuthHeader = p.AuthHeader
+	e.NoProxy = p.NoProxy
 	e.BalanceURL = strings.TrimSpace(p.BalanceURL)
 	e.ContextWindow = p.ContextWindow
 	e.ReasoningProtocol = p.ReasoningProtocol
@@ -3045,6 +3047,39 @@ func (a *App) FetchProviderModels(p ProviderView) ([]string, error) {
 	return nonNil(chatProviderModels(models)), nil
 }
 
+// networkProxySpecForRoot resolves the effective proxy policy chat requests use
+// for this workspace. The load includes project reasonix.toml and project .env
+// expansion but never pins provider credentials into the process environment.
+// A missing or unreadable config falls back to the default policy rather than
+// blocking model discovery.
+func (a *App) networkProxySpecForRoot(root string) netclient.ProxySpec {
+	cfg, err := config.LoadForRootWithoutCredentialsReadOnly(root)
+	if err != nil || cfg == nil {
+		return netclient.ProxySpec{}
+	}
+	return cfg.NetworkProxySpec()
+}
+
+// withProbeDirectHost mirrors the runtime's per-provider no_proxy bypass for the
+// unsaved editor state: when the edited provider is marked no_proxy, its
+// endpoint must also be probed directly. Custom proxy mode wins over provider
+// no_proxy, matching NetworkProxySpec's behavior.
+func withProbeDirectHost(spec netclient.ProxySpec, baseURL string, noProxy bool) netclient.ProxySpec {
+	if !noProxy || netclient.NormalizeMode(spec.Mode) == netclient.ModeCustom {
+		return spec
+	}
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return spec
+	}
+	host := u.Hostname()
+	if host == "" || slices.Contains(spec.DirectHosts, host) {
+		return spec
+	}
+	spec.DirectHosts = append([]string{host}, spec.DirectHosts...)
+	return spec
+}
+
 // FetchAllProviderModels fetches model lists for all providers in a single
 // batch. Models are fetched concurrently (up to 4 parallel requests) and
 // returned as a map keyed by provider name. Errors for individual providers
@@ -3055,6 +3090,7 @@ func (a *App) FetchAllProviderModels(providers []ProviderView) map[string][]stri
 	g, ctx := errgroup.WithContext(a.reqCtx())
 	g.SetLimit(4)
 	root := a.activeWorkspaceRoot()
+	proxy := a.networkProxySpecForRoot(root)
 	for i := range providers {
 		p := providers[i]
 		proxy := a.networkProxySpecForRoot(root)

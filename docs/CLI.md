@@ -237,6 +237,14 @@ Execution failures use `subtype: "error_during_execution"` and
 `is_error: true`. Structured modes keep runtime errors in JSON instead of also
 printing a duplicate human-readable error.
 
+The completion validator has been removed. A clean model stop without tool
+calls ends the turn directly; a response with tools continues through the tool
+loop, and a truly empty response is retried at the frozen-request boundary.
+Legacy `completion_validation`, `completion_evaluator_model`, and
+`REASONIX_COMPLETION_VALIDATION_MODE` settings remain readable but are ignored
+and are no longer emitted by the config renderer. Host-owned readiness, budget,
+tool-safety, and recovery boundaries remain active.
+
 ### Redacted machine interfaces
 
 Use the dedicated event flag when an automation needs lifecycle telemetry but

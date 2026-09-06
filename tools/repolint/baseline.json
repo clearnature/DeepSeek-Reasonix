@@ -1,16 +1,16 @@
 {
   "limits": {
-    "banner": 46,
+    "banner": 44,
     "commented-code": 1,
     "complexity": 1943,
-    "essay": 2098,
-    "file-size": 110136,
-    "function-size": 8436,
+    "essay": 2112,
+    "file-size": 110202,
+    "function-size": 8437,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
     "struct-state": 116,
-    "test-file-size": 70337
+    "test-file-size": 70301
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -41,7 +41,7 @@
     },
     "desktop/app_test.go": {
       "essay": 2,
-      "test-file-size": 10439
+      "test-file-size": 10391
     },
     "desktop/bot_bridge.go": {
       "essay": 3
@@ -127,7 +127,7 @@
       "file-size": 29
     },
     "desktop/frontend/src/components/ProjectTree.tsx": {
-      "file-size": 1477
+      "file-size": 1467
     },
     "desktop/frontend/src/components/RichComposerInput.tsx": {
       "file-size": 141
@@ -175,16 +175,16 @@
       "essay": 7
     },
     "desktop/history_slice.go": {
-      "banner": 2,
+      "banner": 1,
       "complexity": 8,
       "essay": 34,
-      "file-size": 1025,
+      "file-size": 931,
       "function-size": 20
     },
     "desktop/history_slice_test.go": {
-      "banner": 12,
+      "banner": 11,
       "essay": 1,
-      "test-file-size": 371
+      "test-file-size": 344
     },
     "desktop/history_test.go": {
       "test-file-size": 1102
@@ -222,6 +222,23 @@
     },
     "desktop/remote_markdown_image.go": {
       "complexity": 12
+    },
+    "desktop/remote_serve.go": {
+      "essay": 3
+    },
+    "desktop/remote_tab.go": {
+      "essay": 8,
+      "file-size": 182,
+      "function-size": 1
+    },
+    "desktop/remote_tab_commands.go": {
+      "essay": 1
+    },
+    "desktop/remote_tab_multisession.go": {
+      "essay": 2
+    },
+    "desktop/remote_tab_review_regressions_test.go": {
+      "test-file-size": 39
     },
     "desktop/remote_window_test.go": {
       "essay": 1,
@@ -262,7 +279,7 @@
     "desktop/settings_app.go": {
       "complexity": 29,
       "essay": 6,
-      "file-size": 3012
+      "file-size": 3048
     },
     "desktop/settings_app_test.go": {
       "test-file-size": 1813
@@ -294,7 +311,7 @@
       "test-file-size": 3260
     },
     "desktop/terminal.go": {
-      "file-size": 79
+      "file-size": 73
     },
     "desktop/theme_app.go": {
       "complexity": 9,
@@ -1611,9 +1628,6 @@
     },
     "workers/crash-report/src/index.ts": {
       "file-size": 874
-    },
-    "workers/crash-report/src/stats.ts": {
-      "file-size": 42
     }
   }
 }

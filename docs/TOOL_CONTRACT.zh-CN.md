@@ -14,14 +14,14 @@
 | `delete_range` | false | 用精确 start/end 文本锚点删除文件中的连续范围。 |
 | `delete_symbol` | false | 用 Go AST 删除 Go 源文件中的命名符号。 |
 | `edit_file` | false | 将文件中的唯一精确字符串替换为另一个字符串。 |
-| `glob` | true | 查找匹配 glob pattern 的文件。 |
-| `grep` | true | 在文件或目录下按正则搜索文本。 |
+| `glob` | true | 查找匹配 glob pattern 的文件。无依赖的 glob 应同轮下发。 |
+| `grep` | true | 在文件或目录下按正则搜索文本。无依赖的搜索应同轮下发。 |
 | `kill_shell` | false | 终止后台 `bash` 或 `task` job。 |
-| `ls` | true | 列出目录条目，可递归。 |
+| `ls` | true | 列出目录条目，可递归。无依赖的目录读取应同轮下发。 |
 | `move_file` | false | 移动或重命名文件。 |
 | `multi_edit` | false | 对单个文件原子应用多个编辑。 |
 | `notebook_edit` | false | 编辑 Jupyter notebook 的单个 cell。 |
-| `read_file` | true | 按可分页的行号格式读取文本文件。 |
+| `read_file` | true | 按可分页的行号格式读取文本文件。无依赖的读取应同轮下发。 |
 | `todo_write` | true | 记录并替换当前工作的结构化任务列表。 |
 | `wait` | true | 等待后台 job 完成并返回最终输出。 |
 | `web_fetch` | true | 通过 HTTP/HTTPS 获取 URL 文本内容。 |
@@ -99,6 +99,11 @@ call ID 时必须用它消除歧义。`offset` 默认 0，`limit` 默认 16KiB�
 `Subagent reference`，使合并结果始终低于单工具输出上限。`read_subagent_result`
 按 UTF-8 字节偏移分页读取某个引用对应的完整最终答案，因此长篇并行调研无需一次性全部
 注入父会话也不会丢失。引用只允许在当前会话 lineage 和工作区内读取。
+
+已持久化的子 Agent 结果还会携带明确的 `status`（`completed`、`partial`、`failed` 或
+`cancelled`）和 `retryable` 标志。部分完成或失败的子 Agent 可能仍带有最后一条可见回答和
+引用：用 `read_subagent_result` 查看，用原有 `task` / `run_skill` 的 `continue_from` 参数
+继续可重试的任务。`session:tool_result` 只用于普通工具输出，不用于读取子 Agent transcript。
 
 `use_capability`（`action` = `list` | `inspect` | `call` | `decline`）在 provider
 可见工具面上始终存在（没有按任务复杂度切换的工具档位）。可选工具仍在 host
