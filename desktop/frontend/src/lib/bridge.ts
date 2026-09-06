@@ -2712,7 +2712,7 @@ function makeMockApp(): AppBindings {
         emit({
           kind: "ask_request",
           ask: {
-            id: "mock-ask-preview",
+            id: `mock-ask-preview-${Date.now()}`,
             questions: [
               {
                 id: "q1",
