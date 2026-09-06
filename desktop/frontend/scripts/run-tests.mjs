@@ -79,9 +79,8 @@ for (const [name, owner] of OWNED_ELSEWHERE) {
   }
 }
 
-// Suites that statically import CSS (e.g. HeartbeatPanel's heartbeat.css) need
-// the css-stub loader hook so tsx resolves the import under node.
-const CSS_STUB_SUITES = new Set(["heartbeat-editor.test.tsx", "heartbeat-next-run.test.ts", "automation-management.test.tsx"]);
+// Every suite runs with the css-stub loader (see the spawn below): component
+// modules may statically import CSS at any depth, so the loader is unconditional.
 
 const suites = files.filter((name) => !OWNED_ELSEWHERE.has(name));
 console.log(`run-tests: ${suites.length} discovered suites (${OWNED_ELSEWHERE.size} owned by dedicated scripts)`);
