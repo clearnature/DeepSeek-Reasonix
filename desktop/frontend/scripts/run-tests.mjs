@@ -94,11 +94,11 @@ for (const name of suites) {
   // Node's built-in navigator.language follows the machine's ICU locale, and
   // suites assert English UI strings.
   const env = { ...process.env, LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" };
-  const extraArgs = CSS_STUB_SUITES.has(name)
-    // --import needs an absolute file URL: a bare relative path is resolved as
-    // a package specifier by Node and fails with ERR_MODULE_NOT_FOUND.
-    ? ["--import", pathToFileURL(resolve(SCRIPTS_DIR, "css-stub-register.mjs")).href]
-    : [];
+  // css-stub loads for every suite: component modules may statically import
+  // CSS at any depth (ManagementPageShell.css, heartbeat.css, …) and the
+  // loader is trivial, so a per-suite whitelist only chases failures one at a
+  // time. The --import flag needs an absolute file URL.
+  const extraArgs = ["--import", pathToFileURL(resolve(SCRIPTS_DIR, "css-stub-register.mjs")).href];
   const result = spawnSync(process.execPath, [tsxCli, ...extraArgs, path], { stdio: "inherit", env });
   if (result.error) console.error(`run-tests: spawn failed for ${path}: ${result.error.message}`);
   if (result.status !== 0) {
