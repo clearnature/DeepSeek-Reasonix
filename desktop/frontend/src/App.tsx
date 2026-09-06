@@ -4789,10 +4789,10 @@ export default function App() {
                 </button>
               </Tooltip>
               {shouldMountExternalOpener(activeTab, Boolean(sidebarImDetailConnection)) && activeTab && (
-                <ExternalOpener key={activeTab.id} tabId={activeTab.id} dismissSignal={transientOverlayDismissSignal} />
+                <ExternalOpener key={`external-opener:${activeTab.id}`} tabId={activeTab.id} dismissSignal={transientOverlayDismissSignal} />
               )}
               {!sidebarImDetailConnection && (
-                <TopicbarMoreMenu
+                <TopicbarSessionActions key={`session-actions:${activeTab?.id || "none"}`}
                   sessionHasContent={sessionHasContent}
                   getSessionMarkdown={getSessionMarkdown}
                   exportSession={(format) => void exportSession(format)}
