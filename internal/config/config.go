@@ -2347,3 +2347,7 @@ func (c *Config) providerNames() string {
 	}
 	return strings.Join(names, ", ")
 }
+
+// autoBackgroundizeEnv tunes [tools.background_jobs] foreground_backgroundize_seconds
+// for benchmarks and headless runs without touching project config.
+const autoBackgroundizeEnv = "REASONIX_AUTO_BACKGROUND_MS"

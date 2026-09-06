@@ -455,6 +455,9 @@ type Options struct {
 	Runner   agent.Runner
 	Executor *agent.Agent
 	Guardian *guardian.Session
+	// Teammates is the team orchestrator for multi-agent sessions (P6).
+	// Nil keeps single-agent behavior.
+	Teammates *agent.TeammateStore
 	// RecoveryReviewer is the optional independent recovery reviewer (nil =
 	// rule-only path with fail-closed human confirmation for ambiguous cases).
 	RecoveryReviewer recovery.Reviewer
