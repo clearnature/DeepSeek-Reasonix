@@ -134,9 +134,12 @@ type Controller struct {
 	visionModel            string
 	visionProviderResolver func(string) (provider.Provider, error)
 	visionModelSelector    func(string, string) (string, bool)
-	systemPrompt           string
-	sessionDir             string
-	commands               atomic.Pointer[[]command.Command]
+	// modelCapabilityResolver returns the adapter/config-resolved metadata for
+	// the exact active model. Nil keeps the legacy config-only behavior.
+	modelCapabilityResolver func(*config.ProviderEntry) config.ResolvedModelCapability
+	systemPrompt            string
+	sessionDir              string
+	commands                atomic.Pointer[[]command.Command]
 	// skills owns the session's discovered skills (enabled subset, full set, and
 	// the reloadable stores) — the skills slice of the Capabilities concern. See
 	// skill.go.
@@ -504,15 +507,18 @@ type Options struct {
 	VisionModel            string
 	VisionProviderResolver func(string) (provider.Provider, error)
 	VisionModelSelector    func(string, string) (string, bool)
-	SystemPrompt           string
-	SessionDir             string
-	SessionPath            string
-	Host                   *plugin.Host
-	Commands               []command.Command
-	Skills                 []skill.Skill
-	AllSkills              []skill.Skill
-	SkillStore             *skill.Store
-	AllSkillStore          *skill.Store
+	// ModelCapabilityResolver returns the adapter/config-resolved metadata for
+	// the exact active model. Nil keeps the legacy config-only behavior.
+	ModelCapabilityResolver func(*config.ProviderEntry) config.ResolvedModelCapability
+	SystemPrompt            string
+	SessionDir              string
+	SessionPath             string
+	Host                    *plugin.Host
+	Commands                []command.Command
+	Skills                  []skill.Skill
+	AllSkills               []skill.Skill
+	SkillStore              *skill.Store
+	AllSkillStore           *skill.Store
 	// DisableImplicitSkillInvocation controls model-facing discovery only;
 	// explicit /skill commands and management remain host-side capabilities.
 	DisableImplicitSkillInvocation bool
@@ -679,6 +685,7 @@ func New(opts Options) *Controller {
 		visionModel:                       strings.TrimSpace(opts.VisionModel),
 		visionProviderResolver:            opts.VisionProviderResolver,
 		visionModelSelector:               opts.VisionModelSelector,
+		modelCapabilityResolver:           opts.ModelCapabilityResolver,
 		systemPrompt:                      opts.SystemPrompt,
 		sessionDir:                        opts.SessionDir,
 		sessionPath:                       opts.SessionPath,
@@ -5736,7 +5743,13 @@ func (c *Controller) imageInputEnabled() bool {
 		return false
 	}
 	entry, ok := cfg.ResolveModel(ref)
-	return ok && config.EffectiveVision(entry)
+	if !ok {
+		return false
+	}
+	if c.modelCapabilityResolver != nil {
+		return c.modelCapabilityResolver(entry).State == config.CapabilitySupported
+	}
+	return config.EffectiveVision(entry)
 }
 
 // ImageInputEnabled reports whether the current model accepts direct image
