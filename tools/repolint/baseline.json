@@ -3,14 +3,14 @@
     "banner": 46,
     "commented-code": 1,
     "complexity": 1943,
-    "essay": 2101,
-    "file-size": 110169,
-    "function-size": 8430,
+    "essay": 2098,
+    "file-size": 110136,
+    "function-size": 8436,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
     "struct-state": 116,
-    "test-file-size": 70339
+    "test-file-size": 70337
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -32,7 +32,7 @@
     "desktop/app.go": {
       "complexity": 60,
       "essay": 71,
-      "file-size": 11409,
+      "file-size": 11413,
       "function-size": 355,
       "struct-state": 15
     },
@@ -76,7 +76,7 @@
       "essay": 2
     },
     "desktop/frontend/src/App.tsx": {
-      "file-size": 4753
+      "file-size": 4752
     },
     "desktop/frontend/src/__tests__/app-chrome-tabs.test.ts": {
       "test-file-size": 27
@@ -100,10 +100,10 @@
       "test-file-size": 352
     },
     "desktop/frontend/src/__tests__/settings-refresh-snapshot.test.tsx": {
-      "test-file-size": 228
+      "test-file-size": 214
     },
     "desktop/frontend/src/__tests__/tab-switch-hydration.test.tsx": {
-      "test-file-size": 161
+      "test-file-size": 162
     },
     "desktop/frontend/src/components/ApprovalModal.tsx": {
       "file-size": 235
@@ -115,19 +115,19 @@
       "file-size": 4001
     },
     "desktop/frontend/src/components/ContextPanel.tsx": {
-      "file-size": 86
+      "file-size": 52
     },
     "desktop/frontend/src/components/HistoryPanel.tsx": {
-      "file-size": 65
+      "file-size": 7
     },
     "desktop/frontend/src/components/MemoryPanel.tsx": {
       "file-size": 1088
     },
     "desktop/frontend/src/components/Message.tsx": {
-      "file-size": 43
+      "file-size": 29
     },
     "desktop/frontend/src/components/ProjectTree.tsx": {
-      "file-size": 1468
+      "file-size": 1477
     },
     "desktop/frontend/src/components/RichComposerInput.tsx": {
       "file-size": 141
@@ -136,7 +136,7 @@
       "file-size": 6943
     },
     "desktop/frontend/src/components/StatusBar.tsx": {
-      "file-size": 50
+      "file-size": 43
     },
     "desktop/frontend/src/components/ThemeGallery.tsx": {
       "file-size": 489
@@ -154,10 +154,10 @@
       "file-size": 1346
     },
     "desktop/frontend/src/custom/features/heartbeat/HeartbeatPanel.tsx": {
-      "file-size": 180
+      "file-size": 177
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 4941
+      "file-size": 4988
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 225
@@ -166,7 +166,7 @@
       "file-size": 264
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1554
+      "file-size": 1599
     },
     "desktop/frontend/src/lib/useController.ts": {
       "file-size": 4248
@@ -281,8 +281,8 @@
     },
     "desktop/tabs.go": {
       "complexity": 36,
-      "essay": 67,
-      "file-size": 7632,
+      "essay": 64,
+      "file-size": 7577,
       "function-size": 342,
       "struct-state": 23
     },
@@ -528,8 +528,8 @@
     "internal/agent/save.go": {
       "complexity": 33,
       "essay": 79,
-      "file-size": 1399,
-      "function-size": 99
+      "file-size": 1418,
+      "function-size": 105
     },
     "internal/agent/save_test.go": {
       "essay": 3,
@@ -944,14 +944,14 @@
     "internal/control/controller.go": {
       "complexity": 12,
       "essay": 91,
-      "file-size": 5508,
+      "file-size": 5523,
       "function-size": 84,
       "narrative": 4,
       "struct-state": 16
     },
     "internal/control/controller_test.go": {
       "essay": 1,
-      "test-file-size": 4617
+      "test-file-size": 4628
     },
     "internal/control/extension_ui.go": {
       "essay": 4,
