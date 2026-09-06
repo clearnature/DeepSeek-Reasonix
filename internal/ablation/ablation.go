@@ -19,15 +19,11 @@ const (
 	// FullFold off means a fold reads the previous projection instead of
 	// re-deriving its digest from the canonical transcript.
 	FullFold Module = "full-fold"
-	// AutoBackground off disables the P4 auto-backgroundize threshold: a
-	// foreground task never auto-requests a foreground→background handoff by
-	// elapsed time (the /background command still works).
-	AutoBackground Module = "auto-background"
 )
 
 // Modules returns every switchable module in the order arm names use.
 func Modules() []Module {
-	return []Module{Evidence, Planner, Subagent, Retrieval, Compaction, FullFold, AutoBackground}
+	return []Module{Evidence, Planner, Subagent, Retrieval, Compaction, FullFold}
 }
 
 // Set is the group of modules disabled for a run. The zero value is the

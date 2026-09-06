@@ -21,7 +21,6 @@
 package anthropic
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -127,6 +126,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		modelInfo.InputModalities = []provider.ModelModality{provider.ModalityText}
 	}
 	webSearch, _ := cfg.Extra["web_search"].(bool)
+	clientWebSearch, _ := cfg.Extra["client_web_search"].(bool)
 	headers, _ := cfg.Extra["headers"].(map[string]string)
 	authHeader, _ := cfg.Extra["auth_header"].(bool)
 	maxOutputTokens, _ := cfg.Extra["max_output_tokens"].(int)
@@ -147,7 +147,11 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("anthropic: network: %w", err)
 	}
+	if reject, _ := cfg.Extra["reject_redirects"].(bool); reject {
+		httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
 	return &client{
+		identityHeaders:  provider.NewClientIdentityHeaders(),
 		name:             name,
 		apiKey:           cfg.APIKey,
 		keyEnv:           keyEnv,
@@ -162,7 +166,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		vision:           vision,
 		modelInfo:        modelInfo,
 		mimo:             provider.IsMiMoEndpoint(root),
-		webSearch:        webSearch,
+		search:           provider.SearchPolicy{NativeEnabled: webSearch, ClientEnabled: clientWebSearch},
 		headers:          cleanCustomHeaders(headers),
 		authHeader:       authHeader,
 		defaultMaxTokens: maxOutputTokens,
@@ -182,6 +186,7 @@ func newHTTPClient(cfg provider.Config) (*http.Client, error) {
 }
 
 type client struct {
+	identityHeaders  http.Header
 	name             string
 	apiKey           string
 	keyEnv           string // api_key_env name, surfaced in auth errors
@@ -196,7 +201,7 @@ type client struct {
 	vision           bool   // model accepts image input — embed attached images as base64 image blocks
 	modelInfo        provider.ModelInfo
 	mimo             bool // true for MiMo — upgrades legacy tuple schemas to Draft 2020-12
-	webSearch        bool // enable server-side web_search tool (DeepSeek Anthropic API)
+	search           provider.SearchPolicy
 	headers          map[string]string
 	authHeader       bool // send Authorization: Bearer instead of Anthropic's x-api-key header
 	defaultMaxTokens int
@@ -239,8 +244,21 @@ func (c *client) RequiresToolCallReasoning() bool {
 }
 
 func (c *client) RequiresAssistantReasoningReplay(m provider.Message) bool {
+	if c == nil {
+		return false
+	}
+	if !c.deepseek {
+		return c.requiresReceivedReasoning(m)
+	}
+	// A turn carrying provider-issued reasoning must replay it, tools or not:
+	// DeepSeek's thinking mode 400s when a stored thinking block is not passed
+	// back. Without stored reasoning there is nothing to replay — plain text
+	// turns stay out of projection so healthy histories keep their backing.
+	if strings.TrimSpace(m.ReasoningContent) != "" {
+		return true
+	}
 	activity := len(m.ToolCalls) > 0 || len(m.ServerSearch) > 0
-	return c != nil && c.deepseek && activity && (c.deepSeekThinkingEnabled() || strings.TrimSpace(m.ReasoningContent) != "")
+	return activity && c.deepSeekThinkingEnabled()
 }
 
 func (c *client) AllowsEmptyReasoningFallback() bool { return false }
@@ -337,6 +355,7 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 			httpReq.Header.Set("anthropic-beta", "files-api-2025-04-14")
 		}
 		applyCustomHeaders(httpReq.Header, c.headers)
+		provider.ApplyOpenCodeGoHeaders(httpReq, c.baseURL, c.identityHeaders)
 		return httpReq, nil
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
@@ -358,8 +377,6 @@ func (c *client) Stream(ctx context.Context, req provider.Request) (<-chan provi
 func (c *client) buildRequest(ctx context.Context, req provider.Request) anthRequest {
 	var system []textBlock
 	var msgs []anthMessage
-	recoveryWithoutThinking := c.missingReasoningFallback(ctx)
-
 	// appendBlocks adds blocks under role, merging into the previous message when
 	// it shares the role (keeps user/assistant strictly alternating).
 	appendBlocks := func(role string, blocks ...contentBlock) {
@@ -367,13 +384,13 @@ func (c *client) buildRequest(ctx context.Context, req provider.Request) anthReq
 			return
 		}
 		if n := len(msgs); n > 0 && msgs[n-1].Role == role {
-			msgs[n-1].Content = append(msgs[n-1].Content, blocks...)
+			msgs[n-1].Content = mergeThinkingFirst(msgs[n-1].Content, blocks)
 			return
 		}
 		msgs = append(msgs, anthMessage{Role: role, Content: blocks})
 	}
 
-	messages := c.replayMessages(req.Messages, recoveryWithoutThinking)
+	messages := c.replayMessages(req.Messages)
 	for _, m := range provider.SanitizeToolPairing(messages) {
 		switch m.Role {
 		case provider.RoleSystem:
@@ -382,7 +399,7 @@ func (c *client) buildRequest(ctx context.Context, req provider.Request) anthReq
 			}
 		case provider.RoleUser:
 			if m.Content != "" {
-				appendBlocks("user", contentBlock{Type: "text", Text: m.Content})
+				appendBlocks("user", sessionContextTextBlocks(m.Content)...)
 			}
 			if c.vision {
 				for _, ref := range m.Images {
@@ -405,14 +422,13 @@ func (c *client) buildRequest(ctx context.Context, req provider.Request) anthReq
 			appendBlocks("user", block)
 		case provider.RoleAssistant:
 			var blocks []contentBlock
-			// Replay provider reasoning before the tool_use it led to. DeepSeek uses
-			// unsigned thinking blocks and requires the reasoning from a tool-call
-			// turn in every subsequent request, even if the current request no longer
-			// declares tools or has since disabled thinking. Anthropic proper requires
-			// a signature, so reasoning without one cannot be replayed on that endpoint.
-			if block, ok := c.replayReasoningBlock(m, recoveryWithoutThinking); ok {
-				blocks = append(blocks, block)
-			}
+			// Replay provider reasoning ahead of the content it led to. DeepSeek's
+			// thinking mode requires every historical assistant turn's thinking
+			// block back whenever the request declares tools — tool-call turn or
+			// not — even if the current request no longer declares tools or has
+			// since disabled thinking. Anthropic proper requires a signature, so
+			// reasoning without one cannot be replayed on that endpoint.
+			blocks = append(blocks, c.replayReasoningBlocks(m)...)
 			blocks = appendServerSearchBlocks(blocks, m.ServerSearch)
 			if m.Content != "" {
 				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
@@ -428,42 +444,9 @@ func (c *client) buildRequest(ctx context.Context, req provider.Request) anthReq
 		}
 	}
 
-	var tools []anthTool
-	if c.webSearch {
-		tools = append(tools, anthTool{Type: "web_search_20250305", Name: "web_search"})
-	}
-	for _, t := range req.Tools {
-		schema := t.Parameters
-		if len(schema) == 0 {
-			schema = json.RawMessage(`{"type":"object","properties":{}}`)
-		}
-		if c.mimo {
-			schema = provider.NormalizeLegacyTupleItemsForDraft202012(schema)
-		}
-		tools = append(tools, anthTool{Name: t.Name, Description: t.Description, InputSchema: schema})
-	}
-
-	// Prompt-cache breakpoints (ephemeral, prefix-match). DeepSeek ignores
-	// cache_control and manages prefix caching automatically, so keep those fields
-	// off its wire entirely. Render order for native Anthropic is
-	// tools → system → messages, so a marker on the last system block caches
-	// tools+system together; with no system, mark the last tool. A marker on the
-	// last block of the last message caches the conversation prefix, accruing hits
-	// incrementally as turns are appended. Max 4 breakpoints; we use ≤2. Keep
-	// Anthropic's default 5m TTL by omitting the ttl field. Besides being cheaper
-	// than the opt-in 1h write, this keeps provider-visible request bytes stable
-	// across turns, retries, and wall-clock timing.
+	tools := encodeAnthTools(c, req)
 	if !c.deepseek {
-		if n := len(system); n > 0 {
-			system[n-1].CacheControl = ephemeral()
-		} else if n := len(tools); n > 0 {
-			tools[n-1].CacheControl = ephemeral()
-		}
-		if n := len(msgs); n > 0 {
-			if k := len(msgs[n-1].Content); k > 0 {
-				msgs[n-1].Content[k-1].CacheControl = ephemeral()
-			}
-		}
+		markPromptCacheBreakpoints(system, tools, msgs)
 	}
 
 	maxTokens := req.MaxTokens
@@ -486,7 +469,7 @@ func (c *client) buildRequest(ctx context.Context, req provider.Request) anthReq
 	// uses type=adaptive plus display/output_config. LongCat-style compatible
 	// gateways use the simpler enabled|disabled knob and reject output_config.
 	if c.deepseek {
-		c.applyDeepSeekThinking(&r, req, recoveryWithoutThinking)
+		c.applyDeepSeekThinking(&r, req)
 	} else {
 		switch c.thinking {
 		case "adaptive":
@@ -558,6 +541,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 
 	tools := map[int]*provider.ToolCall{} // tool_use blocks, keyed by content index
 	searches := newSearchStream()
+	thinking := map[int]*provider.ThinkingBlock{}
 	argBuckets := map[int]int{} // last emitted 2KB progress bucket per block
 	var inTok, outTok, cacheCreate, cacheRead int
 	var stopReason string
@@ -578,8 +562,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		haveUsage = true
 	}
 
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner := provider.NewStreamScanner(resp.Body, 1024*1024)
 
 	for scanner.Scan() {
 		select { // ping the idle watchdog; non-blocking so a full buffer is fine
@@ -599,10 +582,13 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 
 		var ev streamEvent
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			send(provider.Chunk{Type: provider.ChunkError, Err: provider.StreamDecodeError(c.name, data, err)})
+			send(provider.Chunk{Type: provider.ChunkError, Err: scanner.DecodeError(c.name, data, err)})
 			return
 		}
 
+		if !updateThinkingStream(thinking, ev, send) {
+			return
+		}
 		switch ev.Type {
 		case "message_start":
 			if ev.Message != nil && ev.Message.Usage != nil {
@@ -622,18 +608,6 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			case "text_delta":
 				if ev.Delta.Text != "" {
 					if !send(provider.Chunk{Type: provider.ChunkText, Text: ev.Delta.Text}) {
-						return
-					}
-				}
-			case "thinking_delta":
-				if ev.Delta.Thinking != "" {
-					if !send(provider.Chunk{Type: provider.ChunkReasoning, Text: ev.Delta.Thinking}) {
-						return
-					}
-				}
-			case "signature_delta":
-				if ev.Delta.Signature != "" {
-					if !send(provider.Chunk{Type: provider.ChunkReasoning, Signature: ev.Delta.Signature}) {
 						return
 					}
 				}
@@ -702,6 +676,9 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	goto finalize
 
 finalize:
+	if len(thinking) > 0 {
+		send(provider.Chunk{Type: provider.ChunkReasoning, ReasoningState: provider.ReasoningIncomplete})
+	}
 	if haveUsage {
 		cacheWriteBilledTokens := 0.0
 		if cacheCreate > 0 && c.nativeAnthropic {
@@ -800,6 +777,7 @@ type anthMessage struct {
 // tool_use (echoing a prior assistant call), and tool_result. Unused fields are
 // omitted so each block serialises to its canonical shape.
 type contentBlock struct {
+	Data         string          `json:"data,omitempty"`
 	Type         string          `json:"type"`
 	Text         string          `json:"text,omitempty"`        // text
 	Thinking     string          `json:"thinking,omitempty"`    // thinking
@@ -843,6 +821,8 @@ type anthTool struct {
 	Name         string          `json:"name,omitempty"`
 	Description  string          `json:"description,omitempty"`
 	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
+	Strict       bool            `json:"strict,omitempty"`
+	DeferLoading bool            `json:"defer_loading,omitempty"`
 	CacheControl *cacheControl   `json:"cache_control,omitempty"`
 }
 

@@ -3,10 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
-	"time"
+	"strings"
 
-	"reasonix/internal/event"
 	"reasonix/internal/provider"
 )
 
@@ -17,91 +15,19 @@ type samplingRequest struct {
 	req provider.Request
 }
 
+func isEmptyStreamResult(text, reasoning string, calls []provider.ToolCall, responsesItems []json.RawMessage, serverSearch []provider.ServerSearchCall) bool {
+	return strings.TrimSpace(text) == "" &&
+		strings.TrimSpace(reasoning) == "" &&
+		len(calls) == 0 &&
+		len(responsesItems) == 0 &&
+		len(serverSearch) == 0
+}
+
 // modelInputMessages derives the stable provider-visible view from durable
 // storage. Tool Content is the first-visible bounded result; RawContent stays
 // local and is available only through the explicit session result reader.
 func modelInputMessages(msgs []provider.Message) []provider.Message {
 	return provider.ModelMessages(msgs)
-}
-
-// saveMainRequest freezes the exact messages AND tool schemas a sampling
-// request sends, so a later summarizer can reuse that byte prefix instead of
-// the live view (which drifts after prune/projection updates) or the live
-// tool set (which grows as MCP servers finish registering). Deep-copied: the
-// request payload is frozen and must not alias session storage.
-func (a *Agent) saveMainRequest(msgs []provider.Message, tools []provider.ToolSchema) {
-	cp := make([]provider.Message, len(msgs))
-	for i, m := range msgs {
-		cp[i] = m
-		cp[i].ToolCalls = append([]provider.ToolCall(nil), m.ToolCalls...)
-		cp[i].Images = append([]string(nil), m.Images...)
-		cp[i].ResponsesItems = append([]json.RawMessage(nil), m.ResponsesItems...)
-		cp[i].ServerSearch = append([]provider.ServerSearchCall(nil), m.ServerSearch...)
-	}
-	var toolCP []provider.ToolSchema
-	if len(tools) > 0 {
-		toolCP = make([]provider.ToolSchema, len(tools))
-		for i, s := range tools {
-			toolCP[i] = s
-			if len(s.Parameters) > 0 {
-				toolCP[i].Parameters = append(json.RawMessage(nil), s.Parameters...)
-			}
-		}
-	}
-	a.sess.lastMainReq.Store(&mainRequestBytes{messages: cp, tools: toolCP})
-	a.maybePersistFreshMainRequest()
-}
-
-// freshWireSidecarInterval throttles how often a main request refreshes the
-// sidecar's frozen wire bytes. Every tool-loop round trip rewrites the sidecar
-// at per-request frequency would make disk IO a per-turn cost; the interval
-// amortizes it while still leaving a recently-active session with a recent
-// prefix for the next resume.
-const freshWireSidecarInterval = 60 * time.Second
-
-// maybePersistFreshMainRequest refreshes the sidecar's last_wire_* fields with
-// the current frozen main-request bytes, throttled. The sidecar otherwise only
-// updates on compaction commits, so a long-lived session resumes with a stale
-// prefix whose server-side cache has already been evicted (2026-08-31 23:01:
-// 0% hit after 15h of activity). Refreshing keeps the resumed prefix equal to
-// the most recent main request — the byte range the server just cached, so the
-// first post-resume compaction replays a warm unit instead of a stale one.
-func (a *Agent) maybePersistFreshMainRequest() {
-	if a == nil || a.sess.path == "" {
-		return
-	}
-	now := time.Now()
-	if now.Sub(time.Unix(0, a.sess.lastMainReqPersist.Load())) < freshWireSidecarInterval {
-		return
-	}
-	saved := a.savedMainRequest()
-	if saved == nil || len(saved.messages) == 0 {
-		return
-	}
-	a.sess.compactionMu.Lock()
-	defer a.sess.compactionMu.Unlock()
-	// Re-check under the lock: a compaction commit may have just persisted.
-	if time.Since(time.Unix(0, a.sess.lastMainReqPersist.Load())) < freshWireSidecarInterval {
-		return
-	}
-	a.sess.compactionState.LastWireMessages = append([]provider.Message(nil), saved.messages...)
-	a.sess.compactionState.LastWireTools = append([]provider.ToolSchema(nil), saved.tools...)
-	a.sess.compactionState.UpdatedAt = now.UTC()
-	if err := a.persistCompactionStateLocked(); err != nil {
-		slog.Warn("agent: refresh frozen-wire sidecar", "err", err)
-		return
-	}
-	a.sess.lastMainReqPersist.Store(now.UnixNano())
-}
-
-// savedMainRequest returns the frozen bytes of the last sampling request, or
-// nil when none was sent in this process (fresh resume included).
-func (a *Agent) savedMainRequest() *mainRequestBytes {
-	p := a.sess.lastMainReq.Load()
-	if p == nil {
-		return nil
-	}
-	return p
 }
 
 // normalizeModelRequestMessages is shared by ordinary sampling and compaction
@@ -124,7 +50,7 @@ func (a *Agent) normalizeModelRequestMessages(msgs []provider.Message) []provide
 func (a *Agent) streamProviderRequest(ctx context.Context, req provider.Request) (<-chan provider.Chunk, error) {
 	ch, err := a.svc.prov.Stream(ctx, req)
 	if err != nil {
-		if limit := provider.AsOutputLimitError(err); limit != nil && req.MaxTokens > limit.MaxOutputTokens {
+		if limit := provider.AsOutputLimitError(err); !provider.ManagedRecovery(ctx) && limit != nil && req.MaxTokens > limit.MaxOutputTokens {
 			a.learnOutputBudget(limit.MaxOutputTokens)
 			retryReq := req
 			retryReq.MaxTokens = limit.MaxOutputTokens
@@ -138,35 +64,6 @@ func (a *Agent) streamProviderRequest(ctx context.Context, req provider.Request)
 	return ch, nil
 }
 
-func (a *Agent) handleSamplingError(
-	ctx context.Context,
-	attemptID string,
-	attempt int,
-	streamSink *deferredStreamSink,
-	frozen *samplingRequest,
-	result, last streamedTurn,
-	billable *provider.Usage,
-) (retry bool, terminal streamedTurn) {
-	if provider.IsStreamInterrupted(result.err) && attempt < maxSamplingAttempts {
-		streamSink.Discard()
-		reason := provider.StreamInterruptReason(result.err)
-		a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, reason, result.err)
-		a.svc.sink.Emit(event.Event{
-			Kind: event.Retrying, RetryAttempt: attempt, RetryMax: maxStreamRecoveries,
-			RetryScope: event.RetryScopeStream,
-		})
-		if !streamRetrySleep(ctx, attempt) {
-			return false, streamedTurn{usage: finalizeSamplingUsage(billable, result.usage), interrupted: true, err: ctx.Err()}
-		}
-		return true, streamedTurn{}
-	}
-	// Exhausted retries or non-retryable error: leave the last speculative UI
-	// visible (no discard) so LocalOnly can mirror it.
-	streamSink.Flush()
-	last.usage = finalizeSamplingUsage(billable, result.usage)
-	return false, last
-}
-
 // prepareSamplingRequest freezes one model-round request (preflight + interceptors).
 // Output budgets are resolved only here and never change the compact_ratio
 // trigger. Physical overflow may attempt at most one recovery summary.
@@ -175,7 +72,7 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	if err := a.applySummaryAdmissionToRequest(&frozen.req); err != nil {
+	if err := a.applyAdmissionToRequest(&frozen.req); err != nil {
 		// One-shot physical overflow recovery. Do not loop.
 		startProjectionVersion := a.currentProjectionVersion()
 		if _, perr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
@@ -191,36 +88,23 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		if rerr != nil {
 			return samplingRequest{}, rerr
 		}
-		if aerr := a.applySummaryAdmissionToRequest(&rebuilt.req); aerr != nil {
+		if aerr := a.applyAdmissionToRequest(&rebuilt.req); aerr != nil {
 			return samplingRequest{}, aerr
 		}
 		shape := a.requestCalibrationShape(rebuilt.req)
 		a.sess.output.activeReqShape.Store(&shape)
-		wire := freezeProviderRequest(rebuilt.req)
-		a.saveMainRequest(wire.Messages, wire.Tools)
-		return samplingRequest{req: wire}, nil
+		return samplingRequest{req: freezeProviderRequest(rebuilt.req)}, nil
 	}
 	shape := a.requestCalibrationShape(frozen.req)
 	a.sess.output.activeReqShape.Store(&shape)
-	wire := freezeProviderRequest(frozen.req)
-	a.saveMainRequest(wire.Messages, wire.Tools)
-	return samplingRequest{req: wire}, nil
+	return samplingRequest{req: freezeProviderRequest(frozen.req)}, nil
 }
 
 func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (samplingRequest, error) {
 	// CreatedAt is durable UI metadata, not model input. Strip it from the
 	// transport copy so wall-clock differences never invalidate the provider's
 	// prompt-cache prefix (and custom providers cannot accidentally send it).
-	policy := ContextPreparePolicy{Trigger: trigger}
-	// #8839 §1: prefer lastUsage observed tokens over fallback estimation.
-	// Fallback estimation (0.25 tok/char) overestimates code/JSON-heavy
-	// sessions by ~2.2x, causing false compaction triggers.
-	if u := a.LastUsage(); u != nil {
-		if pt := u.LatestPromptTokens(); pt > 0 {
-			policy.ObservedInputTokens = pt
-		}
-	}
-	prepared, err := a.contextManager().Prepare(ctx, policy)
+	prepared, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: trigger})
 	if err != nil {
 		return samplingRequest{}, err
 	}
@@ -240,13 +124,15 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 		ResponseFormat: responseFormatFromRequest(ctx),
 		EffortOverride: a.governorOverride(),
 	}
+	if provider.NativeToolSearchEnabled(a.svc.prov) {
+		req.ToolSearch = &provider.ToolSearch{Enabled: true}
+	}
 	// provider.request: the fully assembled request gets one last ruling
 	// (revalidated by the payload registry) before it goes on the wire.
 	req, err = a.interceptProviderRequest(ctx, req)
 	if err != nil {
 		return samplingRequest{}, err
 	}
-	a.sess.setWireFP(providerVisibleFingerprint(req.Messages))
 	return samplingRequest{req: req}, nil
 }
 
@@ -255,14 +141,33 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 // explicit range compression can continue to resolve anchors across calls.
 func (a *Agent) providerProjectionMessages(msgs []provider.Message) []provider.Message {
 	if a != nil {
-		// The provider-declared fallback owns this tool loop. Strict projection
-		// here would erase its completed tool round before adapter serialization.
-		if !a.sess.missingReasoning.fallbackActive || !provider.SupportsMissingReasoningFallback(a.svc.prov) {
-			if repaired, changed := provider.ProjectReplaySafeMessages(a.svc.prov, msgs); changed {
-				msgs = repaired
-			}
+		strongCutoff := a.sess.reasoningReplayStrongProjection
+		if strongCutoff > 0 && a.strictAlternatingRoles {
+			// The cutoff is measured after role coalescing on the repaired
+			// request, so apply the same outbound shape before slicing it.
+			msgs = coalesceProjectionUserRuns(msgs)
 		}
-		if a.strictAlternatingRoles {
+		if strongCutoff > 0 {
+			// A repaired thinking-400 conversation keeps the stripped
+			// projection only for the history that caused the rejection.
+			resolvedCutoff := resolveReasoningReplayPrefix(msgs, strongCutoff, a.sess.reasoningReplayStrongProjectionAnchor)
+			if resolvedCutoff > 0 {
+				if repaired, changed := provider.ProjectReasoningStrippedMessagesPrefix(a.svc.prov, msgs, resolvedCutoff); changed {
+					msgs = a.replayRecoveryFacts(msgs[:resolvedCutoff], repaired)
+				}
+			} else {
+				// The canonical shape no longer contains the repair anchor
+				// (for example after rewind). Do not silently disable all
+				// provider projection; re-arm from the current history.
+				a.sess.clearReasoningReplayStrongProjection()
+				if repaired, changed := provider.ProjectReplaySafeMessages(a.svc.prov, msgs); changed {
+					msgs = repaired
+				}
+			}
+		} else if repaired, changed := provider.ProjectReplaySafeMessages(a.svc.prov, msgs); changed {
+			msgs = repaired
+		}
+		if a.strictAlternatingRoles && a.sess.reasoningReplayStrongProjection <= 0 {
 			return coalesceProjectionUserRuns(msgs)
 		}
 	}
@@ -276,6 +181,7 @@ func freezeProviderRequest(req provider.Request) provider.Request {
 	if len(req.Messages) > 0 {
 		out.Messages = append([]provider.Message(nil), req.Messages...)
 		for i := range out.Messages {
+			out.Messages[i].ThinkingBlocks = append([]provider.ThinkingBlock(nil), out.Messages[i].ThinkingBlocks...)
 			if len(out.Messages[i].ToolCalls) > 0 {
 				out.Messages[i].ToolCalls = append([]provider.ToolCall(nil), out.Messages[i].ToolCalls...)
 			}

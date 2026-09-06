@@ -130,12 +130,6 @@ func EffortCapabilityForEntry(e *ProviderEntry) EffortCapability {
 		return EffortCapability{Supported: true, Levels: []string{"auto", "none", "low", "medium", "high", "max"}, Default: "auto"}
 	case e != nil && e.Kind == "anthropic":
 		return EffortCapability{Supported: true, Levels: []string{"auto", "low", "medium", "high", "xhigh", "max"}, Default: "auto"}
-	case e != nil && e.Kind == "openai":
-		// 未知 OpenAI 兼容端点（TokenHub/自托管 vLLM/第三方代理——#7451）：
-		// 回退到 OpenAI 通用词汇（与协议层 openai.New() generic 分支对齐，
-		// 那里早已 fail-open 接受 low/medium/high）。配置层此前 fail-closed
-		// 拦截——两层不对称是 #7451 根因。
-		return openAIEffortCapability()
 	default:
 		return EffortCapability{}
 	}
@@ -258,15 +252,6 @@ func NormalizeEffort(e *ProviderEntry, raw string) (string, error) {
 			return level, nil
 		default:
 			return "", fmt.Errorf("usage: /effort auto|low|medium|high|xhigh|max")
-		}
-	case e != nil && e.Kind == "openai":
-		// 与 EffortCapabilityForEntry 对称（#7451）：未知 OpenAI 兼容端点
-		// 接受 OpenAI 通用词汇；max 交给协议层钳制（那里已处理）。
-		switch level {
-		case "low", "medium", "high", "max", "auto":
-			return level, nil
-		default:
-			return "", fmt.Errorf("usage: /effort auto|low|medium|high|max")
 		}
 	default:
 		return "", effortNotConfigurableError(e)

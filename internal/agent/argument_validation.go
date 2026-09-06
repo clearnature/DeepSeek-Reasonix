@@ -59,25 +59,6 @@ func hostValidateBeforeDispatch(target tool.Tool, args json.RawMessage) (bool, s
 	if result.CompileErr != nil {
 		return true, fmt.Sprintf("host configuration error: tool %q has an invalid argument schema (schema fingerprint %s); execution was not dispatched", target.Name(), shortSchemaFingerprint(result.Fingerprint))
 	}
-	// Also validate against the capability argument contract when the target
-	// provides one (e.g. run_skill with nested subagent arguments).
-	if provider, ok := target.(tool.CapabilityArgumentProvider); ok {
-		var capID string
-		var parsed struct {
-			CapabilityID string `json:"capability_id"`
-		}
-		if json.Unmarshal(args, &parsed) == nil {
-			capID = parsed.CapabilityID
-		}
-		if capID != "" {
-			if contract, ok := provider.CapabilityArguments(capID); ok {
-				nestedResult := tool.ValidateJSONSchemaValue(contract.Schema, args)
-				if len(nestedResult.Violations) > 0 {
-					result = nestedResult
-				}
-			}
-		}
-	}
 	if len(result.Violations) == 0 {
 		return false, ""
 	}

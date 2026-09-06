@@ -3,6 +3,7 @@ package skill
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -30,6 +31,15 @@ type SubagentRunOptions struct {
 }
 
 type SubagentRunner func(ctx context.Context, sk Skill, task string, opts SubagentRunOptions) (string, error)
+
+// SubagentOutputError is implemented by host runners that can preserve a
+// bounded result envelope alongside a terminal error. Tool dispatchers should
+// return that output to the parent model while retaining the error for host
+// status and recovery classification.
+type SubagentOutputError interface {
+	error
+	SubagentOutput() string
+}
 
 // ProfileResolver returns the model/effort profile a subagent skill will use.
 // It is optional; without one, skill frontmatter still supplies display metadata.
@@ -89,7 +99,7 @@ func (t *runSkillTool) ValidateArguments(args json.RawMessage) []tool.ArgumentVi
 		Arguments string `json:"arguments"`
 	}
 	if json.Unmarshal(args, &p) != nil {
-		return nil
+		return nil // The ordinary JSON Schema/parser owns malformed JSON.
 	}
 	name := cleanSkillName(p.Name)
 	sk, ok := t.store.Read(name)
@@ -161,6 +171,10 @@ func (t *runSkillTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		}
 		out, err := t.runner(ctx, sk, rawArgs, opts)
 		if err != nil {
+			var outputErr SubagentOutputError
+			if errors.As(err, &outputErr) && strings.TrimSpace(outputErr.SubagentOutput()) != "" {
+				return outputErr.SubagentOutput(), err
+			}
 			return "", err
 		}
 		return tool.GuardSubagentHostDecisionText(out), nil
@@ -265,12 +279,12 @@ func (t *readOnlySkillTool) CapabilityArguments(capabilityID string) (tool.Capab
 	if sk.RunAs == RunSubagent {
 		required = `,"required":["arguments"]`
 	}
-	schema := json.RawMessage(`{"type":"object","properties":{"arguments":{"type":"string","description":"Concrete task or inline skill arguments."},"continue_from":{"type":"string","description":"Optional compatible subagent reference."}}` + required + `}`)
+	schema := json.RawMessage(`{"type":"object","properties":{"arguments":{"type":"string","description":"Concrete read-only task or inline skill arguments."}}` + required + `}`)
 	example, _ := json.Marshal(map[string]any{
 		"action":        "call",
 		"capability_id": "skill:" + name,
 		"arguments": map[string]any{
-			"arguments": "specific task for " + name,
+			"arguments": "specific read-only task for " + name,
 		},
 	})
 	return tool.CapabilityArgumentContract{Schema: schema, Example: example}, true
@@ -306,6 +320,10 @@ func (t *readOnlySkillTool) Execute(ctx context.Context, args json.RawMessage) (
 		}
 		out, err := t.runner(ctx, sk, rawArgs, SubagentRunOptions{})
 		if err != nil {
+			var outputErr SubagentOutputError
+			if errors.As(err, &outputErr) && strings.TrimSpace(outputErr.SubagentOutput()) != "" {
+				return outputErr.SubagentOutput(), err
+			}
 			return "", err
 		}
 		return tool.GuardSubagentHostDecisionText(out), nil
@@ -631,7 +649,7 @@ func (t *installSkillTool) Execute(_ context.Context, args json.RawMessage) (str
 		"scope": string(scope),
 		"path":  path,
 		"runAs": string(runAs),
-		"note":  "Callable now via run_skill({name}) or /" + name + ". Appears in the pinned Skills index on the next launch.",
+		"note":  "Callable immediately in this tool loop via run_skill({name}) or /" + name + ". It will appear in session-context on the next real user turn.",
 	})
 	return string(res), nil
 }
@@ -653,8 +671,8 @@ type SkillFileOptions struct {
 	// writable default for older profiles.
 	ReadOnly bool
 	Color    string // optional display tag; emitted regardless of RunAs
-	// Invocation, when "manual", keeps the written skill out of the pinned
-	// Skills index (see index.go) — invocable by name only, never
+	// Invocation, when "manual", keeps the written skill out of automatic
+	// session-context discovery — invocable by name only, never
 	// model-discovered. Anything else (including empty) is the default "auto".
 	Invocation string
 }

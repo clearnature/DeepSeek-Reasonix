@@ -21,7 +21,8 @@ const (
 	compactionStateSchemaV1      = 1
 	compactionStateSchemaV2      = 2
 	compactionStateSchemaV3      = 3
-	compactionStateSchemaCurrent = compactionStateSchemaV3
+	compactionStateSchemaV4      = 4
+	compactionStateSchemaCurrent = compactionStateSchemaV4
 )
 
 // Cache state labels for resume/preflight telemetry. They never enter the
@@ -69,14 +70,13 @@ type ContextProjection struct {
 	// CoveredPrefixHash fingerprints provider-visible canonical[:CoveredCount]
 	// so append-only growth can be distinguished from prefix edits/rewrites.
 	CoveredPrefixHash string `json:"covered_prefix_hash,omitempty"`
-	// NonToolContentHash fingerprints non-tool content in canonical[:CoveredCount].
-	// #8839 §6: prune rewrites tool results → covered hash mismatch. This hash
-	// enables semantic validation — if non-tool content matches, projection is
-	// still valid (prune tolerant). Only invalidate when non-tool content changes.
-	NonToolContentHash string `json:"non_tool_content_hash,omitempty"`
-	SummaryHash        string `json:"summary_hash,omitempty"`
-	SourceTokens       int    `json:"source_tokens,omitempty"`
-	ProjectionTokens   int    `json:"projection_tokens,omitempty"`
+	// PinnedContextHash authenticates host-origin provenance inside the covered
+	// canonical prefix. Provider bytes omit Origin, so CoveredPrefixHash alone
+	// cannot detect provenance edits that change checkpoint reconstruction.
+	PinnedContextHash string `json:"pinned_context_hash,omitempty"`
+	SummaryHash       string `json:"summary_hash,omitempty"`
+	SourceTokens      int    `json:"source_tokens,omitempty"`
+	ProjectionTokens  int    `json:"projection_tokens,omitempty"`
 	// ViewInputHash/ViewOutputHash make free maintenance idempotent across
 	// retries and resume. They fingerprint the visible view, not canonical
 	// storage, so a projection can evolve without rewriting the transcript.
@@ -122,6 +122,22 @@ const (
 )
 
 // CompactionState is the session context sidecar payload.
+
+// toolsFingerprint fingerprints a tool schema set. A system-only summary hit
+// means the prefix broke at the tool seam; this hash distinguishes the frozen
+// main-request set from the live registry in that diagnosis.
+func toolsFingerprint(tools []provider.ToolSchema) string {
+	if len(tools) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(tools)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:16])
+}
+
 type CompactionState struct {
 	SchemaVersion      int                        `json:"schema_version"`
 	TranscriptVersion  uint64                     `json:"transcript_version"`
@@ -142,18 +158,14 @@ type CompactionState struct {
 	// an explicit unsupported response before that latch was set.
 	NativeContextEditingAccepted bool `json:"native_context_editing_accepted,omitempty"`
 	ContextEditingFallbackLocal  bool `json:"context_editing_fallback_local,omitempty"`
-	// LastWireMessages is the lossless inverse of the compaction projection:
-	// the exact messages the last main request sent before this checkpoint.
-	// After resume the summarizer replays them, so its request byte-matches
-	// the provider-cached unit the parent process wrote instead of missing
-	// past the system prefix (project + reconstruct = identity, CRT-style).
-	LastWireMessages []provider.Message `json:"last_wire_messages,omitempty"`
-	// LastWireTools is the tool-schema half of the same cached unit: the
-	// server caches system+tools+messages as one prefix, and the live tool
-	// set drifts (MCP registration) between requests, so the frozen tools
-	// must persist next to the frozen messages.
-	LastWireTools []provider.ToolSchema `json:"last_wire_tools,omitempty"`
-	UpdatedAt     time.Time             `json:"updated_at"`
+	// LastWireMessages/LastWireTools freeze the most recent main request's
+	// provider-visible unit (local extension, 2026-08-31 lesson: a resumed
+	// session whose sidecar lacks the last wire unit replays a stale prefix
+	// and pays a full-price summary). omitempty keeps old sidecars loadable;
+	// LoadProjectionSidecar restores them with the rest of the struct.
+	LastWireMessages []provider.Message    `json:"last_wire_messages,omitempty"`
+	LastWireTools    []provider.ToolSchema `json:"last_wire_tools,omitempty"`
+	UpdatedAt        time.Time             `json:"updated_at"`
 }
 
 // CompactionTelemetry is the structured observability record for one
@@ -177,27 +189,7 @@ type CompactionTelemetry struct {
 	RequestCount      int    `json:"request_count"`
 	ProviderRequestID string `json:"provider_request_id,omitempty"`
 	SummaryInputMode  string `json:"summary_input_mode,omitempty"`
-	ViewFP            string `json:"view_fp,omitempty"` // fold view fingerprint, for resume-divergence diagnosis
-	WireFP            string `json:"wire_fp,omitempty"` // normalized bytes actually sent (vs view_fp)
-	ToolsCount        int    `json:"tools_count,omitempty"`
-	ToolsFP           string `json:"tools_fp,omitempty"`     // tool schema set the summary sent
-	ToolsSource       string `json:"tools_source,omitempty"` // frozen | live | none
 	Error             string `json:"error,omitempty"`
-}
-
-// toolsFingerprint fingerprints a tool schema set. A system-only summary hit
-// means the prefix broke at the tool seam; this hash distinguishes the frozen
-// main-request set from the live registry in that diagnosis.
-func toolsFingerprint(tools []provider.ToolSchema) string {
-	if len(tools) == 0 {
-		return ""
-	}
-	b, err := json.Marshal(tools)
-	if err != nil {
-		return ""
-	}
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:16])
 }
 
 // ContextStatePath returns the projection sidecar path for a session transcript.
@@ -223,16 +215,16 @@ func LoadCompactionState(sessionPath string) (CompactionState, bool, error) {
 	if err := json.Unmarshal(b, &st); err != nil {
 		return CompactionState{}, false, fmt.Errorf("decode context state %s: %w", path, err)
 	}
-	if st.SchemaVersion != 0 && st.SchemaVersion != compactionStateSchemaV1 && st.SchemaVersion != compactionStateSchemaV2 && st.SchemaVersion != compactionStateSchemaV3 {
+	if st.SchemaVersion != 0 && st.SchemaVersion != compactionStateSchemaV1 && st.SchemaVersion != compactionStateSchemaV2 &&
+		st.SchemaVersion != compactionStateSchemaV3 && st.SchemaVersion != compactionStateSchemaV4 {
 		return CompactionState{}, false, fmt.Errorf("unsupported context schema version %d", st.SchemaVersion)
 	}
 	if st.SchemaVersion == 0 {
 		st.SchemaVersion = compactionStateSchemaV1
 	}
-	// The sidecar is written pretty-printed; RawMessage fields inside the
-	// frozen wire bytes would carry that indentation and diverge from the
-	// bytes the main request actually sent. Re-compact them so a resumed
-	// process replays the provider-cached unit byte-exact.
+	// The outer file is pretty-printed, which re-indents embedded
+	// json.RawMessage bytes; re-compact them so the resumed frozen wire unit
+	// byte-matches the main request the provider actually cached.
 	compactSidecarRawMessages(&st)
 	return st, true, nil
 }
@@ -242,47 +234,11 @@ func LoadCompactionState(sessionPath string) (CompactionState, bool, error) {
 // commit pointers: EXDEV/copy fallbacks that can tear an existing file are
 // rejected so a failed write leaves the previous checkpoint intact. A returned
 // error means the on-disk pointer was not published.
-func SaveCompactionState(sessionPath string, st CompactionState) error {
-	path := ContextStatePath(sessionPath)
-	if path == "" {
-		return fmt.Errorf("empty session path")
-	}
-	// V3 keeps logical user-turn boundaries; previous readers fall back to
-	// canonical history rather than misreading the V1 coalesced invariant.
-	st.SchemaVersion = compactionStateSchemaCurrent
-	if st.UpdatedAt.IsZero() {
-		st.UpdatedAt = time.Now().UTC()
-	}
-	// LastReceipt is authoritative. Drop mirrored top-level last_*/blocked_*
-	// writer fields so new sidecars do not re-emit the pre-v3 dual schema.
-	// Old files with those keys still decode into the struct for readers.
-	st.LastTrigger = ""
-	st.LastMode = ""
-	st.LastSourceTokens = 0
-	st.LastResultTokens = 0
-	st.LastCompactionCost = 0
-	if st.LastReceipt != nil {
-		st.BlockedInputHash = ""
-		st.BlockedReason = ""
-	}
-	// Pretty-printing the outer structure must not rewrite RawMessage bytes
-	// inside the frozen wire form: they are part of the provider-cached
-	// prefix and must survive the round trip byte-exact.
-	compactSidecarRawMessages(&st)
-	b, err := json.MarshalIndent(st, "", "  ")
-	if err != nil {
-		return err
-	}
-	b = append(b, '\n')
-	return fileutil.AtomicWriteFileStrict(path, b, 0o644)
-}
 
-// compactSidecarRawMessages rewrites json.RawMessage fields inside the frozen
-// wire bytes (tool parameters, Responses API items, server-search payloads) to
-// their compact form. MarshalIndent pretty-prints raw messages, so without
-// this a sidecar round trip would replay tool schemas that no longer
-// byte-match the main request's cached prefix. Idempotent for already-compact
-// input.
+// compactSidecarRawMessages compacts RawMessage bytes inside the frozen wire
+// form: pretty-printing the outer structure must not rewrite them, they are
+// part of the provider-cached prefix and must survive the round trip
+// byte-exact.
 func compactSidecarRawMessages(st *CompactionState) {
 	compact := func(raw json.RawMessage) json.RawMessage {
 		if len(raw) == 0 {
@@ -305,6 +261,38 @@ func compactSidecarRawMessages(st *CompactionState) {
 	for i := range st.LastWireTools {
 		st.LastWireTools[i].Parameters = compact(st.LastWireTools[i].Parameters)
 	}
+}
+
+func SaveCompactionState(sessionPath string, st CompactionState) error {
+	path := ContextStatePath(sessionPath)
+	if path == "" {
+		return fmt.Errorf("empty session path")
+	}
+	// V4 adds a canonical-coverage pinned-context checkpoint. Previous readers
+	// fail closed on the unknown schema and replay canonical history.
+	st.SchemaVersion = compactionStateSchemaCurrent
+	if st.UpdatedAt.IsZero() {
+		st.UpdatedAt = time.Now().UTC()
+	}
+	compactSidecarRawMessages(&st)
+	// LastReceipt is authoritative. Drop mirrored top-level last_*/blocked_*
+	// writer fields so new sidecars do not re-emit the pre-v3 dual schema.
+	// Old files with those keys still decode into the struct for readers.
+	st.LastTrigger = ""
+	st.LastMode = ""
+	st.LastSourceTokens = 0
+	st.LastResultTokens = 0
+	st.LastCompactionCost = 0
+	if st.LastReceipt != nil {
+		st.BlockedInputHash = ""
+		st.BlockedReason = ""
+	}
+	b, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	return fileutil.AtomicWriteFileStrict(path, b, 0o644)
 }
 
 // RemoveCompactionState deletes a corrupt or invalidated projection sidecar.
@@ -497,6 +485,7 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 		ToolCallID         string                      `json:"tid,omitempty"`
 		Name               string                      `json:"n,omitempty"`
 		ToolCalls          []wireCall                  `json:"tc,omitempty"`
+		ThinkingBlocks     []provider.ThinkingBlock    `json:"tb,omitempty"`
 		ResponsesItems     []json.RawMessage           `json:"ri,omitempty"`
 		ServerSearch       []provider.ServerSearchCall `json:"ss,omitempty"`
 	}
@@ -510,6 +499,7 @@ func providerVisibleFingerprint(msgs []provider.Message) string {
 			ReasoningID:        m.ReasoningID,
 			ReasoningStatus:    m.ReasoningStatus,
 			ReasoningSignature: m.ReasoningSignature,
+			ThinkingBlocks:     m.ThinkingBlocks,
 			ToolCallID:         m.ToolCallID,
 			Name:               m.Name,
 		}
@@ -554,8 +544,9 @@ func projectionValid(st CompactionState, msgs []provider.Message, cacheKey strin
 }
 
 // projectionContentValid reports whether st's projection body still matches the
-// canonical transcript, independent of provider/model lineage. LoadProjectionSidecar
-// uses it to rebind across upgrade/model/workspace key changes.
+// canonical transcript, independent of provider/model lineage. The covered hash
+// is authoritative, except for leading system messages: those live outside the
+// folded region and may be refreshed independently after a compaction.
 func projectionContentValid(st CompactionState, msgs []provider.Message) bool {
 	if len(st.Projection.Messages) == 0 {
 		return false
@@ -568,34 +559,44 @@ func projectionContentValid(st CompactionState, msgs []provider.Message) bool {
 	if st.Projection.CoveredPrefixHash == "" {
 		return false
 	}
+	// Readers before v4 did not authenticate pinned revision provenance. Their
+	// projections may summarize or omit active pinned state, so fail closed and
+	// rebuild a v4 checkpoint from the canonical transcript.
+	if st.SchemaVersion < compactionStateSchemaV4 && containsPinnedContextRevision(msgs[:n]) {
+		return false
+	}
+	if st.SchemaVersion >= compactionStateSchemaV4 &&
+		st.Projection.PinnedContextHash != pinnedContextCoverageHash(msgs, n) {
+		return false
+	}
 	if coveredPrefixHash(msgs, n) == st.Projection.CoveredPrefixHash {
 		return true
 	}
-	// #8839 §6: covered hash mismatch — check semantic hash (non-tool content).
-	// Prune rewrites tool results → covered hash mismatches → projection would
-	// be invalidated → cascading compaction. Instead, compare non-tool content
-	// semantic hash: if it matches, the projection is still valid (prune tolerant).
-	// Only invalidate when non-tool content actually changed (fail-closed).
-	return nonToolContentHash(msgs, n) == st.Projection.NonToolContentHash
+	return projectionMatchesAfterSystemRefresh(st, msgs, n)
 }
 
-// nonToolContentHash returns a hash of non-tool message content in msgs[:n].
-// Used for semantic validation: prune rewrites tool results but preserves
-// non-tool content, so a matching hash means the projection is still valid.
-func nonToolContentHash(msgs []provider.Message, n int) string {
-	if n <= 0 || n > len(msgs) {
-		return ""
+// projectionMatchesAfterSystemRefresh verifies a covered-prefix mismatch by
+// substituting the projection's previous leading system messages into the
+// current canonical prefix. A match proves that only the dynamic system prompt
+// changed; any user, assistant, tool, image, or signed-reasoning edit still
+// fails closed.
+func projectionMatchesAfterSystemRefresh(st CompactionState, msgs []provider.Message, n int) bool {
+	if n <= 0 || n > len(msgs) || len(st.Projection.Messages) == 0 {
+		return false
 	}
-	var b strings.Builder
-	for _, m := range msgs[:n] {
-		if m.Role == provider.RoleTool {
-			continue
+	candidate := append([]provider.Message(nil), msgs[:n]...)
+	systems := 0
+	for systems < len(candidate) && candidate[systems].Role == provider.RoleSystem {
+		if systems >= len(st.Projection.Messages) || st.Projection.Messages[systems].Role != provider.RoleSystem {
+			return false
 		}
-		b.WriteString(string(m.Role))
-		b.WriteString(m.Content)
+		candidate[systems] = st.Projection.Messages[systems]
+		systems++
 	}
-	h := sha256.Sum256([]byte(b.String()))
-	return fmt.Sprintf("%x", h[:8])
+	if systems == 0 || (systems < len(st.Projection.Messages) && st.Projection.Messages[systems].Role == provider.RoleSystem) {
+		return false
+	}
+	return coveredPrefixHash(candidate, len(candidate)) == st.Projection.CoveredPrefixHash
 }
 
 // modelVisibleFromProjection splices the projection with any messages appended
@@ -605,6 +606,12 @@ func modelVisibleFromProjection(proj ContextProjection, canonical []provider.Mes
 		return nil
 	}
 	out := append([]provider.Message(nil), proj.Messages...)
+	// Leading system messages are outside every fold. Refresh them from canonical
+	// so memory/tool/environment prompt updates do not serve a stale prefix or
+	// force a full-history replay.
+	for i := 0; i < len(canonical) && i < len(out) && canonical[i].Role == provider.RoleSystem && out[i].Role == provider.RoleSystem; i++ {
+		out[i] = canonical[i]
+	}
 	if proj.CoveredCount >= 0 && proj.CoveredCount < len(canonical) {
 		out = append(out, canonical[proj.CoveredCount:]...)
 	}
@@ -648,7 +655,7 @@ func coalesceProjectionUserRuns(msgs []provider.Message) []provider.Message {
 // formatSummaryMessage builds the stable user-turn wrapper around a digest.
 func formatSummaryMessage(summary string) provider.Message {
 	return provider.Message{
-		Role: provider.RoleUser,
+		Role: provider.RoleUser, Origin: provider.MessageOriginHost,
 		Content: summaryTagOpen + "\n" +
 			"Summary of earlier conversation (older messages were compacted to save context):\n" +
 			summary + "\n" +

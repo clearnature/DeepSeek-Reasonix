@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"reasonix/internal/netclient"
 	"reasonix/internal/provider"
 )
 
@@ -278,27 +279,42 @@ func TestFetchModelsResponseTooLarge(t *testing.T) {
 	}
 }
 
-func TestFetchModelsCodexCatalogFormat(t *testing.T) {
-	// Codex-style catalog: {"models":[{"slug":...}]} — used by DeepSeek's
-	// Responses API model directory.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"models": []map[string]any{
-				{"slug": "deepseek-v4-pro", "context_window": 1048576, "display_name": "DeepSeek-V4-Pro"},
-				{"slug": "deepseek-v4-flash", "context_window": 1048576, "display_name": "DeepSeek-V4-Flash"},
-			},
+// TestFetchModelsRoutesThroughConfiguredProxy pins the #9560 fix: model
+// discovery must ride the same network policy as chat requests. The fake
+// gateway host only resolves through the proxy, so success proves the proxy
+// transport was used; the plain spec must fail to reach it directly.
+func TestFetchModelsRoutesThroughConfiguredProxy(t *testing.T) {
+	const gateway = "http://reasonix-fetch-probe.invalid/v1"
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.String(), gateway) {
+			http.Error(w, "unexpected proxied target "+r.URL.String(), http.StatusBadRequest)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer proxied-key" {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"data":   []map[string]string{{"id": "model-a", "object": "model"}},
 		})
 	}))
-	defer srv.Close()
+	defer proxy.Close()
 
-	models, err := FetchModels(context.Background(), srv.URL, "", nil)
+	spec := netclient.ProxySpec{Mode: netclient.ModeCustom, URL: proxy.URL}
+	if err := netclient.Validate(spec); err != nil {
+		t.Fatalf("proxy spec: %v", err)
+	}
+
+	models, err := FetchModelsWithOptions(context.Background(), gateway, "proxied-key", FetchModelsOptions{Proxy: spec})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("fetch through proxy: %v", err)
 	}
-	if len(models) != 2 {
-		t.Fatalf("want 2 models, got %d: %v", len(models), models)
+	if fmt.Sprint(models) != "[model-a]" {
+		t.Fatalf("models = %v, want [model-a]", models)
 	}
-	if models[0] != "deepseek-v4-flash" || models[1] != "deepseek-v4-pro" {
-		t.Errorf("want sorted [deepseek-v4-flash deepseek-v4-pro], got %v", models)
+
+	if _, err := FetchModelsWithOptions(context.Background(), gateway, "proxied-key", FetchModelsOptions{}); err == nil {
+		t.Fatal("direct fetch to a proxy-only host must fail, otherwise this test proves nothing")
 	}
 }

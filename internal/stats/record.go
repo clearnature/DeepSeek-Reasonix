@@ -48,33 +48,7 @@ type record struct {
 	CacheMiss  int       `json:"cache_miss,omitempty"`
 	Total      int       `json:"total,omitempty"`
 	Requests   int       `json:"requests,omitempty"` // provider requests represented by this row
-	Est        int       `json:"est,omitempty"`      // Prepare admission estimate; est vs prompt exposes estimate drift
-	// PrefixHash fingerprints the sent request prefix (CacheDiagnostics),
-	// distinguishing a miss from a changed prefix vs server-side expiry.
-	PrefixHash    string   `json:"prefix_hash,omitempty"`
-	PrefixChanged bool     `json:"prefix_changed,omitempty"`
-	PrefixReasons []string `json:"prefix_reasons,omitempty"`
-	// ViewFP fingerprints the sent view; vs a compaction view_fp it pins
-	// summary misses to a post-resume view divergence.
-	ViewFP string `json:"view_fp,omitempty"`
-	// WireFP fingerprints the normalized messages actually sent this request;
-	// compared across requests/resume it separates byte divergence (different
-	// wire_fp) from server-side cache expiry (identical wire_fp).
-	WireFP string `json:"wire_fp,omitempty"`
-	Turn   bool   `json:"turn,omitempty"` // true for TurnDone marker rows
-	// Compaction records one context-compaction pass (agent compaction
-	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
-	Compaction *CompactionRecord `json:"compaction,omitempty"`
-	// Retrieval records one retrieval pass (retrieve_info): how it resolved and
-	// whether it cost an API call.
-	Retrieval *RetrievalRecord `json:"retrieval,omitempty"`
-	// Resume records one session-resume gate decision (C1): how warm the
-	// provider cache was and what the replay did with the history.
-	Resume *ResumeRecord `json:"resume,omitempty"`
-	// Estimate records one admission-time prompt-estimate anomaly (overflow or
-	// inflated vs observed) with the request shape behind it. Nil otherwise;
-	// Query aggregation skips it.
-	Estimate *EstimateAnomalyRecord `json:"estimate,omitempty"`
+	Turn       bool      `json:"turn,omitempty"`     // true for TurnDone marker rows
 	// Cost quote fields (additive; older readers ignore them).
 	UsageSource        string   `json:"usage_source,omitempty"`
 	CostAmount         string   `json:"cost_amount,omitempty"`     // original amount decimal
@@ -99,93 +73,6 @@ type record struct {
 	ValuationUSD string `json:"valuation_usd,omitempty"`
 	// SelectedCost is a float compatibility mirror of SelectedAmount.
 	SelectedCost float64 `json:"selected_cost,omitempty"`
-	// SessionTokens/SessionCost are the recorder's process-lifetime (cold-start
-	// cycle) accumulation, stamped on TurnDone marker rows so the session-cost
-	// readout can be audited against the UI.
-	SessionTokens   int64   `json:"session_tokens,omitempty"`
-	SessionCost     float64 `json:"session_cost,omitempty"`
-	SessionCurrency string  `json:"session_currency,omitempty"`
-}
-
-// CompactionRecord is the structured form of the agent's compaction telemetry
-// detail line (trigger/mode/cache/src/proj/in/out/hit/miss/write/reqs),
-// persisted so a misbehaving compaction can be diagnosed from the stats file
-// alone. Error carries the full provider/estimator failure when the pass
-// failed; RequestID links to provider logs when present.
-// RetrievalRecord describes one retrieval pass (retrieve_info / /retrieve_info):
-// how it resolved and whether it cost an API call.
-type RetrievalRecord struct {
-	Query   string `json:"query,omitempty"`
-	Mode    string `json:"mode,omitempty"` // hit | miss | stale | blocked | error
-	APIUsed bool   `json:"api_used,omitempty"`
-	Tier    string `json:"tier,omitempty"`
-	Ms      int64  `json:"ms,omitempty"`
-	Chars   int    `json:"chars,omitempty"`
-}
-
-// ResumeRecord is one C1 resume-gate decision: the provider-cache warmth
-// seen when a historical session was reopened, and what the replay did.
-type ResumeRecord struct {
-	Path     string `json:"path,omitempty"`
-	State    string `json:"state,omitempty"` // warm | cold | unknown
-	IdleMin  int    `json:"idle_min,omitempty"`
-	Decision string `json:"decision,omitempty"`      // replay | compact-first | record-only
-	EstTok   int    `json:"est,omitempty"`           // resume 决策时估算（超窗才 compact-first）
-	ViewFP   string `json:"view_fp,omitempty"`       // 模型可见视图指纹（对比压缩/请求前缀）
-	Covered  bool   `json:"covered_match,omitempty"` // sidecar covered 前缀与转录是否字节匹配
-	WireFP   string `json:"wire_fp,omitempty"`       // resume 时上次发送字节指纹
-}
-
-// EstimateAnomalyRecord is the structured form of the agent's estimate
-// telemetry detail line (reason/est/window/obs/chars/cchars/cjk/cjkb/msgs/
-// top_role/top_chars/cal), persisted so an inflated desktop context percentage
-// or a false ErrCompactionRequired can be traced back to its request shape.
-type EstimateAnomalyRecord struct {
-	Reason       string `json:"reason,omitempty"`
-	EstTok       int    `json:"est_tokens,omitempty"`
-	WindowTok    int    `json:"window,omitempty"`
-	ObsTok       int    `json:"obs_tokens,omitempty"`
-	Chars        int64  `json:"chars,omitempty"`
-	CompactChars int64  `json:"compact_chars,omitempty"`
-	CJKRunes     int64  `json:"cjk_runes,omitempty"`
-	CJKBytes     int64  `json:"cjk_bytes,omitempty"`
-	Messages     int    `json:"messages,omitempty"`
-	TopRole      string `json:"top_role,omitempty"`
-	TopChars     int    `json:"top_chars,omitempty"`
-	Calibrated   bool   `json:"calibrated,omitempty"`
-}
-
-type CompactionRecord struct {
-	Trigger     string  `json:"trigger,omitempty"`
-	Mode        string  `json:"mode,omitempty"`
-	Cache       string  `json:"cache,omitempty"`
-	EstTok      int     `json:"est_tokens,omitempty"` // decision estimate that crossed the trigger
-	SourceTok   int     `json:"src,omitempty"`
-	ProjTok     int     `json:"proj,omitempty"`
-	FoldTok     int     `json:"fold,omitempty"`
-	Spans       int     `json:"spans,omitempty"`
-	Reason      string  `json:"reason,omitempty"`
-	InputTok    int     `json:"in,omitempty"`
-	OutTok      int     `json:"out,omitempty"`
-	HitTok      int     `json:"hit,omitempty"`
-	MissTok     int     `json:"miss,omitempty"`
-	WriteTok    int     `json:"write,omitempty"`
-	Reqs        int     `json:"reqs,omitempty"`
-	Results     int     `json:"results,omitempty"`
-	SavedChars  int     `json:"saved_chars,omitempty"`
-	UserKept    int     `json:"user_kept,omitempty"`
-	UserDrop    int     `json:"user_dropped,omitempty"`
-	PrefHash    string  `json:"pref_hash,omitempty"`
-	ViewFP      string  `json:"view_fp,omitempty"`     // fold view fingerprint (resume-divergence diagnosis)
-	WireFP      string  `json:"wire_fp,omitempty"`     // normalized bytes actually sent (vs view_fp)
-	ToolsCount  int     `json:"tools_count,omitempty"` // tool schema set the summary sent
-	ToolsFP     string  `json:"tools_fp,omitempty"`
-	ToolsSource string  `json:"tools_source,omitempty"` // frozen | live | none
-	ElapsedMs   int64   `json:"elapsed_ms,omitempty"`   // summarizer stage wall time
-	Status      string  `json:"status,omitempty"`
-	TokPerChar  float64 `json:"tpc,omitempty"`
-	RequestID   string  `json:"provider_request_id,omitempty"`
-	Error       string  `json:"err_type,omitempty"`
 }
 
 // Writer appends records to the daily stats file for a given stats dir.

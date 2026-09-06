@@ -88,13 +88,6 @@ func (p *forkCaptureProvider) Name() string { return p.inner.Name() }
 
 func (p *forkCaptureProvider) OutputBudget() int { return outputBudgetOf(p.inner) }
 
-func (p *forkCaptureProvider) CompactionOutputTokens() int {
-	if q, ok := p.inner.(provider.CompactionOutputTokensProvider); ok {
-		return q.CompactionOutputTokens()
-	}
-	return 0
-}
-
 func (p *forkCaptureProvider) SharesContextWindow() bool { return sharesContextWindow(p.inner) }
 
 func (p *forkCaptureProvider) ContextBudgetPolicy() provider.ContextBudgetPolicy {
@@ -133,7 +126,7 @@ func (p *forkCaptureProvider) Stream(ctx context.Context, req provider.Request) 
 // one turn per task); multi-turn capture would need the active turn's index.
 func forkTurnInput(messages []provider.Message) string {
 	for _, m := range messages {
-		if m.Role == provider.RoleUser {
+		if IsUserAuthoredTurnMessage(m) {
 			if m.RawContent != "" {
 				return m.RawContent
 			}

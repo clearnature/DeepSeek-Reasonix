@@ -109,12 +109,13 @@ func (c Config) mode() string {
 // deepseek (incl. eu.deepseek.com) / mimo via exact-host matching.
 
 type client struct {
+	identityHeaders                    http.Header
 	name, apiKey, keyEnv, keySource    string
 	baseURL, requestURL, model, effort string
 	vendor, mode                       string
 	caps                               vendorCapabilities
 	sessionCache                       bool
-	webSearch                          bool
+	search                             provider.SearchPolicy
 	maxOutputTokens                    int
 	vision                             bool // model accepts image input; embed Images as input_image parts
 	modelInfo                          provider.ModelInfo
@@ -131,6 +132,11 @@ type client struct {
 func New(cfg Config) provider.Provider {
 	vendor := DetectVendor(cfg.BaseURL)
 	cap := capabilitiesFor(vendor)
+	// Explicit replay contracts apply to compatible gateways as well as exact
+	// vendor hosts. Do not inherit endpoint defaults, headers, or output limits.
+	if protocol, _ := cfg.Extra["reasoning_protocol"].(string); strings.EqualFold(strings.TrimSpace(protocol), "deepseek") || strings.EqualFold(strings.TrimSpace(protocol), "mimo") {
+		cap.toolCallReasoning = true
+	}
 	maxOutputTokens := cfg.MaxOutputTokens
 	// Official DeepSeek omits max_output_tokens (server 384K). MiMo still uses
 	// the 16K/32K effort ladder. Compact_ratio is independent.
@@ -153,7 +159,7 @@ func New(cfg Config) provider.Provider {
 	httpClient := &http.Client{}
 	if built, err := netclient.NewHTTPClient(cfg.Proxy, netclient.TransportOptions{
 		DialTimeout: 30 * time.Second, KeepAlive: 30 * time.Second,
-		TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 300 * time.Second, // slow CPU-hosted models need a long prefill window
+		TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 300 * time.Second,
 	}); err == nil {
 		httpClient = built
 	}
@@ -167,18 +173,23 @@ func New(cfg Config) provider.Provider {
 		modelInfo = *cfg.ModelInfo
 		modelInfo.ID = cfg.Model
 	}
+	clientWebSearch, _ := cfg.Extra["client_web_search"].(bool)
+	if reject, _ := cfg.Extra["reject_redirects"].(bool); reject {
+		httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
 	if vision {
 		modelInfo.InputModalities = []provider.ModelModality{provider.ModalityText, provider.ModalityImage}
 	} else if modelInfo.SupportsInput(provider.ModalityImage) {
 		modelInfo.InputModalities = []provider.ModelModality{provider.ModalityText}
 	}
 	return &client{
-		name: cfg.Name, apiKey: cfg.APIKey, keyEnv: cfg.KeyEnv, keySource: cfg.KeySource,
+		identityHeaders: provider.NewClientIdentityHeaders(),
+		name:            cfg.Name, apiKey: cfg.APIKey, keyEnv: cfg.KeyEnv, keySource: cfg.KeySource,
 		baseURL: baseURL, requestURL: requestURL, model: cfg.Model, effort: cfg.Effort,
-		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache, webSearch: cfg.WebSearch, maxOutputTokens: maxOutputTokens,
+		vendor: vendor, caps: cap, mode: cfg.mode(), sessionCache: sessionCache, search: provider.SearchPolicy{NativeEnabled: cfg.WebSearch, ClientEnabled: clientWebSearch}, maxOutputTokens: maxOutputTokens,
 		vision:    vision,
 		modelInfo: modelInfo,
-		http:      httpClient, idleTimeout: cap.streamIdleTimeout, // 0 = readStream falls back to default
+		http:      httpClient, idleTimeout: defaultStreamIdleTimeout,
 	}
 }
 
@@ -214,6 +225,15 @@ func responsesAutoOutputBudget(vendor, effort string) int {
 }
 
 func (c *client) Name() string { return c.name }
+
+func (c *client) NativeToolSearchAvailable() bool {
+	return c != nil && provider.IsFirstPartyOpenAI(c.baseURL) && nativeToolSearchModel(c.model)
+}
+
+func nativeToolSearchModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return strings.HasPrefix(model, "gpt-5.4") || strings.HasPrefix(model, "gpt-5.5") || strings.HasPrefix(model, "gpt-5.6")
+}
 
 func (c *client) sendOpts() provider.SendOptions {
 	return provider.SendOptions{Provider: c.name, KeyEnv: c.keyEnv, KeySource: c.keySource, KeyPresent: c.apiKey != "", RetryAuth: c.authed.Load()}
@@ -260,6 +280,7 @@ func (c *client) send(ctx context.Context, body map[string]any) (*http.Response,
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		provider.ApplyOpenCodeGoHeaders(req, c.baseURL, c.identityHeaders)
 		if c.caps.sessionCacheHeader && c.sessionCache {
 			req.Header.Set("x-dashscope-session-cache", "enable")
 		}
@@ -283,9 +304,20 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 	messages := provider.SanitizeToolPairing(provider.ModelMessages(req.Messages))
 	body := map[string]any{"model": c.model, "stream": true}
 
-	effort := normalizeEffort(requestEffort(req, c.effort), c.model)
-	if reasoning := reasoningBody(effort, c.caps.summaryMode); reasoning != nil {
-		body["reasoning"] = reasoning
+	effort := strings.ToLower(strings.TrimSpace(c.effort))
+	if c.vendor == "deepseek" && (strings.EqualFold(strings.TrimSpace(c.model), "deepseek-v4-flash") || strings.EqualFold(strings.TrimSpace(c.model), "deepseek-v4-pro")) {
+		if effort == "medium" || effort == "xhigh" {
+			effort = "high"
+		}
+	}
+	switch effort {
+	case "auto":
+		effort = ""
+	case "disabled", "off":
+		effort = "none"
+	}
+	if effort != "" {
+		body["reasoning"] = map[string]any{"effort": effort}
 	}
 	maxOutputTokens := req.MaxTokens
 	if maxOutputTokens == 0 {
@@ -303,49 +335,15 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 		// Structured output: Responses text.format. MiMo/DashScope/OpenAI
 		// all accept {"text":{"format":{"type":"json_object"}}}. The model
 		// only emits JSON when the instructions also demand it.
-		// json_schema formats additionally require the schema name on the
-		// wire (DeepSeek rejects a missing name with 400) — send name/schema
-		// only for that shape so json_object stays byte-stable.
-		format := map[string]any{"type": req.ResponseFormat.Type}
-		if req.ResponseFormat.Type == "json_schema" {
-			if req.ResponseFormat.Name != "" {
-				format["name"] = req.ResponseFormat.Name
-			}
-			if len(req.ResponseFormat.Schema) > 0 {
-				format["schema"] = json.RawMessage(req.ResponseFormat.Schema)
-			}
+		body["text"] = map[string]any{
+			"format": map[string]any{"type": req.ResponseFormat.Type},
 		}
-		body["text"] = map[string]any{"format": format}
 	}
 	if req.Temperature != nil && !c.caps.ignoresTemperature {
 		body["temperature"] = *req.Temperature
 	}
-	if c.webSearch || len(req.Tools) > 0 {
-		tools := make([]map[string]any, 0, len(req.Tools)+1)
-		// Keep the server tool first and stable across turns. DeepSeek executes
-		// this tool itself; ordinary Reasonix tools remain function entries.
-		if c.webSearch {
-			tools = append(tools, map[string]any{"type": "web_search"})
-		}
-		for _, tool := range req.Tools {
-			if isServerBuiltinTool(tool.Type) {
-				// Server-side built-in tool (web_search): emit flat
-				// {type}, never wrapped in a function object — the
-				// function shape carries an empty name that the
-				// endpoint rejects with 400.
-				tools = append(tools, map[string]any{"type": tool.Type})
-				continue
-			}
-			parameters := tool.Parameters
-			if len(parameters) == 0 {
-				parameters = provider.CanonicalizeSchema(nil)
-			}
-			tools = append(tools, map[string]any{
-				"type": "function", "name": tool.Name, "description": tool.Description,
-				"parameters": json.RawMessage(parameters),
-			})
-		}
-		body["tools"] = tools
+	if c.search.NativeEnabled || len(req.Tools) > 0 {
+		body["tools"] = encodeResponsesTools(c, req)
 	}
 	instructions, rest := splitInstructions(messages)
 	if instructions != "" {
@@ -361,7 +359,7 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 		return body, true, messages
 	}
 
-	body["input"] = messagesToInput(rest, c.vision, c.webSearch, c.caps.summaryRequired)
+	body["input"] = messagesToInput(rest, c.vision, c.search.NativeEnabled, c.caps.summaryRequired)
 	return body, false, messages
 }
 
@@ -381,21 +379,6 @@ func splitInstructions(messages []provider.Message) (string, []provider.Message)
 		return "", messages
 	}
 	return messages[0].Content, messages[1:]
-}
-
-// isServerBuiltinTool reports whether t names a server-side built-in tool
-// (e.g. "web_search" / "web_search_2025_08_26") that Responses endpoints
-// execute themselves instead of a client-defined function. Restored from the
-// retrieval branch after an upstream merge (d643b37b9, #7466) replaced the
-// guarded loop with an unconditional function wrap — which sent an empty
-// tool name and made DeepSeek reject web_search requests with HTTP 400.
-func isServerBuiltinTool(t string) bool {
-	switch t {
-	case "web_search", "web_search_2025_08_26":
-		return true
-	default:
-		return t != "" && t != "function"
-	}
 }
 
 func messagesToInput(messages []provider.Message, vision, replayWebSearchItems, summary bool) []map[string]any {
@@ -428,7 +411,9 @@ func messagesToInput(messages []provider.Message, vision, replayWebSearchItems, 
 				input = append(input, map[string]any{"role": string(message.Role), "content": message.Content})
 			}
 		case provider.RoleAssistant:
-			if message.ReasoningContent != "" {
+			var rawReasoning bool
+			input, rawReasoning = appendReasoningItems(input, message.ResponsesItems)
+			if !rawReasoning && message.ReasoningContent != "" {
 				// Reasoning items: the OpenAI base format only needs
 				// `content`. DashScope additionally requires a `summary`
 				// list ("Invalid 'summary': summary is required and must be
@@ -504,7 +489,7 @@ func (c *client) conversationDigest(messages []provider.Message) string {
 	payload, _ := json.Marshal(struct {
 		Instructions string           `json:"instructions,omitempty"`
 		Input        []map[string]any `json:"input"`
-	}{Instructions: instructions, Input: messagesToInput(rest, c.vision, c.webSearch, c.caps.summaryRequired)})
+	}{Instructions: instructions, Input: messagesToInput(rest, c.vision, c.search.NativeEnabled, c.caps.summaryRequired)})
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])
 }
@@ -527,6 +512,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 	watchDone := make(chan struct{})
 	activity := make(chan struct{}, 1)
+	var reasoningSnapshots responseReasoningSnapshots
 	var stalled atomic.Bool
 	go func() {
 		timer := time.NewTimer(idle)
@@ -596,6 +582,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			continue
 		}
 		key := fmt.Sprintf("%s:%d", event.ItemID, event.ContentIndex)
+		reasoningSnapshots.capture(event)
 		switch event.Type {
 		case "response.output_text.delta":
 			textDeltas[key] = true
@@ -663,7 +650,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 				}
 			}
 		case "response.output_item.done":
-			if event.Item != nil && event.Item.Type == "web_search_call" && c.webSearch {
+			if event.Item != nil && event.Item.Type == "web_search_call" && c.search.NativeEnabled {
 				if _, ok := decodeReplayableWebSearchItem(event.Item.Raw); ok {
 					key := event.Item.ID
 					if key == "" {
@@ -710,43 +697,14 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			}
 		case "response.completed", "response.incomplete", "response.failed":
 			terminal = true
-			if event.Response != nil {
-				if event.Type == "response.completed" {
-					completedResponseID = event.Response.ID
+			if event.Type == "response.incomplete" {
+				if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, ReasoningState: provider.ReasoningIncomplete}) {
+					return
 				}
-				usage := usageFromResponse(event.Response)
-				provider.ApplyRequestAttemptCount(ctx, usage)
-				if event.Type == "response.incomplete" {
-					switch event.Response.IncompleteDetails.Reason {
-					case "max_output_tokens":
-						usage.FinishReason = "length"
-					case "content_filter":
-						usage.FinishReason = "content_filter"
-					default:
-						usage.FinishReason = "incomplete"
-					}
-				} else if event.Type == "response.completed" && usage.FinishReason == "" {
-					// A completed response finished normally (stop). Preserve any
-					// vendor-specific reason already set by usageFromResponse.
-					usage.FinishReason = "stop"
-				}
-				// DashScope occasionally reports a completed event whose usage
-				// object exists but is all zeros (server-side reporting gap; the
-				// tokens were actually billed). Emitting that as ChunkUsage
-				// would corrupt cache-ratio and cost accounting with a spurious
-				// zero record. 但完成语义必须保留：全零+stop 也发送——计费层
-				// （Pricing.Cost）对全零记录天然返回 0 成本，不污染统计；而
-				// agent 侧 reasoningOnlyFinishHonoured 依赖收到 usage 对象
-				// （FinishReason=stop）才能确认 reasoning-only 完成（#7168
-				// 评审"完成语义保留"的完整实现——此前 stop 被抑制时该语义
-				// 失效，空回复被误判触发重试）。异常终止 reason
-				// （length/content_filter/...）始终上报。
-				if usage.TotalTokens > 0 || usage.FinishReason != "" {
-
-					if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkUsage, Usage: usage}) {
-						return
-					}
-				}
+			}
+			completedResponseID = terminalResponseID(event)
+			if !emitTerminalResponseUsage(ctx, out, event) {
+				return
 			}
 			if event.Type == "response.failed" {
 				failed = true
@@ -788,6 +746,13 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	if !terminal {
 		_ = sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkError, Err: provider.StreamInterrupt(io.ErrUnexpectedEOF, provider.StreamInterruptPrematureEOF)})
 		return
+	}
+	if !reasoningSnapshots.emit(ctx, out) {
+		return
+	}
+	responsesItems = append(responsesItems, reasoningSnapshots.items...)
+	if len(reasoningSnapshots.items) > 0 {
+		reasoningID, reasoningStatus = reasoningSnapshots.metadata()
 	}
 	if completedResponseID != "" {
 		assistant := provider.Message{Role: provider.RoleAssistant, Content: text.String(), ReasoningContent: reasoning.String(), ReasoningID: reasoningID, ReasoningStatus: reasoningStatus, ResponsesItems: responsesItems}
@@ -902,6 +867,7 @@ func (i *sseItem) UnmarshalJSON(data []byte) error {
 }
 
 type sseResponse struct {
+	Output            []sseItem         `json:"output"`
 	ID                string            `json:"id"`
 	Usage             *sseUsage         `json:"usage"`
 	Error             *sseError         `json:"error"`
@@ -987,5 +953,3 @@ func extractJSONFromOutput(text string) (any, bool) {
 	}
 	return nil, false
 }
-
-// ResetContext drops stateful continuation metadata. Full-input stateless mode

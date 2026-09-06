@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sort"
 
 	"reasonix/internal/event"
@@ -15,13 +14,12 @@ import (
 // provider-side prompt-cache reuse. Comparing snapshots across turns
 // lets us explain *why* a cache miss happened.
 type PrefixShape struct {
-	SystemHash        string
-	ToolsHash         string
-	PrefixHash        string
-	ViewFP            string // fingerprint of the full model-visible view (messages after prompt shaping)
-	WireFP            string // fingerprint of the normalized messages actually sent last request
-	LogRewriteVersion int
-	ToolSchemaTokens  int
+	SystemHash           string
+	ToolsHash            string
+	PrefixHash           string
+	LogRewriteVersion    int
+	ToolSchemaTokens     int
+	SessionContextDigest string
 }
 
 // CacheDiagnostics is a type alias for event.CacheDiagnostics so the agent
@@ -36,7 +34,7 @@ func shortHash(v any) string {
 }
 
 // CaptureShape takes a snapshot of the current prefix state.
-func CaptureShape(systemPrompt string, schemas []provider.ToolSchema, rewriteVersion int, viewFP, wireFP string) PrefixShape {
+func CaptureShape(systemPrompt string, schemas []provider.ToolSchema, rewriteVersion int) PrefixShape {
 	normalizedSchemas := normalizeToolSchemas(schemas)
 	toolsJSON, _ := json.Marshal(normalizedSchemas)
 	return PrefixShape{
@@ -46,8 +44,6 @@ func CaptureShape(systemPrompt string, schemas []provider.ToolSchema, rewriteVer
 			"system": systemPrompt,
 			"tools":  string(toolsJSON),
 		}),
-		ViewFP:            viewFP,
-		WireFP:            wireFP,
 		LogRewriteVersion: rewriteVersion,
 		ToolSchemaTokens:  estimateTokens(string(toolsJSON)),
 	}
@@ -84,6 +80,9 @@ func CompareShape(prev, cur PrefixShape, usage *provider.Usage, contentReasons [
 	if prev.ToolsHash != "" && prev.ToolsHash != cur.ToolsHash {
 		reasons = append(reasons, "tools")
 	}
+	if prev.SessionContextDigest != cur.SessionContextDigest {
+		reasons = append(reasons, "session_context")
+	}
 	reasons = append(reasons, contentReasons...)
 	var miss, hit int
 	if usage != nil {
@@ -96,8 +95,6 @@ func CompareShape(prev, cur PrefixShape, usage *provider.Usage, contentReasons [
 		PrefixChangeReasons: reasons,
 		SystemHash:          cur.SystemHash,
 		ToolsHash:           cur.ToolsHash,
-		ViewFP:              cur.ViewFP,
-		WireFP:              cur.WireFP,
 		LogRewriteVersion:   cur.LogRewriteVersion,
 		ToolSchemaTokens:    cur.ToolSchemaTokens,
 		CacheMissTokens:     miss,
@@ -130,31 +127,4 @@ func SchemaTokenCosts(schemas []provider.ToolSchema) []ToolSchemaCost {
 type ToolSchemaCost struct {
 	Name   string
 	Tokens int
-}
-
-// detectResponseCacheMiss returns true when the current hit count is ≥5% and
-// ≥2000 tokens below the previous turn's baseline AND no compaction/snip was
-// in play (those legitimately shrink the prefix). Always updates the baseline
-// (or resets it after compaction) for the next turn.
-func detectResponseCacheMiss(a *Agent, hit int, contentReasons []string) bool {
-	prev := int(a.lastResponseHitTokens.Load())
-	defer func() { a.lastResponseHitTokens.Store(int64(hit)) }()
-	if prev <= 0 {
-		return false
-	}
-	if len(contentReasons) > 0 {
-		slog.Debug("agent: cache miss drop suppressed (prefix rewrite)", "reasons", contentReasons)
-		return false
-	}
-	drop := prev - hit
-	miss := drop >= 2000 && float64(hit) < float64(prev)*0.95
-	if miss {
-		slog.Info("agent: cache miss drop detected",
-			"prev_hit", prev,
-			"current_hit", hit,
-			"drop_tokens", drop,
-			"drop_pct", int((1-float64(hit)/float64(prev))*100),
-		)
-	}
-	return miss
 }

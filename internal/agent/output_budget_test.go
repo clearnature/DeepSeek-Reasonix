@@ -242,7 +242,7 @@ func TestEffectiveOutputBudgetClipsSharedWindowRequest(t *testing.T) {
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 950_000})
 	a.setPromptTokenCalibration(950_000, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
 
-	got, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, false)
+	got, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: msgs})
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -273,12 +273,14 @@ func TestCalibratedOutputBudgetIncludesReplayedReasoning(t *testing.T) {
 	if after < before+99_000 {
 		t.Fatalf("400K replayed reasoning was not calibrated: before=%d after=%d", before, after)
 	}
-	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, false)
+	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current})
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
-	if !clipped || budget > 20_000 {
-		t.Fatalf("replayed reasoning budget = %d clipped=%v, want a clipped budget <= 20000", budget, clipped)
+	adm := a.lastAdmission()
+	if !clipped || budget <= 0 || budget >= prov.budget ||
+		budget+adm.PromptTokens+adm.ReserveTokens > a.contextWindow {
+		t.Fatalf("replayed reasoning budget = %d clipped=%v admission=%+v, want a clipped request within the shared window", budget, clipped, adm)
 	}
 }
 
@@ -303,7 +305,7 @@ func TestCalibratedOutputBudgetKeepsCJKConservativeFloor(t *testing.T) {
 		t.Fatalf("calibrated estimate %d fell below mixed-script safety floor %d", calibrated, wantFloor)
 	}
 
-	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current}, false)
+	budget, clipped, err := a.effectiveOutputBudget(provider.Request{Messages: current})
 	if err != nil {
 		t.Fatalf("effectiveOutputBudget: %v", err)
 	}
@@ -346,7 +348,7 @@ func TestCalibratedResponsesBudgetIncludesNewOrdinaryReasoning(t *testing.T) {
 	if got := a.estimatedRequestTokens(current); got < 174_000 {
 		t.Fatalf("Responses ordinary reasoning estimate = %d, want newly replayed reasoning included", got)
 	}
-	if budget, clipped, err := a.effectiveOutputBudget(current, false); err != nil || !clipped || budget >= prov.budget {
+	if budget, clipped, err := a.effectiveOutputBudget(current); err != nil || !clipped || budget >= prov.budget {
 		t.Fatalf("Responses ordinary reasoning budget = %d clipped=%v err=%v, want a clipped budget", budget, clipped, err)
 	}
 }
@@ -368,7 +370,7 @@ func TestCalibratedResponsesBudgetIncludesNewReplayItems(t *testing.T) {
 	if got := a.estimatedRequestTokens(current); got < 174_000 {
 		t.Fatalf("Responses replay-item estimate = %d, want newly replayed item included", got)
 	}
-	if budget, clipped, err := a.effectiveOutputBudget(current, false); err != nil || !clipped || budget >= prov.budget {
+	if budget, clipped, err := a.effectiveOutputBudget(current); err != nil || !clipped || budget >= prov.budget {
 		t.Fatalf("Responses replay-item budget = %d clipped=%v err=%v, want a clipped budget", budget, clipped, err)
 	}
 }
@@ -415,7 +417,7 @@ func TestEffectiveOutputBudgetRejectsExhaustedSharedWindow(t *testing.T) {
 	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 1_045_000})
 	a.setPromptTokenCalibration(1_045_000, requestCalibrationShapeOf(provider.Request{Messages: msgs}))
 
-	_, _, err := a.effectiveOutputBudget(provider.Request{Messages: msgs}, false)
+	_, _, err := a.effectiveOutputBudget(provider.Request{Messages: msgs})
 	if !errors.Is(err, ErrCompactionRequired) {
 		t.Fatalf("effectiveOutputBudget error = %v, want ErrCompactionRequired", err)
 	}
@@ -426,7 +428,7 @@ func TestEffectiveOutputBudgetLeavesIndependentProviderUnchanged(t *testing.T) {
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov}, sess: sessionRuntime{output: outputBudgetState{outputBudget: prov.budget}}}
 	got, clipped, err := a.effectiveOutputBudget(provider.Request{
 		Messages: []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 950_000)}},
-	}, false)
+	})
 	if err != nil || clipped || got != 0 {
 		t.Fatalf("independent provider changed: budget=%d clipped=%v err=%v", got, clipped, err)
 	}
@@ -438,7 +440,7 @@ func TestEffectiveOutputBudgetHonorsExplicitOmit(t *testing.T) {
 	got, clipped, err := a.effectiveOutputBudget(provider.Request{
 		Messages:  []provider.Message{{Role: provider.RoleUser, Content: strings.Repeat("字", 950_000)}},
 		MaxTokens: -1,
-	}, false)
+	})
 	if err != nil || clipped || got != 0 {
 		t.Fatalf("explicit omit changed: budget=%d clipped=%v err=%v", got, clipped, err)
 	}
@@ -459,109 +461,18 @@ func TestSummarizeClipsSharedWindowOutputBudget(t *testing.T) {
 	}
 }
 
-func TestSummarizeAcceptsLengthTruncation(t *testing.T) {
+func TestSummarizeRejectsLengthTruncation(t *testing.T) {
 	prov := &sharedWindowTestProvider{budget: 128 * 1024, shared: true, finish: "length"}
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_048_576}, svc: agentServices{prov: prov, sink: event.Discard}, sess: sessionRuntime{output: outputBudgetState{outputBudget: prov.budget}}}
 
-	result, _, err := a.summarizeOnce(context.Background(), nil, []provider.Message{{
+	_, _, err := a.summarizeOnce(context.Background(), nil, []provider.Message{{
 		Role: provider.RoleUser, Content: "retain every durable fact",
 	}}, "")
-	if err != nil {
-		t.Fatalf("summarizeOnce error = %v, want success with partial output", err)
-	}
-	if !strings.Contains(result, "summary") {
-		t.Fatalf("summarizeOnce result = %q, want partial output", result)
+	if err == nil || !strings.Contains(err.Error(), "truncated") {
+		t.Fatalf("summarizeOnce error = %v, want truncation failure", err)
 	}
 	if prov.calls != 1 {
 		t.Fatalf("length-truncated summary calls = %d, want no identical retry", prov.calls)
-	}
-}
-
-func TestEstimateAnomalyReason(t *testing.T) {
-	a := &Agent{}
-	a.storeAdmission(contextAdmission{ObservedPrompt: 100_000})
-	window := 1_048_576
-	cases := []struct {
-		name     string
-		est      int
-		want     string
-		observed int
-	}{
-		{"trustworthy", 50_000, "", 100_000},
-		{"overflow", 1_100_000, "overflow", 100_000},
-		{"inflated", 800_000, "inflated", 100_000},
-		{"no-observed-not-inflated", 800_000, "", 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.observed != 100_000 {
-				a.storeAdmission(contextAdmission{ObservedPrompt: tc.observed})
-			}
-			if got := a.estimateAnomalyReason(tc.est, window); got != tc.want {
-				t.Fatalf("estimateAnomalyReason(%d, %d) = %q, want %q", tc.est, window, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestEstimatedReplaySafeTokensGuardsFullReplay(t *testing.T) {
-	big := strings.Repeat("y", 50_000)
-	canonical := make([]provider.Message, 100)
-	for i := range canonical {
-		canonical[i] = provider.Message{Role: provider.RoleUser, Content: big}
-	}
-	req := provider.Request{Messages: canonical}
-	a := &Agent{}
-	a.sess.compactionState.Projection.CoveredCount = 90
-	a.sess.output.lastUsage.Store(&provider.Usage{PromptTokens: 620_000})
-	shape := a.requestCalibrationShape(req)
-	est, raw := a.estimatedReplaySafeTokens(req, shape)
-	if raw <= est {
-		t.Fatalf("full-replay estimate = %d, raw = %d: want est < raw (projection guard)", est, raw)
-	}
-	// 投影视图（消息数 <= covered+slack）不保护：保持全量估算。
-	a.sess.compactionState.Projection.CoveredCount = 95
-	viewReq := provider.Request{Messages: canonical[:95]}
-	shape = a.requestCalibrationShape(viewReq)
-	est, raw = a.estimatedReplaySafeTokens(viewReq, shape)
-	if est != raw {
-		t.Fatalf("projection view est = %d, raw = %d: want equal (no guard)", est, raw)
-	}
-	// 无上次实测：不保护。
-	a.sess.compactionState.Projection.CoveredCount = 90
-	a.sess.output.lastUsage.Store(nil)
-	est, raw = a.estimatedReplaySafeTokens(req, shape)
-	_ = est
-	if raw == 0 {
-		t.Fatal("raw estimate should be non-zero")
-	}
-}
-
-func TestReplayProjectionViewPrefersProjectionOnOverflow(t *testing.T) {
-	big := strings.Repeat("z", 50_000)
-	canonical := make([]provider.Message, 100)
-	for i := range canonical {
-		canonical[i] = provider.Message{Role: provider.RoleUser, Content: big}
-	}
-	a := &Agent{agentConfig: agentConfig{contextWindow: 1_000_000}}
-	st := CompactionState{Projection: ContextProjection{
-		Messages:     []provider.Message{{Role: provider.RoleSystem, Content: "summary"}},
-		CoveredCount: 90,
-	}}
-	view := a.replayProjectionView(canonical, st)
-	if len(view) != 1+10 {
-		t.Fatalf("overflow replay view = %d messages, want projection(1)+tail(10)", len(view))
-	}
-	if view[0].Content != "summary" || view[len(view)-1].Content != big {
-		t.Fatalf("view tail mismatch: first=%q last_len=%d", view[0].Content, len(view[len(view)-1].Content))
-	}
-	// 不超窗：不干预（返回 nil，调用方走全量）。
-	small := make([]provider.Message, 5)
-	for i := range small {
-		small[i] = provider.Message{Role: provider.RoleUser, Content: "tiny"}
-	}
-	if v := a.replayProjectionView(small, st); v != nil {
-		t.Fatalf("non-overflow replay view = %v, want nil", v)
 	}
 }
 
@@ -658,8 +569,8 @@ func TestCalibratedBudgetIgnoresEncryptedSearchRaw(t *testing.T) {
 	if got, want := a.estimatedRequestTokens(withRaw), a.estimatedRequestTokens(withoutRaw); got != want {
 		t.Fatalf("estimate with encrypted raw = %d, without = %d", got, want)
 	}
-	wantBudget, wantClipped, wantErr := a.effectiveOutputBudget(withoutRaw, false)
-	gotBudget, gotClipped, gotErr := a.effectiveOutputBudget(withRaw, false)
+	wantBudget, wantClipped, wantErr := a.effectiveOutputBudget(withoutRaw)
+	gotBudget, gotClipped, gotErr := a.effectiveOutputBudget(withRaw)
 	if gotBudget != wantBudget || gotClipped != wantClipped || (gotErr != nil) != (wantErr != nil) {
 		t.Fatalf("encrypted raw changed output budget: got %d clipped=%v err=%v, want %d clipped=%v err=%v",
 			gotBudget, gotClipped, gotErr, wantBudget, wantClipped, wantErr)

@@ -18,14 +18,6 @@ type summaryProjectionCommit struct {
 	// covered is the canonical length the frozen projection body represents;
 	// messages past it splice live from the transcript.
 	covered int
-	// wirePrefix is the exact prefix the summary request sent this checkpoint
-	// (the provider-cached unit it replayed). Persisted as the lossless
-	// projection inverse so a resumed process replays the same bytes.
-	wirePrefix []provider.Message
-	// wireTools is the tool-schema half of the same cached unit; without it a
-	// resumed process replays the frozen messages against the live tool set
-	// and misses past the system prefix (2026-08-31 desktop).
-	wireTools []provider.ToolSchema
 }
 
 // commitSummaryProjection CAS-installs a checkpoint under compactionMu:
@@ -85,16 +77,10 @@ func (a *Agent) summaryProjectionState(commit summaryProjectionCommit) Compactio
 		Projection: ContextProjection{
 			Messages: commit.projected, TranscriptVersion: commit.transcriptVersion,
 			ProjectionVersion: projectionVersion, CoveredCount: commit.covered, CoveredPrefixHash: coveredHash,
-			NonToolContentHash: nonToolContentHash(commit.canonical, commit.covered),
-			SummaryHash:        summaryHash, SourceTokens: commit.sourceTokens, ProjectionTokens: commit.projectionTokens,
+			PinnedContextHash: pinnedContextCoverageHash(commit.canonical, commit.covered),
+			SummaryHash:       summaryHash, SourceTokens: commit.sourceTokens, ProjectionTokens: commit.projectionTokens,
 			ViewInputHash: commit.inputHash, ViewOutputHash: commit.outputHash, CreatedAt: now,
 		},
 		LastReceipt: receipt, UpdatedAt: now,
-		// Lossless projection inverse: preserve the exact prefix the summary
-		// request replayed (the provider-cached unit), so a resumed process
-		// can replay the same bytes instead of paying a full-price first
-		// compaction (project + reconstruct = identity, CRT-style).
-		LastWireMessages: commit.wirePrefix,
-		LastWireTools:    commit.wireTools,
 	}
 }

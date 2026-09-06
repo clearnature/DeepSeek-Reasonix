@@ -135,10 +135,10 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 }
 
 func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
-	detail := fmt.Sprintf("trigger=%s mode=%s summary_input=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d view_fp=%s wire_fp=%s tools_count=%d tools_fp=%s tools_source=%s",
+	detail := fmt.Sprintf("trigger=%s mode=%s summary_input=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d",
 		t.Trigger, t.Mode, t.SummaryInputMode, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount,
-		t.UserTurnsKept, t.UserTurnsDropped, t.ViewFP, t.WireFP, t.ToolsCount, t.ToolsFP, t.ToolsSource)
+		t.UserTurnsKept, t.UserTurnsDropped)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}

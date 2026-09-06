@@ -286,7 +286,7 @@
   },
   {
     "Name": "read_file",
-    "Description": "Read a text file with optional line offset/limit. Output prefixes each line with its 1-based number (e.g. `   42→...`) so subsequent edit_file calls can target exact lines. Use `offset` and `limit` to page through large files; the tool reports total length and pagination hints in a trailer.",
+    "Description": "Read a text file with optional line offset/limit. Output prefixes each line with its 1-based number (e.g. `   42→...`) so subsequent edit_file calls can target exact lines. Use `offset` and `limit` to page through large files; the tool reports total length and pagination hints in a trailer. Independent reads with no data dependency should be issued in the same round.",
     "ReadOnly": true,
     "Schema": {
       "properties": {
@@ -307,23 +307,6 @@
       },
       "required": [
         "path"
-      ],
-      "type": "object"
-    }
-  },
-  {
-    "Name": "retrieve_info",
-    "Description": "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中且系统已配置 deepseek-responses 时自动走该管道联网检索并落盘（复用系统 API 凭据，无需单独提供）；未配置时返回 needs_grant 标志，此时应使用 ask 工具询问用户是否允许联网检索。避免重复联网查询已检索过的事实。",
-    "ReadOnly": true,
-    "Schema": {
-      "properties": {
-        "query": {
-          "description": "要查询的问题（与之前的检索问题相同或语义相近）",
-          "type": "string"
-        }
-      },
-      "required": [
-        "query"
       ],
       "type": "object"
     }

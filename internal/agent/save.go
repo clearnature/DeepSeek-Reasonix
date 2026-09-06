@@ -81,10 +81,11 @@ var (
 const SessionRecoveryMaxDepth = 3
 
 type sessionPersistState struct {
-	path     string
-	digest   [sha256.Size]byte
-	version  uint64
-	revision int64
+	projectionPending bool
+	path              string
+	digest            [sha256.Size]byte
+	version           uint64
+	revision          int64
 	// revisionKnown marks revision as a real ledger value. It is false when
 	// the baseline was established while the meta sidecar was unreadable
 	// (torn or corrupt): the session must still open, but revision 0 must not
@@ -109,6 +110,7 @@ const (
 	sessionSaveSnapshot sessionSaveMode = iota
 	sessionSaveRewrite
 	sessionSaveRewriteCompact
+	sessionSaveToolCheckpoint
 )
 
 type snapshotWriteDecision struct {
@@ -325,7 +327,8 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 		}
 	}
 	repairLog := false
-	ownedRewrite := mode == sessionSaveRewrite || mode == sessionSaveRewriteCompact
+	deferProjection := mode.defersProjection()
+	ownedRewrite := mode.allowsOwnedRewrite()
 	decision, err := s.classifySnapshotWriteForCommit(path, msgs, digest, version, ownedRewrite, mode)
 	if err != nil {
 		return err
@@ -360,16 +363,17 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 				}
 			}
 			if displayModelCurrent {
-				if err := refreshSessionDisplayIndex(path, msgs, digest, revision, -1); err != nil {
+				if err := refreshCheckpointDisplayIndex(path, msgs, digest, revision, -1, deferProjection); err != nil {
 					// The display index is a derived sidecar; transcript durability
 					// must not depend on rebuilding it successfully.
 					slog.Warn("session: keeping save after display index write failure", "path", path, "err", err)
 				}
 			}
-			s.markPersistedWithListing(path, digest, version, revision, rewriteVersion, msgs)
+			s.markCheckpointPersisted(path, digest, version, revision, rewriteVersion, msgs, deferProjection)
 			return nil
 		}
-		s.markPersistedWithListing(path, digest, version, decision.revision, rewriteVersion, msgs)
+		s.refreshPendingCheckpointProjection(path, msgs, digest, decision.revision, deferProjection)
+		s.markCheckpointPersisted(path, digest, version, decision.revision, rewriteVersion, msgs, deferProjection)
 		return nil
 	}
 	if decision.appendOnly && probe.native && mode != sessionSaveRewriteCompact {
@@ -413,13 +417,13 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 			slog.Warn("session: keeping save after event index write failure", "path", path, "err", err)
 		}
 		if displayModelCurrent {
-			if err := refreshSessionDisplayIndex(path, msgs, digest, revision, decision.appendFrom); err != nil {
+			if err := refreshCheckpointDisplayIndex(path, msgs, digest, revision, decision.appendFrom, deferProjection); err != nil {
 				// The append boundary lets the refresh extend the previous index
 				// instead of re-encoding the whole transcript.
 				slog.Warn("session: keeping save after display index write failure", "path", path, "err", err)
 			}
 		}
-		s.markPersistedWithListing(path, digest, version, revision, rewriteVersion, msgs)
+		s.markCheckpointPersisted(path, digest, version, revision, rewriteVersion, msgs, deferProjection)
 		return nil
 	}
 	baseRevision = decision.revision
@@ -428,15 +432,7 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 	// damage repairs. The event log mutates first so a crash between the two
 	// writes leaves the newer transcript authoritative; the anchor rewrite
 	// keeps the compatibility .jsonl fresh for direct readers.
-	reason := "save"
-	switch mode {
-	case sessionSaveSnapshot:
-		reason = "snapshot"
-	case sessionSaveRewrite:
-		reason = "rewrite"
-	case sessionSaveRewriteCompact:
-		reason = "rewrite-compact"
-	}
+	reason := mode.eventReason()
 	if repairLog {
 		reason = "repair"
 	}
@@ -474,46 +470,12 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 			slog.Warn("session: keeping save after event index write failure", "path", path, "err", err)
 		}
 	}
-	if err := refreshSessionDisplayIndex(path, msgs, digest, revision, -1); err != nil {
+	if err := refreshCheckpointDisplayIndex(path, msgs, digest, revision, -1, deferProjection); err != nil {
 		// Warn-only like the event index above: the display index is a pure
 		// derived sidecar and must never fail a save.
 		slog.Warn("session: keeping save after display index write failure", "path", path, "err", err)
 	}
-	s.markPersistedWithListing(path, digest, version, revision, rewriteVersion, msgs)
-	return nil
-}
-
-func writeSessionMessages(path string, msgs []provider.Message) error {
-	// Write to a sibling tmp file then rename, so a crash mid-write can't
-	// leave a partial JSONL that won't reload. The fsync guards the anchor
-	// against power loss — it is the fallback when the event log is damaged.
-	fileutil.Crash("session-checkpoint", path)
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".session.*.tmp")
-	if err != nil {
-		return fmt.Errorf("create session tmp: %w", err)
-	}
-	tmpPath := tmp.Name()
-	enc := json.NewEncoder(tmp)
-	for _, m := range msgs {
-		if err := enc.Encode(m); err != nil {
-			tmp.Close()
-			os.Remove(tmpPath)
-			return fmt.Errorf("encode message: %w", err)
-		}
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := fileutil.ReplaceFile(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
+	s.markCheckpointPersisted(path, digest, version, revision, rewriteVersion, msgs, deferProjection)
 	return nil
 }
 
@@ -773,48 +735,6 @@ func (s *Session) saveRecoveryBranch(opts RecoveryBranchOptions, shutdown bool) 
 	return RecoveryBranchInfo{}, fmt.Errorf("allocate isolated recovery lane: too many existing collisions")
 }
 
-func (s *Session) saveRecoveryBranchMeta(path string, opts RecoveryBranchOptions, preview string, turns int, digest string, depth int) (BranchMeta, error) {
-	meta := opts.BranchMeta
-	meta.ID = BranchID(path)
-	if strings.TrimSpace(meta.Name) == "" {
-		meta.Name = firstNonEmpty(strings.TrimSpace(opts.Name), RecoveryBranchDefaultName)
-	}
-	if strings.TrimSpace(meta.ParentID) == "" {
-		meta.ParentID = recoveryRootID(opts.OriginalPath)
-	}
-	meta.ForkTurn = -1
-	meta.ForkMessageIndex = len(s.Snapshot())
-	meta.Preview = preview
-	meta.Turns = turns
-	meta.SchemaVersion = BranchMetaCountsVersion
-	meta.Recovered = true
-	meta.RecoveryReason = firstNonEmpty(strings.TrimSpace(opts.Reason), "session snapshot conflict")
-	meta.RecoveryDigest = digest
-	// Always stamped from the parent chain, never trusted from opts: callers
-	// copy tab/session meta wholesale and would carry a stale depth.
-	meta.RecoveryDepth = depth
-	if meta.Revision == 0 {
-		meta.Revision = 1
-	}
-	if strings.TrimSpace(meta.ContentDigest) == "" {
-		meta.ContentDigest = digest
-	}
-	stampSessionListingProjection(&meta)
-	if strings.TrimSpace(meta.WriterID) == "" {
-		meta.WriterID = SessionWriterID()
-	}
-	// Keep any in-flight turn marker across isolated in-place rewrites.
-	if err := saveBranchMetaKeepInFlightTurn(path, meta); err != nil {
-		return BranchMeta{}, err
-	}
-	if stored, ok, err := LoadBranchMeta(path); err != nil {
-		return BranchMeta{}, err
-	} else if ok {
-		return stored, nil
-	}
-	return meta, nil
-}
-
 func recoveryParentStem(parent string) string {
 	parent = strings.TrimSpace(parent)
 	if parent == "" {
@@ -914,6 +834,7 @@ func (s *Session) snapshotUpToDate(path string) bool {
 	defer s.mu.RUnlock()
 	return s.persisted.ok &&
 		s.persisted.saveVerified &&
+		!s.persisted.projectionPending &&
 		s.persisted.path == key &&
 		s.persisted.version == s.version &&
 		s.persisted.revisionKnown &&
@@ -1305,6 +1226,18 @@ func lockSessionSavePath(path string) func() {
 	return mu.Unlock
 }
 
+// tryLockSessionSavePath lets low-priority maintenance yield immediately to a
+// foreground save. The returned unlock is non-nil only when acquired.
+func tryLockSessionSavePath(path string) (func(), bool) {
+	key := canonicalSessionSavePath(path)
+	v, _ := sessionSaveLocks.LoadOrStore(key, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	if !mu.TryLock() {
+		return nil, false
+	}
+	return mu.Unlock, true
+}
+
 // lockSessionFile waits briefly for the cross-process compatibility save lock.
 // A short overlap with a legitimate writer is allowed to settle, but an
 // stalled or indefinitely held lock fails the save instead of freezing tab
@@ -1340,15 +1273,12 @@ func lockSessionFile(path string) (func(), error) {
 // cycle with both goroutines in this process and other Reasonix processes.
 // Callers must hold it from the first read through the final replace.
 func LockSessionMetaPath(path string) (func(), error) {
-	if strings.TrimSpace(path) == "" {
-		return nil, fmt.Errorf("empty session path")
-	}
-	canonical := canonicalSessionSavePath(path)
-	if err := os.MkdirAll(filepath.Dir(canonical), 0o755); err != nil {
-		return nil, fmt.Errorf("create session metadata dir: %w", err)
+	lockPath, err := sessionMetaLockTarget(path)
+	if err != nil {
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), sessionMetaLockWait)
-	releaseFile, err := filelock.Acquire(ctx, sessionMetaLockPath(canonical))
+	releaseFile, err := filelock.Acquire(ctx, lockPath)
 	cancel()
 	if err != nil {
 		return nil, fmt.Errorf("lock session metadata: %w", err)
@@ -1356,6 +1286,32 @@ func LockSessionMetaPath(path string) (func(), error) {
 	return func() {
 		releaseFile()
 	}, nil
+}
+
+func tryLockSessionMetaPath(path string) (func(), bool, error) {
+	lockPath, err := sessionMetaLockTarget(path)
+	if err != nil {
+		return nil, false, err
+	}
+	releaseFile, err := filelock.TryAcquire(lockPath)
+	if errors.Is(err, filelock.ErrHeld) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("try lock session metadata: %w", err)
+	}
+	return releaseFile, true, nil
+}
+
+func sessionMetaLockTarget(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("empty session path")
+	}
+	canonical := canonicalSessionSavePath(path)
+	if err := os.MkdirAll(filepath.Dir(canonical), 0o755); err != nil {
+		return "", fmt.Errorf("create session metadata dir: %w", err)
+	}
+	return sessionMetaLockPath(canonical), nil
 }
 
 func sessionMetaLockPath(path string) string {
@@ -1916,7 +1872,7 @@ func renameOverlongSession(oldPath string) (string, error) {
 // and the checkpoint/job directories. Lock and lease files are disposable and
 // are removed by the caller instead.
 func migrateSessionSidecars(oldPath, newPath, newID string) error {
-	var errs []error
+	errs := []error{migratePinnedContextSidecar(oldPath, newPath, newID)}
 	if len(filepath.Base(oldPath))+len(".meta") <= nameMaxBytes {
 		if meta, ok, err := LoadBranchMeta(oldPath); err != nil {
 			errs = append(errs, err)
@@ -1991,6 +1947,16 @@ func reparentSessionBranches(dir string, renamed map[string]string) error {
 // most-recently-active order used by ListSessions, using only file metadata and
 // branch sidecars. A missing directory is not an error.
 func ListSessionOrder(dir string) ([]SessionOrderInfo, error) {
+	return ListSessionOrderWithRecoveryPreferenceResolver(dir, RecoveryPreferenceCurrent)
+}
+
+// ListSessionOrderWithRecoveryPreferenceResolver lets catalog reconciliation
+// reuse its wave-local transcript snapshot when validating explicit choices.
+// Other callers keep the ordinary ListSessionOrder behavior above.
+func ListSessionOrderWithRecoveryPreferenceResolver(dir string, resolve RecoveryPreferenceResolver) ([]SessionOrderInfo, error) {
+	if resolve == nil {
+		resolve = RecoveryPreferenceCurrent
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -2050,7 +2016,7 @@ func ListSessionOrder(dir string) ([]SessionOrderInfo, error) {
 			recoveryReason = meta.RecoveryReason
 			recoveryDigest = meta.RecoveryDigest
 			parentID = meta.ParentID
-			recoveryPreferred = RecoveryPreferenceCurrent(full, meta)
+			recoveryPreferred = resolve(full, meta)
 			turns = meta.Turns
 			preview = meta.Preview
 			schemaVersion = meta.SchemaVersion

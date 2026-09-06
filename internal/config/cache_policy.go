@@ -56,14 +56,6 @@ func detectCacheVendor(baseURL string) string {
 		return "dashscope"
 	case host == "api.deepseek.com", strings.HasSuffix(host, ".deepseek.com"):
 		return "deepseek"
-	case host == "api.xiaomimimo.com", strings.HasSuffix(host, ".xiaomimimo.com"):
-		// MiMo: verified 2026-08-02 with a 8.8K-token prefix — cached_tokens
-		// reaches 99.9% hit (17024/17034) and survives 2h+ (short prefixes
-		// also hit, but take ~1.5-2h to warm). Aligns with the vendor's
-		// Hybrid SWA + GCache long-TTL design ("hours to days"), so the 24h
-		// unknown-vendor default is correct; do not move MiMo to the 5min
-		// tier.
-		return "mimo"
 	case host == "api.anthropic.com", strings.HasSuffix(host, ".anthropic.com"):
 		return "anthropic"
 	default:

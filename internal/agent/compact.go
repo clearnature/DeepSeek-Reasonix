@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -20,8 +19,6 @@ import (
 // and up to two cache-aligned summary checkpoints restore headroom.
 const (
 	defaultCompactRatio    = 0.80 // sole automatic maintenance trigger (new configs)
-	cheapHitRatioThreshold = 0.015
-	cheapHitCompactRatio   = 0.90
 	recentTailBudgetRatio  = 0.16 // recent verbatim tail as a fraction of the window
 	summaryOutputMaxTokens = 8192 // max digest output; further clipped by remaining candidate space
 	minRecentKeep          = 2    // never keep fewer recent messages than this
@@ -46,7 +43,6 @@ const (
 // byte-stable sampling prefix. This lets providers reuse the ordinary request's
 // system, tools and message-prefix KV cache.
 const compactionInstruction = `Compact the preceding conversation prefix into a durable resume briefing.
-Do not spend tokens on reasoning — produce the briefing directly, without a thinking block.
 Write under these exact headings, omitting a heading only if it has no content:
 
 ## Standing facts & constraints
@@ -72,20 +68,26 @@ What is still in progress or unstarted, and the single most concrete next action
 
 Rules: be terse — bullet points and fragments, not prose. Preserve identifiers, paths, and numbers exactly. Merge valid facts from any existing <compaction-summary> and remove facts superseded by later messages. Do NOT invent anything not present in the messages; if something is unknown, leave it out rather than guessing. Output only the structured Markdown briefing. Do not call tools. Do not output reasoning.`
 
-// priceAwareCompactRatio defers compaction when cache hits are nearly free
-// relative to full input (hit/in < 1.5%): retaining history at hit price then
-// beats a full-price fold. Applied only when the user did not set a ratio.
-func priceAwareCompactRatio(p *provider.Pricing) float64 {
-	if p != nil && p.CacheHit > 0 && p.Input > 0 && p.CacheHit/p.Input < cheapHitRatioThreshold {
-		return cheapHitCompactRatio
-	}
-	return defaultCompactRatio
-}
-
 // compactTrigger is the sole automatic context-maintenance boundary. Output
 // budgets are intentionally absent: they are clipped against the final request
 // at send time and must never make compaction happen earlier than the user's
 // configured compact_ratio.
+func (a *Agent) compact(ctx context.Context, trigger, instructions string, force bool) error {
+	allowChunked := trigger == CompactionTriggerManual
+	_, err := a.compactToProjectionWithChunked(ctx, trigger, instructions, force, false, allowChunked)
+	return err
+}
+
+func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force, mustFree bool) (CompactionOutcome, error) {
+	return a.compactToProjectionWithChunked(ctx, trigger, instructions, force, mustFree, false)
+}
+
+func (a *Agent) compactToProjectionWithChunked(ctx context.Context, trigger, instructions string, force, mustFree, allowChunked bool) (CompactionOutcome, error) {
+	a.sess.compactionRunMu.Lock()
+	defer a.sess.compactionRunMu.Unlock()
+	return a.compactToProjectionLocked(ctx, trigger, instructions, force, mustFree, allowChunked)
+}
+
 func (a *Agent) compactTrigger() int {
 	window := a.effectiveContextWindow()
 	if a == nil || window <= 0 {
@@ -133,7 +135,7 @@ func foldEconomics(region []provider.Message) bool {
 func estimateMessagesTokens(msgs []provider.Message) int {
 	total := 0
 	for _, m := range msgs {
-		if m.LocalOnly {
+		if m.LocalOnly || IsPinnedContextRevision(m) {
 			continue
 		}
 		total += 4 // chat-message framing overhead
@@ -374,9 +376,12 @@ func compactionInstructionWithFocus(instructions string) string {
 	return instruction
 }
 
-// summaryRequestToolsForCommit returns the tool schemas the summary request
-// actually sends for the given prefix, mirroring summaryRequest's choice so
-// the persisted sidecar bytes match what hit the provider.
+// summaryRequest builds the exact cache-aligned request shape used by
+// summarize. Keeping planning and execution on this shared builder prevents a
+// supposedly safe overflow fold from being rejected only after it is selected.
+// summaryRequestToolsForCommit returns the tool schemas the commit-time
+// summary request will send: frozen when a full frozen unit exists, else the
+// live registry. Telemetry uses it to attribute tool-seam divergence.
 func (a *Agent) summaryRequestToolsForCommit(prefix []provider.Message) []provider.ToolSchema {
 	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
 		return saved.tools
@@ -401,10 +406,13 @@ func (a *Agent) summaryToolsSource() ([]provider.ToolSchema, string) {
 	return nil, "none"
 }
 
-// summaryRequest builds the exact cache-aligned request shape used by
-// summarize: the verbatim head (already in the provider's prefix cache from
-// ordinary requests) precedes the fold region so the fold lands at the same
-// byte position the server cached it at. Keeping planning and execution on
+// summaryRequest builds the cache-aligned summary request: the verbatim
+// prefix (already in the provider's prefix cache from ordinary requests)
+// precedes the fold region so the fold lands at the same byte position the
+// server cached it at. When a frozen main request exists, its bytes AND its
+// frozen tool schemas are replayed — the server caches system+tools+messages
+// as one unit, and the live tool set drifts (MCP registration) between the
+// main request and the summary request. Keeping planning and execution on
 // this shared builder prevents a supposedly safe overflow fold from being
 // rejected only after it is selected.
 func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions string) provider.Request {
@@ -416,18 +424,11 @@ func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions s
 		}
 	}
 	messages := a.normalizeModelRequestMessages(msgs)
-	messages = append(messages, provider.Message{Role: provider.RoleUser, Content: compactionInstructionWithFocus(instructions)})
+	messages = append(messages, HostGeneratedUserMessage(compactionInstructionWithFocus(instructions)))
 	var schemas []provider.ToolSchema
 	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
-		// The prefix replays the frozen main-request bytes, so the tools must
-		// be the frozen ones too: the server caches system+tools+messages as
-		// one unit, and the live tool set drifts (MCP registration) between
-		// the main request and the summary request.
 		schemas = saved.tools
 	} else if a.svc.tools != nil {
-		// No frozen tools (legacy sidecar or tool-less request): fall back to
-		// the live registry so the summary never sends an empty tool list
-		// that diverges from the real main-request prefix.
 		schemas = a.providerToolSchemas()
 	}
 	return provider.Request{
@@ -439,23 +440,8 @@ func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions s
 	}
 }
 
-// summaryOutputBudget sizes the digest request: the vendor's dedicated
-// compaction budget wins (deepseek 16K, dashscope 8192, mimo 4096), otherwise
-// the default applies.
-func (a *Agent) summaryOutputBudget() int {
-	if a != nil && a.svc.prov != nil {
-		if p, ok := a.svc.prov.(provider.CompactionOutputTokensProvider); ok {
-			if v := p.CompactionOutputTokens(); v > 0 {
-				return v
-			}
-		}
-	}
-	return summaryOutputMaxTokens
-}
-
 // summarize asks the executor's own provider to distill a replayed prefix into
-// a briefing. prefix is the verbatim head kept out of the fold; instructions
-// is optional /compact focus + PreCompact text.
+// a briefing. instructions is optional /compact focus + PreCompact text.
 // Named returns so defer can attach RequestCount and still return usage.
 func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message, instructions string) (summary string, usage *provider.Usage, err error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -472,8 +458,8 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 	if err := a.applySummaryAdmissionToRequest(&req); err != nil {
 		return "", usage, err
 	}
-	if req.MaxTokens > a.summaryOutputBudget() {
-		req.MaxTokens = a.summaryOutputBudget()
+	if budget := a.summaryOutputBudget(); req.MaxTokens > budget {
+		req.MaxTokens = budget
 	}
 	if req.MaxTokens < 256 {
 		return "", usage, fmt.Errorf("summary output budget too small (%d tokens)", req.MaxTokens)
@@ -481,8 +467,7 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 	if a.svc.prov == nil {
 		return "", usage, fmt.Errorf("summary unavailable")
 	}
-	a.sess.setWireFP(providerVisibleFingerprint(req.Messages))
-	ch, err := a.svc.prov.Stream(ctx, req)
+	ch, err := provider.StreamAuxiliary(provider.WithRecoverySleeper(ctx, recoverySleep), a.svc.prov, req)
 	if err != nil {
 		return "", usage, err
 	}
@@ -495,17 +480,10 @@ func (a *Agent) summarize(ctx context.Context, prefix, region []provider.Message
 			return "", usage, ctx.Err()
 		case chunk, ok := <-ch:
 			if !ok {
-				s := strings.TrimSpace(b.String())
 				if usage != nil && usage.FinishReason == "length" {
-					// Output was truncated at the provider's token limit.
-					// Accept the partial output rather than failing — a partial
-					// summary is still better than no compaction at all.
-					if s == "" {
-						return "", usage, fmt.Errorf("%w: provider reached the output token limit with zero output", errSummaryOutputTruncated)
-					}
-					slog.Warn("summarizer output truncated at token limit — accepting partial output", "bytes", len(s))
-					return s, usage, nil
+					return "", usage, fmt.Errorf("%w: provider reached the output token limit", errSummaryOutputTruncated)
 				}
+				s := strings.TrimSpace(b.String())
 				if s == "" {
 					return "", usage, fmt.Errorf("summarizer returned empty output")
 				}

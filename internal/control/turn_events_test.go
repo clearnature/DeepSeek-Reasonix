@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"reasonix/internal/event"
+	"reasonix/internal/turnevent"
 )
 
 type turnEventGateRunner struct {
@@ -73,7 +75,7 @@ func TestTurnAdmissionIsDurableBeforeRunnerStarts(t *testing.T) {
 	}
 }
 
-func TestTurnAdmissionLedgerFailureProceedsWithoutDurability(t *testing.T) {
+func TestTurnAdmissionLedgerFailureDoesNotRunProvider(t *testing.T) {
 	dir := t.TempDir()
 	blockedParent := filepath.Join(dir, "not-a-directory")
 	if err := os.WriteFile(blockedParent, []byte("block"), 0o600); err != nil {
@@ -92,39 +94,17 @@ func TestTurnAdmissionLedgerFailureProceedsWithoutDurability(t *testing.T) {
 	})
 	t.Cleanup(c.Close)
 
-	// Desktop flow: routing metadata is attached before Submit so the memory
-	// fallback can map the submission back to a non-empty turn id.
-	const submissionID = "test-submission-1"
-	c.SetTurnEventRoutingMetadata("epoch-1", submissionID)
-	c.Submit("should proceed without durability")
-	// With non-fatal ledger errors, the turn should proceed.
-	// Wait for the runner to start, then release it.
-	select {
-	case <-runner.started:
-	case <-time.After(5 * time.Second):
-		t.Fatal("runner did not start")
-	}
-	// The desktop admission protocol must still observe a turn id even though
-	// the durable ledger is unavailable — otherwise StartTurnForTab rejects the
-	// send with "turn admission did not produce a durable turn id".
-	if got := c.TurnIDForSubmission(submissionID); got == "" {
-		t.Fatal("TurnIDForSubmission = \"\", want memory fallback turn id")
-	}
-	if got := c.RuntimeStatus().TurnID; got == "" {
-		t.Fatal("RuntimeStatus().TurnID = \"\", want memory fallback turn id")
-	}
-	close(runner.release)
+	c.Submit("must not reach provider")
 	select {
 	case terminal := <-done:
-		// Turn should succeed — ledger errors are non-fatal.
-		if terminal.Err != nil {
-			t.Fatalf("terminal error = %v, want success (ledger errors are non-fatal)", terminal.Err)
+		if !errors.Is(terminal.Err, turnevent.ErrTurnLedgerUnavailable) {
+			t.Fatalf("terminal error = %v, want explicit ledger admission failure", terminal.Err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("turn did not complete")
+		t.Fatal("failed admission did not terminate")
 	}
-	if got := runner.calls.Load(); got != 1 {
-		t.Fatalf("runner calls = %d, want provider ran once", got)
+	if got := runner.calls.Load(); got != 0 {
+		t.Fatalf("runner calls = %d, want provider side effects blocked", got)
 	}
 }
 

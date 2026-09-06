@@ -55,7 +55,6 @@ func TestDetectCacheVendor(t *testing.T) {
 		{"https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", "dashscope"},
 		{"https://dashscope.aliyuncs.com/api/v1", "dashscope"},
 		{"https://api.deepseek.com", "deepseek"},
-		{"https://api.xiaomimimo.com/v1", "mimo"},
 		{"https://api.anthropic.com", "anthropic"},
 		{"https://openrouter.ai/api/v1", ""},
 		{"https://dashscope.aliyuncs.com.attacker.example/v1", ""},

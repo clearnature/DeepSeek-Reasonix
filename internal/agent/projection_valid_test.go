@@ -49,6 +49,95 @@ func TestProjectionValidRejectsEditedPrefix(t *testing.T) {
 	}
 }
 
+func TestProjectionSurvivesDynamicSystemRefresh(t *testing.T) {
+	canonical := []provider.Message{
+		{Role: provider.RoleSystem, Content: "system-v1"},
+		{Role: provider.RoleUser, Content: "task"},
+		{Role: provider.RoleAssistant, Content: "done"},
+		{Role: provider.RoleUser, Content: "next"},
+	}
+	const key = "ws|session|model"
+	st := CompactionState{
+		TranscriptVersion: 4,
+		PromptCacheKey:    key,
+		Projection: ContextProjection{
+			Messages: []provider.Message{
+				{Role: provider.RoleSystem, Content: "system-v1"},
+				formatSummaryMessage("earlier task completed"),
+			},
+			TranscriptVersion: 4,
+			CoveredCount:      3,
+			CoveredPrefixHash: coveredPrefixHash(canonical, 3),
+		},
+	}
+
+	if !projectionValid(st, canonical, key) {
+		t.Fatal("matching projection should be valid")
+	}
+
+	refreshed := append([]provider.Message(nil), canonical...)
+	refreshed[0].Content = "system-v2"
+	if !projectionValid(st, refreshed, key) {
+		t.Fatal("dynamic system-only refresh invalidated the projection")
+	}
+	visible := modelVisibleFromProjection(st.Projection, refreshed)
+	if len(visible) == 0 || visible[0].Content != "system-v2" {
+		t.Fatalf("visible system = %+v, want refreshed system-v2", visible)
+	}
+	if len(visible) < 2 || !isCompactionSummary(visible[1]) {
+		t.Fatalf("projection summary was not retained: %+v", visible)
+	}
+
+	edited := append([]provider.Message(nil), refreshed...)
+	edited[1].Content = "different task"
+	if projectionValid(st, edited, key) {
+		t.Fatal("covered user edit was mistaken for a system-only refresh")
+	}
+}
+
+func TestLoadProjectionSidecarRestoresAfterDynamicSystemRefresh(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	original := []provider.Message{
+		{Role: provider.RoleSystem, Content: "system-v1"},
+		{Role: provider.RoleUser, Content: "task"},
+		{Role: provider.RoleAssistant, Content: "done"},
+		{Role: provider.RoleUser, Content: "next"},
+	}
+	key := promptCacheKey("ws", BranchID(path), "m")
+	if err := SaveCompactionState(path, CompactionState{
+		PromptCacheKey: key,
+		Projection: ContextProjection{
+			Messages: []provider.Message{
+				{Role: provider.RoleSystem, Content: "system-v1"},
+				formatSummaryMessage("earlier task completed"),
+			},
+			CoveredCount:      3,
+			CoveredPrefixHash: coveredPrefixHash(original, 3),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sess := NewSession("system-v2")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "task"})
+	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "done"})
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "next"})
+	a := New(nil, nil, sess, Options{
+		SessionPath: path,
+		WorkspaceID: "ws",
+		ModelRef:    "m",
+	}, event.Discard)
+
+	if a.sess.checkpointState != "restored" {
+		t.Fatalf("checkpointState = %q, want restored", a.sess.checkpointState)
+	}
+	visible := a.modelVisibleMessages()
+	if len(visible) != 3 || visible[0].Content != "system-v2" || !isCompactionSummary(visible[1]) || visible[2].Content != "next" {
+		t.Fatalf("restored visible projection = %+v", visible)
+	}
+}
+
 func TestProjectionValidRejectsCacheKeyMismatch(t *testing.T) {
 	msgs := []provider.Message{
 		{Role: provider.RoleSystem, Content: "sys"},
@@ -318,273 +407,5 @@ func TestCompactInstallsCoveredPrefixHash(t *testing.T) {
 	msgs, _ := sess.snapshotMessagesVersion()
 	if !projectionValid(st, msgs, st.PromptCacheKey) {
 		t.Fatal("fresh projection should validate")
-	}
-}
-
-func TestLoadProjectionSidecarDegradedKeepsBody(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "s.jsonl")
-	orig := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "task-v1"},
-		{Role: provider.RoleAssistant, Content: "done"},
-		{Role: provider.RoleUser, Content: "next"},
-	}
-	// Sidecar records the unedited prefix hash. NonToolContentHash marks it
-	// as a trustworthy compaction artifact (full metadata).
-	if err := SaveCompactionState(path, CompactionState{
-		SchemaVersion:     compactionStateSchemaV1,
-		PromptCacheKey:    promptCacheKey("ws", BranchID(path), "model"),
-		TranscriptVersion: 1,
-		Projection: ContextProjection{
-			Messages: []provider.Message{
-				{Role: provider.RoleSystem, Content: "sys summary"},
-				{Role: provider.RoleUser, Content: "task summary"},
-			},
-			CoveredCount:       3,
-			CoveredPrefixHash:  coveredPrefixHash(orig, 3),
-			NonToolContentHash: nonToolContentHash(orig, 3),
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// Conversation has an edited covered prefix (hash mismatch, same lineage).
-	edited := append([]provider.Message(nil), orig...)
-	edited[1].Content = "task-EDITED"
-	sess := NewSession("sys")
-	sess.Add(edited[1])
-	sess.Add(edited[2])
-	sess.Add(edited[3])
-	a := New(nil, nil, sess, Options{
-		SessionPath: path,
-		WorkspaceID: "ws",
-		ModelRef:    "model",
-	}, event.Discard)
-	// Same-lineage hash mismatch must keep the projection body for the
-	// degraded tail-only send (12:49 case) — not drop it and replay the full
-	// disk transcript.
-	if len(a.sess.compactionState.Projection.Messages) == 0 {
-		t.Fatal("same-lineage degraded projection body was dropped")
-	}
-	if a.sess.checkpointState != "none" {
-		t.Fatalf("checkpointState = %q, want none (degraded, not restored)", a.sess.checkpointState)
-	}
-	// modelVisibleMessages must send projection+tail, not the full transcript.
-	visible := a.modelVisibleMessages()
-	if len(visible) != 3 {
-		t.Fatalf("model-visible = %d messages, want 3 (2 projection + 1 tail)", len(visible))
-	}
-	if visible[0].Content != "sys summary" {
-		t.Fatalf("visible[0] = %q, want projection summary head", visible[0].Content)
-	}
-	if visible[len(visible)-1].Content != "next" {
-		t.Fatalf("visible tail = %q, want latest message", visible[len(visible)-1].Content)
-	}
-}
-
-func TestModelVisibleDegradedCoveredExceedsTranscript(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "s.jsonl")
-	msgs := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "task"},
-	}
-	// Sidecar claims to cover 5 messages while the disk transcript has only 2
-	// (post-compaction transcript shrink). The projection body still covers
-	// the folded history — send it alone rather than replaying the transcript.
-	if err := SaveCompactionState(path, CompactionState{
-		SchemaVersion:     compactionStateSchemaV1,
-		PromptCacheKey:    promptCacheKey("ws", BranchID(path), "model"),
-		TranscriptVersion: 1,
-		Projection: ContextProjection{
-			Messages: []provider.Message{
-				{Role: provider.RoleSystem, Content: "folded summary"},
-			},
-			CoveredCount:      5,
-			CoveredPrefixHash: "stale-hash",
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	sess := NewSession(msgs[0].Content)
-	sess.Add(msgs[1])
-	a := New(nil, nil, sess, Options{
-		SessionPath: path,
-		WorkspaceID: "ws",
-		ModelRef:    "model",
-	}, event.Discard)
-	if len(a.sess.compactionState.Projection.Messages) == 0 {
-		t.Fatal("covered-exceeds projection body was dropped")
-	}
-	visible := a.modelVisibleMessages()
-	if len(visible) != 1 {
-		t.Fatalf("model-visible = %d messages, want 1 (projection body only)", len(visible))
-	}
-	if visible[0].Content != "folded summary" {
-		t.Fatalf("visible[0] = %q, want folded summary", visible[0].Content)
-	}
-}
-
-func TestVisibleInputForFoldMatchesSamplingViewOnProjectionLoss(t *testing.T) {
-	// Projection loss with a usable body must degrade both sampling and compaction
-	// to the same projection+tail view, or summary requests lose the prefix bytes (2026-08-30: 3.6% hit).
-	canonical := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "task-v1"},
-		{Role: provider.RoleAssistant, Content: "done"},
-		{Role: provider.RoleUser, Content: "mid-1"},
-		{Role: provider.RoleAssistant, Content: "mid-2"},
-		{Role: provider.RoleUser, Content: "tail"},
-	}
-	st := CompactionState{
-		TranscriptVersion: 1,
-		Projection: ContextProjection{
-			Messages: []provider.Message{
-				{Role: provider.RoleSystem, Content: "sys"},
-				{Role: provider.RoleUser, Content: "SUMMARY"},
-			},
-			TranscriptVersion:  1,
-			CoveredCount:       3,
-			CoveredPrefixHash:  "stale-hash", // fingerprint mismatch → invalid
-			NonToolContentHash: "usable-body",
-		},
-	}
-	a := &Agent{}
-	foldView, onProjection := a.visibleInputForFold(st, canonical, 1)
-	if !onProjection {
-		t.Fatal("projection loss with usable body must degrade to projection+tail, not canonical")
-	}
-	want := append([]provider.Message{}, st.Projection.Messages...)
-	want = append(want, canonical[st.Projection.CoveredCount:]...)
-	if len(foldView) != len(want) {
-		t.Fatalf("fold view = %d messages, want %d", len(foldView), len(want))
-	}
-	for i := range want {
-		if foldView[i].Role != want[i].Role || foldView[i].Content != want[i].Content {
-			t.Fatalf("fold view[%d] = (%s %q), want (%s %q)", i, foldView[i].Role, foldView[i].Content, want[i].Role, want[i].Content)
-		}
-	}
-	// Sampling and compaction must resolve the identical view.
-	samplingView, _ := a.visibleMessagesWithFlag(st, canonical, "ws|sess|model")
-	if len(samplingView) != len(foldView) {
-		t.Fatalf("sampling view = %d messages, fold view = %d", len(samplingView), len(foldView))
-	}
-	for i := range foldView {
-		if samplingView[i].Role != foldView[i].Role || samplingView[i].Content != foldView[i].Content {
-			t.Fatalf("view divergence at %d: sampling (%s %q) vs fold (%s %q)", i, samplingView[i].Role, samplingView[i].Content, foldView[i].Role, foldView[i].Content)
-		}
-	}
-}
-
-// TestSummaryRequestBytesMatchSamplingOnValidProjection 验证投影 valid 时
-// 摘要请求字节与采样发送字节一致（d9e235177 R1+R2 的核心契约）：视图统一 +
-// head 前置后，摘要请求前缀应命中父已发送前缀。2026-08-30 21:47 实测仍
-// miss（4.9%），此测试固定该契约防止回归。
-func TestSummaryRequestBytesMatchSamplingOnValidProjection(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "s.jsonl")
-	sess := NewSession("sys")
-	msgs := []provider.Message{
-		{Role: provider.RoleUser, Content: "task-1"},
-		{Role: provider.RoleAssistant, Content: "a1", ToolCalls: []provider.ToolCall{{ID: "c1", Name: "read", Arguments: `{"p":"x"}`}}},
-		{Role: provider.RoleTool, ToolCallID: "c1", Name: "read", Content: "RESULT"},
-		{Role: provider.RoleUser, Content: "task-2"},
-		{Role: provider.RoleAssistant, Content: "a2"},
-	}
-	for _, m := range msgs {
-		sess.Add(m)
-	}
-	a := New(nil, nil, sess, Options{SessionPath: path, WorkspaceID: "ws", ModelRef: "model"}, event.Discard)
-	canonical, _ := a.sess.conversation.snapshotMessagesVersion()
-	covered := len(canonical)
-	st := CompactionState{
-		TranscriptVersion: 1,
-		Projection: ContextProjection{
-			Messages: []provider.Message{
-				{Role: provider.RoleSystem, Content: "sys"},
-				{Role: provider.RoleUser, Content: "SUMMARY"},
-			},
-			TranscriptVersion: 1,
-			CoveredCount:      covered,
-			CoveredPrefixHash: coveredPrefixHash(canonical, covered),
-		},
-	}
-	st.PromptCacheKey = a.currentPromptCacheKey()
-	a.sess.compactionState = st
-
-	sampling := a.normalizeModelRequestMessages(a.modelVisibleMessages())
-	visible, onProjection := a.visibleInputForFold(st, canonical, 1)
-	if !onProjection {
-		t.Fatal("expected valid projection view")
-	}
-	if len(sampling) != len(visible) {
-		t.Fatalf("sampling view = %d messages, fold view = %d", len(sampling), len(visible))
-	}
-	head := 1 // pinned system
-	req := a.summaryRequest(visible[0:head], visible[head:], "")
-	for i := range sampling {
-		if i >= len(req.Messages)-1 { // last message is the summary instruction
-			t.Fatalf("request too short at %d: sampling %d, req %d", i, len(sampling), len(req.Messages))
-		}
-		got := req.Messages[i].Content
-		want := sampling[i].Content
-		if got != want {
-			t.Fatalf("byte divergence at message %d:\n sampling: %q\n request: %q", i, want, got)
-		}
-	}
-}
-
-// TestInvalidateProjectionKeepsBodyForDegradedView 验证投影失效后保留 body：
-// 折叠路径仍走 degraded 投影+tail 视图（与父已发送字节一致），而非退回
-// canonical（SUMMARY 替换处与父前缀分叉 → 摘要请求全价 miss，
-// 2026-08-30 21:47:44 实测 hit=11008/222690）。
-func TestInvalidateProjectionKeepsBodyForDegradedView(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "s.jsonl")
-	sess := NewSession("sys")
-	msgs := []provider.Message{
-		{Role: provider.RoleUser, Content: "task-1"},
-		{Role: provider.RoleAssistant, Content: "a1"},
-	}
-	for _, m := range msgs {
-		sess.Add(m)
-	}
-	a := New(nil, nil, sess, Options{SessionPath: path, WorkspaceID: "ws", ModelRef: "model"}, event.Discard)
-	canonical, _ := a.sess.conversation.snapshotMessagesVersion()
-	st := CompactionState{
-		TranscriptVersion: 1,
-		Projection: ContextProjection{
-			Messages: []provider.Message{
-				{Role: provider.RoleSystem, Content: "sys"},
-				{Role: provider.RoleUser, Content: "SUMMARY"},
-			},
-			CoveredCount:      len(canonical),
-			CoveredPrefixHash: coveredPrefixHash(canonical, len(canonical)),
-		},
-	}
-	st.PromptCacheKey = a.currentPromptCacheKey()
-	a.sess.compactionState = st
-	a.InvalidateProjection()
-	if len(a.sess.compactionState.Projection.Messages) != 2 {
-		t.Fatalf("projection body dropped after invalidation: %d messages", len(a.sess.compactionState.Projection.Messages))
-	}
-	visible, onProjection := a.visibleInputForFold(a.sess.compactionState, canonical, 1)
-	if !onProjection {
-		t.Fatal("invalidated projection must degrade to projection+tail, not canonical")
-	}
-	want := append([]provider.Message{}, st.Projection.Messages...)
-	want = append(want, canonical[st.Projection.CoveredCount:]...)
-	if len(visible) != len(want) {
-		t.Fatalf("degraded view = %d messages, want %d", len(visible), len(want))
-	}
-	for i := range want {
-		if visible[i].Content != want[i].Content {
-			t.Fatalf("degraded view[%d] = %q, want %q", i, visible[i].Content, want[i].Content)
-		}
-	}
-	// 采样路径必须解析同一视图（R1 契约）。
-	sampling := a.modelVisibleMessages()
-	if len(sampling) != len(visible) {
-		t.Fatalf("sampling view = %d, degraded view = %d", len(sampling), len(visible))
 	}
 }

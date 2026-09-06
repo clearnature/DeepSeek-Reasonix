@@ -96,15 +96,19 @@ func TestColdResumeAfterClonedHistoryStaysInPlace(t *testing.T) {
 	if got := c.SessionPath(); got != path {
 		t.Fatalf("SessionPath after cold resume = %q, want %q", got, path)
 	}
+	// Snapshot was not rewritten by cold resume; in-memory clone keeps new sys
+	// until an explicit save. Disk still has whatever was last saved unless
+	// SnapshotRewrite ran — cold path must not rewrite.
 	re, err := agent.LoadSession(path)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	// Cold resume does NOT compact or rewrite — it only records cache state.
-	// Disk still has whatever was last saved ("old sys"). In-memory clone
-	// keeps "new sys" until an explicit save.
 	if got := re.Messages[0].Content; got != "old sys" {
+		// Cold resume must not SnapshotRewrite the cloned in-memory system prompt.
 		t.Fatalf("system prompt on disk after cold resume = %q, want old sys (no rewrite)", got)
+	}
+	if !strings.HasPrefix(re.Messages[3].Content, "yyy") {
+		t.Fatalf("tool result rewrote on cold resume: %.60q", re.Messages[3].Content)
 	}
 	if matches, err := filepath.Glob(filepath.Join(dir, "*-recovery-*.jsonl")); err != nil || len(matches) != 0 {
 		t.Fatalf("recovery branches after cloned cold resume = %v err=%v, want none", matches, err)

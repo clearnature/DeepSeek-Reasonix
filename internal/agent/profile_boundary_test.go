@@ -57,6 +57,9 @@ func TestDelegationSpecMembersStaySeparate(t *testing.T) {
 	assertFieldSet(t, "ProfileExecSpec", ProfileExecSpec{}, []string{
 		"Task", "Worker", "Grant", "Context", "Sched",
 	})
+	// Sink/Asker are the leader's transport surfaces (stats + approval chain)
+	// carried per delegated run by the team subsystem; they never alter what
+	// the child is asked to do.
 	assertFieldSet(t, "TaskSpec", TaskSpec{}, []string{"Objective", "Description", "Sink", "Asker"})
 	assertFieldSet(t, "WorkerSpec", WorkerSpec{}, []string{
 		"Kind", "Name", "Profile", "SystemPrompt", "UseProfilePrompt", "Model", "Effort",
@@ -64,7 +67,12 @@ func TestDelegationSpecMembersStaySeparate(t *testing.T) {
 	assertFieldSet(t, "CapabilityGrant", CapabilityGrant{}, []string{
 		"ReadOnly", "AllowNoTools", "CallTools", "ProfileTools", "WritePaths",
 	})
-	assertFieldSet(t, "ContextRequest", ContextRequest{}, []string{"ContinueFrom", "ForkFrom", "Fork", "Ephemeral", "Silent", "Writable", "Decisions", "EvidenceSummary", "FileAnchors", "OutputFormat"})
+	// Fork/Silent/Writable are the team fork subsystem's transport knobs
+	// (P5/P6): they route execution surfaces, never delegation semantics.
+	assertFieldSet(t, "ContextRequest", ContextRequest{}, []string{
+		"ContinueFrom", "ForkFrom", "Fork", "Silent", "Writable", "Ephemeral",
+		"Decisions", "EvidenceSummary", "FileAnchors", "OutputFormat",
+	})
 	assertFieldSet(t, "SchedulerPolicy", SchedulerPolicy{}, []string{
 		"MaxSteps", "MaxOutputTokens", "RunInBackground", "BackgroundWriter", "Nested",
 	})

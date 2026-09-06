@@ -11,7 +11,7 @@ import (
 )
 
 func TestDefaultSystemPromptStaysLean(t *testing.T) {
-	if len(DefaultSystemPrompt) > 280 {
+	if len(DefaultSystemPrompt) > 240 {
 		t.Fatalf("default system prompt grew to %d bytes; keep workflows in mode contracts and tool descriptions", len(DefaultSystemPrompt))
 	}
 	for _, duplicate := range []string{"todo_write", "plan mode", "verify with tools", "acceptance criteria"} {

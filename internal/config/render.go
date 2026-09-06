@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"reasonix/internal/billing"
 	"reasonix/internal/provider"
@@ -105,7 +104,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		if currency := c.DesktopCurrency(); currency != "" {
 			fmt.Fprintf(&b, "currency = %q   # legacy display currency; prefer [billing].display_currency\n", currency)
 		}
-		fmt.Fprintf(&b, "layout_style = %q   # desktop layout: classic|workbench|creation\n", c.DesktopLayoutStyle())
+		fmt.Fprintf(&b, "layout_style = %q   # desktop layout: workbench|creation; legacy classic migrates to workbench\n", c.DesktopLayoutStyle())
 		fmt.Fprintf(&b, "theme = %q   # desktop only: auto|dark|light\n", c.DesktopTheme())
 		fmt.Fprintf(&b, "terminal_theme = %q   # integrated terminal: auto|dark|light; auto follows the desktop app\n", c.DesktopTerminalTheme())
 		if style := c.DesktopThemeStyle(); style != "" {
@@ -227,11 +226,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		b.WriteString("# system_prompt_file = \"prompts/system.md\"   # project paths stay in <workspace>; user paths may fall back to <reasonix home>\n")
 	}
 	fmt.Fprintf(&b, "temperature       = %s\n", formatFloat(c.Agent.Temperature))
-	if strings.TrimSpace(c.Agent.RecoveryModel) != "" {
-		fmt.Fprintf(&b, "recovery_model = %q   # optional independent reviewer for low-risk automatic recovery\n", c.Agent.RecoveryModel)
-	} else {
-		b.WriteString("# recovery_model = \"deepseek-pro\"   # optional; falls back to guardian then main model\n")
-	}
+	renderRecoveryAndCompletionValidation(&b, c)
 	if lang := c.ReasoningLanguage(); lang != "auto" {
 		fmt.Fprintf(&b, "reasoning_language = %q   # visible reasoning language: auto|zh|en\n", lang)
 	} else {
@@ -388,7 +383,7 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 				fmt.Fprintf(&b, "vision_detail = %q   # openai image detail hint: low|high; empty = auto\n", p.VisionDetail)
 			}
 			if p.WebSearch != nil {
-				fmt.Fprintf(&b, "web_search  = %t   # provider-executed web_search tool; omitted defaults on for supported official DeepSeek APIs\n", *p.WebSearch)
+				fmt.Fprintf(&b, "web_search  = %t   # independent web_search tool; omitted defaults on for supported official DeepSeek APIs\n", *p.WebSearch)
 			}
 			if p.ReasoningProtocol != "" {
 				fmt.Fprintf(&b, "reasoning_protocol = %q   # auto|deepseek|glm|kimi-k3|openai|none; overrides model/endpoint reasoning detection\n", p.ReasoningProtocol)
@@ -426,8 +421,8 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 	fmt.Fprintf(&b, "mcp_startup_timeout_seconds = %d   # background initialize + tools/list safety cap; per-plugin overrides may raise it\n", c.MCPStartupTimeoutSeconds())
 	fmt.Fprintf(&b, "mcp_call_timeout_seconds = %d   # default MCP call safety cap; per-plugin/tool overrides may raise it\n\n", c.MCPCallTimeoutSeconds())
 
-	fmt.Fprintf(&b, "[tools.background_jobs]\nstalled_warning_seconds = %d   # heads-up once per background job after this many quiet seconds; a quiet job is not necessarily stuck; 0 disables\n", c.BackgroundJobStalledWarningSeconds())
-	fmt.Fprintf(&b, "foreground_backgroundize_seconds = %d   # auto-move a foreground task to the background after this many seconds; 0 disables (REASONIX_AUTO_BACKGROUND_MS overrides in ms)\n\n", int(c.ForegroundBackgroundize()/time.Second))
+	b.WriteString("[tools.background_jobs]\n")
+	fmt.Fprintf(&b, "stalled_warning_seconds = %d   # heads-up once per background job after this many quiet seconds; a quiet job is not necessarily stuck; 0 disables\n\n", c.BackgroundJobStalledWarningSeconds())
 
 	b.WriteString("[tools.shell]\n")
 	if c.Tools.Shell.Prefer != "" {
@@ -917,10 +912,7 @@ func RenderTOMLProjectDelta(c *Config) string {
 		fmt.Fprintf(&agentBuf, "temperature = %s\n", formatFloat(c.Agent.Temperature))
 		anyAgent = true
 	}
-	if c.Agent.RecoveryModel != "" && c.Agent.RecoveryModel != d.Agent.RecoveryModel {
-		fmt.Fprintf(&agentBuf, "recovery_model = %q\n", c.Agent.RecoveryModel)
-		anyAgent = true
-	}
+	diffRecoveryAndCompletionValidation(&agentBuf, *c, *d, &anyAgent)
 	if c.Agent.ReasoningLanguage != d.Agent.ReasoningLanguage {
 		if l := c.ReasoningLanguage(); l != "auto" {
 			fmt.Fprintf(&agentBuf, "reasoning_language = %q\n", l)
@@ -1110,19 +1102,11 @@ func RenderTOMLProjectDelta(c *Config) string {
 
 	// [tools.background_jobs]
 	if c.Tools.BackgroundJobs != d.Tools.BackgroundJobs {
-		wroteHeader := false
 		if c.Tools.BackgroundJobs.StalledWarningSeconds != nil && *c.Tools.BackgroundJobs.StalledWarningSeconds > 0 {
 			b.WriteString("[tools.background_jobs]\n")
-			wroteHeader = true
 			fmt.Fprintf(&b, "stalled_warning_seconds = %d\n", *c.Tools.BackgroundJobs.StalledWarningSeconds)
+			b.WriteString("\n")
 		}
-		if c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds != nil && *c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds != defaultForegroundBackgroundizeSeconds {
-			if !wroteHeader {
-				b.WriteString("[tools.background_jobs]\n")
-			}
-			fmt.Fprintf(&b, "foreground_backgroundize_seconds = %d\n", *c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds)
-		}
-		b.WriteString("\n")
 	}
 
 	// [tools.shell]
@@ -1269,13 +1253,8 @@ func renderPricingInline(p *provider.Pricing) string {
 	if p == nil {
 		return "{}"
 	}
-	base := fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q",
+	return fmt.Sprintf("{ cache_hit = %v, input = %v, output = %v, currency = %q }",
 		p.CacheHit, p.Input, p.Output, p.Symbol())
-	if p.PeakCacheHit > 0 || p.PeakInput > 0 || p.PeakOutput > 0 {
-		base += fmt.Sprintf(", peak_cache_hit = %v, peak_input = %v, peak_output = %v",
-			p.PeakCacheHit, p.PeakInput, p.PeakOutput)
-	}
-	return base + " }"
 }
 
 func renderPricingMap(prices map[string]*provider.Pricing) string {

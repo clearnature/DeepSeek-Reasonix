@@ -20,16 +20,8 @@ const (
 // endRotation releases the admission gate and republishes durable queue work.
 func (c *Controller) endRotation() {
 	c.mu.Lock()
-	elapsed := time.Since(c.rotationStartedAt)
-	caller := c.rotationCaller
 	c.rotating = false
-	c.rotationCaller = ""
 	c.mu.Unlock()
-	if elapsed > 30*time.Second {
-		slog.Warn("controller: rotation completed after long delay",
-			"caller", caller,
-			"elapsed", elapsed.String())
-	}
 	c.maybeDispatchInbox()
 }
 

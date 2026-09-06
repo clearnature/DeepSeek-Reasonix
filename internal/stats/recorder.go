@@ -2,7 +2,6 @@ package stats
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,13 +23,6 @@ type Recorder struct {
 	writer     *Writer
 	dispatcher *recordDispatcher
 	source     string
-
-	// Process-lifetime (cold-start cycle) session accumulation, stamped on
-	// TurnDone marker rows for auditing the UI's session-cost readout.
-	sessionMu       sync.Mutex
-	sessionTokens   int64
-	sessionCost     float64
-	sessionCurrency string
 }
 
 var _ event.OptionalSinkCapabilities = (*Recorder)(nil)
@@ -141,300 +133,13 @@ func (r *Recorder) Emit(e event.Event) {
 	if r != nil && r.inner != nil && !requestOnly {
 		r.inner.Emit(e)
 	}
-	if r == nil || r.writer == nil {
-		return
-	}
-	switch {
-	case e.Kind == event.Usage:
+	if r != nil && r.writer != nil && e.Kind == event.Usage {
 		r.recordUsage(e)
-	case e.Kind == event.GuardianAssessment && e.Guardian.Usage != nil:
-		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, nil, "", nil, 0)
-	case e.Kind == event.TurnDone:
+	} else if r != nil && r.writer != nil && e.Kind == event.GuardianAssessment && e.Guardian.Usage != nil {
+		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, nil, "")
+	} else if r != nil && r.writer != nil && e.Kind == event.TurnDone {
 		r.recordTurnCompletion()
-	case e.Kind == event.Notice && isCompactionTelemetry(e.Text):
-		r.recordCompaction(e)
-	case e.Kind == event.Notice && isRetrievalTelemetry(e.Text):
-		r.recordRetrieval(e)
-	case e.Kind == event.Notice && isResumeTelemetry(e.Text):
-		r.recordResume(e)
-	case e.Kind == event.Notice && isEstimateTelemetry(e.Text):
-		r.recordEstimateAnomaly(e)
 	}
-}
-
-// isCompactionTelemetry matches the agent's compaction telemetry notices, so
-// every pass (success or failure, from any trigger) lands in the stats file
-// for post-hoc diagnosis even when the frontend swallows the notice.
-func isCompactionTelemetry(text string) bool {
-	return text == "compaction telemetry" || text == "compaction failed"
-}
-
-// recordCompaction parses the agent's compaction telemetry detail line
-// (trigger/mode/cache/src/proj/in/out/hit/miss/write/reqs[/err_type]) into a
-// structured record so a compaction problem can be pinned from the stats file
-// alone. Parsing is best-effort and never interrupts the event stream.
-func (r *Recorder) recordCompaction(e event.Event) {
-	if r == nil || r.dispatcher == nil {
-		return
-	}
-	rec := CompactionRecord{Trigger: "unknown", Mode: "unknown"}
-	for _, tok := range strings.Fields(e.Detail) {
-		k, v, ok := strings.Cut(tok, "=")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "trigger":
-			rec.Trigger = v
-		case "mode":
-			rec.Mode = v
-		case "cache":
-			rec.Cache = v
-		case "provider_request_id":
-			rec.RequestID = v
-		case "err_type":
-			if i := strings.Index(e.Detail, "err_type="); i >= 0 {
-				rec.Error = strings.TrimSpace(e.Detail[i+len("err_type="):])
-			}
-			r.dispatcher.enqueue(record{
-				Timestamp:  time.Now(),
-				ModelRef:   e.ModelRef,
-				Source:     r.source,
-				Compaction: &rec,
-			})
-			return
-		case "reason":
-			rec.Reason = v
-		case "status":
-			rec.Status = v
-		case "pref_hash":
-			rec.PrefHash = v
-		case "view_fp":
-			rec.ViewFP = v
-		case "wire_fp":
-			rec.WireFP = v
-		case "tools_fp":
-			rec.ToolsFP = v
-		case "tools_source":
-			rec.ToolsSource = v
-		case "tools_count":
-			if n, err := strconv.Atoi(v); err == nil {
-				rec.ToolsCount = n
-			}
-		case "tpc":
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				rec.TokPerChar = f
-			}
-		case "est":
-			if n, err := strconv.Atoi(v); err == nil {
-				rec.EstTok = n
-			}
-		case "elapsed_ms":
-			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-				rec.ElapsedMs = n
-			}
-		default:
-			setCompactionInt(&rec, k, v)
-		}
-	}
-	r.dispatcher.enqueue(record{
-		Timestamp:  time.Now(),
-		ModelRef:   e.ModelRef,
-		Source:     r.source,
-		Compaction: &rec,
-	})
-}
-
-func setCompactionInt(rec *CompactionRecord, key, val string) {
-	n, err := strconv.Atoi(val)
-	if err != nil {
-		return
-	}
-	switch key {
-	case "est_tokens":
-		rec.EstTok = n
-	case "src":
-		rec.SourceTok = n
-	case "fold":
-		rec.FoldTok = n
-	case "spans":
-		rec.Spans = n
-	case "proj":
-		rec.ProjTok = n
-	case "in":
-		rec.InputTok = n
-	case "out":
-		rec.OutTok = n
-	case "hit":
-		rec.HitTok = n
-	case "miss":
-		rec.MissTok = n
-	case "write":
-		rec.WriteTok = n
-	case "reqs":
-		rec.Reqs = n
-	case "results":
-		rec.Results = n
-	case "saved_chars":
-		rec.SavedChars = n
-	case "user_kept":
-		rec.UserKept = n
-	case "user_dropped":
-		rec.UserDrop = n
-	}
-}
-
-// isRetrievalTelemetry matches retrieval telemetry notices emitted by the
-// retrieve_info tool / /retrieve_info command, so every pass lands in the
-// stats file for post-hoc diagnosis.
-func isRetrievalTelemetry(text string) bool {
-	return text == "retrieval telemetry"
-}
-
-// isResumeTelemetry matches the C1 resume-gate notices so every historical
-// session reopen lands in the stats file with its cache-warmth decision.
-func isResumeTelemetry(text string) bool {
-	return text == "resume telemetry"
-}
-
-// recordResume parses a resume telemetry detail line
-// (path/state/idle_min/decision). Best-effort; never interrupts the stream.
-func (r *Recorder) recordResume(e event.Event) {
-	if r == nil || r.dispatcher == nil {
-		return
-	}
-	rec := ResumeRecord{State: "unknown", Decision: "replay"}
-	for _, tok := range strings.Fields(e.Detail) {
-		k, v, ok := strings.Cut(tok, "=")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "path":
-			rec.Path = v
-		case "state":
-			rec.State = v
-		case "idle_min":
-			if n, err := strconv.Atoi(v); err == nil {
-				rec.IdleMin = n
-			}
-		case "decision":
-			rec.Decision = v
-		case "est":
-			if n, err := strconv.Atoi(v); err == nil {
-				rec.EstTok = n
-			}
-		case "view_fp":
-			rec.ViewFP = v
-		case "wire_fp":
-			rec.WireFP = v
-		case "covered_match":
-			rec.Covered = v == "true"
-		}
-	}
-	r.dispatcher.enqueue(record{
-		Timestamp: time.Now(),
-		ModelRef:  e.ModelRef,
-		Source:    r.source,
-		Resume:    &rec,
-	})
-}
-
-// isEstimateTelemetry matches the agent's estimate-anomaly notices so every
-// unreliable admission-time estimate lands in the stats file for post-hoc
-// diagnosis (the estimate is otherwise only shown on the desktop).
-func isEstimateTelemetry(text string) bool {
-	return text == "estimate telemetry"
-}
-
-// recordEstimateAnomaly parses an estimate telemetry detail line
-// (reason/est/window/obs/chars/cchars/cjk/cjkb/msgs/top_role/top_chars/cal)
-// into a structured record. Best-effort; never interrupts the event stream.
-func (r *Recorder) recordEstimateAnomaly(e event.Event) {
-	if r == nil || r.dispatcher == nil {
-		return
-	}
-	rec := EstimateAnomalyRecord{}
-	for _, tok := range strings.Fields(e.Detail) {
-		k, v, ok := strings.Cut(tok, "=")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "reason":
-			rec.Reason = v
-		case "est":
-			rec.EstTok, _ = strconv.Atoi(v)
-		case "window":
-			rec.WindowTok, _ = strconv.Atoi(v)
-		case "obs":
-			rec.ObsTok, _ = strconv.Atoi(v)
-		case "chars":
-			rec.Chars, _ = strconv.ParseInt(v, 10, 64)
-		case "cchars":
-			rec.CompactChars, _ = strconv.ParseInt(v, 10, 64)
-		case "cjk":
-			rec.CJKRunes, _ = strconv.ParseInt(v, 10, 64)
-		case "cjkb":
-			rec.CJKBytes, _ = strconv.ParseInt(v, 10, 64)
-		case "msgs":
-			rec.Messages, _ = strconv.Atoi(v)
-		case "top_role":
-			rec.TopRole = v
-		case "top_chars":
-			rec.TopChars, _ = strconv.Atoi(v)
-		case "cal":
-			rec.Calibrated = v == "true"
-		}
-	}
-	r.dispatcher.enqueue(record{
-		Timestamp: time.Now(),
-		ModelRef:  e.ModelRef,
-		Source:    r.source,
-		Estimate:  &rec,
-	})
-}
-
-// recordRetrieval parses a retrieval telemetry detail line
-// (query/mode/api/tier/ms/chars) into a structured record. Best-effort; never
-// interrupts the event stream.
-func (r *Recorder) recordRetrieval(e event.Event) {
-	if r == nil || r.dispatcher == nil {
-		return
-	}
-	rec := RetrievalRecord{Mode: "unknown"}
-	chars := 0
-	for _, tok := range strings.Fields(e.Detail) {
-		k, v, ok := strings.Cut(tok, "=")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "query":
-			rec.Query = v
-		case "mode":
-			rec.Mode = v
-		case "api":
-			rec.APIUsed = v == "true"
-		case "tier":
-			rec.Tier = v
-		case "ms":
-			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-				rec.Ms = n
-			}
-		case "chars":
-			if n, err := strconv.Atoi(v); err == nil {
-				chars = n
-			}
-		}
-	}
-	rec.Chars = chars
-	r.dispatcher.enqueue(record{
-		Timestamp: time.Now(),
-		ModelRef:  e.ModelRef,
-		Source:    r.source,
-		Retrieval: &rec,
-	})
 }
 
 // RecordTurnCompletion records synchronous controller runs that deliberately do
@@ -450,17 +155,7 @@ func (r *Recorder) recordTurnCompletion() {
 	if r == nil || r.dispatcher == nil {
 		return
 	}
-	r.sessionMu.Lock()
-	tokens, cost, currency := r.sessionTokens, r.sessionCost, r.sessionCurrency
-	r.sessionMu.Unlock()
-	r.dispatcher.enqueue(record{
-		Timestamp:       time.Now(),
-		Source:          r.source,
-		Turn:            true,
-		SessionTokens:   tokens,
-		SessionCost:     cost,
-		SessionCurrency: currency,
-	})
+	r.dispatcher.enqueue(record{Timestamp: time.Now(), Source: r.source, Turn: true})
 }
 
 // Flush waits until records already accepted by this recorder's shared queue
@@ -547,11 +242,15 @@ func (r *Recorder) RecordRunBudget(sample event.RunBudgetSample) {
 	event.RecordRunBudget(r.inner, sample)
 }
 
-func (r *Recorder) recordUsage(e event.Event) {
-	r.recordProviderUsage(e.ModelRef, e.Usage, e.CostQuote, e.UsageSource, e.CacheDiagnostics, e.EstTokens)
+func (r *Recorder) RecordSubagentLifecycle(info event.SubagentLifecycleInfo) {
+	event.RecordSubagentLifecycle(r.inner, info)
 }
 
-func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, quote *billing.CostQuote, usageSource string, diag *event.CacheDiagnostics, est int) {
+func (r *Recorder) recordUsage(e event.Event) {
+	r.recordProviderUsage(e.ModelRef, e.Usage, e.CostQuote, e.UsageSource)
+}
+
+func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, quote *billing.CostQuote, usageSource string) {
 	if usage == nil || (usage.TotalTokens <= 0 && usage.RequestCount <= 0) {
 		return
 	}
@@ -569,14 +268,6 @@ func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, q
 		Total:       usage.TotalTokens,
 		Requests:    usageRequestCount(usage),
 		UsageSource: strings.TrimSpace(usageSource),
-		Est:         est,
-	}
-	if diag != nil {
-		rec.PrefixHash = diag.PrefixHash
-		rec.PrefixChanged = diag.PrefixChanged
-		rec.PrefixReasons = diag.PrefixChangeReasons
-		rec.ViewFP = diag.ViewFP
-		rec.WireFP = diag.WireFP
 	}
 	if quote != nil {
 		rec.CostAmount = quote.Original.Amount
@@ -610,20 +301,7 @@ func (r *Recorder) recordProviderUsage(modelRef string, usage *provider.Usage, q
 			rec.ValuationUSD = v.Money.Amount
 		}
 	}
-	r.accumulateSession(usage.TotalTokens, rec.SelectedCost, rec.SelectedCurrency)
 	r.dispatcher.enqueue(rec)
-}
-
-// accumulateSession folds a usage event into the process-lifetime session
-// totals stamped on TurnDone marker rows.
-func (r *Recorder) accumulateSession(tokens int, cost float64, currency string) {
-	r.sessionMu.Lock()
-	defer r.sessionMu.Unlock()
-	r.sessionTokens += int64(tokens)
-	r.sessionCost += cost
-	if currency != "" {
-		r.sessionCurrency = currency
-	}
 }
 
 func usageRequestCount(usage *provider.Usage) int {

@@ -41,6 +41,9 @@ type ContextPreparePolicy struct {
 	// old post-turn shim directly. Production Prepare estimates the current view
 	// from its calibrated final request shape.
 	ObservedInputTokens int
+	// AllowChunkedFallback enables fragment/tree-reduce recovery after a single
+	// summary fails. Ordinary pressure/overflow leave this false.
+	AllowChunkedFallback bool
 }
 
 // PreparedContext is the frozen result of a successful Prepare transaction.
@@ -78,17 +81,6 @@ func (m ContextManager) Prepare(ctx context.Context, policy ContextPreparePolicy
 	m.agent.sess.compactionRunMu.Lock()
 	defer m.agent.sess.compactionRunMu.Unlock()
 	return m.prepareOnce(ctx, policy)
-}
-
-func shouldPruneBeforeFold(trigger string, overHardCeiling bool) bool {
-	switch trigger {
-	case CompactionTriggerPressure, CompactionTriggerOverflow:
-		return true
-	case CompactionTriggerManual:
-		return overHardCeiling
-	default:
-		return false
-	}
 }
 
 func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePolicy) (PreparedContext, error) {
@@ -166,8 +158,21 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	return m.foldContext(ctx, prepared, policy, inputHash, est, fold, hard, forceFold)
 }
 
+func shouldPruneBeforeFold(trigger string, overHardCeiling bool) bool {
+	switch trigger {
+	case CompactionTriggerPressure, CompactionTriggerOverflow:
+		return true
+	case CompactionTriggerManual:
+		return overHardCeiling
+	default:
+		return false
+	}
+}
+
 // manualRecoverySummaries bounds the rescue loop for a manual compact that
-// starts at or above the hard input ceiling.
+// starts at or above the hard input ceiling. Each batch folds the largest
+// admissible prefix, so a handful of batches recovers even a view several
+// times the window while capping summarizer spend on pathological input.
 const manualRecoverySummaries = 4
 
 func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContext, policy ContextPreparePolicy, inputHash string, est, fold, hard int, forceFold bool) (PreparedContext, error) {
@@ -181,11 +186,8 @@ func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContex
 	}
 	result := prepared
 	for range maxSummaries {
-		// Reserve summary output space whenever the fold could exceed the
-		// window's physical input ceiling — including manual compaction, whose
-		// summarize request would otherwise be truncated or rejected at send.
 		mustFree := policy.Trigger == CompactionTriggerOverflow || result.InputTokens >= hard
-		outcome, err := a.compactToProjectionLocked(ctx, policy.Trigger, policy.Instructions, forceFold, mustFree)
+		outcome, err := a.compactToProjectionLocked(ctx, policy.Trigger, policy.Instructions, forceFold, mustFree, policy.AllowChunkedFallback)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return PreparedContext{}, err

@@ -29,10 +29,11 @@ type summaryChunksProvider struct {
 
 func (p *summaryChunksProvider) Name() string { return "summary-chunks" }
 func (p *summaryChunksProvider) Stream(context.Context, provider.Request) (<-chan provider.Chunk, error) {
-	ch := make(chan provider.Chunk, len(p.chunks))
+	ch := make(chan provider.Chunk, len(p.chunks)+1)
 	for _, chunk := range p.chunks {
 		ch <- chunk
 	}
+	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
 }
@@ -40,8 +41,9 @@ func (p *summaryChunksProvider) Stream(context.Context, provider.Request) (<-cha
 func (p *deadlineInspectProvider) Name() string { return "deadline-inspect" }
 func (p *deadlineInspectProvider) Stream(ctx context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
 	_, p.hadDeadline = ctx.Deadline()
-	ch := make(chan provider.Chunk, 1)
+	ch := make(chan provider.Chunk, 2)
 	ch <- provider.Chunk{Type: provider.ChunkText, Text: "digest"}
+	ch <- provider.Chunk{Type: provider.ChunkDone}
 	close(ch)
 	return ch, nil
 }
@@ -89,30 +91,19 @@ func TestSummaryCollectorRejectsEmptyAndLengthLimitedOutput(t *testing.T) {
 			want: "empty output",
 		},
 		{
-			name: "length finish accepts partial output",
+			name: "length finish",
 			chunks: []provider.Chunk{
 				{Type: provider.ChunkText, Text: "partial"},
 				{Type: provider.ChunkUsage, Usage: &provider.Usage{FinishReason: "length"}},
 			},
-			want: "partial",
+			want: "output token limit",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			prov := &summaryChunksProvider{chunks: tc.chunks}
 			a := New(prov, tool.NewRegistry(), NewSession("system"), Options{}, event.Discard)
-			result, _, err := a.summarize(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "old"}}, "")
-			if tc.want == "partial" {
-				// length finish now accepts partial output
-				if err != nil {
-					t.Fatalf("summarize error = %v, want success", err)
-				}
-				if !strings.Contains(result, tc.want) {
-					t.Fatalf("summarize result = %q, want %q", result, tc.want)
-				}
-			} else {
-				if err == nil || !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("summarize error = %v, want %q", err, tc.want)
-				}
+			if _, _, err := a.summarize(context.Background(), nil, []provider.Message{{Role: provider.RoleUser, Content: "old"}}, ""); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("summarize error = %v, want %q", err, tc.want)
 			}
 		})
 	}
@@ -289,169 +280,4 @@ func (p *failOnceProvider) Stream(_ context.Context, _ provider.Request) (<-chan
 	ch <- provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("network glitch")}
 	close(ch)
 	return ch, nil
-}
-
-func TestMaximumSafeSummaryPrefixEndTrimsOversizedFold(t *testing.T) {
-	// Manual compaction with an oversized fold (2026-08-30: 1.15M fold vs a
-	// 1,048,576-token model) used to reach the provider as-is when mustFree
-	// was false (manual trigger, under-estimated input) → provider 400. The
-	// fold region must now be trimmed to the window's physical input ceiling
-	// on every path.
-	prov := &countingProvider{reply: "digest"}
-	a := newFoldAgent(t, 100000, prov)
-	fold := foldOfToolResults(300, 400) // ~120k tokens, window 100k
-	msgs := append([]provider.Message{}, fold...)
-	adm := a.lastAdmission()
-	adm.ObservedWindow = 100000
-	a.storeAdmission(adm)
-	head, start, ok := a.planFoldRegion(msgs, false)
-	if !ok || head >= start {
-		t.Fatalf("planFoldRegion ok=%v head=%d start=%d", ok, head, start)
-	}
-	end := a.maximumSafeSummaryPrefixEnd(msgs, head, start, "")
-	if end >= start {
-		t.Fatalf("oversized fold not trimmed: end=%d start=%d", end, start)
-	}
-	if end > head {
-		// Trimmed fold must still fit the summary input budget, measured with
-		// the real request shape: verbatim head precedes the fold region.
-		folded := msgs[head:end]
-		req := a.summaryRequest(msgs[0:head], folded, "")
-		if est := a.estimatedRequestTokens(req); est > a.hardInputCeiling() {
-			t.Fatalf("trimmed fold est=%d exceeds hard input ceiling %d", est, a.hardInputCeiling())
-		}
-	}
-}
-
-func TestSummaryRequestForcesNoReasoningEffort(t *testing.T) {
-	// Summary requests must not inherit the user's reasoning effort:
-	// DeepSeek thinking would consume the 8192 output budget and truncate
-	// the digest (errSummaryOutputTruncated), failing compaction.
-	a := &Agent{}
-	req := a.summaryRequest(nil, []provider.Message{{Role: provider.RoleUser, Content: "x"}}, "")
-	if req.EffortOverride != "none" {
-		t.Fatalf("summaryRequest EffortOverride = %q, want none", req.EffortOverride)
-	}
-	if req.MaxTokens != summaryOutputMaxTokens {
-		t.Fatalf("summaryRequest MaxTokens = %d, want %d", req.MaxTokens, summaryOutputMaxTokens)
-	}
-}
-
-type compactionBudgetProvider struct {
-	provider.Provider
-	budget int
-}
-
-func (p compactionBudgetProvider) CompactionOutputTokens() int { return p.budget }
-
-func TestSummaryOutputBudgetUsesVendorCompactionTokens(t *testing.T) {
-	a := &Agent{}
-	if got := a.summaryOutputBudget(); got != summaryOutputMaxTokens {
-		t.Fatalf("default budget = %d, want %d", got, summaryOutputMaxTokens)
-	}
-	a.svc.prov = compactionBudgetProvider{budget: 16384}
-	if got := a.summaryOutputBudget(); got != 16384 {
-		t.Fatalf("vendor budget = %d, want 16384", got)
-	}
-}
-
-func TestForkCaptureProviderPassesCompactionBudget(t *testing.T) {
-	f := &forkCaptureProvider{inner: compactionBudgetProvider{budget: 16384}}
-	if got := f.CompactionOutputTokens(); got != 16384 {
-		t.Fatalf("fork CompactionOutputTokens = %d, want 16384", got)
-	}
-	f = &forkCaptureProvider{inner: compactionBudgetProvider{}}
-	if got := f.CompactionOutputTokens(); got != 0 {
-		t.Fatalf("non-provider inner = %d, want 0", got)
-	}
-}
-
-func TestCompactToProjectionTrimsOversizedFoldEvenWithoutMustFree(t *testing.T) {
-	// Regression for the manual-compaction 400: compactToProjection with
-	// mustFree=false (the pre-fix manual-trigger path) must still bound the
-	// fold input instead of sending an oversized summary request.
-	prov := &countingProvider{reply: "digest"}
-	a := newFoldAgent(t, 100000, prov)
-	fold := foldOfToolResults(300, 400)
-	msgs := append([]provider.Message{}, fold...)
-	adm := a.lastAdmission()
-	adm.ObservedWindow = 100000
-	a.storeAdmission(adm)
-	a.sess.conversation = &Session{Messages: msgs}
-	_, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", false, false)
-	if err != nil {
-		// Trimmed to nothing is acceptable (explicit rejection); a provider
-		// request for an oversized fold is not.
-		if len(prov.got) != 0 {
-			t.Fatalf("failed compaction still sent %d provider requests", len(prov.got))
-		}
-		return
-	}
-	if len(prov.got) != 1 {
-		t.Fatalf("requests=%d, want exactly one bounded summary call", len(prov.got))
-	}
-	if est := a.estimatedVisibleRequestTokens(prov.got[0].Messages); est > a.hardInputCeiling() {
-		t.Fatalf("summary request est=%d exceeds hard input ceiling %d", est, a.hardInputCeiling())
-	}
-}
-
-func TestSummaryRequestPrefixMatchesOrdinaryRequestBytes(t *testing.T) {
-	// Summary must reproduce the ordinary request's byte prefix; divergence = full-price cache miss (2026-08-30: 3.6% hit).
-	msgs := []provider.Message{
-		{Role: provider.RoleSystem, Content: "sys"},
-		{Role: provider.RoleUser, Content: "task"},
-		{Role: provider.RoleAssistant, Content: "reply-1", ToolCalls: []provider.ToolCall{{ID: "c1", Name: "read", Arguments: `{"p":"a"}`}}},
-		{Role: provider.RoleTool, ToolCallID: "c1", Content: `{"ok":true}`},
-		{Role: provider.RoleUser, Content: "more"},
-		{Role: provider.RoleAssistant, Content: "reply-2"},
-	}
-	a := &Agent{}
-	head := 1
-	ordinary := a.normalizeModelRequestMessages(msgs)
-	summary := a.summaryRequest(msgs[0:head], msgs[head:], "").Messages
-	// Both end with the compaction instruction; the shared prefix must match
-	// up to the start of the instruction.
-	prefix := min(len(summary)-1, len(ordinary))
-	if prefix != len(ordinary) {
-		t.Fatalf("ordinary messages = %d, summary prefix = %d (want ordinary fully reproduced)", len(ordinary), prefix)
-	}
-	for i := range prefix {
-		o, s := ordinary[i], summary[i]
-		if o.Role != s.Role || o.Content != s.Content || o.ToolCallID != s.ToolCallID {
-			t.Fatalf("byte divergence at message %d: ordinary (%s %q tc=%s) vs summary (%s %q tc=%s)", i, o.Role, o.Content, o.ToolCallID, s.Role, s.Content, s.ToolCallID)
-		}
-		if len(o.ToolCalls) != len(s.ToolCalls) {
-			t.Fatalf("tool-call count divergence at message %d: %d vs %d", i, len(o.ToolCalls), len(s.ToolCalls))
-		}
-	}
-}
-
-func TestPlanFoldRegionResumeFirstAlignsToFullCanonicalView(t *testing.T) {
-	// DeepSeek caches only complete prefix units (request-input end-aligned):
-	// a resume-first compaction's budget-cropped fold end has never been sent,
-	// so the summary request misses everything past the system public prefix
-	// (2026-08-31 00:26:19: hit=16896 of 86355). After a resume the fold end
-	// must align to the full canonical view to byte-match the parent process's
-	// last request, which wrote a fresh cache unit before shutdown.
-	prov := &countingProvider{reply: "digest"}
-	a := newFoldAgent(t, 200000, prov)
-	msgs := foldOfToolResults(50, 300) // ~113k tokens, tail budget ~32k
-	head, start, ok := a.planFoldRegion(msgs, false)
-	if !ok || head >= start {
-		t.Fatalf("planFoldRegion ok=%v head=%d start=%d", ok, head, start)
-	}
-	if start == len(msgs) {
-		t.Fatalf("non-resume fold end = %d, want budget-cropped (< %d)", start, len(msgs))
-	}
-	a.sess.checkpointState = "restored"
-	head, start, ok = a.planFoldRegion(msgs, false)
-	if !ok {
-		t.Fatalf("planFoldRegion(resume) ok=%v", ok)
-	}
-	if start != len(msgs) {
-		t.Fatalf("resume-first fold end = %d, want %d (full canonical view)", start, len(msgs))
-	}
-	if head != a.pinnedPrefixLen(msgs) {
-		t.Fatalf("head = %d, want pinned prefix %d", head, a.pinnedPrefixLen(msgs))
-	}
 }

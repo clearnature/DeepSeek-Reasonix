@@ -28,25 +28,40 @@ type mcpManager struct {
 	host      *plugin.Host
 	reg       *tool.Registry
 	pluginCtx context.Context
+	// hostProfile is the fallback surface for lazily created hosts (controllers
+	// built without an injected one). An injected host's own profile wins.
+	hostProfile plugin.HostProfile
 }
 
-func newMcpManager(host *plugin.Host, reg *tool.Registry, pluginCtx context.Context) mcpManager {
-	return mcpManager{host: host, reg: reg, pluginCtx: pluginCtx}
+func newMcpManager(host *plugin.Host, reg *tool.Registry, pluginCtx context.Context, profile plugin.HostProfile) mcpManager {
+	return mcpManager{host: host, reg: reg, pluginCtx: pluginCtx, hostProfile: profile.Normalize()}
 }
 
-// mcpHostProfile returns the MCP host's profile for capability routing.
-func (c *Controller) mcpHostProfile() plugin.HostProfile { return c.mcp.hostProfileOf() }
-
-// hostProfileOf returns the MCP host's profile. Zero (HostProfileCore) when
-// no host exists yet.
+// hostProfileOf returns the live host's profile, or the configured fallback
+// when no host exists yet.
 func (m *mcpManager) hostProfileOf() plugin.HostProfile {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.host == nil {
-		return plugin.HostProfileCore
+	host := m.host
+	profile := m.hostProfile
+	m.mu.Unlock()
+	if host != nil {
+		return host.Profile()
 	}
-	return m.host.Profile()
+	return profile.Normalize()
 }
+
+// MCPCapabilityViews returns the host's four-layer capability matrix for MCP
+// status surfaces.
+func (c *Controller) MCPCapabilityViews() []plugin.CapabilityView {
+	if host := c.mcp.hostRef(); host != nil {
+		return host.CapabilityViews()
+	}
+	return plugin.NewHostWithProfile(c.mcp.hostProfileOf()).CapabilityViews()
+}
+
+// mcpHostProfile reports the session's MCP capability profile for cache
+// identity selection.
+func (c *Controller) mcpHostProfile() plugin.HostProfile { return c.mcp.hostProfileOf() }
 
 // hostRef returns the live plugin host (nil until one is injected or lazily
 // created), for the SessionAPI Host() accessor and the nil-safe read wrappers.
@@ -62,7 +77,7 @@ func (m *mcpManager) hostRef() *plugin.Host {
 func (m *mcpManager) connectSpec(s plugin.Spec) (int, error) {
 	m.mu.Lock()
 	if m.host == nil {
-		m.host = plugin.NewHost()
+		m.host = plugin.NewHostWithProfile(m.hostProfile)
 	}
 	host, ctx, reg := m.host, m.pluginCtx, m.reg
 	m.mu.Unlock()
@@ -96,7 +111,7 @@ func (m *mcpManager) connectSpec(s plugin.Spec) (int, error) {
 func (m *mcpManager) registerSpecOnDemand(s plugin.Spec) (int, error) {
 	m.mu.Lock()
 	if m.host == nil {
-		m.host = plugin.NewHost()
+		m.host = plugin.NewHostWithProfile(m.hostProfile)
 	}
 	host, ctx, reg := m.host, m.pluginCtx, m.reg
 	m.mu.Unlock()
@@ -111,7 +126,7 @@ func (m *mcpManager) registerSpecOnDemand(s plugin.Spec) (int, error) {
 			return 0, err
 		}
 	} else {
-		cached, _ := plugin.LoadCachedSchemaForSpec(s)
+		cached, _ := plugin.LoadCachedSchemaForSpecProfile(s, host.Profile())
 		tools = plugin.LazyToolset(s, cached, host, reg, ctx, false)
 	}
 	if reg != nil {

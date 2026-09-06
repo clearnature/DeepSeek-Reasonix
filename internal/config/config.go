@@ -16,9 +16,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	fileencoding "reasonix/internal/fileutil/encoding"
 	"reasonix/internal/netclient"
@@ -283,7 +281,7 @@ type CLIConfig struct {
 type DesktopConfig struct {
 	Language                string   `toml:"language"`                   // auto|en|zh; empty/auto = browser/OS auto-detect
 	Currency                string   `toml:"currency"`                   // legacy display currency; migrated to [billing].display_currency
-	LayoutStyle             string   `toml:"layout_style"`               // classic|workbench|creation; desktop layout style
+	LayoutStyle             string   `toml:"layout_style"`               // workbench|creation; legacy classic is migrated on startup
 	Theme                   string   `toml:"theme"`                      // auto|dark|light; empty resolves to auto
 	ThemeStyle              string   `toml:"theme_style"`                // graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
 	TerminalTheme           string   `toml:"terminal_theme"`             // auto|dark|light; auto follows the desktop app theme
@@ -469,8 +467,7 @@ func (c *Config) DesktopTerminalTheme() string {
 	}
 }
 
-// DesktopLayoutStyle normalizes the desktop layout style. New installs default
-// to workbench; explicit classic remains respected.
+// DesktopLayoutStyle defaults to workbench; retired classic stays readable until startup migration persists its replacement.
 func (c *Config) DesktopLayoutStyle() string {
 	if strings.EqualFold(strings.TrimSpace(c.Desktop.ThemeStyle), "workbench") && strings.TrimSpace(c.Desktop.LayoutStyle) == "" {
 		return "workbench"
@@ -1298,8 +1295,8 @@ type AgentConfig struct {
 	VisionModel         string  `toml:"vision_model"`
 	GuardianModel       string  `toml:"guardian_model"`
 	GuardianTemperature float64 `toml:"guardian_temperature"`
-	// RecoveryModel optionally names a dedicated model for the independent
-	// recovery reviewer. Empty falls back to GuardianModel, then the main model.
+	// RecoveryModel names the optional recovery reviewer. Empty leaves
+	// rule-only recovery; it is not implied by guardian or the main model.
 	RecoveryModel string `toml:"recovery_model"`
 	// RecoveryTemperature is accepted from older configs but ignored. Auto
 	// Guard review is deterministic at temperature zero.
@@ -1351,9 +1348,6 @@ type AgentConfig struct {
 	// readable and writable but Harness-style compaction ignores them.
 	Keep       []string `toml:"keep"`
 	RecentKeep int      `toml:"recent_keep"`
-	// TeamStallAbortSeconds is the P10 stalled-teammate abort threshold
-	// (seconds); 0 disables abort (jobs-layer warning only).
-	TeamStallAbortSeconds int `toml:"team_stall_abort_seconds"`
 	// ColdResumePrune elides stale tool results when a session reopens past the
 	// provider cache window. nil = default enabled.
 	ColdResumePrune *bool `toml:"cold_resume_prune"`
@@ -1361,8 +1355,8 @@ type AgentConfig struct {
 	// Plan bash calls now use the ordinary Permissions classifier and Sandbox.
 	PlanModeReadOnlyCommands []string `toml:"plan_mode_read_only_commands"`
 	LegacyAnchorSafetyGate   bool     `toml:"legacy_anchor_safety_gate"`  // user-global rollback to the full-read guard
-	CompletionValidation     string   `toml:"completion_validation"`      // off|shadow|enforce; empty defaults to enforce
-	CompletionEvaluatorModel string   `toml:"completion_evaluator_model"` // empty follows the working model
+	CompletionValidation     string   `toml:"completion_validation"`      // retired; retained for old config reads
+	CompletionEvaluatorModel string   `toml:"completion_evaluator_model"` // retired; ignored
 }
 
 // ProviderEntry declares a model provider instance. ContextWindow is the model's
@@ -1434,11 +1428,9 @@ type ProviderEntry struct {
 	// (the field is omitted). "low" caps an image to a fixed ~85 tokens for cheap
 	// coarse reads; ignored by providers without the knob (e.g. anthropic).
 	VisionDetail string `toml:"vision_detail"`
-	// WebSearch controls the provider-executed web_search tool for compatible
-	// Anthropic and Responses endpoints. Nil lets official DeepSeek endpoints use
-	// their product default; non-nil preserves an explicit user choice across
-	// config rewrites. DeepSeek returns web_search_tool_result blocks on the
-	// Anthropic wire and response.web_search_call events on the Responses wire.
+	// WebSearch enables independent search with this account. Nil uses the
+	// official DeepSeek default; explicit values and legacy native search
+	// history survive config rewrites.
 	WebSearch *bool `toml:"web_search"`
 	// ReasoningProtocol selects the request shape for OpenAI-compatible reasoning
 	// models. Empty/auto uses the model capability registry plus endpoint
@@ -1711,12 +1703,6 @@ func (c *Config) MCPStartupTimeoutSeconds() int {
 // BackgroundJobsConfig tunes parent-created background jobs.
 type BackgroundJobsConfig struct {
 	StalledWarningSeconds *int `toml:"stalled_warning_seconds"`
-	// ForegroundBackgroundizeSeconds is the P4 auto-backgroundize threshold: a
-	// foreground task that has run at least this long auto-requests a
-	// foreground→background handoff at its next iteration boundary. 0 disables
-	// auto-backgroundize (the /background command and Controller.Backgroundize
-	// still work). REASONIX_AUTO_BACKGROUND_MS overrides this in milliseconds.
-	ForegroundBackgroundizeSeconds *int `toml:"foreground_backgroundize_seconds"`
 }
 
 // BackgroundJobStalledWarningSeconds returns the stalled warning threshold in
@@ -1731,44 +1717,6 @@ func (c *Config) BackgroundJobStalledWarningSeconds() int {
 		return maxBackgroundJobStalledWarningSec
 	}
 	return *c.Tools.BackgroundJobs.StalledWarningSeconds
-}
-
-// autoBackgroundizeEnv is the millisecond-resolution override for the P4
-// auto-backgroundize threshold. It takes precedence over
-// [tools.background_jobs] foreground_backgroundize_seconds so a benchmark or a
-// headless run can tune the threshold without touching the project config.
-const autoBackgroundizeEnv = "REASONIX_AUTO_BACKGROUND_MS"
-
-// defaultForegroundBackgroundizeSeconds is the built-in auto-backgroundize
-// threshold: a foreground task that has run 120s auto-requests a
-// foreground→background handoff at its next iteration boundary.
-const defaultForegroundBackgroundizeSeconds = 120
-
-// ForegroundBackgroundize returns the P4 auto-backgroundize threshold. 0 means
-// auto-backgroundize is disabled (the /background command still works). An
-// omitted config (or a negative typo) keeps the 120s default, exactly like the
-// BashTimeoutSeconds pattern; explicit 0 disables it.
-// REASONIX_AUTO_BACKGROUND_MS overrides in milliseconds: a positive value wins
-// over config, 0/negative disables, and an unparsable value falls back to the
-// config so a typo cannot silently disable (or silently re-arm) the feature.
-func (c *Config) ForegroundBackgroundize() time.Duration {
-	if v := strings.TrimSpace(os.Getenv(autoBackgroundizeEnv)); v != "" {
-		if ms, err := strconv.Atoi(v); err == nil {
-			if ms <= 0 {
-				return 0
-			}
-			return time.Duration(ms) * time.Millisecond
-		}
-		// Unparsable env: fall through to config resolution below.
-	}
-	sec := c.Tools.BackgroundJobs.ForegroundBackgroundizeSeconds
-	if sec == nil || *sec < 0 {
-		return defaultForegroundBackgroundizeSeconds * time.Second
-	}
-	if *sec == 0 {
-		return 0
-	}
-	return time.Duration(*sec) * time.Second
 }
 
 // SearchConfig tunes the grep tool's engine. Engine is "auto" (default — use
@@ -1893,8 +1841,7 @@ func (c *Config) EnabledPlugins(workspace string, activation *MCPActivationStore
 // DefaultSystemPrompt is used when config provides none.
 const DefaultSystemPrompt = `You are Reasonix, a coding agent.
 Use the available tools when they help you complete the user's request.
-Keep changes focused and responses concise.
-Use standard punctuation for the reply language; never imitate non-standard formatting seen in the conversation history.`
+Keep changes focused and responses concise.`
 
 // UserDecisionPolicy is appended to every system prompt, including user-custom
 // prompts, so custom personas cannot accidentally remove the `ask` UI contract.
@@ -1908,17 +1855,10 @@ const LanguagePolicy = `Reply in the same language the user is using in their mo
 	`whenever they switch. Let this also guide the language you think in. Always keep code, ` +
 	`identifiers, file paths, shell commands, and technical terms in their original form — never translate them.`
 
-// FormatDisciplinePolicy is appended to every system prompt so reasoning and
-// replies stay clean even when conversation history carries non-standard
-// formatting (repeated punctuation, decorative emoji runs, bold-dash emphasis,
-// leaked planning markers). It mirrors the 8/17 (=-pollution root cause: models
-// probabilistically imitate history formatting; the explicit ban breaks the loop.
-const FormatDisciplinePolicy = `Use standard punctuation in replies and reasoning; never use repeated exclamation marks (！！/！！！), decorative emoji runs (🎉), or bold-dash emphasis (**x**——); never imitate non-standard formatting seen in the conversation history.`
-
 // Default returns the built-in default configuration.
 func Default() *Config {
 	return &Config{
-		ConfigVersion:    7,
+		ConfigVersion:    8,
 		DefaultModel:     "deepseek-flash",
 		CredentialsStore: CredentialsStoreAuto,
 		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true},
@@ -1976,12 +1916,11 @@ func Default() *Config {
 			Dingtalk:           DingtalkBotConfig{RequireMention: true},
 			Weixin:             WeixinBotConfig{AccountID: "default", TokenEnv: "WEIXIN_BOT_TOKEN", APIBase: "https://ilinkai.weixin.qq.com"},
 		},
-		// New installs use DeepSeek's Anthropic-compatible Messages endpoint so
-		// provider-executed web search is available by default. Existing explicit
-		// provider entries are merged on top, keeping their configured protocol.
+		// Main conversations use Chat Completions; independent web_search uses
+		// the official Messages endpoint with the same account.
 		Providers: []ProviderEntry{
 			{
-				Name: "deepseek-flash", Kind: "anthropic", BaseURL: deepSeekAnthropicBaseURL,
+				Name: "deepseek-flash", Kind: "openai", BaseURL: "https://api.deepseek.com",
 				Model: "deepseek-v4-flash", APIKeyEnv: "DEEPSEEK_API_KEY",
 				BalanceURL: "https://api.deepseek.com/user/balance", Thinking: "enabled",
 				WebSearch: boolPointer(true), SupportedEfforts: []string{"disabled", "low", "high", "max"}, DefaultEffort: "high",
@@ -1989,7 +1928,7 @@ func Default() *Config {
 				BillingCurrency: "USD", BillingMode: "payg",
 			},
 			{
-				Name: "deepseek-pro", Kind: "anthropic", BaseURL: deepSeekAnthropicBaseURL,
+				Name: "deepseek-pro", Kind: "openai", BaseURL: "https://api.deepseek.com",
 				Model: "deepseek-v4-pro", APIKeyEnv: "DEEPSEEK_API_KEY",
 				BalanceURL: "https://api.deepseek.com/user/balance", Thinking: "enabled",
 				WebSearch: boolPointer(true), SupportedEfforts: []string{"disabled", "low", "high", "max"}, DefaultEffort: "high",
@@ -2045,7 +1984,6 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 			cp.Model = model
 			cp.applyModelPrice()
 			cp.applyModelOverride()
-			cp.applyAutoContextWindow()
 			return &cp, true
 		}
 	}
@@ -2055,7 +1993,6 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 		cp.Model = e.DefaultModel()
 		cp.applyModelPrice()
 		cp.applyModelOverride()
-		cp.applyAutoContextWindow()
 		return &cp, true
 	}
 	// a bare model name → the provider that lists it
@@ -2065,7 +2002,6 @@ func (c *Config) ResolveModel(ref string) (*ProviderEntry, bool) {
 			cp.Model = ref
 			cp.applyModelPrice()
 			cp.applyModelOverride()
-			cp.applyAutoContextWindow()
 			return &cp, true
 		}
 	}

@@ -40,8 +40,8 @@ price = { cache_hit = 0.0028, input = 0.14, output = 0.28, currency = "$" }
 		t.Fatal(err)
 	}
 	text := string(raw)
-	if !strings.Contains(text, "config_version = 7") {
-		t.Fatalf("missing v7:\n%s", text)
+	if !strings.Contains(text, "config_version = 8") {
+		t.Fatalf("missing v8:\n%s", text)
 	}
 	if !strings.Contains(text, "display_currency") && !strings.Contains(text, `currency = "CNY"`) {
 		t.Fatalf("display currency not migrated:\n%s", text)
@@ -160,10 +160,10 @@ price = { cache_hit = 0.0028, input = 0.14, output = 0.28, currency = "$" }
 	}
 	cfg := LoadForEdit(path)
 	official, _ := cfg.Provider("deepseek")
-	if got := official.Prices["deepseek-v4-flash"]; got == nil || got.CacheHit != 0.05 || got.Input != 1.5 || got.Output != 4.5 || got.PeakCacheHit != 0.10 {
+	if got := official.Prices["deepseek-v4-flash"]; got == nil || got.CacheHit != 0.10 || got.Input != 3 || got.Output != 9 {
 		t.Fatalf("flash = %+v", got)
 	}
-	if got := official.Prices["deepseek-v4-pro"]; got == nil || got.CacheHit != 0.15 || got.Input != 4.5 || got.Output != 13.5 || got.PeakCacheHit != 0.30 {
+	if got := official.Prices["deepseek-v4-pro"]; got == nil || got.CacheHit != 0.30 || got.Input != 9 || got.Output != 27 {
 		t.Fatalf("pro = %+v", got)
 	}
 	customEndpoint, _ := cfg.Provider("custom-endpoint")

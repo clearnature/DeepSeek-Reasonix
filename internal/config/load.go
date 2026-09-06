@@ -36,14 +36,24 @@ func Load() (*Config, error) {
 // mergeRuntimeTOMLFileSnapshot). Callers that must not mutate config files should use
 // LoadForRootReadOnly instead.
 func LoadForRoot(root string) (*Config, error) {
-	return loadForRoot(root, true)
+	return loadForRoot(root, loadForRootOptions{migrateOnDisk: true, loadCredentials: true})
 }
 
 // LoadForRootReadOnly is like LoadForRoot but never writes config files: it skips
 // on-disk legacy MCP tier migration. Prefer this for diagnostics, doctor, and
 // other read-only inspection paths.
 func LoadForRootReadOnly(root string) (*Config, error) {
-	return loadForRoot(root, false)
+	return loadForRoot(root, loadForRootOptions{loadCredentials: true})
+}
+
+// LoadForRootWithoutCredentialsReadOnly is the credential-free form of
+// LoadForRootReadOnly. It still merges the effective user + project config and
+// carries project .env values for workspace-scoped expansion, but it neither
+// pins Reasonix credentials into the process environment nor resolves provider
+// API keys. Settings probes use it when they need runtime network policy before
+// resolving only the edited provider's credential explicitly.
+func LoadForRootWithoutCredentialsReadOnly(root string) (*Config, error) {
+	return loadForRoot(root, loadForRootOptions{})
 }
 
 // LoadUserConfigReadOnly loads only the trusted user-global config. It never
@@ -65,9 +75,17 @@ func LoadUserConfigReadOnly() (*Config, error) {
 	return cfg, nil
 }
 
-func loadForRoot(root string, migrateOnDisk bool) (*Config, error) {
+type loadForRootOptions struct {
+	migrateOnDisk   bool
+	loadCredentials bool
+}
+
+func loadForRoot(root string, opts loadForRootOptions) (*Config, error) {
 	root = resolveRoot(root)
-	expansionEnv := loadDotEnvForRoot(root)
+	expansionEnv := loadProjectDotEnvForExpansion(root)
+	if opts.loadCredentials {
+		loadCredentialStoreForRoot(root)
+	}
 	cfg := Default()
 	cfg.setExpansionEnv(expansionEnv)
 	cfg.CredentialsStore = credentialsStoreMode()
@@ -86,7 +104,7 @@ func loadForRoot(root string, migrateOnDisk bool) (*Config, error) {
 	}
 
 	mergeTOML := mergeFileSnapshot
-	if migrateOnDisk {
+	if opts.migrateOnDisk {
 		mergeTOML = mergeRuntimeTOMLFileSnapshot
 	}
 
@@ -215,33 +233,17 @@ func loadForRoot(root string, migrateOnDisk bool) (*Config, error) {
 		cfg.mergeMCPJSON(loadLegacyMCP(legacyConfigPath()))
 	}
 	_ = mergeInstalledPluginPackages(cfg, root)
-	normalizePluginCommandLines(cfg)
-	normalizeLegacyEffort(cfg)
-	cfg.ignoredLegacyStepLimits = normalizeLegacyAgentStepLimits(cfg)
-	normalizeRetiredAutoPlan(cfg)
-	normalizeLegacyMCPTiers(cfg)
-	normalizeLegacyStepFunBaseURLs(cfg)
-	normalizeLegacyLongCatContextWindows(cfg)
-	normalizeLegacyQwenContextWindows(cfg)
-	normalizeLegacyKimiK3Catalog(cfg)
-	normalizeLegacyOpenCodeGoInstalls(cfg)
-	normalizeLegacyMimoCustomProviders(cfg)
-	normalizeLegacyDeepSeekResponsesPreset(cfg)
-	normalizeLegacyProviderModels(cfg)
-	normalizeDesktopOfficialProviderAccess(cfg)
-	normalizeOfficialDeepSeekModels(cfg)
-	migrateBillingDisplayCurrency(cfg)
-	freezeProviderBillingCurrencies(cfg)
-	applyDeepSeekOfficialDefaultPricing(cfg)
-	backfillDeepSeekOfficialPrices(cfg)
-	normalizeEffortConfig(cfg)
-	backfillDeepSeekPro(cfg)
+	if err := normalizeLoadedConfig(cfg); err != nil {
+		return nil, err
+	}
 	if userDefaultModelExplicit {
 		restoreUnresolvableProjectDefaultModel(cfg, userDefaultModel)
 	}
 	cfg.CredentialsStore = credentialsStoreMode()
 	cfg.setExpansionEnv(expansionEnv)
-	resolveProviderCredentialsForRoot(root, cfg)
+	if opts.loadCredentials {
+		resolveProviderCredentialsForRoot(root, cfg)
+	}
 	return cfg, nil
 }
 
@@ -810,7 +812,6 @@ func normalizeConfigForEdit(cfg *Config) bool {
 	changed = normalizeLegacyKimiK3Catalog(cfg) || changed
 	changed = normalizeLegacyOpenCodeGoInstalls(cfg) || changed
 	changed = normalizeLegacyMimoCustomProviders(cfg) || changed
-	changed = normalizeLegacyDeepSeekResponsesPreset(cfg) || changed
 	normalizeLegacyProviderModels(cfg)
 	normalizeDesktopOfficialProviderAccess(cfg)
 	normalizeOfficialDeepSeekModels(cfg)
@@ -903,13 +904,6 @@ func mergeFileSnapshotWithRead(cfg *Config, path string, readFile func(string) (
 	var validated Config
 	if _, err := decodeTOMLBytes(data, &validated); err != nil {
 		return toml.MetaData{}, fmt.Errorf("config %s: %w", path, err)
-	}
-	// 用户 config 声明 [[providers]] 数组 → 整体替换默认 provider，绝不与
-	// 内置默认（deepseek-flash/pro 带 balance_url/price/context_window）按
-	// index 合并字段——否则自定义 openai provider（如自托管 vLLM）会继承
-	// DeepSeek 的余额端点/价格表/上下文窗口（issue #7357）。
-	if validated.Providers != nil {
-		cfg.Providers = nil
 	}
 	meta, err := decodeTOMLBytes(data, cfg)
 	if err != nil {
@@ -1778,47 +1772,6 @@ func legacyOfficialProviderModel(name string) string {
 
 func normalizeLegacyMimoCustomProviders(c *Config) bool {
 	return normalizeLegacyMimoCustomProvidersForRefs(c, legacyMimoConfigRefs(c)...)
-}
-
-// normalizeLegacyDeepSeekResponsesPreset repairs a deepseek-responses entry
-// that was written to config outside the preset-install flow (no preset_id and
-// missing from Desktop.ProviderAccess). Such an entry matched the curated
-// preset's kind+baseURL, so the Settings UI showed "DeepSeek Responses API" as
-// installed while the model picker could not use it. Backfill preset_id and
-// ensure the provider name is in provider_access so the entry becomes usable.
-func normalizeLegacyDeepSeekResponsesPreset(c *Config) bool {
-	if c == nil {
-		return false
-	}
-	preset, ok := CuratedProviderPreset("deepseek-responses")
-	if !ok || len(preset.Entries) != 1 {
-		return false
-	}
-	canonical := preset.Entries[0]
-	changed := false
-	for i := range c.Providers {
-		p := &c.Providers[i]
-		name := strings.TrimSpace(p.Name)
-		if name != strings.TrimSpace(canonical.Name) {
-			continue
-		}
-		if strings.TrimSpace(p.PresetID) == "" &&
-			strings.EqualFold(strings.TrimSpace(p.Kind), strings.TrimSpace(canonical.Kind)) &&
-			normalizedBaseURLForMigration(p.BaseURL) == normalizedBaseURLForMigration(canonical.BaseURL) {
-			p.PresetID = canonical.PresetID
-			changed = true
-		}
-	}
-	// Ensure the preset provider is listed in Desktop.ProviderAccess so the
-	// model picker exposes it (the preset-install flow adds it there).
-	if _, ok := c.Provider(canonical.Name); ok {
-		seen := desktopProviderAccessMap(c.Desktop.ProviderAccess)
-		if !seen[canonical.Name] {
-			c.Desktop.ProviderAccess = append(c.Desktop.ProviderAccess, canonical.Name)
-			changed = true
-		}
-	}
-	return changed
 }
 
 // NormalizeLegacyMimoCustomProvidersForRefs appends custom OpenAI-compatible

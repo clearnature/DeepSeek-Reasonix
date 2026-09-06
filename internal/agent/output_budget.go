@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"log/slog"
 	"math"
 	"strings"
 	"sync"
@@ -10,7 +9,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"reasonix/internal/event"
 	"reasonix/internal/nilutil"
 	"reasonix/internal/provider"
 )
@@ -33,11 +31,7 @@ var learnedOutputBudgetCache = struct {
 }{entries: make(map[string]learnedOutputBudgetCacheEntry)}
 
 type outputBudgetState struct {
-	// lastPersistedRatio de-dupes calibration writes: persist only when the
-	// ratio moved meaningfully, so a request every few seconds does not hit
-	// the disk on every turn.
-	lastPersistedRatio float64
-	outputBudget       int
+	outputBudget int
 	// lastUsage caches the latest provider telemetry for per-turn readouts.
 	// The run loop writes it while a frontend reads it, so it is atomic.
 	lastUsage         atomic.Pointer[provider.Usage]
@@ -119,21 +113,13 @@ func (a *Agent) setPromptTokenCalibration(promptTokens int, shape requestCalibra
 	if a == nil || promptTokens <= 0 || shape.requestChars <= 0 {
 		return
 	}
-	cal := &promptTokenCalibration{
+	a.sess.output.promptCalibration.Store(&promptTokenCalibration{
 		promptTokens: promptTokens,
 		requestChars: shape.requestChars,
 		compactChars: shape.compactChars,
 		cjkRunes:     shape.cjkRunes,
 		cjkBytes:     shape.cjkBytes,
-	}
-	a.sess.output.promptCalibration.Store(cal)
-	// Best-effort persistence: write only when the ratio moved ≥2% vs the
-	// last persisted value (first write always persists).
-	if r := float64(promptTokens) / float64(shape.compactChars); r > 0 && r != a.sess.output.lastPersistedRatio &&
-		(a.sess.output.lastPersistedRatio == 0 || absRatioDelta(r, a.sess.output.lastPersistedRatio) >= 0.02) {
-		a.sess.output.lastPersistedRatio = r
-		persistCalibration(a.calibrationKey(), cal)
-	}
+	})
 }
 
 func (a *Agent) setPromptTokenCalibrationFromActive(promptTokens int) {
@@ -367,47 +353,6 @@ func (a *Agent) estimatedShapeTokens(shape requestCalibrationShape) int {
 	return int(float64(shape.requestChars) * fallbackTokPerChar)
 }
 
-// replayTailSlack bounds the projection-covered prefix comparison below; a
-// message set that far exceeds the covered count is a canonical full replay.
-const replayTailSlack = 8
-
-// estimatedReplaySafeTokens prices the request like estimatedShapeTokens but
-// guards the display/admission estimate against canonical full replay after
-// projection loss: a whole-transcript estimate (e.g. gpu1 5.6M chars → 1.9M
-// tokens) fakes the window and forces an unnecessary compaction on a warm
-// replay. When the message set clearly exceeds the projection-covered prefix
-// and a last observed prompt exists, it prices the covered history at the
-// observed baseline and only the uncovered tail above it. The raw estimate is
-// returned separately so anomaly diagnostics still see the inflation source.
-func (a *Agent) estimatedReplaySafeTokens(req provider.Request, shape requestCalibrationShape) (est, raw int) {
-	raw = a.estimatedShapeTokens(shape)
-	if a == nil {
-		return raw, raw
-	}
-	a.sess.compactionMu.Lock()
-	covered := a.sess.compactionState.Projection.CoveredCount
-	a.sess.compactionMu.Unlock()
-	if covered <= 0 || len(req.Messages) <= covered+replayTailSlack {
-		return raw, raw
-	}
-	last := 0
-	if u := a.LastUsage(); u != nil {
-		last = u.LatestPromptTokens()
-	}
-	if last <= 0 {
-		return raw, raw
-	}
-	var tailChars int64
-	for _, m := range req.Messages[covered:] {
-		tailChars += int64(len(m.Content))
-	}
-	est = last + int(float64(tailChars)*fallbackTokPerChar)
-	if est < raw {
-		return est, raw
-	}
-	return raw, raw
-}
-
 func isCJKRune(r rune) bool {
 	return (r >= 0x4E00 && r <= 0x9FFF) ||
 		(r >= 0x3400 && r <= 0x4DBF) ||
@@ -522,7 +467,7 @@ func admissionSource(userMax int, policy provider.ContextBudgetPolicy, learnedWi
 // effectiveOutputBudget clips completion tokens at send time only; it never
 // moves compact_ratio. Calibrated exhausted windows fail locally; a cold
 // estimate that differs from the provider tokenizer uses bounded 400 recovery.
-func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (int, bool, error) {
+func (a *Agent) effectiveOutputBudget(req provider.Request) (int, bool, error) {
 	adm, err := a.admitOutputBudget(req)
 	if err != nil {
 		return 0, false, err
@@ -537,10 +482,33 @@ func (a *Agent) effectiveOutputBudget(req provider.Request, useObserved bool) (i
 }
 
 func (a *Agent) admitOutputBudget(req provider.Request) (contextAdmission, error) {
-	return a.admitOutputBudgetWithReserve(req, outputBudgetReserve)
+	return a.admitOutputBudgetWithReserve(req, outputBudgetReserveForWindow(a.effectiveContextWindow()), false)
 }
 
-func (a *Agent) admitOutputBudgetWithReserve(req provider.Request, reserveTokens int) (contextAdmission, error) {
+// outputBudgetReserveForWindow preserves the original safety ratio: the 8K
+// tokenizer/protocol cushion was chosen for a 1M-token window, so smaller
+// windows reserve roughly the same 1/128 share. A 256-token floor covers
+// framing, while the 8K cap keeps larger windows byte-stable.
+func outputBudgetReserveForWindow(window int) int {
+	if window <= 0 {
+		return outputBudgetReserve
+	}
+	return min(outputBudgetReserve, max(minOutputBudgetReserve, window/128))
+}
+
+// admitSummaryOutputBudget uses the summary request's dedicated protocol
+// reserve instead of the ordinary-turn reserve. Unknown gateways are treated
+// as shared when an effective window exists: summary planning already makes
+// that conservative assumption, so execution must enforce the same contract.
+func (a *Agent) admitSummaryOutputBudget(req provider.Request) (contextAdmission, error) {
+	return a.admitOutputBudgetWithReserve(req, protocolReserveTokens, true)
+}
+
+func shouldUseSharedWindowForAdmission(mode provider.ContextWindowMode, observedWindow int, conservativeUnknown bool) bool {
+	return mode == provider.ContextWindowUnknown && (observedWindow > 0 || conservativeUnknown)
+}
+
+func (a *Agent) admitOutputBudgetWithReserve(req provider.Request, reserveTokens int, conservativeUnknown bool) (contextAdmission, error) {
 	adm := contextAdmission{
 		ReserveTokens: reserveTokens,
 		LastRecovery:  a.lastAdmission().LastRecovery,
@@ -557,7 +525,7 @@ func (a *Agent) admitOutputBudgetWithReserve(req provider.Request, reserveTokens
 		adm.ObservedCompletion = learned.completionBudget
 	}
 	policy := contextBudgetPolicyOf(a.svc.prov)
-	if policy.WindowMode == provider.ContextWindowUnknown && adm.ObservedWindow > 0 {
+	if shouldUseSharedWindowForAdmission(policy.WindowMode, adm.ObservedWindow, conservativeUnknown) {
 		policy.WindowMode = provider.ContextWindowShared
 	}
 	if policy.AutoOutputTokens <= 0 && a.learnedCompletionBudget() > 0 {
@@ -583,11 +551,9 @@ func (a *Agent) admitOutputBudgetWithReserve(req provider.Request, reserveTokens
 		a.storeAdmission(adm)
 		return adm, nil
 	}
-	shape := a.requestCalibrationShape(req)
-	est, rawEst := a.estimatedReplaySafeTokens(req, shape)
-	a.emitEstimateAnomaly(req, shape, rawEst, window)
+	est := a.estimatedRequestTokens(req)
 	adm.PromptTokens = est
-	physical := window - est - outputBudgetReserve
+	physical := window - est - reserveTokens
 	adm.PhysicalRemaining = physical
 	shared := policy.WindowMode == provider.ContextWindowShared
 	if !shared {
@@ -659,7 +625,7 @@ func (a *Agent) applySummaryAdmissionToRequest(req *provider.Request) error {
 	if a == nil || req == nil {
 		return nil
 	}
-	adm, err := a.admitOutputBudgetWithReserve(*req, protocolReserveTokens)
+	adm, err := a.admitSummaryOutputBudget(*req)
 	if err != nil {
 		return err
 	}
@@ -667,49 +633,6 @@ func (a *Agent) applySummaryAdmissionToRequest(req *provider.Request) error {
 		req.MaxTokens = adm.EffectiveOutputTokens
 	}
 	return nil
-}
-
-// estimateAnomalyReason reports why an admission-time prompt estimate looks
-// unreliable. overflow means the estimate alone already crosses the shared
-// window (admitOutputBudget will refuse or force-compact); inflated means the
-// estimate is far above the last provider-observed prompt on a meaningful
-// request, which would fake the desktop context percentage without necessarily
-// overflowing. Returns "" when the estimate looks trustworthy.
-func (a *Agent) estimateAnomalyReason(est, window int) string {
-	if est >= window-outputBudgetReserve {
-		return "overflow"
-	}
-	if obs := a.lastAdmission().ObservedPrompt; obs > 0 && est > obs*2 && est >= window*2/3 {
-		return "inflated"
-	}
-	return ""
-}
-
-// emitEstimateAnomaly persists the request shape behind a suspicious estimate
-// (overflow or inflated vs observed) so the culprit message can be pinned from
-// the stats file. The estimate is otherwise only shown on the desktop and never
-// written to disk. Observer-only: it never changes admission behavior.
-func (a *Agent) emitEstimateAnomaly(req provider.Request, shape requestCalibrationShape, est, window int) {
-	if a == nil || a.svc.sink == nil {
-		return
-	}
-	reason := a.estimateAnomalyReason(est, window)
-	if reason == "" {
-		return
-	}
-	topRole, topChars := "", 0
-	for _, msg := range req.Messages {
-		if n := len(msg.Content); n > topChars {
-			topChars, topRole = n, string(msg.Role)
-		}
-	}
-	_, calibrated := a.calibratedPromptTokens(shape)
-	detail := fmt.Sprintf("reason=%s est=%d window=%d obs=%d chars=%d cchars=%d cjk=%d cjkb=%d msgs=%d top_role=%s top_chars=%d cal=%t",
-		reason, est, window, a.lastAdmission().ObservedPrompt, shape.requestChars, shape.compactChars,
-		shape.cjkRunes, shape.cjkBytes, len(req.Messages), topRole, topChars, calibrated)
-	slog.Warn("agent: estimated prompt anomaly", "detail", detail)
-	a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Audience: event.NoticeAudienceOperator,
-		Text: "estimate telemetry", Detail: detail})
 }
 
 func (a *Agent) applyLimitMode(adm *contextAdmission, userMax int, policy provider.ContextBudgetPolicy, physical int) {
@@ -744,12 +667,4 @@ func (a *Agent) applyLimitMode(adm *contextAdmission, userMax int, policy provid
 			adm.EffectiveOutputTokens = effective
 		}
 	}
-}
-
-// outputBudgetReserveForWindow returns the reserve tokens for a given context window.
-func outputBudgetReserveForWindow(window int) int {
-	if window <= 0 {
-		return outputBudgetReserve
-	}
-	return min(outputBudgetReserve, max(minOutputBudgetReserve, window/128))
 }

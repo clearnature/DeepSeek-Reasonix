@@ -237,7 +237,7 @@ func TestDesktopLayoutStyleNormalizes(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"", "classic", false},
+		{"", "workbench", false},
 		{"classic", "classic", false},
 		{" workbench ", "workbench", false},
 		{"workspace", "workbench", false},
@@ -2922,30 +2922,26 @@ func TestUpsertProviderNormalizesCustomEffortFields(t *testing.T) {
 }
 
 func TestEffortCapabilityEmptySupportedEffortsNotConfigurable(t *testing.T) {
-	// mimo-pro（token-plan-cn 端点）：isMimoEntry 只认 api.xiaomimimo.com，
-	// 该端点未覆盖 → 走 generic OpenAI 回退（#7451 修复后未知 openai 端点
-	// fail-open）。注意：token-plan-cn 是 mimo 官方端点，isMimoEntry 未覆盖
-	// 是既有缺口（mimo 二进制 thinking 语义丢失——另行处理）。
+	// mimo-pro without SupportedEfforts: no built-in heuristic, /effort must reject.
 	e := &ProviderEntry{
 		Name:    "mimo-pro",
 		Kind:    "openai",
 		BaseURL: "https://token-plan-cn.xiaomimimo.com/v1",
 		Model:   "mimo-v2.5-pro",
 	}
-	if cap := EffortCapabilityForEntry(e); !cap.Supported {
-		t.Fatalf("mimo-pro (token-plan-cn) must fall back to generic openai effort, got %+v", cap)
+	if cap := EffortCapabilityForEntry(e); cap.Supported {
+		t.Fatalf("mimo-pro without SupportedEfforts should not be configurable, got %+v", cap)
 	}
-	if _, err := NormalizeEffort(e, "high"); err != nil {
-		t.Fatalf("NormalizeEffort should accept generic level for openai endpoint: %v", err)
+	if _, err := NormalizeEffort(e, "high"); err == nil {
+		t.Fatal("NormalizeEffort should reject level for unsupported provider")
 	}
 	// `supported_efforts = []` (empty slice) is treated like nil — the v2 design
 	// has no way to opt out of the built-in heuristic; users either configure
 	// levels or leave the field unset.
-	// 空 supported_efforts 等同 nil——继续走内置启发（此处为 generic 回退）。
 	e2 := *e
 	e2.SupportedEfforts = []string{}
-	if cap := EffortCapabilityForEntry(&e2); !cap.Supported {
-		t.Fatalf("empty supported_efforts should fall through to the generic heuristic, got %+v", cap)
+	if cap := EffortCapabilityForEntry(&e2); cap.Supported {
+		t.Fatalf("empty supported_efforts should also fall through to the heuristic, got %+v", cap)
 	}
 }
 

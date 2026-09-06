@@ -87,6 +87,9 @@ type Approvals interface {
 	AnswerMCPInteraction(id, action string, content map[string]any)
 	AnswerQuestion(id string, answers []event.AskAnswer)
 	AnswerQuestionChecked(id string, answers []event.AskAnswer) error
+	// AnswerMCPInteractionChecked resolves an mcp_interaction prompt after its
+	// durable transition (serve /mcp-interaction, desktop bridge).
+	AnswerMCPInteractionChecked(id, action string, content map[string]any) error
 	Ask(ctx context.Context, questions []event.AskQuestion) ([]event.AskAnswer, error)
 	ReplayPendingPrompts()
 	ReplayPendingPromptsTo(sink event.Sink)
@@ -190,6 +193,10 @@ type Capabilities interface {
 	HookRunner() *hook.Runner
 	CustomCommand(input string) (sent string, found bool)
 	MCPPrompt(ctx context.Context, input string) (sent string, found bool, err error)
+	// MCPCapabilityViews returns the host's four-layer capability matrix
+	// (Protocol Connection, Core Host, Interactive Host, Apps Host) as
+	// read-only diagnostics for MCP status surfaces.
+	MCPCapabilityViews() []plugin.CapabilityView
 	RunSkill(input string) (sent string, found bool)
 	AddMCPServer(e config.PluginEntry) (int, error)
 	ConnectMCPServer(e config.PluginEntry) (int, error)
@@ -261,6 +268,7 @@ type Settings interface {
 	SetReasoningLanguage(lang string)
 	SetDisplayRecorder(fn func(content, display string))
 	ApplyComposerProfile(plan bool, toolApprovalMode, goal string) ([]string, error)
+	SystemPrompt() string
 }
 
 // SessionAPI is the full driving port — the composition of every sub-port. A

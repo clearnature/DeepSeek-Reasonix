@@ -153,25 +153,6 @@ func FetchModelCatalogWithOptions(ctx context.Context, baseURL, apiKey string, o
 		}
 		modelsByID[model.ID] = model
 	}
-	// Codex-style catalog fallback: DeepSeek and other Responses API vendors
-	// publish {"models":[{"slug":"deepseek-v4-flash",...}]} (the schema Codex's
-	// model_catalog_json uses) rather than OpenAI's {"data":[{"id":...}]}.
-	// Accept both shapes so a ModelsURL pointing at a Codex catalog works.
-	if len(modelsByID) == 0 {
-		var codex struct {
-			Models []struct {
-				Slug string `json:"slug"`
-			} `json:"models"`
-		}
-		if err := json.Unmarshal(body, &codex); err == nil {
-			for _, m := range codex.Models {
-				if m.Slug != "" {
-					modelsByID[m.Slug] = provider.ModelInfo{ID: m.Slug, InputModalities: []provider.ModelModality{provider.ModalityText}}
-				}
-			}
-		}
-	}
-
 	models := make([]provider.ModelInfo, 0, len(modelsByID))
 	for _, model := range modelsByID {
 		models = append(models, model)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -28,6 +27,8 @@ type streamedTurn struct {
 	reasoningID        string
 	reasoningStatus    string
 	reasoningComplete  bool
+	reasoningState     provider.ReasoningState
+	thinkingBlocks     []provider.ThinkingBlock
 	calls              []provider.ToolCall
 	responsesItems     []json.RawMessage
 	serverSearch       []provider.ServerSearchCall
@@ -42,80 +43,9 @@ type streamedTurn struct {
 func (s streamedTurn) assistantMessage() provider.Message {
 	return provider.Message{
 		Role: provider.RoleAssistant, Content: s.text, ReasoningContent: s.reasoning,
+		ReasoningState: s.reasoningState, ThinkingBlocks: s.thinkingBlocks,
 		ReasoningSignature: s.signature, ReasoningID: s.reasoningID, ReasoningStatus: s.reasoningStatus,
 		ToolCalls: s.calls, ResponsesItems: s.responsesItems, ServerSearch: s.serverSearch,
-	}
-}
-
-// deferredStreamSink keeps selected stream events local until the caller
-// chooses which provider response to adopt. On an ordinary healthy DeepSeek
-// turn, reasoning arrives before tool calls and unlocks live tool-card events.
-// On the rare malformed turn with no reasoning, only the speculative partial
-// tool cards remain buffered, so retrying does not flash duplicate cards in the
-// UI. A recovery attempt buffers everything because it may be discarded.
-type deferredStreamSink struct {
-	inner               event.Sink
-	deferAll            bool
-	waitingForReasoning bool
-	sawReasoning        bool
-	events              []event.Event
-}
-
-func newReasoningAwareStreamSink(inner event.Sink) *deferredStreamSink {
-	return &deferredStreamSink{inner: inner, waitingForReasoning: true}
-}
-
-func newDeferredStreamSink(inner event.Sink) *deferredStreamSink {
-	return &deferredStreamSink{inner: inner, deferAll: true}
-}
-
-func (s *deferredStreamSink) Emit(e event.Event) {
-	if s == nil {
-		return
-	}
-	if s.deferAll {
-		s.events = append(s.events, e)
-		return
-	}
-	if s.waitingForReasoning && e.Kind == event.Reasoning && strings.TrimSpace(e.Text) != "" {
-		s.sawReasoning = true
-		s.inner.Emit(e)
-		s.flushBuffered()
-		return
-	}
-	if s.waitingForReasoning && !s.sawReasoning {
-		switch e.Kind {
-		case event.ToolDispatch, event.ToolResult, event.Text, event.Message:
-			// Keep every user-visible speculative event private until reasoning
-			// proves the turn replayable. Healthy DeepSeek responses emit
-			// reasoning first, so their live-streaming fast path is unchanged.
-			s.events = append(s.events, e)
-			return
-		}
-	}
-	s.inner.Emit(e)
-}
-
-func (s *deferredStreamSink) flushBuffered() {
-	if s == nil {
-		return
-	}
-	for _, e := range s.events {
-		s.inner.Emit(e)
-	}
-	s.events = nil
-}
-
-func (s *deferredStreamSink) Flush() {
-	if s == nil {
-		return
-	}
-	s.flushBuffered()
-}
-
-func (s *deferredStreamSink) Discard() {
-	if s != nil {
-		s.events = nil
 	}
 }
 
@@ -123,7 +53,7 @@ func (s *deferredStreamSink) Discard() {
 // evidence re-lease, and the initial user-turn persistence. Callers still own
 // all Run-level defers (workspace lease, evidence commit, delivery checkpoint,
 // steer queue, active-turn timestamp).
-func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string, state *turnRuntime) {
+func (a *Agent) beginRunTurn(ctx context.Context, input string, pinned pinnedRevisionPlan) (rawInput string, state *turnRuntime) {
 	rawInput = RawUserInput(ctx, input)
 	providerInput := input
 	// A fresh user turn starts from zeroed per-turn host state; the new turn's
@@ -196,31 +126,26 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 	}
 	a.turn.engine = runtimepolicy.NewEngine(a.turn.constraints)
 	a.rebuildTurnContract()
-	// Reuse an open provider/configuration circuit before projecting history or
-	// spending another pair of normal thinking-mode requests.
-	if a.beginMissingReasoningRecovery() {
-		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetrySuppressed})
-		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningFallback})
-	}
 	// A cancelled/error turn leaves a provider-excluded recovery record at the
 	// transcript tail. Fold its bounded facts into this new user turn exactly
 	// once; the user's raw text remains the source above.
 	a.ensureUnreplayableHistoryRecovery()
-	providerInput = withInterruptedRecovery(providerInput, a.pendingInterruptedRecovery())
+	providerInput = withInterruptedRecovery(providerInput, a.verifyInterruptedWrites(ctx, a.pendingInterruptedRecovery()))
 	a.task.prepareScope(scoped, scope.ID)
 	a.svc.sink.Emit(event.Event{Kind: event.TurnStarted})
 	a.emitTurnPhase(event.TurnPhaseWorking)
-	input = a.withTurnPreferences(providerInput)
+	input = a.prepareProviderTurn(ctx, providerInput)
 	userCreatedAt := time.Now().UnixMilli()
 	a.activeTurnCreatedAt.Store(userCreatedAt)
 	rawContent := rawInput
 	if rawContent == "" {
 		rawContent = a.turn.turnInput
 	}
-	a.sess.conversation.Add(provider.Message{
+	userMessage := provider.Message{
 		Role: provider.RoleUser, Origin: inputMessageOrigin(ctx), Content: input, RawContent: rawContent,
 		Images: userImages(ctx), VisionSummary: VisionSummaryFromContext(ctx), CreatedAt: userCreatedAt,
-	})
+	}
+	a.appendPinnedRevisionAndUser(ctx, pinned, userMessage)
 
 	// The loop fields join the classification computed above rather than
 	// opening a second object: one turn, one turnRuntime. The zero values the
@@ -241,15 +166,24 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 
 // runToolLoop owns the main tool-round budget and dispatches each streamed
 // assistant turn into final-response or tool-round handling.
-func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
+func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr error) {
+	releaseMCPListObserver := a.activateMCPListObserver()
+	defer func() {
+		a.recordReadonlySoftBudgetSample(state, runErr)
+		releaseMCPListObserver()
+	}()
 	ctx = a.withAgentContext(ctx)
+	truncatedRounds := 0
 	for step := 0; state.runMaxSteps <= 0 || step < state.runMaxSteps || state.graceRound || state.recoveryGraceRound || state.incompleteReads.hasPending(); step++ {
 		// Consume a queued steer and persist it to the session so it
 		// survives tab switches and history replay. The model sees it as
 		// guidance (with a prefix), not a new task. One cache miss per
 		// steer is unavoidable — the model must see the new instruction.
 		if text, itemID, ok := a.consumeSteer(); ok {
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Origin: provider.MessageOriginUser, Content: a.withTurnPreferences(midTurnSteerMessage(text))})
+			a.sess.conversation.Add(provider.Message{
+				Role: provider.RoleUser, Origin: provider.MessageOriginUser,
+				Content: a.withTurnPreferences(midTurnSteerMessage(text)), RawContent: text,
+			})
 			a.svc.sink.Emit(event.Event{Kind: event.Steer, Text: text, ItemID: itemID})
 		} else if itemID != "" {
 			// Loader failed after dequeue: durable entry stays for inspection
@@ -262,7 +196,6 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		if !a.sess.haveLastPrefixShape {
 			prevPrefixShape = prefixShape
 		}
-
 		// Drain reasons queued since the previous capture (compaction,
 		// snip/prune, rewind, guardian merge) so CompareShape can attribute
 		// any prefix change to the operation that actually caused it, instead
@@ -277,7 +210,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 		text, reasoning, signature, calls, responsesItems, serverSearch, usage := streamed.text, streamed.reasoning, streamed.signature, streamed.calls, streamed.responsesItems, streamed.serverSearch, streamed.usage
 		partialCalls, err := streamed.partialCalls, streamed.err
 		cacheDiagnostics := CompareShape(prevPrefixShape, prefixShape, usage, contentReasons)
-		cacheDiagnostics.WireFP = a.sess.wireFP()
+		a.attachSessionContextDiagnostics(&cacheDiagnostics)
 		if err != nil {
 			quote := a.emitTurnUsage(usage, &cacheDiagnostics)
 			a.observeRunBudget(state, usage, quote)
@@ -288,6 +221,8 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			// bounded LocalOnly recovery record for the next real user message.
 			// Intermediate failed attempts never wrote session state.
 			a.recordInterruptedDisplay(text, reasoning, partialCalls, true, state.workDurationMs())
+			// A broken provider stream can otherwise look like a silent hang
+			// followed only by the generic interrupted-turn notice (#9560).
 			if code, msg := streamInterruptNotice(err); msg != "" {
 				a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Code: code, Text: msg})
 			}
@@ -313,6 +248,8 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			ReasoningSignature: signature,
 			ReasoningID:        streamed.reasoningID,
 			ReasoningStatus:    streamed.reasoningStatus,
+			ReasoningState:     streamed.reasoningState,
+			ThinkingBlocks:     streamed.thinkingBlocks,
 			ToolCalls:          calls,
 			ResponsesItems:     responsesItems,
 			ServerSearch:       serverSearch,
@@ -327,6 +264,18 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 			continue
 		}
 
+		if usage != nil && usage.FinishReason == "length" {
+			truncatedRounds++
+			if err := a.recordTruncatedToolResults(calls); err != nil {
+				return err
+			}
+			if truncatedRounds > maxStreamRecoveries {
+				return fmt.Errorf("tool arguments remained truncated after three recovery rounds")
+			}
+			continue
+		}
+		truncatedRounds = 0
+
 		// Invariant: executeBatch only ever receives tool calls from a
 		// committed sampling attempt (clean terminal + response intercept).
 		cont, terr := a.handleToolRound(ctx, state, step, text, reasoning, calls, usage)
@@ -338,136 +287,6 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) error {
 	// is already in the session, so the user can just send another message to pick
 	// up where it left off.
 	return a.gracePause(state)
-}
-
-// streamWithSamplingRecovery coordinates Codex-style original-request replay
-// for one model round: prepare once, freeze the provider request, run up to
-// maxSamplingAttempts body attempts, and only commit after a clean terminal.
-// Failed attempts never write Session state or execute tools. missing-reasoning
-// repair shares this lifecycle (at most one extra exact replay).
-func (a *Agent) streamWithSamplingRecovery(ctx context.Context, turn int) streamedTurn {
-	frozen, err := a.prepareSamplingRequest(ctx)
-	if err != nil {
-		return streamedTurn{err: err}
-	}
-	// One request counter spans every body attempt; each attempt records only
-	// its delta so RequestCount equals real HTTP POSTs (no triangular growth).
-	ctx = provider.WithRequestAttemptCounter(ctx)
-	var contextRecovery contextRecoveryBudget
-
-	var billable *provider.Usage
-	var last streamedTurn
-
-	runAttempt := func(attemptID string, sink event.Sink) streamedTurn {
-		return a.runSamplingAttempt(ctx, turn, sink, &frozen, attemptID)
-	}
-
-	for attempt := 1; attempt <= maxSamplingAttempts; attempt++ {
-		attemptID := newStreamAttemptID(attempt)
-		a.emitStreamAttempt(attemptID, event.StreamAttemptBegin, attempt, "", nil)
-
-		streamSink, attemptSink := a.samplingAttemptSinks()
-
-		result := runAttempt(attemptID, attemptSink)
-		billable, last = a.recordSamplingAttempt(billable, result)
-
-		if result.err != nil {
-			if next, retryContext, _ := a.recoverContextLimit(ctx, frozen, result.err, &contextRecovery); retryContext {
-				if streamSink != nil {
-					streamSink.Discard()
-				}
-				a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, "context_limit", result.err)
-				frozen = next
-				attempt = 0
-				continue
-			}
-			retry, terminal := a.handleSamplingError(ctx, attemptID, attempt, streamSink, &frozen, result, last, billable)
-			if retry {
-				continue
-			}
-			if provider.AsContextLimitError(result.err) != nil {
-				a.setLastRecovery(contextRecoveryFailed)
-			}
-			return terminal
-		}
-
-		// Clean terminal. Repair missing replay-required reasoning with one exact
-		// replay of the same frozen request (no synthetic prompt). A visible text
-		// prefix does not make a tool turn replayable.
-		issue := a.reasoningReplayIssue(result)
-		missing, shouldRetry := false, false
-		switch issue {
-		case ReasoningReplayMissing:
-			missing = true
-			_, shouldRetry = a.observeMissingAssistantReasoning(result.assistantMessage(), result.reasoningComplete)
-		case "":
-			// Healthy replay-required turns advance the persisted anti-flapping
-			// streak and eventually re-arm recovery for a future regression.
-			a.observeMissingAssistantReasoning(result.assistantMessage(), result.reasoningComplete)
-		}
-		if issue == ReasoningReplayOverflow {
-			event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryReasoningOverflowDetected})
-			result.usage = finalizeSamplingUsage(billable, result.usage)
-			terminal := a.finishUnreplayableReasoning(result, streamSink, issue)
-			a.emitReasoningReplayAttemptOutcome(attemptID, attempt, terminal.err)
-			return terminal
-		}
-		if missing {
-			event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningDetected})
-			if shouldRetry {
-				event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetryAttempted})
-				a.emitProtocolRetry(1, provider.SupportsMissingReasoningFallback(a.svc.prov))
-				retrySink := newDeferredStreamSink(a.svc.sink)
-				retry := runAttempt(attemptID, retrySink)
-				billable = mergeSamplingUsage(billable, retry.usage)
-				if retry.err != nil {
-					retrySink.Discard()
-					if ctx.Err() != nil {
-						streamSink.Discard()
-						a.emitStreamAttempt(attemptID, event.StreamAttemptDiscard, attempt, provider.StreamInterruptReason(retry.err), retry.err)
-						// Use the cancelled retry as the "latest" shape so
-						// FinishReason=interrupted is preserved for accounting.
-						return streamedTurn{usage: finalizeSamplingUsage(billable, retry.usage), err: retry.err}
-					}
-					// Classify the first complete response without executing an
-					// unreplayable client tool.
-					a.storeLatestRequestUsage(result.usage)
-					result.usage = finalizeSamplingUsage(billable, result.usage)
-					event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningFallback})
-					terminal := a.finishUnreplayableReasoning(result, streamSink, issue)
-					a.emitReasoningReplayAttemptOutcome(attemptID, attempt, terminal.err)
-					return terminal
-				}
-				streamSink.Discard()
-				if a.reasoningReplayIssue(retry) == ReasoningReplayMissing {
-					event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningDetected})
-					if fallback, ok := a.runMissingReasoningFallback(ctx, turn, &frozen, attemptID, attempt, billable, retrySink); ok {
-						return fallback
-					}
-				}
-				retry = a.finishReasoningReplayRetry(retry, retrySink, billable)
-				a.emitReasoningReplayAttemptOutcome(attemptID, attempt, retry.err)
-				return retry
-			}
-			if !shouldRetry {
-				event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetrySuppressed})
-				if fallback, ok := a.runMissingReasoningFallback(ctx, turn, &frozen, attemptID, attempt, billable, streamSink); ok {
-					return fallback
-				}
-				event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningFallback})
-				result.usage = finalizeSamplingUsage(billable, result.usage)
-				terminal := a.finishUnreplayableReasoning(result, streamSink, issue)
-				a.emitReasoningReplayAttemptOutcome(attemptID, attempt, terminal.err)
-				return terminal
-			}
-		}
-
-		streamSink.Flush()
-		a.emitStreamAttempt(attemptID, event.StreamAttemptCommit, attempt, "", nil)
-		result.usage = finalizeSamplingUsage(billable, result.usage)
-		return result
-	}
-	return last
 }
 
 func (a *Agent) emitProtocolRetry(attempt int, hasFallback bool) {
@@ -505,11 +324,11 @@ var streamRetrySleep = sleepStreamRetryBackoff
 // sleepStreamRetryBackoff waits ~0.5s, 1s, 2s, 4s, 8s with small jitter.
 // Returns false when ctx is cancelled during the wait.
 func sleepStreamRetryBackoff(ctx context.Context, attempt int) bool {
-	// attempt is 1-based for the failed attempt about to be retried.
-	shift := min(max(attempt-1, 0), 4)
-	base := time.Duration(1<<shift) * 500 * time.Millisecond
-	jitter := time.Duration(rand.Intn(250)) * time.Millisecond
-	timer := time.NewTimer(base + jitter)
+	return recoverySleep(ctx, time.Duration(1<<min(max(attempt-1, 0), 2))*2*time.Second)
+}
+
+var recoverySleep = func(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -585,29 +404,25 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 		event.RecordReadinessAudit(a.svc.sink, readiness.audit(evidence.ReadinessAllowed, a.turn.readinessRecovered))
 	}
 	if !hasVisibleFinalAnswer(text) {
-		// DeepSeek thinking mode can stream a long reasoning_content and
-		// then finish with finish_reason="stop" but an empty content
-		// block: the model has explicitly signalled completion and its
-		// reasoning was already streamed to the user. Retrying here overrides
-		// that stop signal and forces another expensive thinking round (the
-		// "still thinking after the task is done" symptom), so honour the
-		// stop when reasoning carried the substance of the answer and treat
-		// the turn as a final answer instead of retrying.
-		if a.requireVisibleFinal || a.completionEnforced() || !reasoningOnlyFinishHonoured(a.svc.prov, usage, reasoning) {
+		// Harness-style termination accepts a reasoning-only clean stop. Only
+		// explicit internal callers that require visible output retain the
+		// bounded synthetic retry below. A truly empty response is classified
+		// before this function and retried with the frozen provider request.
+		if a.requireVisibleFinal {
 			state.terminal.emptyFinalBlocks++
 			if state.terminal.emptyFinalBlocks >= maxEmptyFinalBlocks {
 				return false, fmt.Errorf("model finished without a visible final answer %d times", state.terminal.emptyFinalBlocks)
 			}
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeEmptyFinal, Text: emptyFinalNotice(), Detail: emptyFinalNoticeDetail(a.svc.prov.Name(), usage, len(reasoning))})
-			a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(emptyFinalRetryMessage())})
+			a.sess.conversation.Add(HostGeneratedUserMessage(a.withTurnPreferences(emptyFinalRetryMessage())))
 			a.contextManager().ObserveUsage(usage)
 			return true, nil
 		}
 	}
-	if state.executorHandoff && !state.usedAnyTool && state.terminal.handoffNudges < maxExecutorHandoffNudges && shouldNudgeExecutorHandoff(state.input, text) {
+	if a.hostContinuationEnabled(ctx) && state.executorHandoff && !state.usedAnyTool && state.terminal.handoffNudges < maxExecutorHandoffNudges && shouldNudgeExecutorHandoff(state.input, text) {
 		state.terminal.handoffNudges++
 		a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Code: event.NoticeCodeExecutorHandoff, Text: executorHandoffNoticeText(), Detail: "executor answered without taking any action; nudging it to use its tools"})
-		a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(executorHandoffRetryMessage())})
+		a.sess.conversation.Add(HostGeneratedUserMessage(a.withTurnPreferences(executorHandoffRetryMessage())))
 		a.contextManager().ObserveUsage(usage)
 		return true, nil
 	}
@@ -622,17 +437,7 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 	if !a.closeSteerIntakeIfIdle() {
 		return true, nil
 	}
-	// Host repairs are done. The validator now judges the already-streamed
-	// answer; only this decision gates TurnDone.
-	switch decision, pause := a.validateCandidateCompletion(ctx, state, text); decision {
-	case completionResume:
-		a.contextManager().ObserveUsage(usage)
-		return true, nil
-	case completionStop:
-		a.contextManager().ObserveUsage(usage)
-		return false, pause
-	}
-	// A final-answer turn otherwise skips compaction, so a large context
+	// A final-answer turn skips compaction, so a large context
 	// carries into the next turn un-folded and can overflow the model window.
 	// No-op below the trigger, so normal turns keep their warm cache.
 	a.contextManager().ObserveUsage(usage)
@@ -670,28 +475,9 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 	}
 	batch := a.executeBatch(ctx, state, calls)
 	if batch.err != nil {
-		// No call from the batch has executed: executeBatch commits every full
-		// dispatch before entering its execution scheduler.
+		// Any completed results are already stored; a failed durability barrier
+		// prevents starting the next tool.
 		return false, batch.err
-	}
-	results, images := batch.results, batch.images
-	for i, call := range calls {
-		msg := provider.Message{
-			Role:       provider.RoleTool,
-			Content:    results[i],
-			Images:     images[i],
-			ToolCallID: call.ID,
-			Name:       call.Name,
-		}
-		// Content is the stable bounded provider form. Full originals remain in
-		// local RawContent and enter model context only through explicit paging.
-		if i < len(batch.outcomes) && batch.outcomes[i].rawOutput != "" && batch.outcomes[i].rawOutput != results[i] {
-			msg.RawContent = batch.outcomes[i].rawOutput
-		}
-		if i < len(batch.executions) {
-			msg.ToolExecution = toProviderToolExecution(batch.executions[i])
-		}
-		a.sess.conversation.Add(msg)
 	}
 	if cont, boundaryErr, handled := a.resolveIncompleteReadToolRoundBoundary(ctx, state, usage); handled {
 		return cont, boundaryErr
@@ -732,7 +518,7 @@ func (a *Agent) handleToolRound(ctx context.Context, state *turnRuntime, step in
 			ctrl.MarkFinalizationOffered(a.recovery.taskID)
 		}
 		nudge := "Auto recovery has reached its limit for this turn. Do not call any more tools. Summarize what was completed, what failed, and what the user should do next. The user can continue in the next message."
-		a.sess.conversation.Add(provider.Message{Role: provider.RoleUser, Content: a.withTurnPreferences(nudge)})
+		a.sess.conversation.Add(HostGeneratedUserMessage(a.withTurnPreferences(nudge)))
 		return true, nil
 	}
 

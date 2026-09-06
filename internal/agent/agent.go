@@ -23,6 +23,7 @@ import (
 	"reasonix/internal/i18n"
 	"reasonix/internal/instruction"
 	"reasonix/internal/jobs"
+	"reasonix/internal/mcpinteraction"
 	"reasonix/internal/memory"
 	"reasonix/internal/nilutil"
 	"reasonix/internal/plancontract"
@@ -46,8 +47,8 @@ var deprecatedContextRetentionWarning sync.Once
 const maxEmptyFinalBlocks = 3
 
 // maxStreamRecoveries is the number of body-phase stream retries after the
-// initial sampling attempt (Codex-aligned default: 1 + 5 = 6 attempts total).
-const maxStreamRecoveries = 5
+// initial sampling attempt (Pi-style default: 1 + 3 = 4 attempts total).
+const maxStreamRecoveries = 3
 const maxSamplingAttempts = maxStreamRecoveries + 1
 const maxExecutorHandoffNudges = 1
 
@@ -172,7 +173,7 @@ func (a *Agent) withAgentContext(ctx context.Context) context.Context {
 	} else {
 		ctx = memory.WithoutQueue(ctx)
 	}
-	return planmode.WithActive(withParentAgent(ctx, a), a.planMode.Load())
+	return planmode.WithActive(ctx, a.planMode.Load())
 }
 
 // WithParentSession stamps the active parent session ID onto a turn context so
@@ -305,10 +306,7 @@ type Agent struct {
 	reasoningLanguage    atomic.Value // string: auto|zh|en
 
 	requireVisibleFinal bool // internal callers require final Content
-	// lastAPICallAt records when the last provider API call completed; used by
-	// the /compress-fast cache gate (vendor TTL expiry). Atomic because the
-	// command goroutine reads it while the run loop writes it.
-	lastAPICallAt atomic.Int64
+	continuationPolicy  ContinuationPolicy
 
 	// unwrittenResolve is the resolve watermark a failed state write still owes.
 	// It outlives the conversation, which is why it is not in sessionRuntime.
@@ -375,13 +373,6 @@ type Agent struct {
 	// verify against same-turn bash receipts after a write-backed completion.
 	projectChecks []instruction.VerifyCheck
 
-	// lastFoldReason records why the latest fold was admitted (manual,
-	// overflow, force, fold) — compaction telemetry.
-	lastFoldReason string
-	// lastResponseHitTokens stores the previous turn's CacheHitTokens so the
-	// cache-shape estimator can report a windowed hit trend.
-	lastResponseHitTokens atomic.Int64
-	lastEstTokens         int
 	// closedLoop gates come from Goal/Plan scope and strict contract
 	// obligations. Host state only; never enters the provider-cached prefix.
 
@@ -420,9 +411,8 @@ type Agent struct {
 	// tool loop is active, but it must keep this message and everything after it
 	// verbatim so cancellation/crash recovery can retain completed tool pairs.
 	activeTurnCreatedAt atomic.Int64
-	// autoBackgroundizeAfter auto-converts a long-running foreground task to a
-	// background job once it runs past this deadline (0 disables).
-	autoBackgroundizeAfter time.Duration
+	// Pinned revisions are staged after admission and appended with the user turn.
+	pinned pinnedContextRuntime
 }
 
 type repeatFailureRecord struct {
@@ -569,6 +559,19 @@ func (a *Agent) withTurnPreferences(input string) string {
 // Interactive frontends wire one in; headless runs leave it nil.
 func (a *Agent) SetAsker(as Asker) { a.svc.asker = as }
 
+// Asker returns the current ask surface (nil for headless runs without a
+// wired asker); the team leader path reads it to reach the user.
+func (a *Agent) Asker() Asker {
+	if a == nil {
+		return nil
+	}
+	return a.svc.asker
+}
+
+// SetInteractionBroker installs the broker that carries MCP server-initiated
+// elicitations to the user. Headless runs leave it nil so requests cancel.
+func (a *Agent) SetInteractionBroker(b mcpinteraction.Broker) { a.svc.interactionBroker = b }
+
 // SetMemoryQueue installs the sink the remember/forget tools use to apply a
 // memory change in the current session. The controller wires itself in.
 func (a *Agent) SetMemoryQueue(q memory.Queue) { a.svc.memQueue = q }
@@ -601,35 +604,6 @@ func (a *Agent) MutationObserver() *checkpoint.MutationObserver {
 	return a.svc.mutationObserver
 }
 
-// Session returns the agent's current conversation, useful for persistence
-// hooks that need to read the message log between turns. sessMu serialises this
-// pointer read against SetSession, so a frontend (serve's concurrent /history and
-// /new handlers) can't race the swap. The run loop touches a.session directly and
-// only swaps it via SetSession while idle, so its reads need no lock.
-func (a *Agent) Session() *Session {
-	a.sess.mu.Lock()
-	defer a.sess.mu.Unlock()
-	return a.sess.conversation
-}
-
-// SetSession replaces the agent's conversation wholesale. Used by
-// `reasonix --resume` to load a saved JSONL transcript before the first turn,
-// so the model picks up exactly where it left off. Callers serialise it against a
-// running turn (it only fires while idle); sessMu guards the pointer swap itself.
-func (a *Agent) SetSession(s *Session) {
-	a.sess.reset(s)
-	// The replaced conversation's task is over, but the ledger and the bill
-	// answer to beginRunTurn's scope check rather than to this seam.
-	a.task.repeatFailures = nil
-	a.task.repeatScope = ""
-	a.pending.preserveEvidence = false
-	a.pending.finalReadinessRecovery = false
-	a.pending.finalReadinessRecoveryPrepared = false
-	if s != nil {
-		a.rebuildTodoState(s.Snapshot())
-	}
-}
-
 // LastUsage returns the most recent per-turn token telemetry the provider
 // reported (nil if no turn has run yet). The TUI uses it to show a context
 // gauge alongside the prompt; ContextManager.Prepare owns cache-breaking
@@ -640,45 +614,6 @@ func (a *Agent) LastUsage() *provider.Usage { return a.sess.output.lastUsage.Loa
 // API call this session — the basis for the status line's aggregate hit-rate.
 func (a *Agent) SessionCache() (hit, miss int) {
 	return int(a.sess.cacheHit.Load()), int(a.sess.cacheMiss.Load())
-}
-
-// LastAPICallAt returns when the last provider API call completed.
-func (a *Agent) LastAPICallAt() time.Time {
-	if a == nil {
-		return time.Time{}
-	}
-	return time.Unix(0, a.lastAPICallAt.Load())
-}
-
-// PromptOverflow reports whether the canonical transcript already sits at or
-// above the compaction trigger (used by the /compress-fast cache gate).
-func (a *Agent) PromptOverflow() bool {
-	if a == nil || a.contextWindow <= 0 {
-		return false
-	}
-	high := a.compactTrigger()
-	if high <= 0 {
-		return false
-	}
-	return a.estimatedPromptTokens(a.Session().Snapshot()) >= high
-}
-
-// Asker returns the current ask surface (nil for headless runs without a
-// wired approver); the `ask` tool falls back to a model assumption then.
-func (a *Agent) Asker() Asker {
-	if a == nil {
-		return nil
-	}
-	return a.svc.asker
-}
-
-// RecordAPICallForTest stamps lastAPICallAt as if a provider call completed at
-// the given time. Test-only hook so controller cache-gate tests can simulate
-// a warm server-side cache without a live provider.
-func (a *Agent) RecordAPICallForTest(at time.Time) {
-	if a != nil {
-		a.lastAPICallAt.Store(at.UnixNano())
-	}
 }
 
 // ContextWindow returns the configured context-window size in tokens. 0
@@ -926,16 +861,18 @@ func (a *Agent) CompactRatio() float64 { return a.compactRatio }
 
 // CompactNow forces one projection compaction (canonical transcript untouched).
 func (a *Agent) CompactNow(ctx context.Context, instructions string) error {
-	_, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerManual, Instructions: instructions, Force: true})
+	_, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{
+		Trigger:              CompactionTriggerManual,
+		Instructions:         instructions,
+		Force:                true,
+		AllowChunkedFallback: true,
+	})
 	return err
 }
 
 // Options configures an Agent.
 type Options struct {
 	MaxSteps int
-	// AutoBackgroundizeAfter auto-converts a long-running foreground task to a
-	// background job after it runs longer than the deadline.
-	AutoBackgroundizeAfter time.Duration
 	// MaxStepsKey names the explicit runtime control shown when the MaxSteps guard
 	// is hit. Empty defaults to the generic max_steps tool/runtime parameter.
 	MaxStepsKey string
@@ -961,6 +898,9 @@ type Options struct {
 	ModelRef string
 	// RequireVisibleFinal makes internal callers reject reasoning-only responses.
 	RequireVisibleFinal bool
+	// ContinuationPolicy is the internal host policy for synthetic same-Run
+	// continuation. The zero value (ContinuationDisabled) is the product default.
+	ContinuationPolicy ContinuationPolicy
 	// Gate is the per-call permission gate. nil disables gating.
 	Gate Gate
 	// ReadOnlyExecution enables a permanent host-side read-only boundary for
@@ -1112,10 +1052,7 @@ type Options struct {
 	// LegacyAnchorSafetyGate is an internal kill switch for reverting
 	// delete_range to the pre-fingerprint full-file fresh-read requirement.
 	// It never enters provider-visible prompts or tool schemas.
-	LegacyAnchorSafetyGate     bool
-	CompletionValidation       string
-	CompletionEvaluator        CompletionEvaluator
-	CompletionEvaluatorFactory CompletionEvaluatorFactory
+	LegacyAnchorSafetyGate bool
 }
 
 // New constructs an Agent. MaxSteps <= 0 means no cap — the run loop continues
@@ -1125,7 +1062,7 @@ type Options struct {
 func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Options, sink event.Sink) *Agent {
 	warnDeprecatedRetention := deprecatedContextRetentionConfigured(opts)
 	if opts.CompactRatio <= 0 {
-		opts.CompactRatio = priceAwareCompactRatio(opts.Pricing)
+		opts.CompactRatio = defaultCompactRatio
 	}
 	if opts.RecentKeep <= 0 {
 		opts.RecentKeep = minRecentKeep
@@ -1189,7 +1126,6 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 			recentKeep:             opts.RecentKeep,
 			archiveDir:             opts.ArchiveDir,
 			legacyAnchorSafetyGate: opts.LegacyAnchorSafetyGate,
-			completionAgentConfig:  newCompletionAgentConfig(opts, sink),
 		},
 		sess: sessionRuntime{
 			conversation: session,
@@ -1201,6 +1137,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 			budget: runBudget{limit: normalizeTaskBudget(opts.TaskBudget)},
 		},
 		requireVisibleFinal: opts.RequireVisibleFinal,
+		continuationPolicy:  opts.ContinuationPolicy,
 		recovery: recoveryIdentity{
 			agentID: strings.TrimSpace(opts.RecoveryAgentID),
 			taskID:  strings.TrimSpace(opts.RecoveryTaskID),
@@ -1221,11 +1158,9 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 	}
 	a.SetResponseLanguage(opts.ResponseLanguage)
 	a.SetReasoningLanguage(opts.ReasoningLanguage)
-	a.bindToolResultSessionCapability()
-	a.bindReadStrategyCapability()
+	a.bindCapabilityObservers()
 	a.maybeArmForkFromEnv()
 	a.maybeWrapForkCaptureProvider()
-	a.restorePersistedCalibration(opts.ModelRef)
 	if warnDeprecatedRetention {
 		deprecatedContextRetentionWarning.Do(func() {
 			a.svc.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn,
@@ -1314,6 +1249,11 @@ func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, read
 // adaptive stop is the no-progress ladder rather than a round count. Turn policy
 // lives in beginRunTurn / runToolLoop / handleFinalResponse / handleToolRound.
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
+	if err := a.prepareProtocolRecovery(ctx); err != nil {
+		return err
+	}
+	a.restoreProtocolProjection()
+	ctx = a.withProviderCacheSession(ctx)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey
 	a.recovery.runSeq.Add(1)
@@ -1363,10 +1303,15 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 		// If an extension blocks earlier, release the in-memory reservation so
 		// the still-pending durable marker can authorize a later retry.
 		a.RestoreFinalReadinessRecoveryPreparation()
+		a.discardStagedPinnedContext()
 		return err
 	}
 
-	_, state := a.beginRunTurn(ctx, input)
+	pinned, err := a.preparePinnedRevision()
+	if err != nil {
+		return err
+	}
+	_, state := a.beginRunTurn(ctx, input, pinned)
 	if a.pending.forkRestore != nil {
 		a.pending.forkRestore(state)
 	}
@@ -1774,30 +1719,8 @@ func hasVisibleFinalAnswer(text string) bool {
 	return strings.TrimSpace(text) != ""
 }
 
-// reasoningOnlyFinishHonoured reports whether the model finished with a stop
-// signal but placed its answer in the reasoning stream rather than the content
-// block. DeepSeek thinking mode does this occasionally: it streams a long
-// reasoning_content, then returns finish_reason="stop" with an empty content.
-// The model has signalled completion, so the host accepts the turn instead of
-// retrying and forcing another expensive thinking round.
-//
-// The accept is scoped to DeepSeek thinking mode (ToolCallReasoningPolicy):
-// for other providers a reasoning-only turn keeps the empty-final retry
-// safety net — local <think>-tag models often recover a visible answer on
-// the second attempt, and a gateway that mislabels truncation as "stop"
-// must not have a degenerate turn committed as the final answer.
-func reasoningOnlyFinishHonoured(p provider.Provider, u *provider.Usage, reasoning string) bool {
-	if !provider.RequiresToolCallReasoning(p) {
-		return false
-	}
-	if u == nil || u.FinishReason != "stop" {
-		return false
-	}
-	return strings.TrimSpace(reasoning) != ""
-}
-
 func emptyFinalRetryMessage() string {
-	return "The previous assistant response finished without any visible answer text (its output budget was spent on long reasoning). Continue the same task now and provide a concise visible answer to the user. Keep reasoning to at most a few short lines — produce the visible answer or tool call promptly."
+	return "The previous assistant response finished without any visible answer text. Continue the same task now and provide a concise visible answer to the user. Do not send reasoning only."
 }
 
 func emptyFinalNotice() string {
@@ -1839,7 +1762,6 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	// Reuse a parent attempt counter when present so stream retries accumulate
 	// into one RequestCount; otherwise install a fresh counter for this call.
 	ctx = provider.WithRequestAttemptCounter(ctx)
-	ctx = a.withMissingReasoningFallback(ctx)
 	// A stream can terminate locally before the provider channel closes (for
 	// example when the client-side reasoning guard fires). Own a child context
 	// here so every return path aborts the HTTP request and releases the provider
@@ -1872,14 +1794,12 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	transformReasoning := a.svc.hooks != nil && a.svc.hooks.HasPostLLMCall()
 
 	var text, reasoning strings.Builder
-	var signature string                    // provider-issued proof for the reasoning (Anthropic thinking)
-	var reasoningID, reasoningStatus string // Responses reasoning item id/status (meta chunk)
+	meta := reasoningStreamMeta{complete: true}
 	var calls []provider.ToolCall
 	var responsesItems []json.RawMessage
 	search := newSearchTurn()
 	var partialCalls []provider.ToolCall
 	var usage *provider.Usage
-	reasoningComplete := true
 	var partialToolStarted bool
 	var maxArgChars int
 	var lastArgProgress time.Time
@@ -1887,8 +1807,9 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	// finishReasoning output that becomes the round-tripped reasoning.
 	collect := func(stored string, err error) streamedTurn {
 		return streamedTurn{
-			text: text.String(), reasoning: stored, signature: signature,
-			reasoningID: reasoningID, reasoningStatus: reasoningStatus, reasoningComplete: reasoningComplete,
+			text: text.String(), reasoning: stored, signature: meta.signature,
+			reasoningID: meta.id, reasoningStatus: meta.status, reasoningComplete: meta.complete,
+			reasoningState: meta.state, thinkingBlocks: meta.blocks,
 			calls: calls, responsesItems: responsesItems, serverSearch: search.calls, usage: usage,
 			partialToolStarted: partialToolStarted, partialCalls: partialCalls,
 			maxArgChars: maxArgChars, err: err,
@@ -1904,7 +1825,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 			}
 		}
 		stored = display
-		if a.preserveRawReasoning(signature, reasoningID, reasoningStatus, calls, search.calls) {
+		if a.preserveRawReasoning(original, meta.signature, meta.id, meta.status, calls, search.calls) {
 			stored = original
 		}
 		return stored, display
@@ -1930,17 +1851,19 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				// response before it is persisted. A replacement becomes the
 				// visible assistant turn (the user's transcript); a block fails
 				// the turn.
-				providerSignature := signature
-				finalText, finalReasoning, signature, calls, usage, err := a.interceptProviderResponse(
-					ctx, text.String(), stored, signature, calls, usage)
+				providerSignature := meta.signature
+				finalText, finalReasoning, finalSignature, calls, usage, err := a.interceptProviderResponse(
+					ctx, text.String(), stored, meta.signature, calls, usage)
 				if err != nil {
 					return streamedTurn{partialToolStarted: partialToolStarted, partialCalls: partialCalls, maxArgChars: maxArgChars, err: err}
 				}
 				// Responses reasoning IDs/status and Anthropic signatures are
 				// provider-bound metadata. Never attach the provider's metadata
 				// to reasoning that an extension replaced.
-				if finalReasoning != stored || signature != providerSignature {
-					reasoningID, reasoningStatus = "", ""
+				if finalReasoning != stored || finalSignature != providerSignature {
+					meta.id, meta.status = "", ""
+					meta.blocks = nil
+					responsesItems = provider.WithoutResponsesReasoning(responsesItems)
 				}
 				if finalReasoning != stored {
 					// The extension replaced the reasoning: what is persisted
@@ -1958,10 +1881,11 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				// A clean terminal never reports partialToolStarted: the calls
 				// slice is now authoritative and the partial cards were merged.
 				return streamedTurn{
-					text: finalText, reasoning: finalReasoning, signature: signature,
-					reasoningID: reasoningID, reasoningStatus: reasoningStatus,
-					reasoningComplete: reasoningComplete,
-					calls:             calls, responsesItems: responsesItems, serverSearch: search.calls, usage: usage,
+					text: finalText, reasoning: finalReasoning, signature: finalSignature,
+					reasoningID: meta.id, reasoningStatus: meta.status,
+					reasoningComplete: meta.complete,
+					reasoningState:    meta.state, thinkingBlocks: meta.blocks,
+					calls: calls, responsesItems: responsesItems, serverSearch: search.calls, usage: usage,
 					partialCalls: partialCalls, maxArgChars: maxArgChars,
 				}
 			}
@@ -1969,25 +1893,10 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 		}
 		switch chunk.Type {
 		case provider.ChunkReasoning:
-			reasoning.WriteString(chunk.Text)
-			if chunk.Signature != "" {
-				signature = chunk.Signature
-			}
-			// 元数据 chunk（空 Text）：reasoning item id/status 贯通
-			// SSE → session → 下一轮回传（评审 #7234 第 1 点）。
-			if chunk.ReasoningID != "" {
-				reasoningID = chunk.ReasoningID
-			}
-			if chunk.ReasoningStatus != "" {
-				reasoningStatus = chunk.ReasoningStatus
-			}
+			meta.ingest(chunk, &reasoning, a.reasoningByteLimit)
 			if chunk.Text != "" && !transformReasoning {
 				sink.Emit(event.Event{Kind: event.Reasoning, Text: chunk.Text})
 			}
-			// Bound stored hidden reasoning only. Do not cancel the provider
-			// stream: official DeepSeek bills this output and still needs to
-			// emit the visible answer or tool calls.
-			reasoningComplete = boundReasoningReplay(&reasoning, chunk.Text, a.reasoningByteLimit, reasoningComplete)
 		case provider.ChunkText:
 			text.WriteString(chunk.Text)
 			sink.Emit(event.Event{Kind: event.Text, Text: chunk.Text})
@@ -2029,9 +1938,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				}
 			}
 		case provider.ChunkResponsesItem:
-			if len(chunk.ResponsesItem) > 0 {
-				responsesItems = append(responsesItems, append(json.RawMessage(nil), chunk.ResponsesItem...))
-			}
+			responsesItems = meta.ingestResponsesItem(responsesItems, chunk.ResponsesItem, a.reasoningByteLimit)
 		case provider.ChunkServerSearch:
 			search.onChunk(sink, chunk, attemptID)
 		case provider.ChunkUsage:
@@ -2072,6 +1979,7 @@ func bestEffortStreamUsage(current *provider.Usage, textBytes, reasoningBytes in
 		return nil
 	}
 	var usage provider.Usage
+	usage.Unknown = current == nil
 	if current != nil {
 		usage = *current
 	}
@@ -2123,6 +2031,7 @@ func upsertPartialToolCall(calls []provider.ToolCall, call provider.ToolCall) []
 func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provider.ToolCall, pending bool, workDurationMs int64) {
 	displayCalls := make([]provider.ToolCall, 0, len(calls))
 	interrupted := make([]string, 0, len(calls))
+	notStarted := make([]provider.InterruptedToolSummary, 0, len(calls))
 	seen := make(map[string]struct{}, len(calls))
 	for _, call := range calls {
 		name := strings.TrimSpace(call.Name)
@@ -2134,6 +2043,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 		displayCalls = append(displayCalls, provider.ToolCall{ID: call.ID, Name: name})
 		if name != "" {
 			interrupted = append(interrupted, name)
+			notStarted = append(notStarted, provider.InterruptedToolSummary{ID: call.ID, Name: name})
 		}
 	}
 	a.sess.conversation.Add(provider.Message{
@@ -2148,6 +2058,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 		InterruptedTurn: &provider.InterruptedTurnRecovery{
 			Pending:                 pending,
 			InterruptedTools:        interrupted,
+			NotStartedTools:         notStarted,
 			DroppedPartialText:      strings.TrimSpace(text) != "",
 			DroppedPartialReasoning: strings.TrimSpace(reasoning) != "",
 		},
@@ -2155,7 +2066,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 }
 
 func (a *Agent) capturePrefixShape(schemas []provider.ToolSchema) PrefixShape {
-	return CaptureShape(a.systemPrompt(), schemas, a.sess.conversation.RewriteVersion(), a.ModelVisibleFingerprint(), a.sess.wireFP())
+	return captureTurnContextShape(a.systemPrompt(), schemas, a.sess.conversation.RewriteVersion(), a.modelVisibleMessages())
 }
 
 func (a *Agent) systemPrompt() string {

@@ -13,19 +13,26 @@ import (
 // holding atomics and mutexes cannot be assigned, so reset must name each field
 // and this list is what keeps it honest.
 var sessionReset = map[string]bool{
-	"mu":                 true,
-	"conversation":       true,
-	"output":             true,
-	"cacheHit":           true,
-	"cacheMiss":          true,
-	"missingReasoning":   true,
-	"lastWireFP":         true, // per-conversation; a stale wire fp would misread the next prefix
-	"lastMainReq":        true, // per-conversation; a new conversation has sent nothing
-	"lastMainReqPersist": true, // per-conversation; fresh-wire throttle restarts
-	"compactionMu":       true,
-	"compactionState":    true,
-	"cacheState":         true,
-	"compaction":         true,
+	"mu":               true,
+	"conversation":     true,
+	"output":           true,
+	"cacheHit":         true,
+	"cacheMiss":        true,
+	"missingReasoning": true,
+	// The frozen main-request unit belongs to the conversation that sent it; a
+	// new conversation starts with no sent prefix (lastWireFP/lastMainReq) and
+	// no persisted-wire timestamp (lastMainReqPersist).
+	"lastWireFP":         true,
+	"lastMainReq":        true,
+	"lastMainReqPersist": true,
+	// A strong-projection repair belongs to the corrupted conversation; a new
+	// conversation starts without it.
+	"reasoningReplayStrongProjection":       true,
+	"reasoningReplayStrongProjectionAnchor": true,
+	"compactionMu":                          true,
+	"compactionState":                       true,
+	"cacheState":                            true,
+	"compaction":                            true,
 }
 
 // sessionCarryOver names the fields reset deliberately leaves alone, each with
@@ -138,6 +145,8 @@ func TestSetSessionRestartsTheConversationState(t *testing.T) {
 	a.sess.cacheHit.Store(11)
 	a.sess.cacheMiss.Store(7)
 	a.sess.missingReasoning = missingReasoningWatch{active: true, stateRecorded: true, healthyStreak: 2}
+	a.sess.reasoningReplayStrongProjection = 7
+	a.sess.reasoningReplayStrongProjectionAnchor = "anchor"
 	a.sess.compaction.stuck = true
 	a.sess.compaction.stuckInputHash = "old-input"
 	a.sess.compaction.consecutive = 3
@@ -157,6 +166,12 @@ func TestSetSessionRestartsTheConversationState(t *testing.T) {
 	}
 	if a.sess.missingReasoning != (missingReasoningWatch{}) {
 		t.Errorf("missingReasoning = %+v, want the incident to end with its conversation", a.sess.missingReasoning)
+	}
+	if a.sess.reasoningReplayStrongProjection != 0 {
+		t.Errorf("reasoningReplayStrongProjection = %d, want it restarted", a.sess.reasoningReplayStrongProjection)
+	}
+	if a.sess.reasoningReplayStrongProjectionAnchor != "" {
+		t.Errorf("reasoningReplayStrongProjectionAnchor = %q, want it restarted", a.sess.reasoningReplayStrongProjectionAnchor)
 	}
 	if a.sess.compaction.stuck || a.sess.compaction.stuckInputHash != "" || a.sess.compaction.consecutive != 0 ||
 		a.sess.compaction.failedTurn.Load() != 0 || a.sess.compaction.lastTurn.Load() != 0 {

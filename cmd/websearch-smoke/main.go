@@ -76,12 +76,11 @@ func ask(ctx context.Context, key, query string) (int, error) {
 	p := responses.New(responses.Config{
 		Name: "deepseek-responses", APIKey: key,
 		BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash",
-		Effort: "low",
+		Effort:    "low",
+		WebSearch: true, // client-level search policy since #9826
 	})
 	req := provider.Request{
 		Messages:       []provider.Message{{Role: provider.RoleUser, Content: query}},
-		Tools:          []provider.ToolSchema{provider.WebSearchTool(false)},
-		ToolChoice:     &provider.ToolChoice{Type: "web_search"},
 		ResponseFormat: provider.JSONSchemaFormat("knowledge_extract", knowledgeSchema),
 	}
 	ch, err := p.Stream(ctx, req)
@@ -200,14 +199,13 @@ func realFetch(key string) responses.FetchFunc {
 		p := responses.New(responses.Config{
 			Name: "deepseek-responses", APIKey: key,
 			BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash",
-			Effort: "low",
+			Effort:    "low",
+			WebSearch: true, // client-level search policy since #9826
 		})
 		req := provider.Request{
 			// instructions 提示模型：回答末尾必须列出来源（机构名+URL），
 			// 解决来源标注缺失（json_schema 是引导非强制，模型常输出 markdown）。
 			Messages:       []provider.Message{{Role: provider.RoleUser, Content: query + "\n\n回答末尾必须列出数据来源（机构名 + URL，至少 2 个）。"}},
-			Tools:          []provider.ToolSchema{provider.WebSearchTool(false)},
-			ToolChoice:     &provider.ToolChoice{Type: "web_search"},
 			ResponseFormat: provider.JSONSchemaFormat("knowledge_extract", knowledgeSchema),
 		}
 		ch, err := p.Stream(ctx, req)

@@ -186,7 +186,7 @@ func TestDesktopWireEventTypeCoversSharedPayloadFields(t *testing.T) {
 		`"completed" | "partial" | "blocked"`,
 		`"final_readiness" | "recovery_paused"`,
 		"checkpointTurn?: number;",
-		"retryAttempt?: number;",
+		"retryAttempt?: number;", "WireEvent extends RecoveryEventFields", "recovery?: RecoveryStatus;",
 		"retryMax?: number;",
 		"retryScope?:",
 		"streamAttempt?: WireStreamAttempt;",
@@ -204,6 +204,10 @@ func TestDesktopWireEventTypeCoversSharedPayloadFields(t *testing.T) {
 		"prefixChanged: boolean;",
 		"prefixChangeReasons?: string[];",
 		"toolSchemaTokens: number;",
+		`sessionContext?: import("./sessionContextTypes").WireSessionContextDiagnostics;`,
+		"export interface WireSessionContextDiagnostics",
+		"targetRole:",
+		"backgroundMemory: WireSessionContextSectionDiagnostics;",
 	} {
 		if !strings.Contains(ts, want) {
 			t.Fatalf("desktop WireEvent types are missing %q", want)
@@ -244,6 +248,22 @@ func TestToWireToolCarriesResolvedCapabilityMetadata(t *testing.T) {
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Fatalf("tool JSON = %s, want %s", b, want)
+		}
+	}
+}
+
+func TestToWireToolCarriesSubagentOutcomeMetadata(t *testing.T) {
+	w := ToWire(event.Event{Kind: event.ToolResult, Tool: event.Tool{
+		ID: "skill-1", Name: "run_skill", SubagentRef: "sa_child",
+		SubagentStatus: "partial", SubagentErrorCode: "completion_uncertain", SubagentRetryable: true,
+	}})
+	b, err := json.Marshal(w)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, want := range []string{`"subagentRef":"sa_child"`, `"subagentStatus":"partial"`, `"subagentErrorCode":"completion_uncertain"`, `"subagentRetryable":true`} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("subagent outcome JSON = %s, want %s", b, want)
 		}
 	}
 }
@@ -344,19 +364,16 @@ func readDesktopTypes(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime caller unavailable")
 	}
-	libDir := filepath.Join(filepath.Dir(file), "..", "..", "desktop", "frontend", "src", "lib")
-	path := filepath.Join(libDir, "types.ts")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read desktop types: %v", err)
+	dir := filepath.Join(filepath.Dir(file), "..", "..", "desktop", "frontend", "src", "lib")
+	var source strings.Builder
+	for _, name := range []string{"types.ts", "sessionContextTypes.ts", "recoveryStatus.ts"} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("read desktop type %s: %v", name, err)
+		}
+		source.Write(b)
 	}
-	// WireEvent extends RecoveryEventFields, so the retry/recovery wire fields
-	// live in recoveryStatus.ts — concatenate so the text guards see them.
-	rb, err := os.ReadFile(filepath.Join(libDir, "recoveryStatus.ts"))
-	if err != nil {
-		t.Fatalf("read desktop recoveryStatus: %v", err)
-	}
-	return string(b) + "\n" + string(rb)
+	return source.String()
 }
 
 func TestToWireToolPayloadJSON(t *testing.T) {
@@ -400,6 +417,10 @@ func TestToWireUsagePayloadJSON(t *testing.T) {
 			PrefixHash: "p", PrefixChanged: true, PrefixChangeReasons: []string{"log_rewrite"},
 			SystemHash: "s", ToolsHash: "t", LogRewriteVersion: 1, ToolSchemaTokens: 42,
 			CacheMissTokens: 100, CacheHitTokens: 900,
+			SessionContext: &event.SessionContextDiagnostics{
+				Version: 1, Digest: strings.Repeat("a", 64), TargetRole: "executor", Reasons: []string{"memory_changed"},
+				BackgroundMemory: event.SessionContextSectionDiagnostics{Digest: strings.Repeat("b", 64), Chars: 23},
+			},
 		},
 		SessionHit: 8000, SessionMiss: 2000,
 	})
@@ -415,6 +436,7 @@ func TestToWireUsagePayloadJSON(t *testing.T) {
 		`"source":"title"`, `"sessionCacheHitTokens":8000`, `"sessionCacheMissTokens":2000`,
 		`"currency":"¥"`, `"costUsd":`, `"cacheDiagnostics":`, `"prefixHash":"p"`,
 		`"prefixChanged":true`, `"prefixChangeReasons":["log_rewrite"]`, `"toolSchemaTokens":42`,
+		`"sessionContext":`, `"targetRole":"executor"`, `"reasons":["memory_changed"]`, `"chars":23`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("usage JSON = %s, want it to contain %s", s, want)

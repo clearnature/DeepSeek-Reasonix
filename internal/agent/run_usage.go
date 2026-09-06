@@ -28,6 +28,8 @@ func estimateFailedAttemptUsage(usage *provider.Usage, frozen samplingRequest, r
 	}
 	// A zero-output, non-interrupted failure with no observed HTTP request is a
 	// local/provider validation failure. It is not a billable sampling attempt.
+	usage = unmeteredUsage(usage, result, httpRequests)
+
 	preBodyLocal := httpRequests <= 0 && !result.interrupted &&
 		!provider.IsStreamInterrupted(result.err) && !sawSpeculativeSamplingOutput(result)
 	if preBodyLocal {
@@ -120,7 +122,9 @@ func estimateSamplingRequestInputTokens(req provider.Request) int {
 			total += estimateTextTokens(string(item))
 		}
 		for _, search := range msg.ServerSearch {
-			provider.WalkServerSearchEstimate(search, func(s string) { total += estimateTextTokens(s) })
+			provider.WalkServerSearchEstimate(search, func(s string) {
+				total += estimateTextTokens(s)
+			})
 		}
 	}
 	for _, schema := range req.Tools {
@@ -165,6 +169,7 @@ func mergeSamplingUsage(acc, attempt *provider.Usage) *provider.Usage {
 		return &merged
 	}
 	merged := *acc
+	merged.Unknown = merged.Unknown || attempt.Unknown
 	// Billable input for Cost: sum hit/miss (prompt when no cache split).
 	ah, am := billableHitMiss(acc)
 	bh, bm := billableHitMiss(attempt)

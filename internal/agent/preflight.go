@@ -24,78 +24,12 @@ func (a *Agent) modelVisibleMessages() []provider.Message {
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	a.sess.compactionMu.Unlock()
-	visible, _ := a.visibleMessagesWithFlag(st, msgs, a.currentPromptCacheKey())
-	return visible
-}
-
-// ModelVisibleFingerprint fingerprints the current model-visible view, for
-// resume-time diagnostics: compare it against the compaction view_fp and the
-// last request's prefix_hash to pin where the cache prefix diverges.
-func (a *Agent) ModelVisibleFingerprint() string {
-	if a == nil {
-		return ""
-	}
-	return providerVisibleFingerprint(modelInputMessages(a.modelVisibleMessages()))
-}
-
-// ProjectionCoveredMatch reports whether the sidecar's covered prefix still
-// byte-matches the current transcript. A mismatch after resume means history
-// rewrites (replay repairs) diverged the fold view from what the parent sent.
-func (a *Agent) ProjectionCoveredMatch() (match bool, covered int) {
-	if a == nil || a.sess.conversation == nil {
-		return false, 0
-	}
-	msgs, _ := a.sess.conversation.snapshotMessagesVersion()
-	a.sess.compactionMu.Lock()
-	st := a.sess.compactionState
-	a.sess.compactionMu.Unlock()
-	covered = st.Projection.CoveredCount
-	if covered <= 0 || covered > len(msgs) || st.Projection.CoveredPrefixHash == "" {
-		return false, covered
-	}
-	return coveredPrefixHash(msgs, covered) == st.Projection.CoveredPrefixHash, covered
-}
-
-// visibleMessagesWithFlag resolves the model-visible view shared by ordinary
-// sampling and compaction planning: the projection + tail when the projection
-// is usable (valid, degraded, or replay fallback), canonical otherwise. The
-// flag reports whether the projection view was used, so fold boundaries can be
-// translated back to canonical indices. Ordinary and compaction paths must
-// resolve the same view — a divergence (compaction falling back to canonical
-// while sampling sends projection+tail) breaks the prompt-cache prefix and
-// makes every summary request a full-price miss.
-func (a *Agent) visibleMessagesWithFlag(st CompactionState, msgs []provider.Message, cacheKey string) ([]provider.Message, bool) {
-	if projectionValid(st, msgs, cacheKey) {
+	if projectionValid(st, msgs, a.currentPromptCacheKey()) {
 		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
-			return visible, true
+			return visible
 		}
-	} else if len(st.Projection.Messages) > 0 {
-		// Load-verified body: send projection+tail, never canonical — canonical
-		// bytes diverge from the sent projection view at the summary splice,
-		// making every summary request a full-price miss (2026-08-30 21:47:44:
-		// hit=11008/222690). Full replay of an uncompacted jsonl (12:49 case:
-		// 928k) would also force an unnecessary compaction after resume.
-		if visible := modelVisibleFromProjection(st.Projection, msgs); len(visible) > 0 {
-			return visible, true
-		}
-	} else if visible := a.replayProjectionView(msgs, st); len(visible) > 0 {
-		// 投影失效但投影体可用（load 时已验证）且全量超窗：优先投影+tail，
-		// 避免暖重放全量估算虚高（如 gpu1 5.6M 字符 → 1.9M 假超窗）。
-		return visible, true
 	}
-	return msgs, false
-}
-
-// replayProjectionView prefers projection+tail over a canonical full replay
-// after projection loss when the full transcript would blow the window.
-func (a *Agent) replayProjectionView(msgs []provider.Message, st CompactionState) []provider.Message {
-	if len(st.Projection.Messages) == 0 || st.Projection.CoveredCount <= 0 {
-		return nil
-	}
-	if window := a.effectiveContextWindow(); window <= 0 || a.estimatedVisibleRequestTokens(msgs) < window {
-		return nil
-	}
-	return modelVisibleFromProjection(st.Projection, msgs)
+	return msgs
 }
 
 func (a *Agent) currentProjectionVersion() uint64 {
@@ -127,21 +61,13 @@ func (a *Agent) InvalidateProjection() {
 	if a == nil {
 		return
 	}
+	// A strong reasoning-replay overlay is indexed against the old canonical
+	// history. Clear it together with the compaction projection so rewind,
+	// branch, and model/system lineage changes cannot reuse a stale anchor.
+	a.sess.clearReasoningReplayStrongProjection()
 	a.sess.compactionMu.Lock()
 	path := a.sess.path
-	body := a.sess.compactionState.Projection
-	// Keep the projection body for the degraded view; only lineage metadata
-	// is invalid. Dropping it would push fold planning to canonical, whose
-	// bytes diverge from the sent projection view at the summary splice —
-	// every summary request then pays full price (2026-08-30 21:47:44:
-	// in=222690, hit=11008, ¥0.32).
-	a.sess.compactionState = CompactionState{
-		Projection: ContextProjection{
-			Messages:           body.Messages,
-			CoveredCount:       body.CoveredCount,
-			NonToolContentHash: body.NonToolContentHash,
-		},
-	}
+	a.sess.compactionState = CompactionState{}
 	a.sess.compactionMu.Unlock()
 	a.sess.compaction.stuck = false
 	a.sess.compaction.stuckInputHash = ""
@@ -149,8 +75,8 @@ func (a *Agent) InvalidateProjection() {
 	a.sess.compaction.failedTurn.Store(0)
 	a.sess.compaction.lastTurn.Store(0)
 	if path != "" {
-		if err := SaveCompactionState(path, a.sess.compactionState); err != nil {
-			slog.Warn("agent: persist degraded projection", "err", err)
+		if err := RemoveCompactionState(path); err != nil {
+			slog.Warn("agent: remove context projection", "err", err)
 		}
 	}
 }
@@ -162,6 +88,10 @@ func (a *Agent) InvalidateProjectionIfStale() {
 	if a == nil {
 		return
 	}
+	// This helper is called after a history rewrite even when the existing
+	// compaction fold remains valid (for example a tail-only rewind). The
+	// reasoning-replay overlay still belongs to the pre-rewrite shape.
+	a.sess.clearReasoningReplayStrongProjection()
 	a.sess.compactionMu.Lock()
 	st := a.sess.compactionState
 	if len(st.Projection.Messages) > 0 && a.sess.conversation != nil {
@@ -246,37 +176,18 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	}
 	valid := len(st.Projection.Messages) > 0 && projectionValid(st, msgs, key)
 	if !valid && len(st.Projection.Messages) > 0 {
-		coveredExceeds := st.Projection.CoveredCount > len(msgs)
-		// Keep only trustworthy projections: a covered count beyond the
-		// current transcript means the disk was compacted under this sidecar,
-		// and a non-empty non-tool hash means the body is a compaction
-		// artifact with full metadata. Either way resume sends projection+tail
-		// instead of replaying the full disk transcript (12:49 case: 928k vs
-		// 452k in-memory), avoiding a post-resume pressure compaction. Bodies
-		// without verification metadata stay dropped (fail-closed): they may
-		// be legacy or tampered, and replaying the transcript is the safe
-		// answer. Foreign-lineage mismatch is dropped earlier (keyOK=false),
-		// so reaching here means the projection belongs to this session.
-		if coveredExceeds || st.Projection.NonToolContentHash != "" {
-			hashMismatch := !coveredExceeds && st.Projection.CoveredPrefixHash != "" && !projectionContentValid(st, msgs)
-			slog.Warn("agent: projection degraded, kept for tail-only send",
-				"session", sessionPath, "generation", st.Generation,
-				"covered", st.Projection.CoveredCount, "msgs", len(msgs),
-				"covered_hash_mismatch", hashMismatch,
-				"covered_exceeds_transcript", coveredExceeds)
-		} else {
-			// Keep blocked receipts / telemetry; drop unusable projection body.
-			st.Projection = ContextProjection{}
-		}
+		// Keep blocked receipts / telemetry; drop unusable projection body.
+		st.Projection = ContextProjection{}
 	}
 	a.sess.compactionState = st
-	// Lossless projection inverse: the sidecar preserved the parent process's
-	// last wire bytes; replay them as the frozen main-request prefix so the
-	// first post-resume compaction hits the provider-cached unit.
-	if len(st.LastWireMessages) > 0 {
-		a.sess.lastMainReq.Store(&mainRequestBytes{messages: st.LastWireMessages, tools: st.LastWireTools})
-	}
 	if valid {
+		// Lossless projection inverse: the sidecar preserved the parent
+		// process's last wire bytes; replay them as the frozen main-request
+		// prefix so the first post-resume compaction hits the provider-cached
+		// unit.
+		if len(st.LastWireMessages) > 0 {
+			a.sess.lastMainReq.Store(&mainRequestBytes{messages: st.LastWireMessages, tools: st.LastWireTools})
+		}
 		a.sess.checkpointState = "restored"
 		if needsNormalization {
 			if err := a.persistCompactionStateLocked(); err != nil {
@@ -318,7 +229,6 @@ func (a *Agent) resetCompactionState() {
 	a.sess.compactionMu.Lock()
 	a.sess.compactionState = CompactionState{}
 	a.sess.checkpointState = "none"
-	a.sess.lastMainReq.Store(nil)
 	a.sess.compactionMu.Unlock()
 }
 
@@ -338,7 +248,6 @@ func (a *Agent) BindSessionPath(path string, loadSidecar bool) {
 	a.sess.compactionState = CompactionState{}
 	a.sess.checkpointState = "none"
 	a.sess.cacheState = CacheStateUnknown
-	a.sess.lastMainReq.Store(nil)
 	a.sess.compactionMu.Unlock()
 	a.sess.compaction.stuck = false
 	a.sess.compaction.stuckInputHash = ""

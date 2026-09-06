@@ -15,9 +15,10 @@ import (
 	"sync"
 	"time"
 
+	"reasonix/internal/provider"
+
 	"reasonix/internal/fileutil"
 	fileencoding "reasonix/internal/fileutil/encoding"
-	"reasonix/internal/provider"
 	"reasonix/internal/store"
 	"reasonix/internal/tool"
 )
@@ -38,6 +39,9 @@ type SubagentMeta struct {
 	CreatedAt        time.Time      `json:"createdAt"`
 	UpdatedAt        time.Time      `json:"updatedAt"`
 	Status           SubagentStatus `json:"status"`
+	Outcome          string         `json:"outcome,omitempty"`
+	Retryable        bool           `json:"retryable,omitempty"`
+	ErrorCode        string         `json:"errorCode,omitempty"`
 	Kind             string         `json:"kind"` // task | skill
 	Name             string         `json:"name"`
 	WorkspaceRoot    string         `json:"workspaceRoot"`
@@ -98,8 +102,9 @@ type SubagentRun struct {
 	Meta       SubagentMeta
 	ForkedFrom string
 
-	store   *SubagentStore
-	release func()
+	store             *SubagentStore
+	release           func()
+	terminalPersisted bool
 }
 
 // SubagentArtifact is a persisted sub-agent transcript and metadata pair owned
@@ -396,36 +401,6 @@ func (s *SubagentStore) PrepareFresh(spec SubagentSpec) (*SubagentRun, error) {
 	return &SubagentRun{Ref: ref, Session: NewSession(spec.SystemPrompt), Meta: meta, store: s, release: release}, nil
 }
 
-// PrepareParentFork 创建 fork 子代理转录（P5 fork 分支）：新 SubagentRun +
-// 全新 Session，把 captureForkPrefix 捕获的父前缀（父 system + 父已提交历史）
-// 逐条 Add 预填进去。captureForkPrefix 已对 Snapshot 深拷贝，这里的 Add 是
-// 第二次复制边界，fork 子代理与父 Session 之间零共享可变状态；父 Session
-// 本身零改动（红线：fork 捕获零发送、父零改动）。首请求 = 预填前缀 + 新
-// user 消息，前缀与父已发送字节 byte-identical（缓存命中前提，plan §五）。
-func (s *SubagentStore) PrepareParentFork(prefix []provider.Message, spec SubagentSpec) (*SubagentRun, error) {
-	if s == nil {
-		return nil, fmt.Errorf("subagent transcript store is required")
-	}
-	if err := requireParentSession(spec); err != nil {
-		return nil, err
-	}
-	ref, err := s.newRef()
-	if err != nil {
-		return nil, err
-	}
-	release, err := s.lock(ref)
-	if err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC()
-	meta := metaFromSpec(ref, SubagentRunning, now, now, spec)
-	sess := NewSession("")
-	for _, m := range prefix {
-		sess.Add(m)
-	}
-	return &SubagentRun{Ref: ref, Session: sess, Meta: meta, store: s, release: release}, nil
-}
-
 func (s *SubagentStore) PrepareContinue(ref string, spec SubagentSpec) (*SubagentRun, error) {
 	if s == nil {
 		return nil, fmt.Errorf("subagent continuation is not available in this session")
@@ -465,6 +440,18 @@ func (s *SubagentStore) PrepareContinue(ref string, spec SubagentSpec) (*Subagen
 	}
 	meta.ParentSession = spec.ParentSession
 	meta.ParentToolCallID = spec.ParentToolCallID
+	// Re-acquire the running state while holding the per-ref lease so a resumed
+	// transcript is visible as active and stale cleanup cannot mark it
+	// interrupted while the continuation is executing.
+	meta.Status = SubagentRunning
+	meta.Outcome = ""
+	meta.Retryable = false
+	meta.ErrorCode = ""
+	meta.UpdatedAt = time.Now().UTC()
+	if err := s.saveMeta(meta); err != nil {
+		release()
+		return nil, fmt.Errorf("mark resumed subagent %q running: %w", ref, err)
+	}
 	return &SubagentRun{Ref: ref, Session: sess, Meta: meta, store: s, release: release}, nil
 }
 
@@ -701,47 +688,6 @@ func (s *SubagentStore) MarkRunning(run *SubagentRun) error {
 	return s.saveMeta(meta)
 }
 
-func (s *SubagentStore) SaveCompleted(run *SubagentRun) error {
-	if s == nil || run == nil || run.Ref == "" {
-		return nil
-	}
-	if s.parentDestroyed(run) {
-		return nil
-	}
-	if err := s.ensureBranchCreatedAt(run); err != nil {
-		return err
-	}
-	if err := run.Session.Save(s.sessionPath(run.Ref)); err != nil {
-		return err
-	}
-	meta := run.Meta
-	meta.Status = SubagentCompleted
-	meta.UpdatedAt = time.Now().UTC()
-	run.Meta = meta
-	return s.saveMeta(meta)
-}
-
-func (s *SubagentStore) SaveFailed(run *SubagentRun) error {
-	if s == nil || run == nil || run.Ref == "" {
-		return nil
-	}
-	if s.parentDestroyed(run) {
-		return nil
-	}
-	// Terminal status is independent from transcript persistence. Keep going so
-	// a sidecar failure cannot leave a failed run marked as running on disk.
-	branchErr := s.ensureBranchCreatedAt(run)
-	var sessionErr error
-	if run.Session != nil {
-		sessionErr = run.Session.Save(s.sessionPath(run.Ref))
-	}
-	meta := run.Meta
-	meta.Status = SubagentFailed
-	meta.UpdatedAt = time.Now().UTC()
-	run.Meta = meta
-	return errors.Join(branchErr, sessionErr, s.saveMeta(meta))
-}
-
 // ensureBranchCreatedAt seeds the session list sidecar before the first
 // transcript save. Subagent transcripts are written only on completion, so
 // Session.Save would otherwise backfill BranchMeta.CreatedAt with the save
@@ -785,7 +731,7 @@ func validateMeta(meta SubagentMeta, spec SubagentSpec) error {
 	if meta.Status == SubagentRunning {
 		return fmt.Errorf("subagent reference %q is still in progress", meta.Ref)
 	}
-	if meta.Status == SubagentFailed {
+	if meta.Status == SubagentFailed && !meta.Retryable && meta.Outcome != string(SubagentOutcomePartial) {
 		return fmt.Errorf("subagent reference %q failed and cannot be continued", meta.Ref)
 	}
 	if meta.Status == SubagentInterrupted {
@@ -903,6 +849,35 @@ func (s *SubagentStore) lock(ref string) (func(), error) {
 		delete(s.locked, ref)
 		s.mu.Unlock()
 	}, nil
+}
+
+// PrepareParentFork 创建 fork 子代理转录（P5 fork 分支）：新 SubagentRun +
+// 全新 Session，把 captureForkPrefix 捕获的父前缀（父 system + 父已提交历史）
+// 逐条 Add 预填进去。captureForkPrefix 已对 Snapshot 深拷贝，这里的 Add 是
+// 第二次复制边界，fork 子代理与父 Session 之间零共享可变状态；父 Session
+// 本身零改动（红线：fork 捕获零发送、父零改动）。
+func (s *SubagentStore) PrepareParentFork(prefix []provider.Message, spec SubagentSpec) (*SubagentRun, error) {
+	if s == nil {
+		return nil, fmt.Errorf("subagent transcript store is required")
+	}
+	if err := requireParentSession(spec); err != nil {
+		return nil, err
+	}
+	ref, err := s.newRef()
+	if err != nil {
+		return nil, err
+	}
+	release, err := s.lock(ref)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	meta := metaFromSpec(ref, SubagentRunning, now, now, spec)
+	sess := NewSession("")
+	for _, m := range prefix {
+		sess.Add(m)
+	}
+	return &SubagentRun{Ref: ref, Session: sess, Meta: meta, store: s, release: release}, nil
 }
 
 func (s *SubagentStore) newRef() (string, error) {

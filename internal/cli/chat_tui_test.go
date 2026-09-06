@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/colorprofile"
 	"time"
@@ -26,7 +25,6 @@ import (
 	"reasonix/internal/control"
 	"reasonix/internal/event"
 	"reasonix/internal/i18n"
-	"reasonix/internal/jobs"
 	"reasonix/internal/provider"
 	"reasonix/internal/secrets"
 	"reasonix/internal/skill"
@@ -757,8 +755,11 @@ func TestClearCommandRequiresConfirmationAndDiscardsSession(t *testing.T) {
 	m.shellOutputs["shell-old"] = "old shell output\n"
 	m.shellExpanded["shell-old"] = true
 	m.shellTranscriptIdx["shell-old"] = 2
-	next, _ = m.handleClearConfirmKey(tea.KeyPressMsg{Code: 'y'})
+	next, cmd := m.handleClearConfirmKey(tea.KeyPressMsg{Code: 'y'})
 	m = next.(chatTUI)
+	if cmd == nil {
+		t.Fatal("confirmed /clear should clear native scrollback after rotating the session")
+	}
 	if ctrl.SessionPath() == path {
 		t.Fatal("confirmed /clear should rotate to a fresh session path")
 	}
@@ -775,6 +776,90 @@ func TestClearCommandRequiresConfirmationAndDiscardsSession(t *testing.T) {
 	if len(m.shellTranscriptIdx) != 0 || len(m.shellOutputs) != 0 || len(m.shellExpanded) != 0 {
 		t.Fatalf("confirmed /clear should reset shell display state: idx=%v outputs=%v expanded=%v",
 			m.shellTranscriptIdx, m.shellOutputs, m.shellExpanded)
+	}
+}
+
+// TestClearCommandInYOLOModeSkipsConfirmation guards the non-interactive fast
+// path: with YOLO already active, /clear must clear the session immediately
+// instead of opening the confirmation overlay.
+func TestClearCommandInYOLOModeSkipsConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "old context"})
+	exec := agent.New(nil, nil, sess, agent.Options{}, event.Discard)
+	path := filepath.Join(dir, "session.jsonl")
+	ctrl := control.New(control.Options{Executor: exec, SystemPrompt: "sys", SessionDir: dir, SessionPath: path, Label: "test"})
+	ctrl.SetToolApprovalMode(control.ToolApprovalYolo)
+	if err := ctrl.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+	m := newChatTUI(ctrl, "", make(chan event.Event, 1), 80)
+
+	if cmd := m.runSlashCommand("/clear"); cmd == nil {
+		t.Fatal("/clear in YOLO mode should clear native scrollback after rotating the session")
+	}
+	if m.clearConfirm != nil {
+		t.Fatal("/clear in YOLO mode should not open a confirmation prompt")
+	}
+	if ctrl.SessionPath() == path {
+		t.Fatal("/clear in YOLO mode should rotate to a fresh session path")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("/clear in YOLO mode should remove the old transcript, stat err=%v", err)
+	}
+	current := exec.Session().Snapshot()
+	if len(current) != 1 || current[0].Role != provider.RoleSystem || current[0].Content != "sys" {
+		t.Fatalf("cleared context = %+v, want only system prompt", current)
+	}
+}
+
+func TestClearCommandFailureKeepsDisplayAndDoesNotClearScreen(t *testing.T) {
+	dir := t.TempDir()
+	sess := agent.NewSession("sys")
+	sess.Add(provider.Message{Role: provider.RoleUser, Content: "old context"})
+	exec := agent.New(nil, nil, sess, agent.Options{}, event.Discard)
+	path := filepath.Join(dir, "session.jsonl")
+	runner := &blockingTurnRunner{started: make(chan struct{})}
+	ctrl := control.New(control.Options{
+		Runner: runner, Executor: exec, SystemPrompt: "sys",
+		SessionDir: dir, SessionPath: path, Label: "test", Sink: event.Discard,
+	})
+	if err := ctrl.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+	ctrl.Send("active turn")
+	<-runner.started
+	t.Cleanup(func() {
+		ctrl.Cancel()
+		deadline := time.Now().Add(2 * time.Second)
+		for ctrl.Running() && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+
+	m := newChatTUI(ctrl, "", make(chan event.Event, 1), 80)
+	m.commitLine("visible transcript sentinel")
+	m.shellOutputs["shell-old"] = "old shell output\n"
+	m.shellExpanded["shell-old"] = true
+	m.shellTranscriptIdx["shell-old"] = len(m.transcript) - 1
+	m.runSlashCommand("/clear")
+
+	next, cmd := m.handleClearConfirmKey(tea.KeyPressMsg{Code: 'y'})
+	m = next.(chatTUI)
+	if cmd != nil {
+		t.Fatal("failed /clear should not clear native scrollback")
+	}
+	if ctrl.SessionPath() != path {
+		t.Fatalf("failed /clear rotated session path to %q, want %q", ctrl.SessionPath(), path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("failed /clear should preserve the session file: %v", err)
+	}
+	if !strings.Contains(strings.Join(m.transcript, "\n"), "visible transcript sentinel") {
+		t.Fatalf("failed /clear erased the visible transcript: %+v", m.transcript)
+	}
+	if m.shellOutputs["shell-old"] == "" || !m.shellExpanded["shell-old"] {
+		t.Fatalf("failed /clear reset shell display state: outputs=%v expanded=%v", m.shellOutputs, m.shellExpanded)
 	}
 }
 
@@ -893,11 +978,11 @@ func TestModalPanelsHideComposerBox(t *testing.T) {
 		{
 			name: "resume picker",
 			setup: func(m *chatTUI) {
-				m.resumePick = &resumePicker{sessions: []agent.SessionInfo{{
+				m.resumePick = &resumePicker{entries: []resumeEntry{{session: agent.SessionInfo{
 					Path:    "one.jsonl",
 					Preview: "previous task",
 					Turns:   3,
-				}}, sel: 0, active: -1}
+				}}}, sel: 0, active: -1}
 			},
 			render: func(m chatTUI) string { return m.renderResumePicker() },
 		},
@@ -1234,128 +1319,6 @@ func TestStatusCommandShowsRuntimeDetails(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("/status output missing %q:\n%s", want, out)
 		}
-	}
-}
-
-// statusCtrl stubs the SessionAPI reads /status performs so the P2 T5
-// task-detail assertions run without a real controller. Embedding
-// control.SessionAPI satisfies the interface; every method showStatusDetails
-// touches is overridden with a zero/empty value.
-type statusCtrl struct {
-	control.SessionAPI
-	jobViews []jobs.View
-	snaps    []jobs.JobSnapshot
-}
-
-func (s statusCtrl) Jobs() []jobs.View                { return s.jobViews }
-func (s statusCtrl) JobSnapshots() []jobs.JobSnapshot { return s.snaps }
-func (statusCtrl) ContextSnapshot() (int, int)        { return 0, 0 }
-func (statusCtrl) CompactRatio() float64              { return 0 }
-func (statusCtrl) Goal() string                       { return "" }
-func (statusCtrl) GoalStatus() string                 { return "" }
-func (statusCtrl) ToolApprovalMode() string           { return control.ToolApprovalAsk }
-func (statusCtrl) LastUsage() *provider.Usage         { return nil }
-func (statusCtrl) SessionCache() (int, int)           { return 0, 0 }
-
-// statusLegacyCtrl is the pre-T2 shape: a controller that only exposes
-// Status.Jobs (no JobSnapshots). It proves /status stays byte-identical on the
-// legacy path — the P2 T5 backward-compatibility contract.
-type statusLegacyCtrl struct {
-	control.SessionAPI
-	jobViews []jobs.View
-}
-
-func (s statusLegacyCtrl) Jobs() []jobs.View         { return s.jobViews }
-func (statusLegacyCtrl) ContextSnapshot() (int, int) { return 0, 0 }
-func (statusLegacyCtrl) CompactRatio() float64       { return 0 }
-func (statusLegacyCtrl) Goal() string                { return "" }
-func (statusLegacyCtrl) GoalStatus() string          { return "" }
-func (statusLegacyCtrl) ToolApprovalMode() string    { return control.ToolApprovalAsk }
-func (statusLegacyCtrl) LastUsage() *provider.Usage  { return nil }
-func (statusLegacyCtrl) SessionCache() (int, int)    { return 0, 0 }
-
-// TestStatusCommandShowsTaskDetailSection locks the P2 T5 output: the legacy
-// "jobs <tag>" line keeps its byte-identical shape, and one detail row per
-// job snapshot follows it as "  <id>  <kind>  <state>  <label>  <tail>".
-func TestStatusCommandShowsTaskDetailSection(t *testing.T) {
-	ctrl := statusCtrl{
-		jobViews: []jobs.View{{ID: "job-1", Kind: "bash", Label: "run tests", Status: string(jobs.Running)}},
-		snaps: []jobs.JobSnapshot{
-			{ID: "job-1", Kind: "bash", Label: "run tests", Status: string(jobs.Running), Tail: "compiling package reasonix"},
-			{ID: "job-2", Kind: "write_file", Label: "write report", Status: string(jobs.Done), Tail: "wrote 12 files"},
-		},
-	}
-	m := newTestChatTUI()
-	m.ctrl = ctrl
-	m.runSlashCommand("/status")
-	out := ansi.Strip(strings.Join(m.transcript, "\n"))
-
-	if !strings.Contains(out, "  jobs       ⚙ 1") {
-		t.Errorf("/status output missing legacy jobs line:\n%s", out)
-	}
-	for _, want := range []string{
-		"  job-1  bash  running  run tests  compiling package reasonix",
-		"  job-2  write_file  done  write report  wrote 12 files",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("/status task detail missing %q:\n%s", want, out)
-		}
-	}
-}
-
-// TestStatusCommandTaskDetailDegradesToLegacyJobs proves a controller without
-// JobSnapshots (T2 not yet landed) still renders the legacy jobs line and no
-// detail rows — /status output stays byte-identical on that path.
-func TestStatusCommandTaskDetailDegradesToLegacyJobs(t *testing.T) {
-	ctrl := statusLegacyCtrl{
-		jobViews: []jobs.View{{ID: "job-1", Kind: "bash", Label: "run tests", Status: string(jobs.Running)}},
-	}
-	m := newTestChatTUI()
-	m.ctrl = ctrl
-	m.runSlashCommand("/status")
-	out := ansi.Strip(strings.Join(m.transcript, "\n"))
-
-	if !strings.Contains(out, "  jobs       ⚙ 1") {
-		t.Errorf("/status output missing legacy jobs line:\n%s", out)
-	}
-	if strings.Contains(out, "  job-1  bash") {
-		t.Errorf("task detail rendered without JobSnapshots; legacy path must stay byte-identical:\n%s", out)
-	}
-}
-
-// TestStatusTailLine locks the P2 T5 tail contract: single line, at most 64
-// bytes, rune-safe, with a "…" marker when cut.
-func TestStatusTailLine(t *testing.T) {
-	if got := statusTailLine(""); got != "" {
-		t.Errorf("statusTailLine(\"\") = %q, want empty", got)
-	}
-	if got := statusTailLine("short"); got != "short" {
-		t.Errorf("statusTailLine(short) = %q, want unchanged", got)
-	}
-	// Newlines/tabs fold so a detail row stays on one transcript line.
-	if got := statusTailLine("line1\nline2\r\ntab\tend"); got != "line1 line2 tab end" {
-		t.Errorf("statusTailLine folds = %q", got)
-	}
-	// A multi-byte tail is cut rune-safe to ≤ 64 bytes with a "…" suffix.
-	long := strings.Repeat("界", 40) // 120 bytes
-	got := statusTailLine(long)
-	if len(got) > statusDetailTailBudget {
-		t.Errorf("statusTailLine cut length = %d bytes, want ≤ %d", len(got), statusDetailTailBudget)
-	}
-	if !strings.HasSuffix(got, "…") {
-		t.Errorf("statusTailLine cut = %q, want … suffix", got)
-	}
-	if !utf8.ValidString(got) {
-		t.Errorf("statusTailLine cut is not valid UTF-8: %q", got)
-	}
-	// The byte budget falling mid-rune must never split a UTF-8 sequence.
-	mid := strings.Repeat("a", 62) + "界" // 65 bytes; budget lands inside the rune
-	got = statusTailLine(mid)
-	if len(got) > statusDetailTailBudget {
-		t.Errorf("statusTailLine mid-rune cut length = %d bytes, want ≤ %d", len(got), statusDetailTailBudget)
-	}
-	if !utf8.ValidString(got) {
-		t.Errorf("statusTailLine mid-rune cut is not valid UTF-8: %q", got)
 	}
 }
 
@@ -2926,76 +2889,6 @@ func TestQueueNewMessageOnEnterDuringRunning(t *testing.T) {
 	}
 	if bodies[1] != "new message" {
 		t.Fatalf("queue[1] should be %q, got %q", "new message", bodies[1])
-	}
-}
-
-func TestQueuedFoldedPasteExpandsBeforeInterjectSend(t *testing.T) {
-	runner := &recordingTurnRunner{}
-	events := make(chan event.Event, 8)
-	dir := t.TempDir()
-	ctrl := control.New(control.Options{
-		Runner:     runner,
-		Sink:       event.FuncSink(func(e event.Event) { events <- e }),
-		SessionDir: dir,
-		Label:      "test",
-	})
-	defer ctrl.Close()
-	ctrl.EnsureSessionPath()
-	m := newTestChatTUI()
-	m.ctrl = ctrl
-	m.eventCh = make(chan event.Event, 8)
-	m.state = tuiRunning
-	pasted := strings.Repeat("queued pasted content\n", 10)
-	model, _ := m.Update(tea.PasteMsg{Content: pasted})
-	m = model.(chatTUI)
-
-	display := strings.TrimSpace(m.input.Value())
-	if !strings.Contains(display, "[Pasted text #1") {
-		t.Fatalf("paste should be folded, got %q", display)
-	}
-
-	model, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = model.(chatTUI)
-
-	bodies := m.inboxBodies()
-	if len(bodies) != 1 {
-		t.Fatalf("queue should have 1 item, got %d", len(bodies))
-	}
-	queued := bodies[0]
-	if queued == display {
-		t.Fatalf("queued interject kept the folded placeholder: %q", queued)
-	}
-	for _, want := range []string{
-		"queued pasted content",
-		"--- Begin [Pasted text #1",
-		"--- End [Pasted text #1",
-	} {
-		if !strings.Contains(queued, want) {
-			t.Fatalf("queued interject missing %q in:\n%s", want, queued)
-		}
-	}
-
-	// Resume inbox so controller can dispatch after TurnDone.
-	_ = m.ctrl.SetInboxPaused(false)
-	model, _ = m.Update(agentEventMsg(event.Event{Kind: event.TurnDone}))
-	m = model.(chatTUI)
-	// Controller dispatches asynchronously via maybeDispatch; wait briefly.
-	waitForCLIEvent(t, events, event.TurnDone)
-
-	// Admission may start a turn; wait for runner input.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && len(runner.inputs) == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if len(runner.inputs) != 1 {
-		t.Fatalf("runner should receive queued interject, inputs=%q", runner.inputs)
-	}
-	sent := runner.inputs[0]
-	if sent == display {
-		t.Fatalf("runner received the folded placeholder: %q", sent)
-	}
-	if !strings.Contains(sent, "queued pasted content") {
-		t.Fatalf("runner input missing pasted content:\n%s", sent)
 	}
 }
 

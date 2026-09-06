@@ -31,8 +31,8 @@ func (s *extensionStubCtrl) CustomCommand(string) (string, bool) {
 	return s.customSent, s.customFound
 }
 func (s *extensionStubCtrl) RunSkill(string) (string, bool) { return "", false }
-func (s *extensionStubCtrl) Running() bool                  { return false }
 func (s *extensionStubCtrl) SendWithRaw(string, string)     {}
+func (s *extensionStubCtrl) Running() bool                  { return false }
 func (s *extensionStubCtrl) InvokeExtensionAction(_ context.Context, name string, args map[string]string) (string, error) {
 	s.invokeName, s.invokeArgs = name, args
 	return s.invokeMsg, s.invokeErr

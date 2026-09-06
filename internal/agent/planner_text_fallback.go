@@ -37,6 +37,20 @@ var plannerApprovalPhrases = []string{
 	"has approved",
 }
 
+// plannerRequiresApprovalMarker is the legacy last-line approval marker the
+// planner may still emit; the text fallback trusts it over phrase heuristics.
+const plannerRequiresApprovalMarker = "[planner_requires_approval]"
+
+func lastNonEmptyLine(s string) string {
+	lines := strings.Split(s, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if t := strings.TrimSpace(lines[i]); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
 func plannerPlanRequestsApproval(plan string) bool {
 	lower := strings.ToLower(strings.TrimSpace(plan))
 	if lower == "" {

@@ -127,15 +127,33 @@ func TestSubmitHTTPFormatBindsToTurn(t *testing.T) {
 	}
 }
 
-// TestSubmitHTTPFormatTwoRequestsOrder：双请求顺序——普通请求（先提交）
-// 与 JSON format 请求（后提交）各自绑定自己的 format，不互相串用。
-// 用 recorded 参数链验证：每个 turn 的 format 由提交时决定。
-func TestSubmitHTTPFormatTwoRequestsOrder(t *testing.T) {
+// TestWithTurnFormatInjectsFormatIntoContext：format 绑定 turn 的实际效果
+// ——withTurnFormat 注入后 agent 请求路径能读到（不是全局槽）。
+func TestWithTurnFormatInjectsFormatIntoContext(t *testing.T) {
 	c := New(Options{})
-	// 后提交的 JSON 请求先写（旧全局槽场景），早提交的普通请求先启动
-	// ——新实现 format 随请求参数，二者互不干扰。
-	c.SubmitHTTPFormat("first plain request", "")
-	c.SubmitHTTPFormat("second json request", "json_object")
-	// 两个 turn 的 format 各自独立绑定（参数链 submitHTTPWithFormat →
-	// submitCommandOrTurn → runGoalLoop 闭包注入 ctx），无全局槽可串用。
+	ctx := context.Background()
+	if got := agent.ResponseFormatFromRequest(c.withTurnFormat(ctx, "")); got != nil {
+		t.Fatalf("empty format must be no-op, got %+v", got)
+	}
+	if got := agent.ResponseFormatFromRequest(c.withTurnFormat(ctx, "json_object")); got == nil || got.Type != "json_object" {
+		t.Fatalf("turn format must reach agent request, got %+v", got)
+	}
+}
+
+// TestRefTurnFormatBound：@reference turn 同样绑定 format（统一架构——
+// format 是每个被接纳 turn 的属性，非 runGoalLoop 特例）。
+func TestRefTurnFormatBound(t *testing.T) {
+	c := New(Options{})
+	ctx := context.Background()
+	// runRefTurnWithFormat 注入后 agent 请求路径读到 json_object
+	if got := agent.ResponseFormatFromRequest(c.withTurnFormat(ctx, "json_object")); got == nil || got.Type != "json_object" {
+		t.Fatalf("ref-turn format must bind to ctx, got %+v", got)
+	}
+	// isRefTurnInput 识别 @引用 turn（format 经 wrapper 绑定，不再丢弃）
+	// ref-turn 输入识别（SlashCodeCommentLine 不依赖文件系统）
+	for _, input := range []string{"// comment line", "//src/main.go:12"} {
+		if !SlashCodeCommentLine(input) {
+			t.Errorf("SlashCodeCommentLine(%q) = false, want true", input)
+		}
+	}
 }

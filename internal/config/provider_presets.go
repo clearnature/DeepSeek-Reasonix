@@ -122,12 +122,11 @@ var (
 	glmCodingModels    = []string{"glm-5.2", "glm-5.1", "glm-5", "glm-4.7"}
 	glmAnthropicModels = []string{"glm-5.2[1m]", "glm-5.2", "glm-5.1", "glm-5", "glm-4.7", "glm-4.5-air"}
 
-	qwenAPIModels        = []string{"qwen3.8-max-preview", "qwen3.7-plus", "qwen3.7-max", "qwen3.6-plus", "qwen3.6-flash", "qwen3.5-plus", "qwen3-max-2026-01-23", "qwen3-coder-next", "qwen3-coder-plus", "deepseek-v4-pro", "MiniMax-M2.5", "glm-5.2", "glm-5", "glm-4.7", "kimi-k2.5"}
-	qwenAPIVisionModels  = []string{"qwen3.8-max-preview", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus", "kimi-k2.5"}
-	qwenPlanModels       = []string{"qwen3.8-max-preview", "qwen3.7-plus", "qwen3.6-plus", "qwen3.6-flash", "kimi-k2.5", "deepseek-v4-pro", "glm-5.2", "glm-5", "MiniMax-M2.5", "qwen3.5-plus", "qwen3-max-2026-01-23", "qwen3-coder-next", "qwen3-coder-plus", "glm-4.7"}
-	qwenPlanVisionModels = []string{"qwen3.8-max-preview", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus", "kimi-k2.5"}
-
-	stepfunPlanModels = []string{"step-3.7-flash", "step-3.5-flash", "step-3.5-flash-2603"}
+	qwenAPIModels        = []string{"qwen3.7-plus", "qwen3.7-max", "qwen3.6-plus", "qwen3.5-plus", "qwen3-max-2026-01-23", "qwen3-coder-next", "qwen3-coder-plus", "MiniMax-M2.5", "glm-5", "glm-4.7", "kimi-k2.5"}
+	qwenAPIVisionModels  = []string{"qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus", "kimi-k2.5"}
+	qwenPlanModels       = []string{"qwen3.7-plus", "qwen3.6-plus", "kimi-k2.5", "glm-5", "MiniMax-M2.5", "qwen3.5-plus", "qwen3-max-2026-01-23", "qwen3-coder-next", "qwen3-coder-plus", "glm-4.7"}
+	qwenPlanVisionModels = []string{"qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus", "kimi-k2.5"}
+	stepfunPlanModels    = []string{"step-3.7-flash", "step-3.5-flash", "step-3.5-flash-2603"}
 
 	// Only step-3.7-flash is enabled server-side on the Responses API
 	// ("this model is not enabled for the Responses API" for 3.5 SKUs).
@@ -361,7 +360,7 @@ var curatedProviderPresets = []ProviderPreset{
 	{
 		ID:          "mimo-api",
 		Label:       "MiMo API",
-		Description: "Xiaomi MiMo direct API with text and vision-capable models. 默认走 OpenAI 兼容 Chat Completions（kind=openai）；Responses 协议能力（stateless 多轮/知识缓存/JSON 输出/web_search）需在厂商接入中单独添加 kind=responses 的自定义配置（如 deepseek-responses 同款添加方式）。",
+		Description: "Xiaomi MiMo direct API with text and vision-capable models.",
 		KeyEnv:      "MIMO_API_KEY",
 		Entries: []ProviderEntry{{
 			Name:          "mimo-api",
@@ -568,26 +567,6 @@ var curatedProviderPresets = []ProviderPreset{
 			APIKeyEnv:     "MINIMAX_API_KEY",
 			AuthHeader:    true,
 			ContextWindow: 1048576,
-		}},
-	},
-	{
-		ID:          "minimax-responses",
-		Label:       "MiniMax Responses API",
-		Description: "MiniMax OpenAI Responses API endpoint (Create Response, documented; stateless, no previous_response_id).",
-		KeyEnv:      "MINIMAX_API_KEY",
-		Entries: []ProviderEntry{{
-			Name:          "minimax-responses",
-			Kind:          "responses",
-			BaseURL:       "https://api.minimaxi.com/v1",
-			Models:        minimaxMSeriesModels,
-			VisionModels:  minimaxMSeriesVisionModels,
-			Default:       "MiniMax-M3",
-			APIKeyEnv:     "MINIMAX_API_KEY",
-			ContextWindow: 1048576,
-			// MiniMax's Responses API is stateless: no previous_response_id,
-			// store always false. Reasoning defaults OFF for M3 (omitted or
-			// effort:none); minimal/low/medium/high enable without tuning depth.
-			ResponsesMode: "stateless",
 		}},
 	},
 	{
@@ -906,24 +885,6 @@ var curatedProviderPresets = []ProviderPreset{
 			ContextWindow:  1_000_000,
 			ModelOverrides: qwenModelContextOverrides(),
 			Thinking:       "adaptive",
-		}},
-	},
-	{
-		ID:          "qwen-responses",
-		Label:       "Qwen Responses API",
-		Description: "DashScope Responses API endpoint (stateful previous_response_id, server-managed context).",
-		KeyEnv:      "QWEN_TOKEN_PLAN_CN_API_KEY",
-		Entries: []ProviderEntry{{
-			Name:           "qwen-responses",
-			Kind:           "responses",
-			BaseURL:        "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-			Models:         qwenAPIModels,
-			VisionModels:   qwenAPIVisionModels,
-			Default:        "qwen3.7-plus",
-			APIKeyEnv:      "QWEN_TOKEN_PLAN_CN_API_KEY",
-			ContextWindow:  1_000_000,
-			ResponsesMode:  "stateful",
-			ModelOverrides: qwenModelContextOverrides(),
 		}},
 	},
 	{

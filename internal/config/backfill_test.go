@@ -1441,8 +1441,8 @@ func TestApplyDeepSeekOfficialDefaultPricingExplicitCurrencyWins(t *testing.T) {
 	// billing currency — force official CNY rates for this assertion.
 	flash.Price = deepSeekV4FlashPriceCNY()
 	applyDeepSeekOfficialDefaultPricing(c)
-	if flash.Price == nil || flash.Price.Output != 4.5 || flash.Price.Currency != "¥" || flash.Price.PeakOutput != 9 {
-		t.Fatalf("flash price = %+v, want CNY billing_currency table (off-peak base + peak)", flash.Price)
+	if flash.Price == nil || flash.Price.Output != 9 || flash.Price.Currency != "¥" {
+		t.Fatalf("flash price = %+v, want CNY billing_currency table", flash.Price)
 	}
 }
 
@@ -1922,98 +1922,6 @@ func TestNormalizeOfficialDeepSeekModelsSkipsExplicitModelList(t *testing.T) {
 	}
 }
 
-func TestNormalizeLegacyDeepSeekResponsesPresetBackfillsPresetIDAndAccess(t *testing.T) {
-	// Simulate the broken entry: deepseek-responses written outside the
-	// preset-install flow — no preset_id, missing from provider_access.
-	c := Default()
-	c.Providers = append(c.Providers, ProviderEntry{
-		Name:      "deepseek-responses",
-		Kind:      "responses",
-		BaseURL:   "https://api.deepseek.com",
-		Models:    []string{"deepseek-v4-flash"},
-		APIKeyEnv: "DEEPSEEK_API_KEY",
-	})
-	c.Desktop.ProviderAccess = []string{"deepseek"}
-
-	if !normalizeLegacyDeepSeekResponsesPreset(c) {
-		t.Fatal("migration did not report a change")
-	}
-	p, ok := c.Provider("deepseek-responses")
-	if !ok {
-		t.Fatal("deepseek-responses provider missing")
-	}
-	if p.PresetID != "deepseek-responses" {
-		t.Fatalf("PresetID = %q, want deepseek-responses", p.PresetID)
-	}
-	if !desktopProviderAccessMap(c.Desktop.ProviderAccess)["deepseek-responses"] {
-		t.Fatalf("provider_access = %+v, want deepseek-responses included", c.Desktop.ProviderAccess)
-	}
-
-	// Idempotent: a second run changes nothing.
-	if normalizeLegacyDeepSeekResponsesPreset(c) {
-		t.Fatal("migration must be idempotent")
-	}
-}
-
-func TestNormalizeLegacyDeepSeekResponsesPresetSkipsUnrelatedEntries(t *testing.T) {
-	c := Default()
-	c.Providers = append(c.Providers, ProviderEntry{
-		Name:    "custom-deepseek",
-		Kind:    "openai",
-		BaseURL: "https://api.deepseek.com",
-	})
-	c.Desktop.ProviderAccess = nil
-	if normalizeLegacyDeepSeekResponsesPreset(c) {
-		t.Fatal("unrelated entry must not trigger the migration")
-	}
-	if _, ok := c.Provider("deepseek-responses"); ok {
-		t.Fatal("must not create a deepseek-responses entry out of thin air")
-	}
-}
-
-// TestStandardTemplateWithCustomPriceKeepsProvenance（#4814 残余）：
-// 标准 deepseek 模板 + 用户自定义价格（USD 表）→ 非标准模板 →
-// persistedOfficialCurrency 保留 → locale 自动刷新不覆盖用户价格。
-func TestStandardTemplateWithCustomPriceKeepsProvenance(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	raw := `config_version = 5
-
-[desktop]
-currency = "auto"
-
-[[providers]]
-name        = "deepseek"
-kind        = "openai"
-base_url    = "https://api.deepseek.com"
-models      = ["deepseek-v4-flash"]
-api_key_env = "DEEPSEEK_API_KEY"
-balance_url = "https://api.deepseek.com/user/balance"
-context_window = 1000000
-price = { cache_hit = 0.0028, input = 0.14, output = 0.28, currency = "$" }
-`
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cfg := LoadForEdit(path)
-	if len(cfg.Providers) != 1 {
-		t.Fatalf("providers = %d", len(cfg.Providers))
-	}
-	p := cfg.Providers[0]
-	if isStandardDeepSeekProviderTemplate(&p) {
-		t.Fatal("template with custom price must not be standard (provenance must survive)")
-	}
-	if p.Price == nil || p.Price.Currency != "$" {
-		t.Fatalf("custom USD price must survive load: %+v", p.Price)
-	}
-	// 无自定义价格的官方模板：仍是标准模板（可被 locale 刷新——官方默认）
-	p2 := p
-	p2.Price = nil
-	p2.Prices = nil
-	if !isStandardDeepSeekProviderTemplate(&p2) {
-		t.Fatal("official template without custom price must remain standard")
-	}
-}
 func TestNormalizeLegacyOpenCodeGoVisionCatalogMigratesOnlyUntouchedPreset(t *testing.T) {
 	base := ProviderEntry{
 		Name: "opencode-go", Kind: "openai", BaseURL: "https://opencode.ai/zen/go/v1",

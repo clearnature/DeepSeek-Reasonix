@@ -21,7 +21,6 @@
 package openai
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -241,6 +240,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		return nil, fmt.Errorf("openai: network: %w", err)
 	}
 	return &client{
+		identityHeaders: provider.NewClientIdentityHeaders(),
 		name:            name,
 		apiKey:          cfg.APIKey,
 		keyEnv:          keyEnv,
@@ -280,6 +280,7 @@ func newHTTPClient(cfg provider.Config) (*http.Client, error) {
 }
 
 type client struct {
+	identityHeaders http.Header
 	name            string
 	apiKey          string
 	keyEnv          string // api_key_env name, surfaced in auth errors
@@ -516,6 +517,7 @@ func (c *client) openStream(ctx context.Context, targetURL string, wireReq chatR
 		applyAPIKeyHeader(httpReq.Header, c.baseURL, c.apiKey)
 		httpReq.Header.Set("Accept", "text/event-stream")
 		applyCustomHeaders(httpReq.Header, c.headers)
+		provider.ApplyOpenCodeGoHeaders(httpReq, c.baseURL, c.identityHeaders)
 		return httpReq, nil
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
@@ -726,24 +728,18 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 			name := m.Name
 			cm.Name = &name
 		}
-		// DeepSeek thinking mode 400s an assistant tool_calls turn whose
-		// reasoning_content KEY is absent from the request JSON ("reasoning_content
-		// … must be passed back"). The API accepts an empty string, and only
-		// validates turns after the last user message, but emitting the field on
-		// every tool_calls turn is uniform and verified accepted — so always send
-		// it (empty included) rather than fail the request when reasoning was lost
-		// upstream (e.g. a gateway renamed the field). With thinking disabled the
-		// API tolerates every shape, so keep the exact pre-fix bytes there: send
-		// the key only when a thinking-mode round left reasoning in the history
-		// (dropping it would invalidate the prompt-cache prefix of mixed
-		// thinking-on→off sessions for no gain).
+		// DeepSeek thinking mode requires provider reasoning to survive every
+		// assistant history turn when tools are in use, including plain turns.
+		// Tool turns with lost reasoning still get an explicit empty key: the API
+		// accepts it, while omitting the key produces a 400. Preserve non-empty
+		// reasoning even when the current round has since disabled thinking.
 		if m.Role == provider.RoleAssistant {
 			switch {
 			case c.kimiK3 && (m.ReasoningContent != "" || len(m.ToolCalls) > 0):
 				// Kimi K3 requires the complete assistant message on multi-turn
 				// and tool-call requests, including provider-issued reasoning.
 				cm.ReasoningContent = &m.ReasoningContent
-			case (c.deepseek || c.RequiresToolCallReasoning()) && len(m.ToolCalls) > 0:
+			case (c.deepseek || c.RequiresToolCallReasoning()) && hasReasoningOrToolCall(m):
 				if c.RequiresToolCallReasoning() || m.ReasoningContent != "" {
 					cm.ReasoningContent = &m.ReasoningContent
 				}
@@ -782,20 +778,7 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 	}
 	flushToolImages()
 
-	var tools []chatTool
-	for _, t := range req.Tools {
-		parameters := t.Parameters
-		if len(parameters) == 0 {
-			parameters = provider.CanonicalizeSchema(nil)
-		}
-		if c.mimo {
-			parameters = provider.NormalizeLegacyTupleItemsForDraft202012(parameters)
-		}
-		tools = append(tools, chatTool{
-			Type:     "function",
-			Function: chatFunction{Name: t.Name, Description: t.Description, Parameters: parameters},
-		})
-	}
+	tools := encodeChatTools(req, c.mimo)
 
 	maxOutputTokens := req.MaxTokens
 	if maxOutputTokens == 0 {
@@ -832,12 +815,11 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		out.MaxCompletionTokens = maxOutputTokens
 	case c.deepseek:
 		// DeepSeek's CoT is controlled by `thinking` plus `reasoning_effort` for
-		// depth. Thinking is on by default but can be turned off via
-		// effort=disabled / thinking=disabled (credit @eghrhegpe, #5063).
-		if c.thinkingType == "disabled" {
-			out.Thinking = &thinkingMode{Type: "disabled"}
-		} else {
-			out.Thinking = &thinkingMode{Type: "enabled"}
+		// depth. Thinking is on by default but can be turned off for one
+		// stateless request through EffortOverride=disabled.
+		out.Thinking = &thinkingMode{Type: c.deepSeekRequestThinking(req)}
+		if out.Thinking.Type == "disabled" {
+			out.ReasoningEffort = ""
 		}
 	case c.minimax:
 		// M3 uses a single `thinking.type` field with two valid values:
@@ -950,8 +932,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	var sawDone bool
 	var think thinkSplitter
 
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner := provider.NewStreamScanner(resp.Body, 1024*1024)
 
 	for scanner.Scan() {
 		select { // ping the idle watchdog; non-blocking so a full buffer is fine
@@ -973,7 +954,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 
 		var sr streamResponse
 		if err := json.Unmarshal([]byte(data), &sr); err != nil {
-			return emitted, provider.StreamDecodeError(c.name, data, err)
+			return emitted, scanner.DecodeError(c.name, data, err)
 		}
 		if sr.Error != nil {
 			return emitted, fmt.Errorf("%s: %s", c.name, sr.Error.Message)
@@ -995,16 +976,12 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		}
 
 		delta := sr.Choices[0].Delta
-		reasoningDelta := delta.ReasoningContent
-		if reasoningDelta == "" {
-			reasoningDelta = delta.Reasoning
+		if sent, err := emitChatReasoning(ctx, out, delta.ReasoningContent, delta.Reasoning); err != nil {
+			return emitted, err
+		} else {
+			emitted = emitted || sent
 		}
-		if reasoningDelta != "" {
-			emitted = true
-			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, Text: reasoningDelta}) {
-				return emitted, ctx.Err()
-			}
-		}
+
 		if delta.Content != "" {
 			r, txt := think.push(delta.Content)
 			if r != "" {
@@ -1252,10 +1229,8 @@ type chatMessage struct {
 	// Prefix is wire-only and is set exclusively on an automatically recovered
 	// DeepSeek assistant tail. omitempty keeps every ordinary request byte-stable.
 	Prefix bool `json:"prefix,omitempty"`
-	// A pointer so the field can serialize as an empty string: DeepSeek thinking
-	// mode requires the reasoning_content key to be PRESENT on assistant
-	// tool_calls turns (an empty value passes; a missing key 400s), while every
-	// other message must keep omitting it.
+	// A pointer so the field can serialize as an empty string for a malformed
+	// tool turn while preserving non-empty reasoning on every assistant turn.
 	ReasoningContent *string        `json:"reasoning_content,omitempty"`
 	ToolCalls        []chatToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string         `json:"tool_call_id,omitempty"`
@@ -1296,14 +1271,16 @@ func imageContentParts(text string, images []string, detail string) []chatConten
 }
 
 type chatTool struct {
-	Type     string       `json:"type"`
-	Function chatFunction `json:"function"`
+	Type         string       `json:"type"`
+	Function     chatFunction `json:"function"`
+	DeferLoading bool         `json:"defer_loading,omitempty"`
 }
 
 type chatFunction struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Strict      bool            `json:"strict,omitempty"`
 }
 
 type chatToolCall struct {
@@ -1330,7 +1307,7 @@ type streamResponse struct {
 	Choices []struct {
 		Delta struct {
 			Content          string         `json:"content"`
-			ReasoningContent string         `json:"reasoning_content"`
+			ReasoningContent *string        `json:"reasoning_content"`
 			Reasoning        string         `json:"reasoning"`
 			ToolCalls        []chatToolCall `json:"tool_calls"`
 		} `json:"delta"`
@@ -1340,16 +1317,6 @@ type streamResponse struct {
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
-}
-
-// Close releases the client's idle HTTP connections (HTTP/2 keep-alive
-// goroutines) — used by long-running hosts and real-API tests that gate on
-// goleak. Idempotent; safe to call after New.
-func (c *client) Close() error {
-	if tr, ok := c.http.Transport.(interface{ CloseIdleConnections() }); ok {
-		tr.CloseIdleConnections()
-	}
-	return nil
 }
 
 // wireUsage covers DeepSeek's top-level cache fields, OpenAI/MiMo's nested

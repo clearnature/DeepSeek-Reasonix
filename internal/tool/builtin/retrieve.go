@@ -160,11 +160,12 @@ func systemFetch(ctx context.Context, query string, tier responses.RetrievalTier
 		Name: entry.Name, APIKey: key,
 		BaseURL: entry.BaseURL, Model: entry.Model,
 		Effort: "low",
+		// Server-side search is a client-level policy since #9826: the
+		// web_search entry no longer rides the per-request tool list.
+		WebSearch: true,
 	})
 	req := provider.Request{
 		Messages:       []provider.Message{{Role: provider.RoleUser, Content: query}},
-		Tools:          []provider.ToolSchema{provider.WebSearchTool(false)},
-		ToolChoice:     &provider.ToolChoice{Type: "web_search"},
 		ResponseFormat: provider.JSONSchemaFormat("knowledge_extract", knowledgeSchema),
 	}
 	ch, err := p.Stream(ctx, req)

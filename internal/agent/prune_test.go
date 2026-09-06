@@ -28,8 +28,8 @@ func TestPruneAndSnipAreNoOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Results != 1 {
-		t.Fatalf("prune results = %d, want 1", st.Results)
+	if st.Results != 0 {
+		t.Fatalf("prune results = %d, want 0", st.Results)
 	}
 	st, err = a.SnipStaleToolResults()
 	if err != nil {
@@ -38,8 +38,8 @@ func TestPruneAndSnipAreNoOps(t *testing.T) {
 	if st.Results != 0 {
 		t.Fatalf("snip results = %d, want 0", st.Results)
 	}
-	if got := a.currentProjectionVersion(); got != 1 {
-		t.Fatalf("projection version = %d, want 1", got)
+	if got := a.currentProjectionVersion(); got != 0 {
+		t.Fatalf("projection version = %d, want 0", got)
 	}
 	for _, m := range sess.Snapshot() {
 		if m.Role == provider.RoleTool && m.Content != strings.Repeat("x", 8000) {

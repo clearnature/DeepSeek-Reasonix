@@ -5,13 +5,6 @@ type OutputBudgetProvider interface {
 	OutputBudget() int
 }
 
-// CompactionOutputTokensProvider sizes summary/compaction requests separately
-// from ordinary output (vendor-specific digest budgets: dashscope 8192,
-// deepseek 16K, mimo 4096). Zero means "no dedicated budget; use the default".
-type CompactionOutputTokensProvider interface {
-	CompactionOutputTokens() int
-}
-
 // SharedWindowOutputProvider reports whether input and output share one window.
 type SharedWindowOutputProvider interface {
 	SharesContextWindow() bool
