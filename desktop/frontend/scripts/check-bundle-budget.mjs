@@ -201,6 +201,11 @@ console.log("\nbundle budgets");
 // Keep one decimal of cross-platform headroom for this measured shell change.
 // Integrating main-v2 rich-link menus measures 466.905 KiB combined.
 const initialJSBudgetKiB = 467.0;
+||||||| parent of 758c67798 (Merge pull request #9842 from SivanCola/fix/session-runtime-9839)
+// The AskCard session-draft wiring adds a bounded 30-byte gzip drift on the
+// initial route; retain the explicit budget rather than failing on a rounded
+// 467.0 KiB display value.
+const initialJSBudgetKiB = 467.5;
 assertBudget("initial JavaScript gzip", initialJSGzip, initialJSBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk gzip", largestInitialJS, 280 * 1024);
 // Render-blocking CSS is intentionally absent: styles.css loads deferred via
@@ -378,5 +383,9 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // current payload is 2484.509 KiB. Retain only bounded toolchain headroom.
 // With the current-base rich-link menus: 2485.715 KiB raw.
 const rawInitialBudgetKiB = 2_485.9;
+||||||| parent of 758c67798 (Merge pull request #9842 from SivanCola/fix/session-runtime-9839)
+// The shared harness decision surface adds a bounded startup stylesheet
+// payload; retain the measured 2492.1 KiB path with narrow headroom.
+const rawInitialBudgetKiB = 2_492.5;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

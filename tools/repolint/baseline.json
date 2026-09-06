@@ -169,7 +169,7 @@
       "file-size": 1554
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4233
+      "file-size": 4248
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -278,6 +278,11 @@
       "essay": 67,
       "file-size": 7613,
       "function-size": 342,
+||||||| parent of 758c67798 (Merge pull request #9842 from SivanCola/fix/session-runtime-9839)
+      "complexity": 42,
+      "essay": 68,
+      "file-size": 7595,
+      "function-size": 364,
       "struct-state": 23
     },
     "desktop/tabs_order_test.go": {
