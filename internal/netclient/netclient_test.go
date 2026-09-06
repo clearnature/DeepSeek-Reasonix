@@ -61,7 +61,11 @@ func TestCustomProxyHonorsNoProxy(t *testing.T) {
 
 func TestDirectHostsBypassProxy(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
+	t.Setenv("https_proxy", "http://proxy.example.com:8080")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("http_proxy", "")
 	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
 	pf, err := proxyFunc(ProxySpec{Mode: "auto", DirectHosts: []string{"token-plan-cn.xiaomimimo.com"}})
 	if err != nil {
 		t.Fatalf("proxyFunc: %v", err)
@@ -86,7 +90,11 @@ func TestDirectHostsBypassProxy(t *testing.T) {
 
 func TestNoDirectHostsKeepsEveryoneProxied(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
+	t.Setenv("https_proxy", "http://proxy.example.com:8080")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("http_proxy", "")
 	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
 	pf, err := proxyFunc(ProxySpec{Mode: "env"}) // no DirectHosts → nothing special-cased
 	if err != nil {
 		t.Fatalf("proxyFunc: %v", err)
