@@ -102,7 +102,6 @@ func TestTurnRuntimeAPIRoutesStopAnswerAndReplayByExactTurn(t *testing.T) {
 		t.Fatalf("empty replay events = %#v, want []", empty.Events)
 	}
 }
-<<<<<<< HEAD
 
 // /compact is a controller-routed management verb that runs asynchronously
 // without a ledger Begin, so it legitimately has no durable turn id. The
@@ -131,8 +130,6 @@ func TestStartTurnForTabAcceptsCompactWithoutTurnID(t *testing.T) {
 		t.Fatalf("compact receipt submission = %q, want echoed", start.SubmissionID)
 	}
 }
-||||||| v1.36.0
-=======
 
 func TestStartTurnForTabReturnsManagementDispositionWithoutTurnID(t *testing.T) {
 	dir := t.TempDir()
@@ -201,4 +198,3 @@ func TestStartTurnForTabRejectsManagementDuringActiveTurn(t *testing.T) {
 		t.Fatal("turn did not finish after cancellation")
 	}
 }
->>>>>>> v1.38.0
