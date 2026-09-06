@@ -140,8 +140,134 @@ func (r *Recorder) Emit(e event.Event) {
 		r.recordProviderUsage(e.ModelRef, e.Guardian.Usage, nil, "")
 	} else if r != nil && r.writer != nil && e.Kind == event.TurnDone {
 		r.recordTurnCompletion()
+	} else if r != nil && r.dispatcher != nil && e.Kind == event.Notice && isCompactionTelemetry(e.Text) {
+		r.recordCompaction(e)
 	} else if r != nil && r.dispatcher != nil && e.Kind == event.Notice && isEstimateTelemetry(e.Text) {
 		r.recordEstimateAnomaly(e)
+	}
+}
+
+// isCompactionTelemetry matches the agent's compaction notices so every
+// compaction pass (success or failure) lands in the stats file with its full
+// wire-shape attribution (view_fp/wire_fp/tools_source).
+func isCompactionTelemetry(text string) bool {
+	return text == "compaction telemetry" || text == "compaction failed"
+}
+
+// recordCompaction parses a compaction telemetry detail line
+// (trigger/mode/cache/src/fold/spans/proj/in/out/hit/miss/write/reqs/
+// user_kept/user_dropped/view_fp/wire_fp/tools_count/tools_fp/tools_source/
+// provider_request_id/err_type) into a structured record. Best-effort; never
+// interrupts the event stream. Failed rows carry status=failed + err_type=.
+func (r *Recorder) recordCompaction(e event.Event) {
+	if r == nil || r.dispatcher == nil {
+		return
+	}
+	rec := CompactionRecord{Trigger: "unknown", Mode: "unknown"}
+	for _, tok := range strings.Fields(e.Detail) {
+		k, v, ok := strings.Cut(tok, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "trigger":
+			rec.Trigger = v
+		case "mode":
+			rec.Mode = v
+		case "cache":
+			rec.Cache = v
+		case "provider_request_id":
+			rec.RequestID = v
+		case "err_type":
+			// err_type is the trailing key; the value may contain '='.
+			if i := strings.Index(e.Detail, "err_type="); i >= 0 {
+				rec.Error = strings.TrimSpace(e.Detail[i+len("err_type="):])
+			}
+			rec.Status = "failed"
+			r.dispatcher.enqueue(record{
+				Timestamp:  time.Now(),
+				ModelRef:   e.ModelRef,
+				Source:     r.source,
+				Compaction: &rec,
+			})
+			return
+		case "reason":
+			rec.Reason = v
+		case "status":
+			rec.Status = v
+		case "pref_hash":
+			rec.PrefHash = v
+		case "view_fp":
+			rec.ViewFP = v
+		case "wire_fp":
+			rec.WireFP = v
+		case "tools_fp":
+			rec.ToolsFP = v
+		case "tools_source":
+			rec.ToolsSource = v
+		case "tools_count":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.ToolsCount = n
+			}
+		case "tpc":
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				rec.TokPerChar = f
+			}
+		case "est":
+			if n, err := strconv.Atoi(v); err == nil {
+				rec.EstTok = n
+			}
+		case "elapsed_ms":
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				rec.ElapsedMs = n
+			}
+		default:
+			setCompactionInt(&rec, k, v)
+		}
+	}
+	r.dispatcher.enqueue(record{
+		Timestamp:  time.Now(),
+		ModelRef:   e.ModelRef,
+		Source:     r.source,
+		Compaction: &rec,
+	})
+}
+
+// setCompactionInt fills the numeric keys of a compaction record.
+func setCompactionInt(rec *CompactionRecord, key, val string) {
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return
+	}
+	switch key {
+	case "src":
+		rec.SourceTok = n
+	case "fold":
+		rec.FoldTok = n
+	case "spans":
+		rec.Spans = n
+	case "proj":
+		rec.ProjTok = n
+	case "in":
+		rec.InputTok = n
+	case "out":
+		rec.OutTok = n
+	case "hit":
+		rec.HitTok = n
+	case "miss":
+		rec.MissTok = n
+	case "write":
+		rec.WriteTok = n
+	case "reqs":
+		rec.Reqs = n
+	case "results":
+		rec.Results = n
+	case "saved_chars":
+		rec.SavedChars = n
+	case "user_kept":
+		rec.UserKept = n
+	case "user_dropped":
+		rec.UserDrop = n
 	}
 }
 

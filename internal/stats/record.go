@@ -76,6 +76,46 @@ type record struct {
 	// Estimate records one admission-time prompt-estimate anomaly (overflow or
 	// inflated vs observed) with the request shape behind it. Nil otherwise.
 	Estimate *EstimateAnomalyRecord `json:"estimate,omitempty"`
+	// Compaction records one context-compaction pass (agent compaction
+	// telemetry). Nil on usage/turn rows; Query aggregation skips them.
+	Compaction *CompactionRecord `json:"compaction,omitempty"`
+}
+
+// CompactionRecord is the structured form of the agent's compaction telemetry
+// detail line (trigger/mode/cache/src/fold/spans/proj/in/out/hit/miss/write/
+// reqs/user_kept/user_dropped/view_fp/wire_fp/tools_*/err_type), persisted so
+// a summary cache hit or a failed compaction can be re-traced after the fact.
+type CompactionRecord struct {
+	Trigger     string  `json:"trigger,omitempty"`
+	Mode        string  `json:"mode,omitempty"`
+	Cache       string  `json:"cache,omitempty"`
+	SourceTok   int     `json:"src,omitempty"`
+	ProjTok     int     `json:"proj,omitempty"`
+	FoldTok     int     `json:"fold,omitempty"`
+	Spans       int     `json:"spans,omitempty"`
+	InputTok    int     `json:"in,omitempty"`
+	OutTok      int     `json:"out,omitempty"`
+	HitTok      int     `json:"hit,omitempty"`
+	MissTok     int     `json:"miss,omitempty"`
+	WriteTok    int     `json:"write,omitempty"`
+	Reqs        int     `json:"reqs,omitempty"`
+	UserKept    int     `json:"user_kept,omitempty"`
+	UserDrop    int     `json:"user_dropped,omitempty"`
+	ViewFP      string  `json:"view_fp,omitempty"`     // fold view fingerprint (resume-divergence diagnosis)
+	WireFP      string  `json:"wire_fp,omitempty"`     // normalized bytes actually sent (vs view_fp)
+	ToolsCount  int     `json:"tools_count,omitempty"` // tool schema set the summary sent
+	ToolsFP     string  `json:"tools_fp,omitempty"`
+	ToolsSource string  `json:"tools_source,omitempty"` // frozen | live | none
+	Status      string  `json:"status,omitempty"`       // failed on err_type rows
+	RequestID   string  `json:"provider_request_id,omitempty"`
+	Error       string  `json:"err_type,omitempty"`
+	TokPerChar  float64 `json:"tpc,omitempty"`
+	ElapsedMs   int64   `json:"elapsed_ms,omitempty"`
+	EstTok      int     `json:"est_tokens,omitempty"` // decision estimate that crossed the trigger
+	Reason      string  `json:"reason,omitempty"`
+	Results     int     `json:"results,omitempty"`
+	SavedChars  int     `json:"saved_chars,omitempty"`
+	PrefHash    string  `json:"pref_hash,omitempty"`
 }
 
 // EstimateAnomalyRecord is the structured form of the agent's estimate
