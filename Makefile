@@ -1,10 +1,11 @@
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 BUILD_TIME_UTC := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GIT_COMMIT := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
-# Local dated build version, e.g. v1.38.0-local-20260906. `git describe` can
-# return a desktop-module tag (desktop-vX.Y.Z), so pin the main release line
-# here and bump it on release; DATE_VERSION=… overrides wholesale.
-DATE_VERSION := v1.38.0-local-$(shell date +%Y%m%d)
+# Local dated build version, e.g. v1.38.0-local-20260906-1430. Hour+minute
+# disambiguate multiple builds in one day. `git describe` can return a
+# desktop-module tag (desktop-vX.Y.Z), so pin the main release line here and
+# bump it on release; DATE_VERSION=… overrides wholesale.
+DATE_VERSION := v1.38.0-local-$(shell date +%Y%m%d-%H%M)
 LDFLAGS := -s -w \
 	-X main.version=$(VERSION) \
 	-X main.gitCommit=$(GIT_COMMIT) \
