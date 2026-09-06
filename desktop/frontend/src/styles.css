@@ -244,8 +244,8 @@
   /* motion — shared timing + easing tokens. Durations mirror the values
    * already used across the app (0.12 / 0.18 / 0.34 / 0.42s); easings reuse the
    * existing curves. The global prefers-reduced-motion block at EOF collapses
-   * every animation/transition to ~0ms, so these tokens are safe to reuse
-   * freely without per-rule reduce overrides. */
+   * every animation to ~0ms and removes transitions, so these tokens are safe
+   * to reuse freely without per-rule reduce overrides. */
   --dur-fast: 120ms; /* color/border hovers, tooltips */
   --dur-base: 180ms; /* popovers, menus, small enters */
   --dur-slow: 340ms; /* drawers, modals, panel slides */
@@ -2104,6 +2104,9 @@ a[href] {
 :root[data-theme-style] .layout.layout--statusbar-hidden {
   --statusbar-height: 0px;
 }
+
+/* Automation is a focused main page. These rules only remove presentation
+   rows; workspace and terminal preferences remain in their stores. */
 
 .app--darwin .layout {
   --app-chrome-height: 44px;
@@ -6611,6 +6614,20 @@ body > .mermaid-diagram--fullscreen {
   overflow-y: auto;
   color: inherit;
 }
+.tool__subagent-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  font-family: var(--font-code-family);
+  font-size: var(--font-caption);
+}
+.tool__subagent-outcome-status { color: var(--fg-dim); }
+.tool__subagent-outcome code { overflow-wrap: anywhere; }
 .tool__nested-count {
   display: inline-flex;
   align-items: center;
@@ -23083,10 +23100,8 @@ body > .mermaid-diagram--fullscreen {
   transition: opacity var(--dur-base) ease;
 }
 
-/* The image viewer is an app-level fullscreen surface. Hide the custom
-/* The image viewer is an app-level fullscreen surface. Hide the custom
-   Windows caption controls while it is open so the preview owns the only
-   visible close affordance; native shortcuts such as Alt+F4 remain intact. */
+/* Full-window image previews own their close affordance. Management pages
+   reserve caption space and retain native window controls. */
 .app--windows-frameless:has(.image-viewer-backdrop) > .windows-window-controls {
   opacity: 0;
   visibility: hidden;
@@ -23979,20 +23994,13 @@ body > .mermaid-diagram--fullscreen {
   background: var(--button-bg);
 }
 
-/* ── Topic bar "More" overflow menu ──────────────────────────────── */
-.topicbar__more {
-  position: relative;
-  display: inline-flex;
-}
-
-/* Borderless icon-only entries: file opener, More menu, workspace toggle,
-/* Borderless icon-only entries: file opener, More menu, workspace toggle,
-   and the utility (search) button. Default state has no background/border —
+/* Borderless icon-only entries: file opener, session actions, workspace toggle,
+/* Borderless icon-only entries: file opener, session actions, workspace toggle,
+   and search. Default state has no background/border —
    hover/focus still highlight so the controls stay discoverable. */
 .topicbar__actions .external-opener,
 .topicbar__actions .external-opener__primary,
 .topicbar__actions .external-opener__menu-trigger,
-.topicbar__actions .topicbar__more .topicbar__action-btn,
 .topicbar__actions .topicbar__chrome-btn,
 .topicbar__actions .topicbar__action-btn--utility {
   border: none !important;
@@ -24004,8 +24012,6 @@ body > .mermaid-diagram--fullscreen {
   border-left: none !important;
 }
 
-.topicbar__actions .topicbar__more .topicbar__action-btn:hover:not(:disabled),
-.topicbar__actions .topicbar__more .topicbar__action-btn:focus-visible:not(:disabled),
 .topicbar__actions .external-opener__primary:hover:not(:disabled),
 .topicbar__actions .external-opener__primary:focus-visible:not(:disabled),
 .topicbar__actions .external-opener__menu-trigger:hover:not(:disabled),
@@ -27480,15 +27486,17 @@ body > .mermaid-diagram--fullscreen {
 }
 
 /* Respect the OS reduced-motion preference: squash all animations and force
-/* Respect the OS reduced-motion preference: squash all animations and force
-   instant scrolling so the UI feels immediate rather than web-like. */
+   instant scrolling so the UI feels immediate rather than web-like. Transitions
+   go to `none`, not 0.01ms: a near-zero `transition: all` still starts from the
+   old value, so transform/padding writes stay invisible to same-frame geometry
+   reads and the transcript scroll guards compound their compensation. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition: none !important;
     scroll-behavior: auto !important;
   }
 }
@@ -33553,8 +33561,10 @@ body > .mermaid-diagram--fullscreen {
 
 .app--creation .sidebar-feature-zone__item:hover,
 .app--creation .sidebar-feature-zone__item:focus-visible,
+.app--creation .sidebar-feature-zone__item--active,
 :root[data-theme-style] .app--creation .sidebar-feature-zone__item:hover,
-:root[data-theme-style] .app--creation .sidebar-feature-zone__item:focus-visible {
+:root[data-theme-style] .app--creation .sidebar-feature-zone__item:focus-visible,
+:root[data-theme-style] .app--creation .sidebar-feature-zone__item--active {
   border-color: color-mix(in srgb, var(--accent) 12%, transparent);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   color: var(--fg);
@@ -35962,6 +35972,39 @@ body > .mermaid-diagram--fullscreen {
   pointer-events: none;
 }
 
+/* macOS keeps dock tabs and the fixed workspace toggle in one title row. The
+   toggle stays anchored to the window edge while this row reserves its hit
+   area; the four tabs share the remaining width instead of sliding under it. */
+.app--darwin.app--workbench .workbench-dock__tools,
+:root[data-theme-style] .app--darwin.app--workbench .workbench-dock__tools {
+  padding-right: 48px;
+}
+
+.app--darwin.app--workbench .workbench-dock__tabs,
+:root[data-theme-style] .app--darwin.app--workbench .workbench-dock__tabs {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  gap: 2px;
+}
+
+.app--darwin.app--workbench .workbench-dock__tab,
+:root[data-theme-style] .app--darwin.app--workbench .workbench-dock__tab {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  padding: 0 5px;
+  gap: 4px;
+  justify-content: center;
+}
+
+.app--darwin.app--workbench .workbench-dock__tab-label,
+:root[data-theme-style] .app--darwin.app--workbench .workbench-dock__tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Workbench keeps its workspace toggle in the fixed top-right dock-toggle
 /* Workbench keeps its workspace toggle in the fixed top-right dock-toggle
    instead of an AppChrome rail; shift it left of the Windows caption strip
@@ -36054,6 +36097,8 @@ body > .mermaid-diagram--fullscreen {
     grid-column: 1 !important;
     min-width: 0;
   }
+
+
 }
 
 /* ============================================================================
@@ -38547,8 +38592,7 @@ body > .mermaid-diagram--fullscreen {
 .theme-editor__live,
 .theme-gallery__editor > .theme-editor__actions,
 .provider-access-more__menu,
-.topicbar__more-menu,
-.topicbar__more-export-menu,
+.topicbar__export-menu,
 .heartbeat-filter-menu,
 .heartbeat-project-menu,
 .heartbeat-task-menu {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -101,6 +102,7 @@ func TestTurnRuntimeAPIRoutesStopAnswerAndReplayByExactTurn(t *testing.T) {
 		t.Fatalf("empty replay events = %#v, want []", empty.Events)
 	}
 }
+<<<<<<< HEAD
 
 // /compact is a controller-routed management verb that runs asynchronously
 // without a ledger Begin, so it legitimately has no durable turn id. The
@@ -129,3 +131,74 @@ func TestStartTurnForTabAcceptsCompactWithoutTurnID(t *testing.T) {
 		t.Fatalf("compact receipt submission = %q, want echoed", start.SubmissionID)
 	}
 }
+||||||| v1.36.0
+=======
+
+func TestStartTurnForTabReturnsManagementDispositionWithoutTurnID(t *testing.T) {
+	dir := t.TempDir()
+	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}
+	ctrl := control.New(control.Options{SessionDir: dir, SessionPath: filepath.Join(dir, "session.jsonl"), Sink: sink})
+	t.Cleanup(ctrl.Close)
+	tab := &WorkspaceTab{ID: "tab", Scope: "global", Ready: true, Ctrl: ctrl, sink: sink}
+	app := &App{tabs: map[string]*WorkspaceTab{tab.ID: tab}, activeTabID: tab.ID}
+	sink.app = app
+
+	start, err := app.StartTurnForTab(tab.ID, "/context", "submission-management")
+	if err != nil {
+		t.Fatalf("StartTurnForTab management command: %v", err)
+	}
+	if start.Disposition != control.SubmitManagementHandled || start.TurnID != "" {
+		t.Fatalf("management receipt = %+v, want management_handled without turn id", start)
+	}
+	replay, err := app.TurnEventsForTab(tab.ID, 0)
+	if err != nil {
+		t.Fatalf("TurnEventsForTab: %v", err)
+	}
+	if len(replay.Events) != 0 {
+		t.Fatalf("management command created durable turn events: %+v", replay.Events)
+	}
+}
+
+func TestStartTurnForTabRejectsManagementDuringActiveTurn(t *testing.T) {
+	dir := t.TempDir()
+	runner := &exactTurnRunner{started: make(chan struct{})}
+	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}
+	terminal := make(chan event.Event, 1)
+	sink.SetBotSink(event.FuncSink(func(e event.Event) {
+		if e.Kind == event.TurnDone {
+			terminal <- e
+		}
+	}))
+	ctrl := control.New(control.Options{
+		Runner: runner, Sink: sink, SessionDir: dir,
+		SessionPath: filepath.Join(dir, "session.jsonl"),
+	})
+	t.Cleanup(ctrl.Close)
+	tab := &WorkspaceTab{ID: "tab", Scope: "global", Ready: true, Ctrl: ctrl, sink: sink}
+	app := &App{tabs: map[string]*WorkspaceTab{tab.ID: tab}, activeTabID: tab.ID}
+	sink.app = app
+
+	start, err := app.StartTurnForTab(tab.ID, "hold this turn", "submission-active")
+	if err != nil {
+		t.Fatalf("StartTurnForTab active turn: %v", err)
+	}
+	select {
+	case <-runner.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("turn runner did not start")
+	}
+	if _, err := app.StartTurnForTab(tab.ID, "/context", "submission-management"); !errors.Is(err, control.ErrTurnRunning) {
+		t.Fatalf("management command during active turn = %v, want ErrTurnRunning", err)
+	}
+	status := ctrl.RuntimeStatus()
+	if !status.Running || status.TurnID != start.TurnID {
+		t.Fatalf("active turn changed after rejected management command: %+v", status)
+	}
+	ctrl.Cancel()
+	select {
+	case <-terminal:
+	case <-time.After(5 * time.Second):
+		t.Fatal("turn did not finish after cancellation")
+	}
+}
+>>>>>>> v1.38.0

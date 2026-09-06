@@ -697,13 +697,20 @@ func providerViewFromEntryForRootWithResolverAndCredentials(p config.ProviderEnt
 		ContextWindow:               p.ContextWindow,
 		ReasoningProtocol:           p.ReasoningProtocol,
 		Thinking:                    providerThinkingForSettings(p.Thinking),
-		WebSearch:                   config.EffectiveWebSearch(&p),
-		ServerWebSearchCapability:   config.HasServerWebSearchCapability(&p),
+		WebSearch:                   config.EffectiveIndependentWebSearch(&p),
+		ServerWebSearchCapability:   (config.IsOfficialDeepSeekSearchEndpoint(&p) || config.HasServerWebSearchCapability(&p)),
 		SupportedEfforts:            nonNil(p.SupportedEfforts),
 		DefaultEffort:               p.DefaultEffort,
 		ModelOverrides:              providerModelOverridesForView(p.ModelOverrides, models),
+<<<<<<< HEAD
 		ModelCapabilities:           modelCapabilities,
 		RecommendedUpgradeAvailable: config.CanUpgradeDeepSeekProviderProtocol(&p),
+||||||| v1.36.0
+		RecommendedUpgradeAvailable: config.CanUpgradeDeepSeekProviderProtocol(&p),
+=======
+		ModelCapabilities:           modelCapabilities,
+		RecommendedUpgradeAvailable: false, // Chat Completions is the default again; retain the legacy Wails field.
+>>>>>>> v1.38.0
 		ModelCatalogFingerprint:     providerModelCatalogFingerprintForCredentials(p, credentialsRevision),
 	}
 }
@@ -2441,8 +2448,8 @@ func officialProviderTemplate(kind, pricingLanguage string) ([]config.ProviderEn
 		// Freeze the official USD regional table; display currency is independent.
 		return []config.ProviderEntry{{
 			Name:            "deepseek",
-			Kind:            "anthropic",
-			BaseURL:         "https://api.deepseek.com/anthropic",
+			Kind:            "openai",
+			BaseURL:         "https://api.deepseek.com",
 			Models:          []string{"deepseek-v4-flash", "deepseek-v4-pro"},
 			Default:         "deepseek-v4-flash",
 			APIKeyEnv:       "DEEPSEEK_API_KEY",
@@ -2537,10 +2544,10 @@ func saveProviderConfig(c *config.Config, p ProviderView) error {
 	e.Thinking = providerThinkingForSettings(p.Thinking)
 	// Settings exposes this switch only for verified endpoints. Preserve an
 	// existing advanced override, but never carry an official default to a new URL.
-	if config.IsOfficialDeepSeekWebSearchEndpoint(&e) {
+	if config.IsOfficialDeepSeekSearchEndpoint(&e) {
 		enabled := p.WebSearch
 		e.WebSearch = &enabled
-	} else if !config.SupportsServerWebSearch(&e) || !existing || config.IsOfficialDeepSeekWebSearchEndpoint(&original) {
+	} else if !config.SupportsServerWebSearch(&e) || !existing || config.IsOfficialDeepSeekSearchEndpoint(&original) {
 		e.WebSearch = nil
 	}
 	e.SupportedEfforts = p.SupportedEfforts
@@ -2605,7 +2612,7 @@ func (a *App) SetProviderWebSearch(names []string, enabled bool) error {
 				if !ok {
 					return fmt.Errorf("provider %q not found", name)
 				}
-				if !config.IsOfficialDeepSeekWebSearchEndpoint(entry) {
+				if !config.IsOfficialDeepSeekSearchEndpoint(entry) {
 					return fmt.Errorf("provider %q does not support configurable server-side web search", name)
 				}
 				providers = append(providers, entry)
@@ -3026,6 +3033,7 @@ func providerPresetNoExistingProviderError(id string) error {
 // it never touches chat request serialization or provider-visible prompt data.
 // The probe rides the configured network proxy so a broken proxy path fails
 // here, at setup time, instead of succeeding and stalling chat later (#9560).
+<<<<<<< HEAD
 func (a *App) FetchProviderModelCatalog(p ProviderView) ([]ProviderModelCapabilityView, error) {
 	root := a.activeWorkspaceRoot()
 	// Capture persisted identity separately from the editor draft. Draft routes
@@ -3102,6 +3110,32 @@ func (a *App) FetchProviderModelCatalog(p ProviderView) ([]ProviderModelCapabili
 // frontends and callers.
 func (a *App) FetchProviderModels(p ProviderView) ([]string, error) {
 	catalog, err := a.FetchProviderModelCatalog(p)
+||||||| v1.36.0
+func (a *App) FetchProviderModels(p ProviderView) ([]string, error) {
+	root := a.activeWorkspaceRoot()
+	e := config.ProviderEntry{
+		Name:       p.Name,
+		Kind:       p.Kind,
+		BaseURL:    p.BaseURL,
+		ModelsURL:  strings.TrimSpace(p.ModelsURL),
+		APIKeyEnv:  p.APIKeyEnv,
+		Headers:    p.Headers,
+		AuthHeader: p.AuthHeader,
+	}
+	e.ResolveAPIKeyForRoot(root)
+	ctx, cancel := context.WithTimeout(a.reqCtx(), 15*time.Second)
+	defer cancel()
+	models, err := e.FetchModelsWithProxy(ctx, withProbeDirectHost(a.networkProxySpecForRoot(root), e.BaseURL, p.NoProxy))
+=======
+func (a *App) FetchProviderModelCatalog(p ProviderView) ([]ProviderModelCapabilityView, error) {
+	return a.FetchProviderModelCatalogDraft(p, "")
+}
+
+// FetchProviderModels is the legacy ID-only wrapper retained for older
+// frontends and callers.
+func (a *App) FetchProviderModels(p ProviderView) ([]string, error) {
+	catalog, err := a.FetchProviderModelCatalog(p)
+>>>>>>> v1.38.0
 	if err != nil {
 		return []string{}, err
 	}

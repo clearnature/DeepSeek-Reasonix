@@ -269,6 +269,14 @@ export const zh: Record<DictKey, string> = {
   "externalOpener.saveAs": "另存为…",
   "externalOpener.saved": "已保存到 {path}",
   "externalOpener.persistFailed": "已打开，但无法将 {name} 保存为默认：{error}",
+  "richLink.menuAriaLabel": "链接操作",
+  "richLink.openInBrowser": "在浏览器中打开",
+  "richLink.composeEmail": "写邮件",
+  "richLink.copyLink": "复制链接",
+  "richLink.copyReference": "复制引用",
+  "richLink.copyEmail": "复制邮箱地址",
+  "richLink.copied": "已复制",
+  "richLink.copyFailed": "复制失败",
 
   // 范围标签
   "scope.global": "范围：全局",
@@ -927,6 +935,8 @@ export const zh: Record<DictKey, string> = {
   "status.jobsLabel": "任务",
   "status.plan": "计划",
   "status.switchModel": "切换模型",
+  "providerUI.image": "图片",
+  "providerUI.manageModels": "管理模型",
   "modelSwitcher.searchPlaceholder": "搜索模型…",
   "modelSwitcher.noMatches": "没有匹配的模型",
   "status.noModels": "没有可切换模型",
@@ -965,6 +975,9 @@ export const zh: Record<DictKey, string> = {
   "status.effortAutoTitle": "推理力度：auto（模型默认：{def}）",
   "status.switchFolder": "{cwd}\n点击切换项目目录",
   "status.tokens": "tokens",
+  "status.recoveryNetwork": "网络暂时不可用",
+  "status.recoveryProvider": "服务暂时不可用",
+  "status.recoveryWaiting": "正在等待供应商恢复（{phase}），{seconds} 秒后重试；可点击停止。",
   "status.retrying": "正在重试 ({attempt}/{max})…",
   "status.balanceTitle": "钱包余额",
   "status.spendTitle": "当前会话估算计费费用，包含主模型、子代理和辅助调用",
@@ -1585,6 +1598,7 @@ export const zh: Record<DictKey, string> = {
 
 
   // 设置抽屉
+  "settings.backToWorkspace": "返回工作区",
   "settings.title": "设置",
   "settings.loading": "加载中…",
   "settings.loadFailed": "设置加载失败。",
@@ -3055,6 +3069,9 @@ export const zh: Record<DictKey, string> = {
   "msg.fileAttachment": "文件",
   "msg.imageAttachment": "图片",
   "msg.workspaceReference": "工作区引用",
+  "notice.protocolRecoveryAction": "从有效历史恢复",
+  "notice.protocolRecoveryBody": "上游未提供具体原因。可以重建请求中的历史视图并继续，保留已完成结果。",
+  "sources.notProvided": "搜索已完成，供应商未提供可用的结构化来源。",
   "sources.title": "来源",
   "sources.count": "{n} 条",
   "sources.hidden": "已隐藏 {n} 条",
@@ -3275,6 +3292,7 @@ export const zh: Record<DictKey, string> = {
   "subagent.phase.tool": "使用工具",
   "subagent.phase.retrying": "重试中",
   "subagent.phase.completed": "已完成",
+  "subagent.phase.partial": "部分完成",
   "subagent.phase.failed": "失败",
   "subagent.phase.cancelled": "已取消",
   "subagent.phase.elapsed": "{n} 秒",
@@ -3283,6 +3301,12 @@ export const zh: Record<DictKey, string> = {
   "subagent.preview.text": "回答预览",
   "subagent.preview.notice": "提示",
   "subagent.preview.truncated": "预览已截断",
+  "subagent.outcome.label": "子代理",
+  "subagent.outcome.completed": "已完成",
+  "subagent.outcome.partial": "部分完成",
+  "subagent.outcome.failed": "失败",
+  "subagent.outcome.cancelled": "已取消",
+  "subagent.outcome.retryable": "可重试",
 
   // 软件更新
   "config.loadWarning": "配置问题：{msg}",
