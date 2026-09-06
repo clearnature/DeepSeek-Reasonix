@@ -21,7 +21,6 @@ type OptionalSinkCapabilities interface {
 	AnchorSafetyAuditSink
 	ContractShadowAuditSink
 	CompletionReportAuditSink
-	CompletionValidationAuditSink
 	MemoryRecallSink
 	DelegationAdmissionSink
 	OutcomeProgressSink
@@ -49,10 +48,6 @@ func (f AuditForwarder) RecordContractShadow(a ContractShadowAudit) {
 
 func (f AuditForwarder) RecordCompletionReport(a CompletionReportAudit) {
 	RecordCompletionReport(f.Inner, a)
-}
-
-func (f AuditForwarder) RecordCompletionValidation(info CompletionValidationInfo) {
-	RecordCompletionValidation(f.Inner, info)
 }
 
 func (f AuditForwarder) RecordMemoryRecall(a MemoryRecallAudit) {

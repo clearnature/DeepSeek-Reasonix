@@ -608,6 +608,12 @@ type subagentProgressSink struct {
 
 var _ event.OptionalSinkCapabilities = (*subagentProgressSink)(nil)
 
+// RecordCompletionValidation keeps completion audits flowing to the parent
+// sink in child contexts; AuditForwarder no longer carries this retired contract.
+func (s *subagentProgressSink) RecordCompletionValidation(info event.CompletionValidationInfo) {
+	event.RecordCompletionValidation(s.Inner, info)
+}
+
 // newSubagentProgressTracker creates (or joins) the group merger and returns a
 // tracker for one child run. wrapSink is the sink the child's real tool events
 // already flow through; the tracker's own preview events are emitted through

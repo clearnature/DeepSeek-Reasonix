@@ -86,14 +86,6 @@ func (s *syncSink) RecordCompletionReport(a CompletionReportAudit) {
 	}
 }
 
-func (s *syncSink) RecordCompletionValidation(info CompletionValidationInfo) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if cs, ok := s.inner.(CompletionValidationAuditSink); ok {
-		cs.RecordCompletionValidation(info)
-	}
-}
-
 func (s *syncSink) RecordOutcomeProgress(sample evidence.OutcomeSample) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -643,6 +643,12 @@ type plannerEventSink struct {
 
 var _ event.OptionalSinkCapabilities = (*plannerEventSink)(nil)
 
+// RecordCompletionValidation keeps completion audits flowing to the host sink
+// in planner contexts; AuditForwarder no longer carries this retired contract.
+func (s *plannerEventSink) RecordCompletionValidation(info event.CompletionValidationInfo) {
+	event.RecordCompletionValidation(s.inner, info)
+}
+
 func (s *plannerEventSink) Emit(e event.Event) {
 	switch e.Kind {
 	case event.TurnStarted, event.TurnDone:
