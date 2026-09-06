@@ -1,8 +1,21 @@
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 BUILD_TIME_UTC := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GIT_COMMIT := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+# Local dated build version, e.g. v1.38.0-local-20260906. `git describe` can
+# return a desktop-module tag (desktop-vX.Y.Z), so pin the main release line
+# here and bump it on release; DATE_VERSION=… overrides wholesale.
+DATE_VERSION := v1.38.0-local-$(shell date +%Y%m%d)
 LDFLAGS := -s -w \
 	-X main.version=$(VERSION) \
+	-X main.gitCommit=$(GIT_COMMIT) \
+	-X main.buildTimeUTC=$(BUILD_TIME_UTC)
+# Desktop shares main.version etc but lives in the desktop/ module. Use
+# webkit2_41: the Linux build host has webkit2gtk-4.1 (not 4.0), and Wails
+# 2.13 selects the pkg-config target by build tag (webkit2_41 →
+# webkit2gtk-4.1 + libsoup-3.0). Without it wails probes webkit2gtk-4.0 and
+# fails on a 4.1-only host.
+DESKTOP_LDFLAGS := -s -w \
+	-X main.version=$(DATE_VERSION) \
 	-X main.gitCommit=$(GIT_COMMIT) \
 	-X main.buildTimeUTC=$(BUILD_TIME_UTC)
 GOEXE := $(shell go env GOEXE)
@@ -15,6 +28,17 @@ WAILS_VERSION := $(shell tr -d '[:space:]' < .wails-version)
 build:
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/reasonix$(GOEXE) ./cmd/reasonix
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/reasonix-plugin-example$(GOEXE) ./cmd/reasonix-plugin-example
+
+# Build the desktop app for the current OS with a dated local version. Wails
+# compiles the frontend from desktop/frontend (needs the frontend toolchain).
+# Linux: -tags webkit2_41 is required when the host ships webkit2gtk-4.1
+# (Wails 2.13 selects the pkg-config target by tag; default probes 4.0).
+# Override DESKTOP_TAGS= for other targets (darwin/windows ignore it).
+# Output: desktop/build/bin/reasonix-desktop (linux/darwin) or .exe (windows).
+DESKTOP_TAGS ?= webkit2_41
+.PHONY: desktop-build
+desktop-build:
+	cd desktop && wails build -tags "$(DESKTOP_TAGS)" -ldflags "$(DESKTOP_LDFLAGS)"
 
 vet:
 	go vet ./...
