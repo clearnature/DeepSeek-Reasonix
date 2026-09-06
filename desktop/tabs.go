@@ -245,6 +245,10 @@ type WorkspaceTab struct {
 	mcpOrder         []string
 	lastBuildResult  *boot.BuildResult // incremental extension reload
 
+	PinnedFiles              []string
+	pendingLegacyPinnedFiles []string // round-tripped until the session sidecar publishes
+	pinnedFilesMu            sync.RWMutex
+
 	// metaExtras caches the expensive MetaForTab fields (git branch, image
 	// input capability) computed off the request path by
 	// refreshTabMetaExtras. Lock-free reads keep MetaForTab synchronous and
@@ -6065,20 +6069,33 @@ func (a *App) forkTopicTitle(title string) string {
 }
 
 type sessionRecoveryEvent struct {
-	OriginalPath     string `json:"originalPath,omitempty"`
-	RecoveryPath     string `json:"recoveryPath"`
-	Scope            string `json:"scope,omitempty"`
-	WorkspaceRoot    string `json:"workspaceRoot,omitempty"`
-	TopicID          string `json:"topicId,omitempty"`
-	TopicTitle       string `json:"topicTitle,omitempty"`
-	RecoveryReason   string `json:"recoveryReason,omitempty"`
-	RecoveryDigest   string `json:"recoveryDigest,omitempty"`
-	RecoveryParentID string `json:"recoveryParentId,omitempty"`
-	Existing         bool   `json:"existing,omitempty"`
+	ConversationID    string `json:"conversationId,omitempty"`
+	ActiveVersionID   string `json:"activeVersionId,omitempty"`
+	RecoveryVersionID string `json:"recoveryVersionId,omitempty"`
+	OriginalPath      string `json:"originalPath,omitempty"`
+	RecoveryPath      string `json:"recoveryPath"`
+	Scope             string `json:"scope,omitempty"`
+	WorkspaceRoot     string `json:"workspaceRoot,omitempty"`
+	TopicID           string `json:"topicId,omitempty"`
+	TopicTitle        string `json:"topicTitle,omitempty"`
+	RecoveryReason    string `json:"recoveryReason,omitempty"`
+	RecoveryDigest    string `json:"recoveryDigest,omitempty"`
+	RecoveryParentID  string `json:"recoveryParentId,omitempty"`
+	Existing          bool   `json:"existing,omitempty"`
+	BaseRevision      int64  `json:"baseRevision,omitempty"`
+	DiskRevision      int64  `json:"diskRevision,omitempty"`
+	CanContinue       bool   `json:"canContinue"`
+	RequiresChoice    bool   `json:"requiresChoice"`
 }
 
 type sessionRecoveryFailedEvent struct {
-	Reason string `json:"reason,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	ConversationID  string `json:"conversationId,omitempty"`
+	TopicID         string `json:"topicId,omitempty"`
+	RecoveryPath    string `json:"recoveryPath,omitempty"`
+	WorkspaceRoot   string `json:"workspaceRoot,omitempty"`
+	CanContinue     bool   `json:"canContinue"`
+	RecoveryPending bool   `json:"recoveryPending"`
 }
 
 func (a *App) tabSessionRecoveryMeta(tab *WorkspaceTab) func(control.SessionRecoveryRequest) agent.BranchMeta {
@@ -6132,78 +6149,6 @@ func (a *App) tabSessionRecoveryMeta(tab *WorkspaceTab) func(control.SessionReco
 			ToolApprovalMode: persistedToolApprovalMode(toolApprovalMode),
 			Goal:             goal,
 		}
-	}
-}
-
-func (a *App) handleTabSessionRecovered(tab *WorkspaceTab) func(control.SessionRecoveryInfo) error {
-	return func(info control.SessionRecoveryInfo) error {
-		if strings.TrimSpace(info.RecoveryPath) == "" {
-			return nil
-		}
-		if err := a.handoffTabRecoveryLease(tab, info.RecoveryPath); err != nil {
-			return err
-		}
-		meta := info.Meta
-		scope := strings.TrimSpace(meta.Scope)
-		if scope != "project" {
-			scope = "global"
-		}
-		workspaceRoot := strings.TrimSpace(meta.WorkspaceRoot)
-		if scope == "global" {
-			workspaceRoot = ""
-		}
-		invalidateTopicSessionIndexForPath(info.RecoveryPath)
-		a.mu.Lock()
-		if tab != nil && !tab.removed {
-			oldKey := sessionRuntimeKey(info.OriginalPath)
-			newKey := sessionRuntimeKey(info.RecoveryPath)
-			if oldKey != "" && newKey != "" && a.detachedSessions[oldKey] == tab {
-				delete(a.detachedSessions, oldKey)
-				a.ensureDetachedSessionsLocked()
-				a.detachedSessions[newKey] = tab
-			}
-			tab.SessionPath = canonicalTabSessionPath(info.RecoveryPath)
-			if a.tabs[tab.ID] == tab {
-				a.saveTabsLocked()
-			}
-		}
-		a.mu.Unlock()
-		// The fork continues the same conversation, so its cost history moves
-		// with it: re-key the in-memory telemetry from the original session to
-		// the recovery path and persist the sidecar right away. Without this
-		// the fork's sidecar stays empty until the next usage event (cost
-		// shows 0 after a restart), and the sync-by-key reload would wipe the
-		// carried totals as "another session's" numbers.
-		if tab != nil && !tab.removed {
-			origKey := sessionRuntimeKey(info.OriginalPath)
-			newKey := sessionRuntimeKey(info.RecoveryPath)
-			carried := false
-			if newKey != "" {
-				tab.telemMu.Lock()
-				if tab.telemetrySessionKey == origKey || tab.telemetrySessionKey == "" {
-					tab.telemetrySessionKey = newKey
-					carried = true
-				}
-				tab.telemMu.Unlock()
-			}
-			if carried {
-				_ = saveTelemetry(info.RecoveryPath+".telemetry.json", tab.telemetrySnapshot())
-			}
-		}
-		a.emitSessionRecoveredAndRefresh(sessionDirectoryForPath(info.RecoveryPath), sessionRecoveryEvent{
-			OriginalPath:     info.OriginalPath,
-			RecoveryPath:     info.RecoveryPath,
-			Scope:            scope,
-			WorkspaceRoot:    workspaceRoot,
-			TopicID:          meta.TopicID,
-			TopicTitle:       meta.TopicTitle,
-			RecoveryReason:   meta.RecoveryReason,
-			RecoveryDigest:   meta.RecoveryDigest,
-			RecoveryParentID: string(meta.ParentID),
-			Existing:         info.Existing,
-		})
-		a.invalidatePromptHistoryCache()
-		return nil
 	}
 }
 
