@@ -577,7 +577,7 @@ type Event struct {
 	// PhaseName is set on TurnPhase events (working|checking|verifying|reviewing).
 	PhaseName TurnPhaseName
 	// Completion is set on CompletionSummary events.
-	Completion    *CompletionSummaryInfo
+	Completion     *CompletionSummaryInfo
 	MCPInteraction MCPInteraction // MCPInteractionRequest
 }
 

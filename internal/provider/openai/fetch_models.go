@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"reasonix/internal/netclient"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"reasonix/internal/netclient"
 	"sort"
 	"strings"
 	"time"
@@ -35,7 +35,7 @@ const (
 type FetchModelsOptions struct {
 	Headers  map[string]string
 	AuthMode ModelFetchAuthMode
-	Proxy netclient.ProxySpec
+	Proxy    netclient.ProxySpec
 }
 
 func (e modelFetchStatusError) Error() string {
