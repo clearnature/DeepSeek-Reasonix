@@ -2,10 +2,10 @@
   "limits": {
     "banner": 46,
     "commented-code": 1,
-    "complexity": 2008,
-    "essay": 2169,
-    "file-size": 109925,
-    "function-size": 8718,
+    "complexity": 2007,
+    "essay": 2166,
+    "file-size": 110093,
+    "function-size": 8700,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -32,7 +32,7 @@
     "desktop/app.go": {
       "complexity": 57,
       "essay": 71,
-      "file-size": 11331,
+      "file-size": 11338,
       "function-size": 343,
       "struct-state": 15
     },
@@ -387,7 +387,7 @@
     "internal/agent/agent.go": {
       "complexity": 31,
       "essay": 25,
-      "file-size": 2103,
+      "file-size": 2122,
       "function-size": 104,
       "struct-state": 7
     },
@@ -411,8 +411,8 @@
     },
     "internal/agent/compact_projection.go": {
       "essay": 7,
-      "file-size": 60,
-      "function-size": 12
+      "file-size": 139,
+      "function-size": 23
     },
     "internal/agent/context_manager.go": {
       "essay": 1
@@ -581,7 +581,7 @@
     "internal/agent/task.go": {
       "complexity": 19,
       "essay": 12,
-      "file-size": 1195,
+      "file-size": 1206,
       "function-size": 99
     },
     "internal/agent/task_test.go": {
@@ -739,10 +739,10 @@
       "essay": 6
     },
     "internal/cli/chat_tui.go": {
-      "complexity": 321,
+      "complexity": 320,
       "essay": 86,
-      "file-size": 4762,
-      "function-size": 1299
+      "file-size": 4817,
+      "function-size": 1291
     },
     "internal/cli/chat_tui_paste.go": {
       "essay": 6
@@ -753,9 +753,9 @@
     },
     "internal/cli/cli.go": {
       "complexity": 75,
-      "essay": 24,
-      "file-size": 1936,
-      "function-size": 501
+      "essay": 22,
+      "file-size": 1935,
+      "function-size": 500
     },
     "internal/cli/cli_test.go": {
       "essay": 1,
@@ -763,7 +763,7 @@
     },
     "internal/cli/complete.go": {
       "essay": 3,
-      "file-size": 54
+      "file-size": 52
     },
     "internal/cli/complete_test.go": {
       "test-file-size": 15
@@ -859,7 +859,7 @@
       "essay": 1
     },
     "internal/cli/tui_diagnostics.go": {
-      "function-size": 9
+      "function-size": 4
     },
     "internal/cli/upgrade.go": {
       "complexity": 1,
@@ -1557,9 +1557,6 @@
     "internal/tool/builtin/glob.go": {
       "essay": 3
     },
-    "internal/tool/builtin/grep.go": {
-      "essay": 1
-    },
     "internal/tool/builtin/multiedit.go": {
       "essay": 1
     },
@@ -1568,9 +1565,6 @@
     },
     "internal/tool/builtin/preview.go": {
       "essay": 7
-    },
-    "internal/tool/builtin/readfile.go": {
-      "function-size": 15
     },
     "internal/tool/builtin/retrieve.go": {
       "essay": 1
