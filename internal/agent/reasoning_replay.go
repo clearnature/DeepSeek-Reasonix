@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"slices"
 	"strings"
 
@@ -8,41 +9,48 @@ import (
 	"reasonix/internal/provider"
 )
 
-func (a *Agent) preserveRawReasoning(reasoning, signature, reasoningID, reasoningStatus string, calls []provider.ToolCall, searches []provider.ServerSearchCall) bool {
+func (a *Agent) runMissingReasoningFallback(
+	ctx context.Context,
+	turn int,
+	frozen *samplingRequest,
+	attemptID string,
+	attempt int,
+	billable *provider.Usage,
+	discarded ...*deferredStreamSink,
+) (streamedTurn, bool) {
+	if !a.activateMissingReasoningFallback() {
+		return streamedTurn{}, false
+	}
+	for _, sink := range discarded {
+		if sink != nil {
+			sink.Discard()
+		}
+	}
+	event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningFallback})
+	a.emitProtocolRetry(2, true)
+	fallbackSink := newDeferredStreamSink(a.svc.sink)
+	fallback := a.runSamplingAttempt(ctx, turn, fallbackSink, frozen, attemptID)
+	billable = mergeSamplingUsage(billable, fallback.usage)
+	a.storeLatestRequestUsage(fallback.usage)
+	fallback.usage = finalizeSamplingUsage(billable, fallback.usage)
+	if fallback.err != nil {
+		fallbackSink.Discard()
+		a.emitReasoningReplayAttemptOutcome(attemptID, attempt, fallback.err)
+		return fallback, true
+	}
+	fallbackSink.Flush()
+	event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetryRecovered})
+	a.emitReasoningReplayAttemptOutcome(attemptID, attempt, nil)
+	return fallback, true
+}
+
+func (a *Agent) preserveRawReasoning(signature, reasoningID, reasoningStatus string, calls []provider.ToolCall, searches []provider.ServerSearchCall) bool {
 	if signature != "" || reasoningID != "" || reasoningStatus != "" {
 		return true
 	}
 	return provider.RequiresAssistantReasoningReplay(a.svc.prov, provider.Message{
-		Role: provider.RoleAssistant, ReasoningContent: reasoning, ToolCalls: calls, ServerSearch: searches,
+		Role: provider.RoleAssistant, ToolCalls: calls, ServerSearch: searches,
 	})
-}
-
-// reasoningReplayMessageFingerprint identifies the last provider-visible
-// message at the original repair boundary. It deliberately ignores durable UI fields,
-// matching the same wire-visible fields used by the context projection hash.
-func reasoningReplayMessageFingerprint(message provider.Message) string {
-	return providerVisibleFingerprint(provider.ModelMessages([]provider.Message{message}))
-}
-
-// resolveReasoningReplayPrefix maps the repaired provider prefix back onto a
-// later canonical snapshot. Strong repair can remove old assistant/tool
-// messages, so a raw message count alone can point into a different old turn.
-func resolveReasoningReplayPrefix(msgs []provider.Message, hint int, anchor string) int {
-	if hint <= 0 || hint > len(msgs) {
-		return 0
-	}
-	if anchor == "" {
-		return hint
-	}
-	// Removed messages only make the canonical location move forward. Prefer
-	// the first matching anchor at/after the old provider-visible count; this
-	// also avoids selecting an earlier duplicate user message.
-	for i, message := range msgs {
-		if i+1 >= hint && reasoningReplayMessageFingerprint(message) == anchor {
-			return i + 1
-		}
-	}
-	return 0
 }
 
 func (a *Agent) emitReasoningReplayAttemptOutcome(id string, attempt int, err error) {
@@ -54,36 +62,44 @@ func (a *Agent) emitReasoningReplayAttemptOutcome(id string, attempt int, err er
 }
 
 func (a *Agent) reasoningReplayIssue(result streamedTurn) ReasoningReplayFailure {
-	decision := provider.DecideReasoningReplay(a.svc.prov, result.assistantMessage(), result.reasoningComplete)
-	if decision == provider.ReplayDirect || decision == provider.ReplayCompatible {
+	if a.sess.missingReasoning.fallbackActive && provider.SupportsMissingReasoningFallback(a.svc.prov) {
 		return ""
 	}
-	if result.reasoningState == provider.ReasoningIncomplete || result.reasoningStatus == "in_progress" || result.reasoningStatus == "incomplete" {
-		return ReasoningReplayIncomplete
+	if !provider.RequiresAssistantReasoningReplay(a.svc.prov, result.assistantMessage()) {
+		return ""
 	}
-	if !result.reasoningComplete || result.reasoningState == provider.ReasoningTruncated {
+	if !result.reasoningComplete {
 		return ReasoningReplayOverflow
 	}
-	if decision == provider.ReplayReject {
-		return ReasoningReplayIncomplete
-	}
-	if !provider.HasReplayableReasoning(a.svc.prov, result.assistantMessage()) {
+	if strings.TrimSpace(result.reasoning) == "" {
 		return ReasoningReplayMissing
 	}
 	return ""
 }
 
-// finishReasoningReplayOverflow terminates an attempt whose required reasoning
-// was truncated by the client limit: audit, finalize usage, and hand the turn
-// to the unreplayable-reasoning policy.
-func (a *Agent) finishReasoningReplayOverflow(result streamedTurn, sink *deferredStreamSink, issue ReasoningReplayFailure, billable *provider.Usage, attemptID string, attempt int) streamedTurn {
-	if issue == ReasoningReplayOverflow {
-		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryReasoningOverflowDetected})
+func (a *Agent) finishReasoningReplayRetry(retry streamedTurn, sink *deferredStreamSink, billable *provider.Usage) streamedTurn {
+	a.storeLatestRequestUsage(retry.usage)
+	retry.usage = finalizeSamplingUsage(billable, retry.usage)
+	issue := a.reasoningReplayIssue(retry)
+	if issue != "" {
+		if issue == ReasoningReplayMissing {
+			a.observeMissingAssistantReasoning(retry.assistantMessage(), retry.reasoningComplete)
+		} else {
+			event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryReasoningOverflowDetected})
+		}
+		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningDetected})
+		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningFallback})
+		return a.finishUnreplayableReasoning(retry, sink, issue)
 	}
-	result.usage = finalizeSamplingUsage(billable, result.usage)
-	terminal := a.finishUnreplayableReasoning(result, sink, issue)
-	a.emitReasoningReplayAttemptOutcome(attemptID, attempt, terminal.err)
-	return terminal
+	if len(retry.calls) == 0 && len(retry.serverSearch) == 0 {
+		sink.Flush()
+		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetryReplaced})
+		return retry
+	}
+	a.observeMissingAssistantReasoning(retry.assistantMessage(), retry.reasoningComplete)
+	sink.Flush()
+	event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryMissingReasoningRetryRecovered})
+	return retry
 }
 
 func (a *Agent) finishUnreplayableReasoning(result streamedTurn, sink *deferredStreamSink, issue ReasoningReplayFailure) streamedTurn {
@@ -94,14 +110,14 @@ func (a *Agent) finishUnreplayableReasoning(result streamedTurn, sink *deferredS
 	// Empty can replace reasoning the provider never emitted, never reasoning
 	// truncated by the client limit: preserved-thinking protocols require the
 	// returned content to remain complete and unchanged.
-	allowsEmptyReasoning := issue == ReasoningReplayMissing && provider.AllowsEmptyReasoningFallback(a.svc.prov)
-	if len(result.calls) > 0 && !allowsEmptyReasoning {
+	allowsFallback := issue == ReasoningReplayMissing && provider.AllowsEmptyReasoningFallback(a.svc.prov)
+	if len(result.calls) > 0 && !allowsFallback {
 		sink.Discard()
 		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryClientToolRejected})
 		result.err = &ReasoningReplayError{Kind: issue}
 		return result
 	}
-	if len(result.serverSearch) > 0 && !allowsEmptyReasoning {
+	if len(result.serverSearch) > 0 && !allowsFallback {
 		if strings.TrimSpace(result.text) == "" {
 			sink.Discard()
 			result.err = &ReasoningReplayError{Kind: issue}
@@ -118,7 +134,7 @@ func (a *Agent) finishUnreplayableReasoning(result streamedTurn, sink *deferredS
 		event.RecordProtocolRecovery(a.svc.sink, event.ProtocolRecoveryAudit{Kind: event.ProtocolRecoveryServerSearchSalvaged})
 		return result
 	}
-	if provider.RequiresReasoningRoundTrip(a.svc.prov) && !allowsEmptyReasoning {
+	if provider.RequiresReasoningRoundTrip(a.svc.prov) && !allowsFallback {
 		sink.Discard()
 		result.err = &ReasoningReplayError{Kind: issue}
 		return result
@@ -132,7 +148,12 @@ func (a *Agent) finishUnreplayableReasoning(result streamedTurn, sink *deferredS
 // CanReplayAssistantMessage lets the controller apply the provider-specific
 // half of interrupted-turn validation without exposing the provider itself.
 func (a *Agent) CanReplayAssistantMessage(m provider.Message) bool {
-	return a == nil || provider.CanReplayAssistantMessage(a.svc.prov, m)
+	if a == nil || provider.AllowsEmptyReasoningFallback(a.svc.prov) ||
+		(a.sess.missingReasoning.fallbackActive && provider.SupportsMissingReasoningFallback(a.svc.prov)) ||
+		!provider.RequiresAssistantReasoningReplay(a.svc.prov, m) {
+		return true
+	}
+	return strings.TrimSpace(m.ReasoningContent) != ""
 }
 
 // ensureUnreplayableHistoryRecovery installs one existing-format LocalOnly
@@ -143,12 +164,15 @@ func (a *Agent) ensureUnreplayableHistoryRecovery() {
 	if a == nil || a.sess.conversation == nil {
 		return
 	}
-
+	if provider.AllowsEmptyReasoningFallback(a.svc.prov) ||
+		(a.sess.missingReasoning.fallbackActive && provider.SupportsMissingReasoningFallback(a.svc.prov)) {
+		return
+	}
 	msgs := a.sess.conversation.Snapshot()
 	latestBad := -1
 	recovery := &provider.InterruptedTurnRecovery{Pending: true}
 	for i, m := range msgs {
-		if m.Role != provider.RoleAssistant || provider.CanReplayAssistantMessage(a.svc.prov, m) {
+		if m.Role != provider.RoleAssistant || !provider.RequiresAssistantReasoningReplay(a.svc.prov, m) || strings.TrimSpace(m.ReasoningContent) != "" {
 			continue
 		}
 		latestBad = i
@@ -161,11 +185,11 @@ func (a *Agent) ensureUnreplayableHistoryRecovery() {
 			if name == "" {
 				continue
 			}
-			state := provider.ToolRunUnknown
-			if result, ok := results[call.ID+"\x00"+name]; ok {
-				state = provider.ToolResultRunState(result)
+			if _, ok := results[call.ID+"\x00"+name]; ok {
+				recovery.CompletedTools = append(recovery.CompletedTools, provider.InterruptedToolSummary{ID: call.ID, Name: name})
+			} else {
+				recovery.InterruptedTools = appendUniqueRecoveryName(recovery.InterruptedTools, name)
 			}
-			provider.RecordToolRecovery(recovery, provider.InterruptedToolSummary{ID: call.ID, Name: name}, state)
 		}
 		for _, search := range m.ServerSearch {
 			if len(search.Results) > 0 || len(search.Raw) > 0 {

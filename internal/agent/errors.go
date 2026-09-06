@@ -13,7 +13,6 @@ type ReasoningReplayFailure string
 const (
 	ReasoningReplayMissing      ReasoningReplayFailure = "missing_required_reasoning"
 	ReasoningReplayOverflow     ReasoningReplayFailure = "reasoning_overflow"
-	ReasoningReplayIncomplete   ReasoningReplayFailure = "incomplete_reasoning"
 	ReasoningReplayUnreplayable ReasoningReplayFailure = "unreplayable_history"
 )
 
@@ -25,9 +24,6 @@ type ReasoningReplayError struct {
 }
 
 func (e *ReasoningReplayError) Error() string {
-	if e != nil && e.Kind == ReasoningReplayIncomplete {
-		return "The provider ended the response with unfinished reasoning. Reasonix kept existing work and did not run the requested tools; retry to continue safely."
-	}
 	if e != nil && e.Kind == ReasoningReplayOverflow {
 		return "The provider reasoning exceeded the client safety limit, so Reasonix did not run the requested tools. Existing work was kept; retry to continue safely."
 	}

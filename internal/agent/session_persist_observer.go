@@ -80,7 +80,7 @@ func (s *Session) saveObserved(path string, mode sessionSaveMode) error {
 		}
 	}
 	err := s.save(path, mode)
-	if err == nil && !mode.defersProjection() {
+	if err == nil {
 		s.notifyPersisted(path, mode != sessionSaveSnapshot, appendFrom)
 	}
 	return err

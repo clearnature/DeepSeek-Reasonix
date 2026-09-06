@@ -8,7 +8,7 @@ import (
 
 func encodeResponsesTools(c *client, req provider.Request) []map[string]any {
 	tools := make([]map[string]any, 0, len(req.Tools)+1)
-	if c.search.NativeEnabled && !c.search.ClientEnabled {
+	if c.webSearch {
 		tools = append(tools, map[string]any{"type": "web_search"})
 	}
 	for _, tool := range req.Tools {

@@ -1138,28 +1138,18 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/prompt: unknown session " + p.SessionID}
 	}
 	text := FlattenPrompt(p.Prompt)
-	if text == "" && p.Action != control.ProtocolRecoveryAction {
+	if text == "" {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/prompt: empty prompt"}
 	}
-	protocolRecovery := p.Action == control.ProtocolRecoveryAction
-	if protocolRecovery && p.RecoveryID == "" {
-		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/prompt: missing recoveryId"}
-	}
 	recovery := p.Action == control.FinalReadinessRecoveryAction
-	if p.Action != "" && !recovery && !protocolRecovery {
+	if p.Action != "" && !recovery {
 		return nil, &RPCError{Code: ErrInvalidParams, Message: "session/prompt: unsupported action " + p.Action}
 	}
-	if p.Action == "" {
-		if id, guidance, ok := control.ParseProtocolRecoveryCommand(text); ok {
-			protocolRecovery = true
-			p.RecoveryID = id
-			text = guidance
-		} else if prompt, ok := control.ParseFinalReadinessRecoveryCommand(text); ok {
-			recovery = true
-			text = prompt
-		} else {
-			text = s.resolveSlashPrompt(ctx, sess, text)
-		}
+	if prompt, ok := control.ParseFinalReadinessRecoveryCommand(text); ok {
+		recovery = true
+		text = prompt
+	} else {
+		text = s.resolveSlashPrompt(ctx, sess, text)
 	}
 
 	runCtx, cancel, ok := sess.begin(ctx)
@@ -1186,22 +1176,11 @@ func (s *service) sessionPrompt(ctx context.Context, raw json.RawMessage) (any, 
 		statusStarted = true
 	}
 	var runErr error
-	if protocolRecovery {
-		if runner, ok := sess.ctrl.(interface {
-			RunProtocolRecoveryWithAdmission(context.Context, string, string, func()) error
-		}); ok {
-			runErr = runner.RunProtocolRecoveryWithAdmission(runCtx, p.RecoveryID, text, beginTurn)
-		} else {
-			return nil, &RPCError{Code: ErrInvalidRequest, Message: "protocol recovery is unsupported by this controller"}
-		}
-	} else if recovery {
+	if recovery {
 		runErr = sess.ctrl.RunFinalReadinessRecoveryWithAdmission(runCtx, text, beginTurn)
 	} else {
 		beginTurn()
 		runErr = sess.ctrl.RunTurn(runCtx, text)
-	}
-	if errors.Is(runErr, agent.ErrProtocolRecoveryUnavailable) && !statusStarted {
-		return nil, &RPCError{Code: ErrInvalidRequest, Message: "session/prompt: protocol recovery is unavailable or stale"}
 	}
 	if errors.Is(runErr, control.ErrNoFinalReadinessRecovery) && !statusStarted {
 		return nil, &RPCError{

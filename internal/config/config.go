@@ -1434,9 +1434,11 @@ type ProviderEntry struct {
 	// (the field is omitted). "low" caps an image to a fixed ~85 tokens for cheap
 	// coarse reads; ignored by providers without the knob (e.g. anthropic).
 	VisionDetail string `toml:"vision_detail"`
-	// WebSearch enables independent search with this account. Nil uses the
-	// official DeepSeek default; explicit values and legacy native search
-	// history survive config rewrites.
+	// WebSearch controls the provider-executed web_search tool for compatible
+	// Anthropic and Responses endpoints. Nil lets official DeepSeek endpoints use
+	// their product default; non-nil preserves an explicit user choice across
+	// config rewrites. DeepSeek returns web_search_tool_result blocks on the
+	// Anthropic wire and response.web_search_call events on the Responses wire.
 	WebSearch *bool `toml:"web_search"`
 	// ReasoningProtocol selects the request shape for OpenAI-compatible reasoning
 	// models. Empty/auto uses the model capability registry plus endpoint
@@ -1916,7 +1918,7 @@ const FormatDisciplinePolicy = `Use standard punctuation in replies and reasonin
 // Default returns the built-in default configuration.
 func Default() *Config {
 	return &Config{
-		ConfigVersion:    8,
+		ConfigVersion:    7,
 		DefaultModel:     "deepseek-flash",
 		CredentialsStore: CredentialsStoreAuto,
 		UI:               UIConfig{Theme: "auto", ShowTurnUsage: true},
@@ -1974,11 +1976,12 @@ func Default() *Config {
 			Dingtalk:           DingtalkBotConfig{RequireMention: true},
 			Weixin:             WeixinBotConfig{AccountID: "default", TokenEnv: "WEIXIN_BOT_TOKEN", APIBase: "https://ilinkai.weixin.qq.com"},
 		},
-		// Main conversations use Chat Completions; independent web_search uses
-		// the official Messages endpoint with the same account.
+		// New installs use DeepSeek's Anthropic-compatible Messages endpoint so
+		// provider-executed web search is available by default. Existing explicit
+		// provider entries are merged on top, keeping their configured protocol.
 		Providers: []ProviderEntry{
 			{
-				Name: "deepseek-flash", Kind: "openai", BaseURL: "https://api.deepseek.com",
+				Name: "deepseek-flash", Kind: "anthropic", BaseURL: deepSeekAnthropicBaseURL,
 				Model: "deepseek-v4-flash", APIKeyEnv: "DEEPSEEK_API_KEY",
 				BalanceURL: "https://api.deepseek.com/user/balance", Thinking: "enabled",
 				WebSearch: boolPointer(true), SupportedEfforts: []string{"disabled", "low", "high", "max"}, DefaultEffort: "high",
@@ -1986,7 +1989,7 @@ func Default() *Config {
 				BillingCurrency: "USD", BillingMode: "payg",
 			},
 			{
-				Name: "deepseek-pro", Kind: "openai", BaseURL: "https://api.deepseek.com",
+				Name: "deepseek-pro", Kind: "anthropic", BaseURL: deepSeekAnthropicBaseURL,
 				Model: "deepseek-v4-pro", APIKeyEnv: "DEEPSEEK_API_KEY",
 				BalanceURL: "https://api.deepseek.com/user/balance", Thinking: "enabled",
 				WebSearch: boolPointer(true), SupportedEfforts: []string{"disabled", "low", "high", "max"}, DefaultEffort: "high",

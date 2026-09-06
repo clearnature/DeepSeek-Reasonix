@@ -55,6 +55,9 @@ func TokenModeFromAgentPreset(preset string) string {
 // CoreProviderToolNames is the stable top-level tool surface shared by every
 // Agent role setting under identical configuration. Host-control tools
 // (ask, update_goal, todo_write, complete_step) are appended when enabled.
+// retrieve_info rides the core surface so every interactive session can query
+// the knowledge-cache pipeline (zero-cost local lookups, deepseek web_search
+// on miss) without dropping to the capability catalog.
 func CoreProviderToolNames() []string {
 	return []string{
 		"bash",
@@ -66,7 +69,7 @@ func CoreProviderToolNames() []string {
 		"write_file",
 		"compress",
 		"use_capability",
-		"web_search",
+		"retrieve_info",
 	}
 }
 

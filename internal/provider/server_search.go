@@ -16,11 +16,10 @@ type ServerSearchHit struct {
 // Query/Results; Anthropic replay uses ID + Raw. omitempty keeps old sessions
 // byte-compatible.
 type ServerSearchCall struct {
-	SourcesStatus string            `json:"sources_status,omitempty"`
-	ID            string            `json:"id"`
-	Query         string            `json:"query,omitempty"`
-	Results       []ServerSearchHit `json:"results,omitempty"`
-	Raw           json.RawMessage   `json:"raw,omitempty"`
+	ID      string            `json:"id"`
+	Query   string            `json:"query,omitempty"`
+	Results []ServerSearchHit `json:"results,omitempty"`
+	Raw     json.RawMessage   `json:"raw,omitempty"`
 }
 
 type wireSearchHit struct {
@@ -104,14 +103,6 @@ func FormatServerSearchFootnotes(hits []ServerSearchHit) string {
 
 // ParseServerSearchOutput reads title/URL pairs from FormatServerSearchOutput.
 func ParseServerSearchOutput(output string) []ServerSearchHit {
-	// Independent searches carry a summary alongside sources. Keep accepting
-	// the original title/URL output so old sessions render unchanged.
-	var result struct {
-		Sources []ServerSearchHit `json:"sources"`
-	}
-	if strings.HasPrefix(strings.TrimSpace(output), "{") && json.Unmarshal([]byte(output), &result) == nil && result.Sources != nil {
-		return result.Sources
-	}
 	var out []ServerSearchHit
 	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
@@ -163,10 +154,7 @@ func ServerSearchFromResponsesItem(raw json.RawMessage) *ServerSearchCall {
 		Type   string `json:"type"`
 		Status string `json:"status"`
 		Action struct {
-			Type    string   `json:"type"`
-			Query   string   `json:"query"`
-			Queries []string `json:"queries"`
-			URL     string   `json:"url"`
+			Query   string `json:"query"`
 			Sources []struct {
 				URL   string `json:"url"`
 				Title string `json:"title"`
@@ -177,15 +165,6 @@ func ServerSearchFromResponsesItem(raw json.RawMessage) *ServerSearchCall {
 		return nil
 	}
 	call := &ServerSearchCall{ID: item.ID, Query: strings.TrimSpace(item.Action.Query), Raw: append(json.RawMessage(nil), raw...)}
-	if call.Query == "" {
-		call.Query = strings.Join(item.Action.Queries, "\n")
-	}
-	// DeepSeek returns visited URLs on open_page/find_in_page actions even
-	// when search actions omit sources and message annotations are empty.
-	// Use that structured evidence; never infer sources from generated prose.
-	if item.Status == "completed" && (item.Action.Type == "open_page" || item.Action.Type == "find_in_page") && item.Action.URL != "" {
-		call.Results = append(call.Results, ServerSearchHit{URL: item.Action.URL})
-	}
 	for _, src := range item.Action.Sources {
 		if src.Title == "" && src.URL == "" {
 			continue
@@ -210,7 +189,6 @@ func WalkServerSearchEstimate(search ServerSearchCall, visit func(string)) {
 
 // MergeServerSearch upserts call into dst by ID, filling query/results/raw.
 func MergeServerSearch(dst []ServerSearchCall, call ServerSearchCall) []ServerSearchCall {
-	call.SourcesStatus = ServerSearchSourcesStatus(call)
 	if strings.TrimSpace(call.ID) == "" {
 		return dst
 	}
@@ -220,9 +198,6 @@ func MergeServerSearch(dst []ServerSearchCall, call ServerSearchCall) []ServerSe
 		}
 		if call.Query != "" {
 			dst[i].Query = call.Query
-		}
-		if call.SourcesStatus != "" {
-			dst[i].SourcesStatus = call.SourcesStatus
 		}
 		if len(call.Results) > 0 {
 			dst[i].Results = append([]ServerSearchHit(nil), call.Results...)
@@ -240,10 +215,4 @@ func MergeServerSearch(dst []ServerSearchCall, call ServerSearchCall) []ServerSe
 		copied.Raw = append(json.RawMessage(nil), call.Raw...)
 	}
 	return append(dst, copied)
-}
-
-// SearchPolicy separates native search injection from an independent client tool.
-type SearchPolicy struct {
-	NativeEnabled bool
-	ClientEnabled bool
 }

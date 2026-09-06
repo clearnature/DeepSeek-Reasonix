@@ -9,11 +9,17 @@ import (
 )
 
 func deepSeekV4FlashPriceCNY() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.10, Input: 3, Output: 9, Currency: "¥"}
+	return &provider.Pricing{
+		CacheHit: 0.05, Input: 1.5, Output: 4.5, Currency: "¥",
+		PeakCacheHit: 0.10, PeakInput: 3, PeakOutput: 9,
+	}
 }
 
 func deepSeekV4ProPriceCNY() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.30, Input: 9, Output: 27, Currency: "¥"}
+	return &provider.Pricing{
+		CacheHit: 0.15, Input: 4.5, Output: 13.5, Currency: "¥",
+		PeakCacheHit: 0.30, PeakInput: 9, PeakOutput: 27,
+	}
 }
 
 func deepSeekV4PricesCNY() map[string]*provider.Pricing {
@@ -167,9 +173,13 @@ func isStandardDeepSeekProviderTemplate(p *ProviderEntry) bool {
 	if p == nil || officialProviderKind(p) != "deepseek" {
 		return false
 	}
+	// Price/Prices 未改（仍是官方默认或未设）才算标准模板——用户改了价格
+	// （如自定义 USD 表）则 provenance 保留，locale 自动刷新不得覆盖
+	// （#4814 残余：标准模板+只改价格组合曾被无条件刷新成 CNY）。
 	return strings.TrimSpace(p.APIKeyEnv) == "DEEPSEEK_API_KEY" &&
 		strings.TrimSpace(p.BalanceURL) == "https://api.deepseek.com/user/balance" &&
-		p.ContextWindow == 1_000_000
+		p.ContextWindow == 1_000_000 &&
+		p.Price == nil && len(p.Prices) == 0
 }
 
 func completeDeepSeekOfficialPricingCurrency(p *ProviderEntry) string {
@@ -203,15 +213,15 @@ func completeDeepSeekOfficialPricingCurrency(p *ProviderEntry) string {
 }
 
 func mimoV25ProPrice() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.025, Input: 3, Output: 6, Currency: "¥"}
+	return &provider.Pricing{CacheHit: 0.025, Input: 3, Output: 6, Currency: "¥", Estimated: true}
 }
 
 func mimoV25Price() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.02, Input: 1, Output: 2, Currency: "¥"}
+	return &provider.Pricing{CacheHit: 0.02, Input: 1, Output: 2, Currency: "¥", Estimated: true}
 }
 
 func mimoV2FlashPrice() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.07, Input: 0.70, Output: 2.10, Currency: "¥"}
+	return &provider.Pricing{CacheHit: 0.07, Input: 0.70, Output: 2.10, Currency: "¥", Estimated: true}
 }
 
 func mimoDomesticPrices(models []string) map[string]*provider.Pricing {
@@ -230,7 +240,7 @@ func mimoDomesticPrices(models []string) map[string]*provider.Pricing {
 }
 
 func longCat20Price() *provider.Pricing {
-	return &provider.Pricing{CacheHit: 0.04, Input: 2, Output: 8, Currency: "¥"}
+	return &provider.Pricing{CacheHit: 0.04, Input: 2, Output: 8, Currency: "¥", Estimated: true}
 }
 
 func longCat20Prices(models []string) map[string]*provider.Pricing {
@@ -277,25 +287,11 @@ func ApplyUserConfigUpgradesOnStartup(path string) (bool, error) {
 	if _, err := decodeTOMLFile(path, &header); err != nil {
 		return false, fmt.Errorf("config %s: %w", path, err)
 	}
-	defaultVersion := Default().ConfigVersion
-	if header.ConfigVersion > defaultVersion {
+	if header.ConfigVersion >= Default().ConfigVersion {
 		return false, nil
-	}
-	classicDesktopLayout := strings.EqualFold(strings.TrimSpace(header.Desktop.LayoutStyle), "classic")
-	if header.ConfigVersion == defaultVersion && !classicDesktopLayout {
-		return false, nil
-	}
-	// Version 7 already completed the older migrations. Preserve its original
-	// TOML byte-for-byte except for the protocol scalars and version marker.
-	if header.ConfigVersion >= deepSeekScheduledPricingConfigVersion && header.ConfigVersion < deepSeekChatDefaultConfigVersion && !classicDesktopLayout {
-		return upgradeDeepSeekChatDefaultFileLocked(path)
 	}
 	cfg := LoadForEdit(path)
 	changed := false
-	if classicDesktopLayout {
-		cfg.Desktop.LayoutStyle = "workbench"
-		changed = true
-	}
 	if header.ConfigVersion < deepSeekPricingResetConfigVersion {
 		resetOfficialProviderPricingDefaults(cfg)
 		changed = true
@@ -324,16 +320,10 @@ func ApplyUserConfigUpgradesOnStartup(path string) (bool, error) {
 		// remain user-owned on later startups instead of being reconsidered.
 		changed = true
 	}
-	if header.ConfigVersion < deepSeekChatDefaultConfigVersion {
-		restoreDeepSeekChatDefaults(cfg)
-		changed = true
-	}
 	if !changed {
 		return false, nil
 	}
-	if header.ConfigVersion < defaultVersion {
-		cfg.ConfigVersion = defaultVersion
-	}
+	cfg.ConfigVersion = Default().ConfigVersion
 	if err := cfg.SaveTo(path); err != nil {
 		return false, err
 	}

@@ -46,8 +46,8 @@ var deprecatedContextRetentionWarning sync.Once
 const maxEmptyFinalBlocks = 3
 
 // maxStreamRecoveries is the number of body-phase stream retries after the
-// initial sampling attempt (Pi-style default: 1 + 3 = 4 attempts total).
-const maxStreamRecoveries = 3
+// initial sampling attempt (Codex-aligned default: 1 + 5 = 6 attempts total).
+const maxStreamRecoveries = 5
 const maxSamplingAttempts = maxStreamRecoveries + 1
 const maxExecutorHandoffNudges = 1
 
@@ -1314,11 +1314,6 @@ func (a *Agent) reserveParentWrite(runTool tool.Tool, args json.RawMessage, read
 // adaptive stop is the no-progress ladder rather than a round count. Turn policy
 // lives in beginRunTurn / runToolLoop / handleFinalResponse / handleToolRound.
 func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
-	if err := a.prepareProtocolRecovery(ctx); err != nil {
-		return err
-	}
-	a.restoreProtocolProjection()
-	ctx = a.withProviderCacheSession(ctx)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey
 	a.recovery.runSeq.Add(1)
@@ -1877,12 +1872,14 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	transformReasoning := a.svc.hooks != nil && a.svc.hooks.HasPostLLMCall()
 
 	var text, reasoning strings.Builder
-	meta := reasoningStreamMeta{complete: true}
+	var signature string                    // provider-issued proof for the reasoning (Anthropic thinking)
+	var reasoningID, reasoningStatus string // Responses reasoning item id/status (meta chunk)
 	var calls []provider.ToolCall
 	var responsesItems []json.RawMessage
 	search := newSearchTurn()
 	var partialCalls []provider.ToolCall
 	var usage *provider.Usage
+	reasoningComplete := true
 	var partialToolStarted bool
 	var maxArgChars int
 	var lastArgProgress time.Time
@@ -1890,9 +1887,8 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 	// finishReasoning output that becomes the round-tripped reasoning.
 	collect := func(stored string, err error) streamedTurn {
 		return streamedTurn{
-			text: text.String(), reasoning: stored, signature: meta.signature,
-			reasoningID: meta.id, reasoningStatus: meta.status, reasoningComplete: meta.complete,
-			reasoningState: meta.state, thinkingBlocks: meta.blocks,
+			text: text.String(), reasoning: stored, signature: signature,
+			reasoningID: reasoningID, reasoningStatus: reasoningStatus, reasoningComplete: reasoningComplete,
 			calls: calls, responsesItems: responsesItems, serverSearch: search.calls, usage: usage,
 			partialToolStarted: partialToolStarted, partialCalls: partialCalls,
 			maxArgChars: maxArgChars, err: err,
@@ -1908,7 +1904,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 			}
 		}
 		stored = display
-		if a.preserveRawReasoning(original, meta.signature, meta.id, meta.status, calls, search.calls) {
+		if a.preserveRawReasoning(signature, reasoningID, reasoningStatus, calls, search.calls) {
 			stored = original
 		}
 		return stored, display
@@ -1934,19 +1930,17 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				// response before it is persisted. A replacement becomes the
 				// visible assistant turn (the user's transcript); a block fails
 				// the turn.
-				providerSignature := meta.signature
-				finalText, finalReasoning, finalSignature, calls, usage, err := a.interceptProviderResponse(
-					ctx, text.String(), stored, meta.signature, calls, usage)
+				providerSignature := signature
+				finalText, finalReasoning, signature, calls, usage, err := a.interceptProviderResponse(
+					ctx, text.String(), stored, signature, calls, usage)
 				if err != nil {
 					return streamedTurn{partialToolStarted: partialToolStarted, partialCalls: partialCalls, maxArgChars: maxArgChars, err: err}
 				}
 				// Responses reasoning IDs/status and Anthropic signatures are
 				// provider-bound metadata. Never attach the provider's metadata
 				// to reasoning that an extension replaced.
-				if finalReasoning != stored || finalSignature != providerSignature {
-					meta.id, meta.status = "", ""
-					meta.blocks = nil
-					responsesItems = provider.WithoutResponsesReasoning(responsesItems)
+				if finalReasoning != stored || signature != providerSignature {
+					reasoningID, reasoningStatus = "", ""
 				}
 				if finalReasoning != stored {
 					// The extension replaced the reasoning: what is persisted
@@ -1964,11 +1958,10 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				// A clean terminal never reports partialToolStarted: the calls
 				// slice is now authoritative and the partial cards were merged.
 				return streamedTurn{
-					text: finalText, reasoning: finalReasoning, signature: finalSignature,
-					reasoningID: meta.id, reasoningStatus: meta.status,
-					reasoningComplete: meta.complete,
-					reasoningState:    meta.state, thinkingBlocks: meta.blocks,
-					calls: calls, responsesItems: responsesItems, serverSearch: search.calls, usage: usage,
+					text: finalText, reasoning: finalReasoning, signature: signature,
+					reasoningID: reasoningID, reasoningStatus: reasoningStatus,
+					reasoningComplete: reasoningComplete,
+					calls:             calls, responsesItems: responsesItems, serverSearch: search.calls, usage: usage,
 					partialCalls: partialCalls, maxArgChars: maxArgChars,
 				}
 			}
@@ -1976,10 +1969,25 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 		}
 		switch chunk.Type {
 		case provider.ChunkReasoning:
-			meta.ingest(chunk, &reasoning, a.reasoningByteLimit)
+			reasoning.WriteString(chunk.Text)
+			if chunk.Signature != "" {
+				signature = chunk.Signature
+			}
+			// 元数据 chunk（空 Text）：reasoning item id/status 贯通
+			// SSE → session → 下一轮回传（评审 #7234 第 1 点）。
+			if chunk.ReasoningID != "" {
+				reasoningID = chunk.ReasoningID
+			}
+			if chunk.ReasoningStatus != "" {
+				reasoningStatus = chunk.ReasoningStatus
+			}
 			if chunk.Text != "" && !transformReasoning {
 				sink.Emit(event.Event{Kind: event.Reasoning, Text: chunk.Text})
 			}
+			// Bound stored hidden reasoning only. Do not cancel the provider
+			// stream: official DeepSeek bills this output and still needs to
+			// emit the visible answer or tool calls.
+			reasoningComplete = boundReasoningReplay(&reasoning, chunk.Text, a.reasoningByteLimit, reasoningComplete)
 		case provider.ChunkText:
 			text.WriteString(chunk.Text)
 			sink.Emit(event.Event{Kind: event.Text, Text: chunk.Text})
@@ -2021,7 +2029,9 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				}
 			}
 		case provider.ChunkResponsesItem:
-			responsesItems = meta.ingestResponsesItem(responsesItems, chunk.ResponsesItem, a.reasoningByteLimit)
+			if len(chunk.ResponsesItem) > 0 {
+				responsesItems = append(responsesItems, append(json.RawMessage(nil), chunk.ResponsesItem...))
+			}
 		case provider.ChunkServerSearch:
 			search.onChunk(sink, chunk, attemptID)
 		case provider.ChunkUsage:
@@ -2062,7 +2072,6 @@ func bestEffortStreamUsage(current *provider.Usage, textBytes, reasoningBytes in
 		return nil
 	}
 	var usage provider.Usage
-	usage.Unknown = current == nil
 	if current != nil {
 		usage = *current
 	}
@@ -2114,7 +2123,6 @@ func upsertPartialToolCall(calls []provider.ToolCall, call provider.ToolCall) []
 func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provider.ToolCall, pending bool, workDurationMs int64) {
 	displayCalls := make([]provider.ToolCall, 0, len(calls))
 	interrupted := make([]string, 0, len(calls))
-	notStarted := make([]provider.InterruptedToolSummary, 0, len(calls))
 	seen := make(map[string]struct{}, len(calls))
 	for _, call := range calls {
 		name := strings.TrimSpace(call.Name)
@@ -2126,7 +2134,6 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 		displayCalls = append(displayCalls, provider.ToolCall{ID: call.ID, Name: name})
 		if name != "" {
 			interrupted = append(interrupted, name)
-			notStarted = append(notStarted, provider.InterruptedToolSummary{ID: call.ID, Name: name})
 		}
 	}
 	a.sess.conversation.Add(provider.Message{
@@ -2141,7 +2148,6 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 		InterruptedTurn: &provider.InterruptedTurnRecovery{
 			Pending:                 pending,
 			InterruptedTools:        interrupted,
-			NotStartedTools:         notStarted,
 			DroppedPartialText:      strings.TrimSpace(text) != "",
 			DroppedPartialReasoning: strings.TrimSpace(reasoning) != "",
 		},

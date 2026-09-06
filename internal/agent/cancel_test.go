@@ -657,17 +657,54 @@ func toolMessagesByID(msgs []provider.Message) map[string]string {
 	return out
 }
 
-func TestMissingTerminalUsageRemainsUnknownAfterEstimationAndMerge(t *testing.T) {
-	estimated := bestEffortStreamUsage(nil, 20, 40, "interrupted")
-	if estimated == nil || !estimated.Unknown || !estimated.Estimated {
-		t.Fatalf("estimated=%+v", estimated)
+type queuedChunkProvider struct {
+	chunks []provider.Chunk
+}
+
+func (queuedChunkProvider) Name() string { return "queued-chunks" }
+
+func (p *queuedChunkProvider) Stream(ctx context.Context, _ provider.Request) (<-chan provider.Chunk, error) {
+	ch := make(chan provider.Chunk)
+	go func() {
+		defer close(ch)
+		for _, c := range p.chunks {
+			select {
+			case ch <- c:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return ch, nil
+}
+
+// TestStreamInterruptedEmitsBestEffortUsage（#7184 缺口 1）：ChunkError +
+// StreamInterrupted 必须走 best-effort 计费（与 ctx.Done 分支对齐）——
+// 修复前直接返回原始 usage（nil → emitTurnUsage 跳过 → 计费完全丢失）。
+func TestStreamInterruptedEmitsBestEffortUsage(t *testing.T) {
+	prov := &queuedChunkProvider{chunks: []provider.Chunk{
+		{Type: provider.ChunkReasoning, Text: strings.Repeat("think", 100)}, // 400B ≈ 100 tok
+		{Type: provider.ChunkText, Text: "partial answer"},
+		{Type: provider.ChunkError, Err: &provider.StreamInterruptedError{Err: errors.New("conn reset")}},
+	}}
+	a := New(prov, echoRegistry(), NewSession(""), Options{}, event.Discard)
+	st := a.stream(context.Background(), 1, &recordSink{})
+	if st.err == nil {
+		t.Fatal("expected StreamInterrupted error")
 	}
-	exact := &provider.Usage{PromptTokens: 10, CompletionTokens: 20, TotalTokens: 30, RequestCount: 1}
-	combined := finalizeSamplingUsage(mergeSamplingUsage(estimated, exact), exact)
-	if !combined.Unknown || combined.RequestCount != 2 {
-		t.Fatalf("combined=%+v", combined)
+	if !st.interrupted {
+		t.Fatal("interrupted flag must be true")
 	}
-	if exact.Unknown {
-		t.Fatal("mutated exact usage")
+	if st.usage == nil {
+		t.Fatal("usage must be non-nil after best-effort (was dropped pre-fix)")
 	}
+	if !st.usage.Estimated {
+		t.Fatal("best-effort usage must be marked Estimated")
+	}
+	if st.usage.ReasoningTokens < 90 {
+		t.Fatalf("reasoning tokens = %d, want best-effort estimate ≈100", st.usage.ReasoningTokens)
+	}
+	// RequestCount 依赖 ctx 的 attempt counter（由 run 路径封装注入）；
+	// 本测试直接调 stream 裸 ctx——不断言该字段，其余 best-effort 契约已验。
+	_ = st.usage.RequestCount
 }

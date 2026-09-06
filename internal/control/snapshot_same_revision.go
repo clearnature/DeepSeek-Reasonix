@@ -11,27 +11,19 @@ import (
 // Authority-bound rewrites stay on the canonical path; missing/stale authority
 // is returned as a typed error so callers rebind instead of forking recovery.
 func persistSessionSnapshot(s *agent.Session, path string, forceRewrite bool) (error, bool) {
-	return persistSessionSnapshotMode(s, path, forceRewrite, false)
-}
-
-func persistSessionSnapshotMode(s *agent.Session, path string, forceRewrite, checkpoint bool) (error, bool) {
 	if s == nil {
 		return nil, forceRewrite
 	}
 	forceRewrite = forceRewrite || s.NeedsRewriteSave()
-	var err error
-	if checkpoint {
-		err = s.SaveToolCheckpoint(path, forceRewrite)
-	} else if forceRewrite {
+	if forceRewrite {
 		return s.SaveRewrite(path), true
-	} else {
-		err = s.SaveSnapshot(path)
 	}
+	err := s.SaveSnapshot(path)
 	if authoritySaveError(err) {
-		return err, forceRewrite
+		return err, false
 	}
 	if !errors.Is(err, agent.ErrSessionSnapshotConflict) {
-		return err, forceRewrite
+		return err, false
 	}
 	// Auto-compaction may rewrite between the decision and the write.
 	if s.NeedsRewriteSave() {

@@ -142,15 +142,6 @@ func EnsureCostQuote(e Event, ctx *QuoteContext) *billing.CostQuote {
 		return nil
 	}
 	display, now := ctx.snapshot()
-	if e.Usage.Unknown {
-		known := *e.Usage
-		known.Unknown = false
-		e.Usage = &known
-		q := EnsureCostQuote(e, ctx)
-		q.CostComplete, q.DisplayComplete, q.Complete = false, false, false
-		q.Estimated, q.DisplayStatus, q.IncompleteReason = true, billing.DisplayStatusUnavailable, "usage_unknown"
-		return q
-	}
 	if e.Pricing == nil {
 		q := billing.CostQuote{
 			Estimated: true, CostComplete: false, DisplayComplete: false, Complete: false,
@@ -199,10 +190,13 @@ func rateCardFromPricing(p *provider.Pricing) billing.RateCard {
 		return billing.RateCard{}
 	}
 	return billing.RateCard{
-		CacheHit: p.CacheHit,
-		Input:    p.Input,
-		Output:   p.Output,
-		Currency: billing.NormalizeCurrency(p.Currency),
+		CacheHit:     p.CacheHit,
+		Input:        p.Input,
+		Output:       p.Output,
+		Currency:     billing.NormalizeCurrency(p.Currency),
+		PeakCacheHit: p.PeakCacheHit,
+		PeakInput:    p.PeakInput,
+		PeakOutput:   p.PeakOutput,
 	}
 }
 

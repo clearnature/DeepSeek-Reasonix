@@ -115,9 +115,14 @@ func catalogEntryEffective(e CatalogEntry, at time.Time) bool {
 // DeepSeekRateBand selects the documented Beijing peak windows by their stable
 // UTC equivalents.
 func DeepSeekRateBand(at time.Time) string {
-	at = at.UTC()
+	at = at.In(time.FixedZone("CST", 8*3600)) // Asia/Shanghai, UTC+8
+	// Official schedule: peak = Beijing time Mon–Fri 09:00–12:00 & 14:00–18:00;
+	// weekends are off-peak all day.
+	if at.Weekday() == time.Saturday || at.Weekday() == time.Sunday {
+		return RateBandOffPeak
+	}
 	minutes := at.Hour()*60 + at.Minute()
-	if (minutes >= 60 && minutes < 240) || (minutes >= 360 && minutes < 600) {
+	if (minutes >= 9*60 && minutes < 12*60) || (minutes >= 14*60 && minutes < 18*60) {
 		return RateBandPeak
 	}
 	return RateBandOffPeak
@@ -206,7 +211,21 @@ func MatchesCatalog(provider, model string, rates RateCard) (CatalogEntry, bool)
 // MatchesScheduleAnchor verifies that configured rates are the current peak
 // anchor. Custom and off-peak-looking static prices stay static.
 func MatchesScheduleAnchor(provider, model, scheduleID string, rates RateCard) bool {
-	entry, ok := LookupCatalog(provider, model, rates.Currency, BillingModePAYG)
-	return ok && entry.ScheduleID == scheduleID && entry.RateBand == RateBandPeak &&
-		entry.CacheHit == rates.CacheHit && entry.Input == rates.Input && entry.Output == rates.Output
+	for _, e := range OfficialCatalog() {
+		if !catalogIdentityMatches(e, provider, model, rates.Currency, BillingModePAYG) || e.ScheduleID != scheduleID {
+			continue
+		}
+		if e.RateBand == RateBandPeak {
+			// Anchor on either the legacy single peak price (base matches the
+			// peak row) or the dual-rate config (explicit peak fields match).
+			if (e.CacheHit == rates.CacheHit && e.Input == rates.Input && e.Output == rates.Output) ||
+				(e.CacheHit == rates.PeakCacheHit && e.Input == rates.PeakInput && e.Output == rates.PeakOutput) {
+				return true
+			}
+		} else if e.CacheHit == rates.CacheHit && e.Input == rates.Input && e.Output == rates.Output {
+			// Config priced at the off-peak row is still an official anchor.
+			return true
+		}
+	}
+	return false
 }

@@ -81,11 +81,10 @@ var (
 const SessionRecoveryMaxDepth = 3
 
 type sessionPersistState struct {
-	projectionPending bool
-	path              string
-	digest            [sha256.Size]byte
-	version           uint64
-	revision          int64
+	path     string
+	digest   [sha256.Size]byte
+	version  uint64
+	revision int64
 	// revisionKnown marks revision as a real ledger value. It is false when
 	// the baseline was established while the meta sidecar was unreadable
 	// (torn or corrupt): the session must still open, but revision 0 must not
@@ -110,7 +109,6 @@ const (
 	sessionSaveSnapshot sessionSaveMode = iota
 	sessionSaveRewrite
 	sessionSaveRewriteCompact
-	sessionSaveToolCheckpoint
 )
 
 type snapshotWriteDecision struct {
@@ -327,8 +325,7 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 		}
 	}
 	repairLog := false
-	deferProjection := mode.defersProjection()
-	ownedRewrite := mode.allowsOwnedRewrite()
+	ownedRewrite := mode == sessionSaveRewrite || mode == sessionSaveRewriteCompact
 	decision, err := s.classifySnapshotWriteForCommit(path, msgs, digest, version, ownedRewrite, mode)
 	if err != nil {
 		return err
@@ -363,17 +360,16 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 				}
 			}
 			if displayModelCurrent {
-				if err := refreshCheckpointDisplayIndex(path, msgs, digest, revision, -1, deferProjection); err != nil {
+				if err := refreshSessionDisplayIndex(path, msgs, digest, revision, -1); err != nil {
 					// The display index is a derived sidecar; transcript durability
 					// must not depend on rebuilding it successfully.
 					slog.Warn("session: keeping save after display index write failure", "path", path, "err", err)
 				}
 			}
-			s.markCheckpointPersisted(path, digest, version, revision, rewriteVersion, msgs, deferProjection)
+			s.markPersistedWithListing(path, digest, version, revision, rewriteVersion, msgs)
 			return nil
 		}
-		s.refreshPendingCheckpointProjection(path, msgs, digest, decision.revision, deferProjection)
-		s.markCheckpointPersisted(path, digest, version, decision.revision, rewriteVersion, msgs, deferProjection)
+		s.markPersistedWithListing(path, digest, version, decision.revision, rewriteVersion, msgs)
 		return nil
 	}
 	if decision.appendOnly && probe.native && mode != sessionSaveRewriteCompact {
@@ -417,13 +413,13 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 			slog.Warn("session: keeping save after event index write failure", "path", path, "err", err)
 		}
 		if displayModelCurrent {
-			if err := refreshCheckpointDisplayIndex(path, msgs, digest, revision, decision.appendFrom, deferProjection); err != nil {
+			if err := refreshSessionDisplayIndex(path, msgs, digest, revision, decision.appendFrom); err != nil {
 				// The append boundary lets the refresh extend the previous index
 				// instead of re-encoding the whole transcript.
 				slog.Warn("session: keeping save after display index write failure", "path", path, "err", err)
 			}
 		}
-		s.markCheckpointPersisted(path, digest, version, revision, rewriteVersion, msgs, deferProjection)
+		s.markPersistedWithListing(path, digest, version, revision, rewriteVersion, msgs)
 		return nil
 	}
 	baseRevision = decision.revision
@@ -432,7 +428,15 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 	// damage repairs. The event log mutates first so a crash between the two
 	// writes leaves the newer transcript authoritative; the anchor rewrite
 	// keeps the compatibility .jsonl fresh for direct readers.
-	reason := mode.eventReason()
+	reason := "save"
+	switch mode {
+	case sessionSaveSnapshot:
+		reason = "snapshot"
+	case sessionSaveRewrite:
+		reason = "rewrite"
+	case sessionSaveRewriteCompact:
+		reason = "rewrite-compact"
+	}
 	if repairLog {
 		reason = "repair"
 	}
@@ -470,12 +474,12 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 			slog.Warn("session: keeping save after event index write failure", "path", path, "err", err)
 		}
 	}
-	if err := refreshCheckpointDisplayIndex(path, msgs, digest, revision, -1, deferProjection); err != nil {
+	if err := refreshSessionDisplayIndex(path, msgs, digest, revision, -1); err != nil {
 		// Warn-only like the event index above: the display index is a pure
 		// derived sidecar and must never fail a save.
 		slog.Warn("session: keeping save after display index write failure", "path", path, "err", err)
 	}
-	s.markCheckpointPersisted(path, digest, version, revision, rewriteVersion, msgs, deferProjection)
+	s.markPersistedWithListing(path, digest, version, revision, rewriteVersion, msgs)
 	return nil
 }
 
@@ -910,7 +914,6 @@ func (s *Session) snapshotUpToDate(path string) bool {
 	defer s.mu.RUnlock()
 	return s.persisted.ok &&
 		s.persisted.saveVerified &&
-		!s.persisted.projectionPending &&
 		s.persisted.path == key &&
 		s.persisted.version == s.version &&
 		s.persisted.revisionKnown &&

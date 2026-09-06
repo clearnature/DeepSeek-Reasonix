@@ -21,6 +21,7 @@
 package openai
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -240,7 +241,6 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		return nil, fmt.Errorf("openai: network: %w", err)
 	}
 	return &client{
-		identityHeaders: provider.NewClientIdentityHeaders(),
 		name:            name,
 		apiKey:          cfg.APIKey,
 		keyEnv:          keyEnv,
@@ -280,7 +280,6 @@ func newHTTPClient(cfg provider.Config) (*http.Client, error) {
 }
 
 type client struct {
-	identityHeaders http.Header
 	name            string
 	apiKey          string
 	keyEnv          string // api_key_env name, surfaced in auth errors
@@ -517,7 +516,6 @@ func (c *client) openStream(ctx context.Context, targetURL string, wireReq chatR
 		applyAPIKeyHeader(httpReq.Header, c.baseURL, c.apiKey)
 		httpReq.Header.Set("Accept", "text/event-stream")
 		applyCustomHeaders(httpReq.Header, c.headers)
-		provider.ApplyOpenCodeGoHeaders(httpReq, c.baseURL, c.identityHeaders)
 		return httpReq, nil
 	}
 	resp, err := provider.SendWithRetry(requestCtx, c.http, c.sendOpts(), newReq)
@@ -952,7 +950,8 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	var sawDone bool
 	var think thinkSplitter
 
-	scanner := provider.NewStreamScanner(resp.Body, 1024*1024)
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	for scanner.Scan() {
 		select { // ping the idle watchdog; non-blocking so a full buffer is fine
@@ -974,7 +973,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 
 		var sr streamResponse
 		if err := json.Unmarshal([]byte(data), &sr); err != nil {
-			return emitted, scanner.DecodeError(c.name, data, err)
+			return emitted, provider.StreamDecodeError(c.name, data, err)
 		}
 		if sr.Error != nil {
 			return emitted, fmt.Errorf("%s: %s", c.name, sr.Error.Message)
@@ -996,12 +995,16 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 		}
 
 		delta := sr.Choices[0].Delta
-		if sent, err := emitChatReasoning(ctx, out, delta.ReasoningContent, delta.Reasoning); err != nil {
-			return emitted, err
-		} else {
-			emitted = emitted || sent
+		reasoningDelta := delta.ReasoningContent
+		if reasoningDelta == "" {
+			reasoningDelta = delta.Reasoning
 		}
-
+		if reasoningDelta != "" {
+			emitted = true
+			if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkReasoning, Text: reasoningDelta}) {
+				return emitted, ctx.Err()
+			}
+		}
 		if delta.Content != "" {
 			r, txt := think.push(delta.Content)
 			if r != "" {
@@ -1327,7 +1330,7 @@ type streamResponse struct {
 	Choices []struct {
 		Delta struct {
 			Content          string         `json:"content"`
-			ReasoningContent *string        `json:"reasoning_content"`
+			ReasoningContent string         `json:"reasoning_content"`
 			Reasoning        string         `json:"reasoning"`
 			ToolCalls        []chatToolCall `json:"tool_calls"`
 		} `json:"delta"`
