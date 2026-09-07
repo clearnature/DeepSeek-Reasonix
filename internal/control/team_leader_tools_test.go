@@ -53,6 +53,9 @@ func TestTeamToolCreatesAssignsReportsRemoves(t *testing.T) {
 		return out
 	}
 
+	if out := call("group_create", "writers", "", ""); !strings.Contains(out, `"writers" created`) {
+		t.Fatalf("group_create = %q", out)
+	}
 	if out := call("create", "alice", "", "researcher"); !strings.Contains(out, `"alice" created`) {
 		t.Fatalf("create = %q", out)
 	}
@@ -70,11 +73,11 @@ func TestTeamToolCreatesAssignsReportsRemoves(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	if out := call("remove", "alice", "", ""); !strings.Contains(out, `"alice" removed`) {
-		t.Fatalf("remove = %q", out)
+	if out := call("group_delete", "", "", ""); !strings.Contains(out, "team dissolved") {
+		t.Fatalf("group_delete = %q", out)
 	}
-	if out := call("status", "", "", ""); strings.Contains(out, "alice") {
-		t.Fatalf("alice still present after remove: %q", out)
+	if out := call("status", "", "", ""); !strings.Contains(out, "no teammates") {
+		t.Fatalf("members survived group_delete: %q", out)
 	}
 }
 

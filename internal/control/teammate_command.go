@@ -82,6 +82,9 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 		c.notice(fmt.Sprintf("teammate %q stopping", name))
 	case "/team-status":
 		c.notice(c.teamRosterText())
+	case "/team-group":
+		c.applyTeamGroup(rest)
+		return
 	case "/team-add":
 		name, task, _ := strings.Cut(rest, " ")
 		if strings.TrimSpace(task) == "" {
@@ -118,6 +121,31 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 	}
 }
 
+// applyTeamGroup implements /team-group (qwen team_create/team_delete
+// analog): create names the singleton group, delete dissolves it.
+func (c *Controller) applyTeamGroup(rest string) {
+	sub := strings.TrimSpace(rest)
+	name, _, _ := strings.Cut(sub, " ")
+	switch {
+	case strings.HasPrefix(sub, "create"):
+		if err := c.teammates.CreateGroup(name); err != nil {
+			c.notice("team-group create: " + err.Error())
+			return
+		}
+		c.notice(fmt.Sprintf("team %q created — register members with /team-create or /team-add", name))
+	case strings.HasPrefix(sub, "delete"), strings.HasPrefix(sub, "remove"):
+		if err := c.teammates.DeleteGroup(); err != nil {
+			c.notice("team-group delete: " + err.Error())
+			return
+		}
+		c.notice("team dissolved — all members stopped and removed")
+	case sub == "" || sub == "status":
+		c.notice("team group: " + c.teamGroupText())
+	default:
+		c.notice("usage: /team-group create <name> | delete | status")
+	}
+}
+
 // teamRosterText renders the P6 roster for /team-status notices.
 func (c *Controller) teamRosterText() string {
 	if c.teammates == nil {
@@ -132,6 +160,19 @@ func (c *Controller) teamRosterText() string {
 		fmt.Fprintf(&b, "%s %s\n", rv.Name, rv.State)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// teamGroupText renders the group label for /team-group status.
+func (c *Controller) teamGroupText() string {
+	if c.teammates == nil {
+		return "team commands are disabled (no TeammateStore configured)"
+	}
+	name := c.teammates.Name()
+	if name == "" {
+		return "no named team — /team-group create <name>"
+	}
+	n := len(c.teammates.Roster())
+	return fmt.Sprintf("%s (%d member(s))", name, n)
 }
 
 // TeamRosterView exposes the live roster for headless harnesses and the

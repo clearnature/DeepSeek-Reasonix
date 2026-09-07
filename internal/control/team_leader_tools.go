@@ -31,20 +31,20 @@ func (t *teamTool) Name() string { return "team" }
 
 func (t *teamTool) Description() string {
 	return "Orchestrate your team of sub-agents (you are the leader). Actions: " +
-		"create (register a member with a name and role), add (assign one task " +
-		"to a member — the member forks your prefix and runs it as a background " +
-		"job), status (list members and their state), remove (drop a member), " +
-		"broadcast (mail all active members). Members run concurrently; a member " +
-		"returns to idle when its job completes. Group-level transaction " +
-		"lifecycle is a later stage; this acts on individual members."
+		"group_create (name your team — one active group), group_delete " +
+		"(dissolve the team: stop and drop every member), create (register a " +
+		"member), add (assign one task to a member — it forks your prefix and " +
+		"runs as a background job), status (list members), remove (drop a " +
+		"member), broadcast (mail all active members). Members run " +
+		"concurrently; a member returns to idle when its job completes."
 }
 
 func (t *teamTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "action":{"type":"string","enum":["create","add","status","remove","broadcast"]},
-  "name":{"type":"string","description":"member name (create/add/remove)"},
+  "action":{"type":"string","enum":["group_create","group_delete","create","add","status","remove","broadcast"]},
+  "name":{"type":"string","description":"team name for group_create / member name for create/add/remove"},
   "role":{"type":"string","description":"role for create, default researcher"},
   "task":{"type":"string","description":"task prompt for add"},
   "text":{"type":"string","description":"message for broadcast"}
@@ -77,6 +77,16 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("team: invalid args: %w", err)
 	}
 	switch p.Action {
+	case "group_create":
+		if err := t.ts.CreateGroup(p.Name); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("team %q created — register members with team create or team add", p.Name), nil
+	case "group_delete":
+		if err := t.ts.DeleteGroup(); err != nil {
+			return "", err
+		}
+		return "team dissolved — all members stopped and removed", nil
 	case "create":
 		if strings.TrimSpace(p.Name) == "" {
 			return "", fmt.Errorf("team create: name is required")
