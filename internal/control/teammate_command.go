@@ -9,8 +9,6 @@ import (
 	"reasonix/internal/jobs"
 )
 
-var ctxTODO = context.Background
-
 // applyTeamCommand implements the P6 /team-* management verbs: /team-create
 // registers a teammate; /team-add dispatches one job (first run forks the
 // leader prefix, later runs continue the teammate's own transcript);
@@ -91,7 +89,7 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			c.notice("usage: /team-add <name> <task>")
 			return
 		}
-		if _, err := c.teammates.Assign(jobs.WithSession(ctxTODO(), c.parentSessionID()), name, task); err != nil {
+		if _, err := c.teammates.Assign(jobs.WithSession(jobs.WithManager(context.Background(), c.jobs), c.parentSessionID()), name, task); err != nil {
 			c.notice("team-add: " + err.Error())
 			return
 		}
@@ -127,21 +125,35 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 // analog): create names the singleton group, delete dissolves it.
 func (c *Controller) applyTeamGroup(rest string) {
 	sub := strings.TrimSpace(rest)
-	name, _, _ := strings.Cut(sub, " ")
-	switch {
-	case strings.HasPrefix(sub, "create"):
+	// Verb is the first token; the group name follows it (/team-group create e2e-writers).
+	fields := strings.Fields(sub)
+	if len(fields) == 0 {
+		c.notice("usage: /team-group create <name> | delete | status")
+		return
+	}
+	verb := fields[0]
+	name := ""
+	if len(fields) > 1 {
+		name = fields[1]
+	}
+	switch verb {
+	case "create":
+		if name == "" {
+			c.notice("usage: /team-group create <name>")
+			return
+		}
 		if err := c.teammates.CreateGroup(name); err != nil {
 			c.notice("team-group create: " + err.Error())
 			return
 		}
 		c.notice(fmt.Sprintf("team %q created — register members with /team-create or /team-add", name))
-	case strings.HasPrefix(sub, "delete"), strings.HasPrefix(sub, "remove"):
+	case "delete", "remove":
 		if err := c.teammates.DeleteGroup(); err != nil {
 			c.notice("team-group delete: " + err.Error())
 			return
 		}
 		c.notice("team dissolved — all members stopped and removed")
-	case sub == "" || sub == "status":
+	case "status":
 		c.notice("team group: " + c.teamGroupText())
 	default:
 		c.notice("usage: /team-group create <name> | delete | status")
