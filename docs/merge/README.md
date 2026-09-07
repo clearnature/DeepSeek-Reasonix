@@ -8,6 +8,7 @@
 - `merge-discipline.md` — **合并纪律全文**（侦察/逐块/语义复查/生成文件/验证链/遥测四方审计/分支纪律）
 - `20260814-v125-merge-risk.md` — v1.25.x（26 提交）↔ dev（508 提交）合并风险分析（按主题）
 - `20260906-v137-v138-merge-risk.md` — v1.37/v1.38 收敛（B1-B6 + 附录 A-O）与 v1.38 拓扑合并完整档案
+- `merge-hotspot-inventory.md` — 合并热区清单（本地×上游双端活跃 47 文件分类，merge 前定向复查）
 - `../telemetry-audit-20260813.md` — 遥测四方审计纪律（合并涉及遥测文件后必做）
 
 > 完整纪律见 `merge-discipline.md`（本目录主文档）；以下为速查。
