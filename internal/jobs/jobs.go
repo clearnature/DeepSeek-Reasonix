@@ -186,10 +186,6 @@ type Job struct {
 	// claims the result either. The caller polls it with wait (bash_output /
 	// steer remain fully usable). Guarded by mu.
 	silentCompletion bool
-	// leaseExempt skips the workspace-lease retain observer for read-only
-	// background jobs (read-only researchers must not lock the leader out of
-	// its own workspace). Writer jobs keep the lease as upstream semantics.
-	leaseExempt bool
 }
 
 // Manager is the session's background-job table. It is safe for concurrent use.
@@ -524,10 +520,6 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 // result is never delivered back as a P1 completion envelope and no closing
 // Notice is emitted. wait / bash_output / steer remain fully usable — the
 // caller polls the result explicitly. The run func behaves exactly like Start.
-func (m *Manager) StartForSessionReadonly(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
-	return m.startForSession(parentSession, kind, label, run, false, false, true)
-}
-
 func (m *Manager) StartSilent(kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
 	return m.StartSilentForSession("", kind, label, run)
 }
@@ -592,7 +584,6 @@ func (m *Manager) startForSession(parentSession, kind, label string, run func(ct
 		artifactErr:            artifactErr,
 		foregroundClaimPending: foreground,
 		silentCompletion:       silent,
-		leaseExempt:            leaseExempt,
 	}
 	ctx = WithSession(ctx, parentSession)
 	ctx = context.WithValue(ctx, jobCtxKey{}, j)
