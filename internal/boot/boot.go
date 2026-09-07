@@ -981,11 +981,6 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	// nesting out of the picture). It registers into the same reg the
 	// executor uses, so the model surfaces it like any other tool.
 	resolveSubagentProvider := func(modelRef, effort string) (provider.Provider, *provider.Pricing, int, error) {
-		// Inherit the live main provider when no model/effort override is
-		// requested — re-resolving can drop a custom base path (404 /v4).
-		if strings.TrimSpace(modelRef) == "" && strings.TrimSpace(effort) == "" && execProv != nil {
-			return execProv, entry.Price, entry.ContextWindow, nil
-		}
 		me := *entry
 		selectedRef := modelRefFromEntry(entry)
 		if strings.TrimSpace(modelRef) != "" {
