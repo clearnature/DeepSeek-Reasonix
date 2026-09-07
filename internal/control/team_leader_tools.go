@@ -36,20 +36,23 @@ func (t *teamTool) Description() string {
 		"forks your prefix as a background job), tasks (list the team's task " +
 		"board), mail (send a message to one member's inbox, delivered on its " +
 		"next assignment), status (list members), remove (drop a member), " +
-		"shutdown (ask one member to wind down its work), broadcast (mail all " +
-		"active members). Running members are steered with the send_message " +
-		"tool by job_id; mail reaches idle members."
+		"shutdown (ask one member to wind down its work), approve (answer a " +
+		"member's plan request: request_id + decision allow/deny), broadcast " +
+		"(mail all active members). Running members are steered with the " +
+		"send_message tool by job_id; mail reaches idle members."
 }
 
 func (t *teamTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "action":{"type":"string","enum":["group_create","group_delete","create","add","tasks","mail","status","shutdown","remove","broadcast"]},
+  "action":{"type":"string","enum":["group_create","group_delete","create","add","tasks","mail","status","shutdown","approve","remove","broadcast"]},
   "name":{"type":"string","description":"team name for group_create / member name for create/add/mail/remove"},
   "role":{"type":"string","description":"role for create, default researcher"},
   "task":{"type":"string","description":"task prompt for add"},
-  "text":{"type":"string","description":"message for broadcast"}
+  "text":{"type":"string","description":"message for broadcast"},
+  "request_id":{"type":"string","description":"approval request id for approve"},
+  "decision":{"type":"string","enum":["allow","deny"],"description":"verdict for approve"}
 },
 "required":["action"]
 }`)
@@ -86,6 +89,18 @@ func truncateText(s string, n int) string {
 	return s[:n] + "…"
 }
 
+func (t *teamTool) executeApprove(requestID, decision string) (string, error) {
+	requestID = strings.TrimSpace(requestID)
+	decision = strings.TrimSpace(decision)
+	if requestID == "" || (decision != "allow" && decision != "deny") {
+		return "", fmt.Errorf("team approve: request_id and decision (allow|deny) are required")
+	}
+	if err := t.ts.Approve(requestID, decision == "allow", ""); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("plan %q %s — verdict sent to teammate", requestID, decision), nil
+}
+
 func (t *teamTool) executeMail(name, text string) (string, error) {
 	name = strings.TrimSpace(name)
 	text = strings.TrimSpace(text)
@@ -111,11 +126,13 @@ func (t *teamTool) executeShutdown(name string) (string, error) {
 
 func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	var p struct {
-		Action string `json:"action"`
-		Name   string `json:"name"`
-		Role   string `json:"role"`
-		Task   string `json:"task"`
-		Text   string `json:"text"`
+		Action    string `json:"action"`
+		Name      string `json:"name"`
+		Role      string `json:"role"`
+		Task      string `json:"task"`
+		Text      string `json:"text"`
+		RequestID string `json:"request_id"`
+		Decision  string `json:"decision"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("team: invalid args: %w", err)
@@ -178,6 +195,8 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return t.executeMail(p.Name, p.Text)
 	case "shutdown":
 		return t.executeShutdown(p.Name)
+	case "approve":
+		return t.executeApprove(p.RequestID, p.Decision)
 	case "broadcast":
 		text := strings.TrimSpace(p.Text)
 		if text == "" {
