@@ -15,9 +15,6 @@ import (
 
 	"reasonix/internal/boot"
 	"reasonix/internal/event"
-
-	_ "reasonix/internal/provider/anthropic"
-	_ "reasonix/internal/provider/openai"
 )
 
 // GA engine with AUTO-APPROVAL: ask-gene individuals ask the leader on

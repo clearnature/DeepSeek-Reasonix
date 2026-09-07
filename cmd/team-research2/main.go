@@ -12,9 +12,6 @@ import (
 
 	"reasonix/internal/boot"
 	"reasonix/internal/event"
-
-	_ "reasonix/internal/provider/anthropic"
-	_ "reasonix/internal/provider/openai"
 )
 
 // Research-domain pipeline v2: researcher -> validator -> reporter.
