@@ -1162,6 +1162,7 @@ func (c *Controller) runReady(ctx context.Context, input string) (err error) {
 		defer func() { c.hooks.StopResult(context.Background(), lastAssistantText(c.History()), turn, err) }()
 	}
 	ctx, marker = c.beginTurn(ctx, startMessages, true)
+	ctx = c.announceAuthoredTurn(ctx, rawInput, startMessages)
 	ctx = c.withPlannerTurnMetadata(ctx, rawInput, false)
 	err = c.runSettled(ctx, c.withCapabilityRoute(ctx, input, rawInput))
 	return err

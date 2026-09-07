@@ -60,6 +60,7 @@ func (o *turnOrchestrator) runGoalContinuationTurnWithRawDisplay(
 
 func (o *turnOrchestrator) runComposedSyntheticTurn(ctx context.Context, text string) error {
 	c := o.c
+	ctx = c.continueAnnouncedTurn(ctx)
 	ctx = agent.WithRawUserInput(ctx, text)
 	ctx = c.withPlannerTurnMetadata(ctx, text, true)
 	return c.runner.Run(ctx, c.ComposeSynthetic(text))
@@ -138,12 +139,12 @@ func (o *turnOrchestrator) runSubagentSkillTurns(ctx context.Context, skills []s
 		defer func() { c.hooks.StopResult(context.Background(), lastAssistantText(c.History()), turn, err) }()
 	}
 
-	ctx, marker = c.beginTurn(ctx, startMessages, true)
-	c.sink.Emit(event.Event{Kind: event.TurnStarted})
 	if c.executor == nil {
 		return fmt.Errorf("subagent slash invocation requires an active session")
 	}
-	c.executor.Session().Add(provider.Message{Role: provider.RoleUser, Content: input, Images: images.userImages, CreatedAt: time.Now().UnixMilli()})
+	ctx, marker = c.beginTurn(ctx, startMessages, true)
+	ctx = c.announceAuthoredTurn(ctx, firstNonEmpty(raw, task), startMessages)
+	c.executor.LandAuthoredUserMessage(ctx, provider.Message{Role: provider.RoleUser, Content: input, Images: images.userImages, CreatedAt: time.Now().UnixMilli()})
 
 	for _, sk := range skills {
 		sk = c.skills.prepare(sk)
@@ -245,7 +246,7 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 		}
 		defer func() { c.hooks.StopResult(context.Background(), lastAssistantText(c.History()), turn, err) }()
 	}
-	ctx, marker = c.beginTurn(ctx, startMessages, !turn.synthetic && !IsSyntheticUserMessage(turn.raw))
+	ctx, marker = c.openTurnBoundary(ctx, turn, startMessages)
 	if continuation != nil {
 		ctx = agent.WithDeliveryExecutionScope(ctx, agent.DeliveryExecutionScope{
 			ID:       continuation.scopeID,
@@ -305,7 +306,47 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 	return o.gatePlanApproval(ctx)
 }
 
-// gatePlanApproval turns a finished planning turn into the user's decision and,
+// announceAuthoredTurn opens this turn's boundary before any planner or
+// executor work can produce the message it is about, and hands the runner the
+// identity it has to land on. Whichever model does the work, and whether or not
+// any of it executes, this is the only start the turn gets; the identity rides
+// it when the turn opens an authored one.
+func (c *Controller) announceAuthoredTurn(ctx context.Context, raw string, msgIndex int) context.Context {
+	boundary := agent.HostTurnBoundary{}
+	started := event.Event{Kind: event.TurnStarted}
+	class := agent.ClassifyTurn(
+		provider.Message{Role: provider.RoleUser, RawContent: raw},
+		agent.PriorAuthoredTurn(c.History()),
+	)
+	if class.StartsTurn {
+		boundary.Authored = &agent.AuthoredTurnIdentity{AuthoredTurn: class.AuthoredTurn, MsgIndex: msgIndex, Raw: raw}
+		authored, index := class.AuthoredTurn, msgIndex
+		started.AuthoredTurn, started.MsgIndex = &authored, &index
+	}
+	c.sink.Emit(started)
+	return agent.WithHostTurnBoundary(ctx, boundary)
+}
+
+// openTurnBoundary marks the turn in flight and opens its boundary. One call
+// because they are one decision: the index the marker records is the index the
+// announcement names.
+func (c *Controller) openTurnBoundary(ctx context.Context, turn orchestratedTurn, msgIndex int) (context.Context, agent.InFlightTurnMeta) {
+	ctx, marker := c.beginTurn(ctx, msgIndex, !turn.synthetic && !IsSyntheticUserMessage(turn.raw))
+	if turn.synthetic {
+		return c.continueAnnouncedTurn(ctx), marker
+	}
+	return c.announceAuthoredTurn(ctx, firstNonEmpty(turn.raw, turn.input), msgIndex), marker
+}
+
+// continueAnnouncedTurn hands a run the boundary of the turn it belongs to. A
+// synthetic continuation — approved plan execution, a goal's next step, a
+// readiness follow-up — is more work inside the turn the host already named,
+// not a turn of its own, so it opens no boundary and closes none.
+func (c *Controller) continueAnnouncedTurn(ctx context.Context) context.Context {
+	return agent.WithHostTurnBoundary(ctx, agent.HostTurnBoundary{})
+}
+
+// gatePlanApproval turns a finished planning turn// gatePlanApproval turns a finished planning turn into the user's decision and,
 // if they approve, into the execution that follows it. Each step is a lifecycle
 // transition, so a decision answered after the workflow moved grants nothing.
 func (o *turnOrchestrator) gatePlanApproval(ctx context.Context) error {

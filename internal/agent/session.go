@@ -83,10 +83,18 @@ func NewSession(system string) *Session {
 
 // Add appends a message.
 func (s *Session) Add(m provider.Message) {
+	s.addIndexed(m)
+}
+
+// addIndexed appends m and returns the index it took. A caller that published
+// that index before the work producing m has to check it landed there, and
+// reading the length afterwards would be a second, racing answer.
+func (s *Session) addIndexed(m provider.Message) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Messages = append(s.Messages, m)
 	s.version++
+	return len(s.Messages) - 1
 }
 
 // AddDecisionReceipt persists local decision metadata without inserting a

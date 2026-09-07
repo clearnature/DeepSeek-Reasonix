@@ -234,11 +234,11 @@ func (a *Agent) openUserTurn(ctx context.Context, providerInput, rawInput string
 		Role: provider.RoleUser, Content: input, RawContent: rawContent,
 		Images: userImages(ctx),
 	}
-	a.svc.sink.Emit(a.turnStartedEvent(pending))
+	a.announceOwnTurn(ctx, pending)
 	a.emitTurnPhase(event.TurnPhaseWorking)
 	pending.CreatedAt = time.Now().UnixMilli()
 	a.activeTurnCreatedAt.Store(pending.CreatedAt)
-	a.sess.conversation.Add(pending)
+	a.LandAuthoredUserMessage(ctx, pending)
 	return input
 }
 

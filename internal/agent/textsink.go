@@ -27,7 +27,9 @@ type TextSink struct {
 	renderer  Renderer
 	termWidth int
 
-	// Per-stream state, reset on Message / TurnStarted.
+	// Per-stream state, reset on Message / TurnStarted / Phase: a phase marker
+	// changes model within one turn, and without the reset the executor's
+	// thinking loses its header to the planner's.
 	wroteReasoningHeader bool
 	wroteReasoningBody   bool
 	textWritten          bool
@@ -114,6 +116,9 @@ func (s *TextSink) Emit(e event.Event) {
 		s.completionAttention(e.Completion)
 
 	case event.Phase:
+		s.wroteReasoningHeader = false
+		s.wroteReasoningBody = false
+		s.textWritten = false
 		if s.wroteAnything {
 			fmt.Fprintln(s.out)
 		}

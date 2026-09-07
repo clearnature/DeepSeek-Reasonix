@@ -118,3 +118,96 @@ func TestSyntheticUserTurnMintsNoAuthoredTurn(t *testing.T) {
 	next := runTurns(t, session, "second")
 	requireNamed(t, next[0], 2)
 }
+
+// TestPlannerNeverNamesTheTurnAtTheParentSink keeps the planner's own turn
+// identity out of the conversation's: it runs over its own session, so a start
+// it announces names a message in that transcript. Under a host boundary it
+// announces nothing; standalone it still does, which is why the coordinator's
+// sink filter is not dead code.
+func TestPlannerNeverNamesTheTurnAtTheParentSink(t *testing.T) {
+	for _, hosted := range []bool{false, true} {
+		name := "standalone"
+		if hosted {
+			name = "host owns the boundary"
+		}
+		t.Run(name, func(t *testing.T) {
+			var starts []event.Event
+			sink := event.FuncSink(func(e event.Event) {
+				if e.Kind == event.TurnStarted {
+					starts = append(starts, e)
+				}
+			})
+			// The planner's transcript is longer, so a name minted over it
+			// cannot be mistaken for one minted over the executor's.
+			plannerSession := NewSession("planner system")
+			plannerSession.Add(provider.Message{Role: provider.RoleUser, Content: "earlier planner turn"})
+			plannerSession.Add(provider.Message{Role: provider.RoleAssistant, Content: "earlier plan"})
+			exec := New(&turnStartProvider{}, tool.NewRegistry(), NewSession("system"), Options{}, sink)
+			c := NewCoordinatorWithPlannerPolicy(
+				&turnStartProvider{}, plannerSession, nil, tool.NewRegistry(), Options{}, exec, 0, sink,
+				func(context.Context, string) PlannerDecision {
+					return PlannerDecision{Route: PlannerRoutePlanAndExecute, Depth: PlannerDepthFull, Reason: "test"}
+				},
+			)
+			ctx := context.Background()
+			if hosted {
+				ctx = WithHostTurnBoundary(ctx, HostTurnBoundary{})
+			}
+			if err := c.Run(ctx, "第一句用户输入"); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			named := 0
+			for _, e := range starts {
+				if e.AuthoredTurn == nil {
+					continue
+				}
+				named++
+				if *e.MsgIndex != 1 {
+					t.Fatalf("a start named message %d; the executor's turn is message 1, the planner's is not this turn",
+						*e.MsgIndex)
+				}
+			}
+			want := 1
+			if hosted {
+				want = 0
+			}
+			if named != want {
+				t.Fatalf("named starts at the parent sink = %d, want %d", named, want)
+			}
+		})
+	}
+}
+
+// TestLandingHoldsTheMessageToTheAnnouncedIdentity checks the seam holding a
+// published name to the message that lands. The mismatch is constructed —
+// control measures the index one statement before handing over the identity —
+// so this proves the check fires, not that anything reaches it.
+func TestLandingHoldsTheMessageToTheAnnouncedIdentity(t *testing.T) {
+	land := func(id AuthoredTurnIdentity, text string) []event.Event {
+		var notices []event.Event
+		sink := event.FuncSink(func(e event.Event) {
+			if e.Kind == event.Notice && e.Code == event.NoticeCodeTurnIdentityMismatch {
+				notices = append(notices, e)
+			}
+		})
+		session := NewSession("system")
+		a := New(&turnStartProvider{}, tool.NewRegistry(), session, Options{}, sink)
+		ctx := WithHostTurnBoundary(context.Background(), HostTurnBoundary{Authored: &id})
+		a.LandAuthoredUserMessage(ctx, provider.Message{Role: provider.RoleUser, Content: text})
+		if got := session.Snapshot()[1].RawContent; got != id.Raw {
+			t.Fatalf("landed RawContent = %q, want the announced identity's %q", got, id.Raw)
+		}
+		return notices
+	}
+
+	if notices := land(AuthoredTurnIdentity{AuthoredTurn: 1, MsgIndex: 1, Raw: "第一句"}, "第一句"); len(notices) != 0 {
+		t.Fatalf("a message that landed where it was named reported %d mismatches", len(notices))
+	}
+	notices := land(AuthoredTurnIdentity{AuthoredTurn: 1, MsgIndex: 7, Raw: "第一句"}, "第一句")
+	if len(notices) != 1 {
+		t.Fatalf("a message that landed elsewhere reported %d mismatches, want 1", len(notices))
+	}
+	if notices[0].Audience != event.NoticeAudienceOperator {
+		t.Fatalf("mismatch audience = %q, want operator: this is about the machine, not the conversation", notices[0].Audience)
+	}
+}

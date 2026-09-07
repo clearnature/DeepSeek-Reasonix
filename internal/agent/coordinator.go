@@ -318,7 +318,12 @@ func (c *Coordinator) SetPlannerPlanApprover(g PlannerPlanApprover) {
 
 // Run plans with the planner model, then hands the plan to the executor.
 func (c *Coordinator) Run(ctx context.Context, input string) error {
-	c.sink.Emit(event.Event{Kind: event.TurnStarted})
+	// A host that announced this turn owns its boundary; opening a second one
+	// here would make planner work and executor work two turns to every sink
+	// that resets on a start.
+	if _, hosted := HostTurnBoundaryFrom(ctx); !hosted {
+		c.sink.Emit(event.Event{Kind: event.TurnStarted})
+	}
 	// A turn starts owing nothing to the last one's plan; deliverPlan installs
 	// this turn's plan only once the executor is actually about to run it.
 	c.executor.SetPlanContract(nil)
@@ -453,15 +458,13 @@ func (c *Coordinator) persistExecutorNoOp(ctx context.Context, input, plan strin
 	if c == nil || c.executor == nil || c.executor.sess.conversation == nil {
 		return
 	}
-	rawInput := RawUserInput(ctx, input)
-	providerContent := c.executor.withTurnPreferences(input)
-	rawContent := ""
-	if providerContent != rawInput {
-		rawContent = rawInput
-	}
-	c.executor.sess.conversation.Add(provider.Message{
-		Role: provider.RoleUser, Content: providerContent, RawContent: rawContent,
-		Images: userImages(ctx), CreatedAt: time.Now().UnixMilli(),
+	// A turn nobody executed is still the turn the host named. It lands through
+	// the same seam an executed one does, so the identity published for it holds
+	// whichever way the turn ended.
+	c.executor.LandAuthoredUserMessage(ctx, provider.Message{
+		Role: provider.RoleUser, Content: c.executor.withTurnPreferences(input),
+		RawContent: RawUserInput(ctx, input),
+		Images:     userImages(ctx), CreatedAt: time.Now().UnixMilli(),
 	})
 	c.executor.sess.conversation.Add(provider.Message{Role: provider.RoleAssistant, Content: plan})
 }

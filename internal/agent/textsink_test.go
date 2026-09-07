@@ -106,3 +106,35 @@ func TestTextSinkRedrawsWithRenderer(t *testing.T) {
 		t.Errorf("redraw output mismatch:\n got: %q\nwant: %q", got, want)
 	}
 }
+
+// TestTextSinkKeepsPlannerAndExecutorApartInOneTurn is the dual-model render
+// fixture. Planner work and executor work are now one top-level turn, so the
+// phase marker is the only thing left between them: it is what has to carry the
+// separation a second turn boundary used to provide. Without that, the
+// executor's thinking joins the planner's block and reads as one model's.
+func TestTextSinkKeepsPlannerAndExecutorApartInOneTurn(t *testing.T) {
+	var b strings.Builder
+	s := NewTextSink(&b, nil, 80)
+	s.SetShowReasoning(true)
+
+	s.Emit(event.Event{Kind: event.TurnStarted})
+	s.Emit(event.Event{Kind: event.Phase, Text: "planner · planning"})
+	s.Emit(event.Event{Kind: event.Reasoning, Text: "what does this need"})
+	s.Emit(event.Event{Kind: event.Text, Text: "1. do the thing"})
+	s.Emit(event.Event{Kind: event.Phase, Text: "executor · executing"})
+	s.Emit(event.Event{Kind: event.Reasoning, Text: "starting on step 1"})
+	s.Emit(event.Event{Kind: event.Text, Text: "done"})
+
+	want := "[planner · planning]\n" +
+		"\x1b[2m  ▎ thinking\x1b[0m\n" +
+		"\x1b[2mwhat does this need\x1b[0m" +
+		"\n1. do the thing" + // the planner's answer, split from its reasoning
+		"\n[executor · executing]\n" +
+		"\x1b[2m  ▎ thinking\x1b[0m\n" + // the executor's own header, not the planner's
+		"\x1b[2mstarting on step 1\x1b[0m" +
+		"\ndone"
+
+	if got := b.String(); got != want {
+		t.Errorf("dual-model output mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
