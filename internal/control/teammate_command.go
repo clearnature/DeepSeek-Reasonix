@@ -112,8 +112,10 @@ func (c *Controller) applyTeamCommand(cmd, trimmed string) {
 			}
 		}
 		c.notice("broadcast mailed to active teammates")
-	case "/team-ask", "/team-approve":
-		c.notice(cmd + ": plan-approval channel is not wired in this build")
+	case "/team-ask":
+		c.notice("/team-ask: ask-forwarding is managed automatically for running members")
+	case "/team-approve":
+		c.applyTeamApprove(rest)
 	case "/team-spawn":
 		c.notice("/team-spawn is not wired in this build — create members individually with /team-create")
 	default:
@@ -144,6 +146,21 @@ func (c *Controller) applyTeamGroup(rest string) {
 	default:
 		c.notice("usage: /team-group create <name> | delete | status")
 	}
+}
+
+// applyTeamApprove answers a teammate plan-approval request (qwen
+// team_plan_approval analog).
+func (c *Controller) applyTeamApprove(rest string) {
+	fields := strings.Fields(strings.TrimSpace(rest))
+	if len(fields) != 2 || (fields[1] != "allow" && fields[1] != "deny") {
+		c.notice("usage: /team-approve <request_id> allow|deny")
+		return
+	}
+	if err := c.teammates.Approve(fields[0], fields[1] == "allow", c.parentSessionID()); err != nil {
+		c.notice("team-approve: " + err.Error())
+		return
+	}
+	c.notice(fmt.Sprintf("plan %q %s — verdict sent to teammate", fields[0], fields[1]))
 }
 
 // teamRosterText renders the P6 roster for /team-status notices.
