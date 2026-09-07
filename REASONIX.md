@@ -85,6 +85,9 @@ go test ./internal/tool/builtin/ ./internal/boot/  # catches tool/boot test brea
 
 ## 合并后必做遥测四方审计
 
+merge 上游前先对照 `docs/merge-hotspot-inventory.md` 定向复查 47 个双端活跃热区
+（A 类 compaction/投影逐块 diff，B 类测试门禁，C 类 jobs 全家）。
+
 合并涉及遥测文件（`internal/agent/*telemetry*.go`、`internal/stats/*`）后，
 **先做四方字段对照再提交**：`CompactionTelemetry` 结构 ↔ `emit` 的 detail
 键 ↔ `recordCompaction`/`setCompactionInt` 解析 ↔ `CompactionRecord` JSON
