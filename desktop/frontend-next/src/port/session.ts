@@ -4,6 +4,9 @@
 export interface HistoryMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  // Where this message sits in the session log. The rebuild drops host chrome,
+  // so a row's place on screen is not its place in the record.
+  msgIndex?: number;
   reasoning?: string;
   images?: number; // attachments on a user turn; an image-only one has no text
   toolCalls?: { id: string; name: string; arguments?: string }[];
@@ -18,6 +21,10 @@ export interface Checkpoint {
   turn: number;
   prompt: string;
   files: number;
+  // The session index of the user message this snapshot was taken for, and the
+  // point a conversation rewind truncates at. turn numbers the snapshots, not
+  // the conversation, so this is what a transcript row is joined to.
+  msgIndex?: number;
 }
 
 // Only edit-tool writes are snapshotted, so "code" restores those files and

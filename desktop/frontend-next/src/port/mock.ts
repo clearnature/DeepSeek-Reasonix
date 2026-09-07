@@ -3,7 +3,7 @@ import { HttpError } from "./port";
 import type { AccountState, AgentPort, ChangeDiff, CompactionSettings, Completion, CompletionItem, DeviceGrant, VersionHub, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, ModelEntry, Preset, ProviderSetup, RoleAssignments, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, WorkspaceChanges, Attachment, DroppedRef, Queue, QueueItem, Queued, TrayPrefs } from "./port";
 import type { ExecutionGraphRead, WireEvent } from "./wire";
 import { MockTheme } from "./mock_theme";
-import { SCRIPT } from "./fixture";
+import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
 import { MockExecutionHold, mockExecutionGraph } from "./mock_graph";
 import { mockStorage, mockStoragePlan } from "./mock_storage";
 import { MEMORIES, USAGE_PRICED, USAGE_TOKENS } from "./mock_memory";
@@ -458,7 +458,7 @@ export class MockPort extends MockTheme implements AgentPort {
   // Mock mode has to be able to show the rewind entry, so every prompt it has
   // seen becomes a checkpoint the way the kernel opens one per user turn.
   async checkpoints(): Promise<Checkpoint[]> {
-    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: i === 0 ? 0 : 3 }));
+    return this.prompts.map((prompt, i) => ({ turn: i, prompt, files: i === 0 ? 0 : 3, msgIndex: mockMsgIndex(i + 1) }));
   }
 
   // The second prompt onwards is scripted to have run bash, so mock mode can
@@ -516,7 +516,7 @@ export class MockPort extends MockTheme implements AgentPort {
       return;
     }
     this.at += 1;
-    this.emit(beat.ev);
+    this.emit(beat.ev.kind === "turn_started" ? { ...beat.ev, ...mockTurnStart(this.prompts.length) } : beat.ev);
     if (beat.ev.kind === "turn_done") {
       this.state.running = false;
       return;

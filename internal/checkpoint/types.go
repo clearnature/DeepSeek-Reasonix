@@ -97,6 +97,25 @@ type ActiveWriter struct {
 	Kind      string    `json:"kind,omitempty"` // "background_subagent", ...
 }
 
+// Meta is the picker-facing summary of a checkpoint (no file contents).
+// MsgIndex is the boundary it was opened at — the session index of the user
+// message this turn is about — which is what a picker joins its own rows to.
+// Turn numbers snapshots and says nothing about which message that is.
+type Meta struct {
+	Turn               int
+	MsgIndex           int
+	Time               time.Time
+	Prompt             string
+	Paths              []string
+	Coverage           Coverage
+	CoverageGaps       []CoverageGap
+	ExpiredFilePayload bool
+	ActiveWriters      []ActiveWriter
+	Legacy             bool
+	CanUndoFiles       bool
+	DisabledReason     string
+}
+
 // RewindScope selects what a rewind restores. Mirrors control.RewindScope without
 // importing control (checkpoint is a lower layer).
 type RewindScope int

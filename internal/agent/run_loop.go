@@ -203,25 +203,7 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 	// transcript tail. Fold its bounded facts into this new user turn exactly
 	// once; the user's raw text remains the classifier source above.
 	providerInput = withInterruptedRecovery(providerInput, a.pendingInterruptedRecovery())
-	a.svc.sink.Emit(event.Event{Kind: event.TurnStarted})
-	a.emitTurnPhase(event.TurnPhaseWorking)
-	input = a.withTurnPreferences(providerInput)
-	// Persist the short execution-policy block in provider Content; keep the
-	// original user text in RawContent for history/title/rewind stripping.
-	policyBlock := taskpolicy.ExecutionPolicyBlock(a.turn.policy)
-	if !strings.Contains(input, "<execution-policy") {
-		input = strings.TrimSpace(input) + "\n\n" + policyBlock
-	}
-	userCreatedAt := time.Now().UnixMilli()
-	a.activeTurnCreatedAt.Store(userCreatedAt)
-	rawContent := rawInput
-	if rawContent == "" {
-		rawContent = a.turn.turnInput
-	}
-	a.sess.conversation.Add(provider.Message{
-		Role: provider.RoleUser, Content: input, RawContent: rawContent,
-		Images: userImages(ctx), CreatedAt: userCreatedAt,
-	})
+	input = a.openUserTurn(ctx, providerInput, rawInput)
 
 	// The loop fields join the classification computed above rather than
 	// opening a second object: one turn, one turnRuntime. The zero values the
@@ -231,6 +213,33 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string) (rawInput string
 	state.input = input
 	state.budget = runBudget{started: time.Now()}
 	return rawInput, state
+}
+
+// openUserTurn composes this turn's user message, announces the turn it starts
+// and appends it, returning the provider-visible text. Composing before
+// announcing is what lets the announcement name the message: what goes out is
+// classified, not a stand-in for it.
+func (a *Agent) openUserTurn(ctx context.Context, providerInput, rawInput string) string {
+	input := a.withTurnPreferences(providerInput)
+	// Persist the short execution-policy block in provider Content; keep the
+	// original user text in RawContent for history/title/rewind stripping.
+	if !strings.Contains(input, "<execution-policy") {
+		input = strings.TrimSpace(input) + "\n\n" + taskpolicy.ExecutionPolicyBlock(a.turn.policy)
+	}
+	rawContent := rawInput
+	if rawContent == "" {
+		rawContent = a.turn.turnInput
+	}
+	pending := provider.Message{
+		Role: provider.RoleUser, Content: input, RawContent: rawContent,
+		Images: userImages(ctx),
+	}
+	a.svc.sink.Emit(a.turnStartedEvent(pending))
+	a.emitTurnPhase(event.TurnPhaseWorking)
+	pending.CreatedAt = time.Now().UnixMilli()
+	a.activeTurnCreatedAt.Store(pending.CreatedAt)
+	a.sess.conversation.Add(pending)
+	return input
 }
 
 // runToolLoop owns the main tool-round budget and dispatches each streamed

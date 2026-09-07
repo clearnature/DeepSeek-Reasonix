@@ -683,7 +683,11 @@ type historyMessage struct {
 	// Images is how many attachments the turn carried, not the attachments
 	// themselves: a turn that was only an image has no text to rebuild from,
 	// and a reader that sees zero of both drops it as host chrome.
-	Images     int               `json:"images,omitempty"`
+	Images int `json:"images,omitempty"`
+	// The session index this message occupies, which is what a checkpoint's
+	// boundary names. A reader rebuilding a transcript joins on it rather than
+	// on where a row happened to land after host chrome was dropped.
+	MsgIndex   int               `json:"msgIndex"`
 	ToolCalls  []historyToolCall `json:"toolCalls,omitempty"`
 	ToolCallID string            `json:"toolCallId,omitempty"`
 	ToolName   string            `json:"toolName,omitempty"`
@@ -691,15 +695,15 @@ type historyMessage struct {
 
 func historyMessages(msgs []provider.Message) []historyMessage {
 	out := make([]historyMessage, 0, len(msgs))
-	for _, m := range msgs {
+	for i, m := range msgs {
 		// Steer messages are surfaced as a notice, not a user message.
 		if m.Role == provider.RoleUser {
 			if steerText, isSteer := agent.SteerText(m.Content); isSteer {
-				out = append(out, historyMessage{Role: "notice", Content: "↪ " + steerText})
+				out = append(out, historyMessage{Role: "notice", Content: "↪ " + steerText, MsgIndex: i})
 				continue
 			}
 		}
-		hm := historyMessage{Role: string(m.Role), Content: m.Content}
+		hm := historyMessage{Role: string(m.Role), Content: m.Content, MsgIndex: i}
 		if m.Role == provider.RoleUser {
 			// Content is what the model saw, and one @-reference expands into a
 			// whole file. A reopened session has to show what was typed.
@@ -913,14 +917,15 @@ func (s *Server) forget(w http.ResponseWriter, r *http.Request) {
 // checkpoints returns the session's checkpoint list for the rewind picker.
 func (s *Server) checkpoints(w http.ResponseWriter, _ *http.Request) {
 	type cp struct {
-		Turn   int    `json:"turn"`
-		Prompt string `json:"prompt"`
-		Files  int    `json:"files"`
+		Turn     int    `json:"turn"`
+		Prompt   string `json:"prompt"`
+		Files    int    `json:"files"`
+		MsgIndex int    `json:"msgIndex"`
 	}
 	raw := s.ctl().Checkpoints()
 	out := make([]cp, len(raw))
 	for i, c := range raw {
-		out[i] = cp{Turn: c.Turn, Prompt: c.Prompt, Files: len(c.Paths)}
+		out[i] = cp{Turn: c.Turn, Prompt: c.Prompt, Files: len(c.Paths), MsgIndex: c.MsgIndex}
 	}
 	writeJSON(w, out)
 }

@@ -38,10 +38,15 @@ type Event struct {
 	Readiness       *FinalReadiness     `json:"readiness,omitempty"`
 	Receipt         *CompletionReceipt  `json:"receipt,omitempty"`
 	CheckpointTurn  *int                `json:"checkpointTurn,omitempty"`
-	RetryAttempt    int                 `json:"retryAttempt,omitempty"`
-	RetryMax        int                 `json:"retryMax,omitempty"`
-	RetryScope      string              `json:"retryScope,omitempty"` // "headers" | "stream"; omit for older clients
-	StreamAttempt   *StreamAttempt      `json:"streamAttempt,omitempty"`
+	// turn_started: the authored message this turn is about — its turn number
+	// in the conversation, and the session index it takes. A client mints its
+	// own user row, so this is the only thing that names which one.
+	AuthoredTurn  *int           `json:"authoredTurn,omitempty"`
+	MsgIndex      *int           `json:"msgIndex,omitempty"`
+	RetryAttempt  int            `json:"retryAttempt,omitempty"`
+	RetryMax      int            `json:"retryMax,omitempty"`
+	RetryScope    string         `json:"retryScope,omitempty"` // "headers" | "stream"; omit for older clients
+	StreamAttempt *StreamAttempt `json:"streamAttempt,omitempty"`
 	// ItemID correlates Steer / TurnDone / unapplied-steer with a durable
 	// session-inbox entry. Empty for legacy text-only guidance.
 	ItemID    string            `json:"itemId,omitempty"`
@@ -176,6 +181,9 @@ func ToWire(e event.Event) Event {
 		w.Guardian = ToWireGuardian(e.Guardian)
 	case event.ExtensionSurface, event.ExtensionStatus:
 		w.Extension = ToWireExtensionSurface(e.Extension)
+	case event.TurnStarted:
+		w.AuthoredTurn = e.AuthoredTurn
+		w.MsgIndex = e.MsgIndex
 	case event.TurnDone:
 		w.Cancelled = e.Cancelled
 		w.Outcome = e.Outcome

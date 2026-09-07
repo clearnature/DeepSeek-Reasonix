@@ -10,6 +10,7 @@ import { showsReceipt } from "./prefs";
 // session has to know they were split off.
 export type { Item, Metrics, PlanStep, RememberedFact, RuntimeNotice, SessionState, TurnTerminal, Waiting };
 import { promptOpen, prompted, sealByReceipt } from "./prompts";
+import { nameTurnStart } from "./turn_start";
 export { quoteAmount };
 export { showsReceipt };
 
@@ -28,6 +29,7 @@ export const initialState: SessionState = {
   running: false,
   doing: "空闲",
   steerQueue: [],
+  awaitingTurnStart: [],
   queueMoved: 0,
   panels: [],
   views: [],
@@ -285,10 +287,12 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
   // client owns its own turn. Mid-turn input stays pending until the steer
   // event says the run consumed it at a tool boundary.
   if (ev.kind === "__user") {
+    const id = ev.id ?? nextId();
     return {
       ...s,
       steerQueue: ev.pending ? [...s.steerQueue, ev.text] : s.steerQueue,
-      items: [...s.items, { t: "user", id: ev.id ?? nextId(), text: ev.text, pending: ev.pending }],
+      awaitingTurnStart: ev.pending ? s.awaitingTurnStart : [...s.awaitingTurnStart, id],
+      items: [...s.items, { t: "user", id, text: ev.text, pending: ev.pending }],
     };
   }
   // The kernel answers a queued line with the id it queued it under. The row
@@ -375,7 +379,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       // turn in front of you, not a record that one ever finished — without
       // this it would be the latter, and the tick from an hour ago would still
       // be on screen over work that is running now.
-      return { ...s, running: true, doing: "运行中", terminal: null, waiting: { ttftSince: Date.now() } };
+      return nameTurnStart({ ...s, running: true, doing: "运行中", terminal: null, waiting: { ttftSince: Date.now() } }, ev);
 
     case "reasoning":
       return {
@@ -724,7 +728,7 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; plan: Plan
       // turn that was nothing but a dropped file still has text here. What is
       // left with none is host chrome, and that is what goes.
       const text = stripControl(m.content);
-      if (text) out.push({ t: "user", id: nextId(), text });
+      if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex });
       continue;
     }
     if (m.role === "assistant") {

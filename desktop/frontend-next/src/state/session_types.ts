@@ -7,7 +7,19 @@ export type Item =
   // itemId names the durable queue entry while pending, which is what a
   // cancel asks the kernel to drop. queued says which wait it is in: guidance
   // lands at the next tool boundary, a follow-up when this turn is done.
-  | { t: "user"; id: string; text: string; pending?: boolean; itemId?: string; queued?: "steer" | "followup" }
+  // authoredTurn/msgIndex are the kernel's names for this message, stamped by
+  // the turn_started it caused (live) or read off the record (a rebuild). A row
+  // that has neither was never a turn of its own.
+  | {
+      t: "user";
+      id: string;
+      text: string;
+      pending?: boolean;
+      itemId?: string;
+      queued?: "steer" | "followup";
+      authoredTurn?: number;
+      msgIndex?: number;
+    }
   | { t: "say"; id: string; text: string; reasoning?: string; done: boolean; thoughtMs?: number }
   | { t: "tool"; id: string; tool: Tool; running: boolean; children: Tool[] }
   | { t: "reads"; id: string; tools: Tool[] }
@@ -129,6 +141,10 @@ export interface SessionState {
   running: boolean;
   doing: string;
   steerQueue: string[];
+  // The rows whose turns have not started yet, oldest first: each send that the
+  // kernel has not yet named a message for. A steer never joins them, because
+  // it starts no turn of its own.
+  awaitingTurnStart: string[];
   // How many times the kernel has said the durable queue moved. The frame
   // carries nothing else on purpose — one authority answers what is in there,
   // and this is what asks it again. Counting, not the kernel's own revision:

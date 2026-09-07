@@ -124,35 +124,24 @@ func encodeDisplayIndexEntries(idx *SessionDisplayIndex, msgs []provider.Message
 
 // classifyDisplayIndexMessage fills one entry's metadata from the message
 // alone — no body retention, no cross-message state beyond the running turn
-// counter.
+// counter, and no turn rule of its own: ClassifyTurn owns that.
 func classifyDisplayIndexMessage(m provider.Message, index int, offset, length int64, turn int) (DisplayIndexEntry, int) {
+	class := ClassifyTurn(m, turn)
 	entry := DisplayIndexEntry{
 		Index:        index,
 		Offset:       offset,
 		Length:       length,
 		Role:         m.Role,
-		AuthoredTurn: turn,
+		AuthoredTurn: class.AuthoredTurn,
+		StartsTurn:   class.StartsTurn,
+		Synthetic:    class.Synthetic,
+		Steer:        class.Steer,
 		HasImages:    len(m.Images) > 0,
 		HasToolCalls: len(m.ToolCalls) > 0,
 		LocalOnly:    m.LocalOnly,
 		ToolResult:   m.Role == provider.RoleTool,
 	}
-	if m.Role == provider.RoleUser {
-		content := UserMessageText(m)
-		switch {
-		case IsUserAuthoredTurn(content):
-			turn++
-			entry.AuthoredTurn = turn
-			entry.StartsTurn = true
-		default:
-			if _, isSteer := SteerText(content); isSteer {
-				entry.Steer = true
-			} else if IsSyntheticUserText(content) {
-				entry.Synthetic = true
-			}
-		}
-	}
-	return entry, turn
+	return entry, class.AuthoredTurn
 }
 
 // extendSessionDisplayIndex incrementally extends the previous index when the

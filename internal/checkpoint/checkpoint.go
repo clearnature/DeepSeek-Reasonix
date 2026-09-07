@@ -123,21 +123,6 @@ func (c *Checkpoint) revisions() []FileRevision {
 	return out
 }
 
-// Meta is the picker-facing summary of a checkpoint (no file contents).
-type Meta struct {
-	Turn               int
-	Time               time.Time
-	Prompt             string
-	Paths              []string
-	Coverage           Coverage
-	CoverageGaps       []CoverageGap
-	ExpiredFilePayload bool
-	ActiveWriters      []ActiveWriter
-	Legacy             bool
-	CanUndoFiles       bool
-	DisabledReason     string
-}
-
 // Store holds a session's checkpoints in memory and, when dir is set, persists one
 // JSON file per turn under it (cheap delete, corruption-isolated). All methods are
 // safe for concurrent use — the agent snapshots from tool goroutines.
@@ -823,6 +808,7 @@ func (s *Store) List() []Meta {
 		}
 		meta := Meta{
 			Turn:               c.Turn,
+			MsgIndex:           c.MsgIndex,
 			Time:               c.Time,
 			Prompt:             c.Prompt,
 			Paths:              paths,

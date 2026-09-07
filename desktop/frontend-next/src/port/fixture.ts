@@ -47,6 +47,14 @@ const T0 = 1_756_000_000_000;
 const node = (id: string, over: Partial<GraphNode> = {}): GraphNode => ({ id, kind: "worker", ...over });
 const graph = (nodes: GraphNode[], edges: GraphEdge[] = []): WireEvent => ({ kind: "graph_delta", graph: { nodes, edges } });
 
+// What the kernel says a turn is about: the authored turn its message opens and
+// the index that message takes. A mock session is a system message and one
+// user/assistant pair per turn — the number matters only in that the checkpoint
+// list and the turn's own event derive it the same way, or mock mode's rewind
+// entries name nothing.
+export const mockMsgIndex = (turn: number) => turn * 2 - 1;
+export const mockTurnStart = (turn: number) => ({ authoredTurn: turn, msgIndex: mockMsgIndex(turn) });
+
 export const SCRIPT: Beat[] = [
   { wait: 300, ev: { kind: "turn_started" } },
   {

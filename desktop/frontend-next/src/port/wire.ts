@@ -568,6 +568,12 @@ export interface WireEvent {
   // The turn a compaction checkpoint committed under, so a reader can tell a
   // fold apart from the turns around it.
   checkpointTurn?: number;
+  // turn_started: which message this turn is about. authoredTurn numbers the
+  // conversation's own turns, msgIndex the session log — a checkpoint's `turn`
+  // is neither. A client mints its own user row, so this is the only thing
+  // that says which row the kernel just started a turn for.
+  authoredTurn?: number;
+  msgIndex?: number;
   // recovery_paused is no longer emitted; sessions recorded before the retry
   // budgets were removed still carry it, so a reader has to render it.
   outcome?: "final_readiness" | "recovery_paused";
