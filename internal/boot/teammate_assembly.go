@@ -6,6 +6,7 @@ import (
 	"reasonix/internal/event"
 	"reasonix/internal/jobs"
 	"reasonix/internal/tool"
+	"time"
 )
 
 // newTeammateOrchestration assembles the P6 TeammateStore for the controller.
@@ -27,6 +28,9 @@ func newTeammateOrchestration(sink event.Sink, jm *jobs.Manager, store *agent.Su
 	if snapshotPath != "" {
 		ts.SetSnapshotPath(snapshotPath)
 	}
+	// Enable stalled-member abort (qwen STALL_THRESHOLD analog); jobs keep
+	// running with only a warning when the threshold is left at zero.
+	ts.SetStallAbort(600 * time.Second)
 	if ts != nil {
 		reg.Add(control.NewTeamLeaderTool(ts))
 	}
