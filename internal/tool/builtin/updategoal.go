@@ -57,9 +57,15 @@ func (updateGoal) ProviderVisible(ctx context.Context) bool {
 	return ok
 }
 
-func (updateGoal) Unavailable(context.Context) string {
-	return "update_goal is only available while an active goal turn is running — no goal state was changed"
+// noActiveGoalTurn is the one fact ProviderVisible can prove: this turn carries
+// no goal recorder. Both refusal paths return this same value, so the identity
+// cannot be present on the gate and missing on the stale-transcript path.
+var noActiveGoalTurn = tool.Refusal{
+	Code:    "goal.no_active_turn",
+	Message: "update_goal is only available while an active goal turn is running — no goal state was changed",
 }
+
+func (updateGoal) Unavailable(context.Context) tool.Refusal { return noActiveGoalTurn }
 
 // PlanModeSafe reports true: the tool is read-only host bookkeeping, and
 // outside an active goal turn its Execute fails closed anyway.
@@ -95,7 +101,7 @@ func (updateGoal) Execute(ctx context.Context, args json.RawMessage) (string, er
 	}
 	recorder, ok := tool.GoalTurnRecorderFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("update_goal is only available while an active goal turn is running — no goal state was changed")
+		return "", noActiveGoalTurn
 	}
 	result, err := recorder.RecordGoalReport(tool.GoalReport{
 		Status:     p.Status,

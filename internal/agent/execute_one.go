@@ -219,20 +219,26 @@ func contextualToolGateOutcome(ctx context.Context, target tool.Tool, name strin
 	if !ok || contextual.ProviderVisible(ctx) {
 		return toolOutcome{}, false
 	}
-	msg := unavailableReason(ctx, target, name)
-	return toolOutcome{output: msg, blocked: true, errMsg: firstLine(msg)}, true
+	refusal := unavailableReason(ctx, target, name)
+	msg := refusal.String()
+	return toolOutcome{output: msg, blocked: true, errMsg: firstLine(msg), refusalCode: refusal.Code}, true
 }
 
 // What the model is told when a contextual tool is out of context. The tool
 // answers it, because the tool is what knows; a table here keyed by name would
-// go stale the first time one is added.
-func unavailableReason(ctx context.Context, target tool.Tool, name string) string {
+// go stale the first time one is added. A contextual tool that says nothing is
+// a fact about the registry rather than about the call, so the host names it
+// under its own code instead of leaving the reader a bare sentence.
+func unavailableReason(ctx context.Context, target tool.Tool, name string) tool.Refusal {
 	if r, ok := target.(tool.ContextualReasoner); ok {
-		if why := strings.TrimSpace(r.Unavailable(ctx)); why != "" {
-			return why
+		if refusal := r.Unavailable(ctx); !refusal.Empty() {
+			return refusal
 		}
 	}
-	return fmt.Sprintf("blocked: tool %q is unavailable in the current workflow context", name)
+	return tool.Refusal{
+		Code:    "tool.unavailable_unspecified",
+		Message: fmt.Sprintf("blocked: tool %q is unavailable in the current workflow context", name),
+	}
 }
 
 // applyMutationDependencyBarrier blocks later mutations and verifications in the

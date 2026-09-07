@@ -93,9 +93,15 @@ func (completeStep) ProviderVisible(ctx context.Context) bool {
 	return !planmode.Active(ctx)
 }
 
-func (completeStep) Unavailable(context.Context) string {
-	return "blocked: complete_step is only available after plan approval. While planning, keep task state with todo_write and present the plan for user approval."
+// Plan mode being active is what ProviderVisible reads, so that is what the
+// code names — not "unapproved", which is a conclusion about a plan this tool
+// never sees.
+var planModeActive = tool.Refusal{
+	Code:    "plan.mode_active",
+	Message: "blocked: complete_step is only available after plan approval. While planning, keep task state with todo_write and present the plan for user approval.",
 }
+
+func (completeStep) Unavailable(context.Context) tool.Refusal { return planModeActive }
 
 // PlanModeSafe reports false: although complete_step is read-only, it signs off a
 // completed execution step, which is meaningful only after plan approval — not

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"reasonix/internal/tool"
 )
 
 // ConcludeNoChangesTool is the planner's other structured exit. A turn that
@@ -40,14 +42,20 @@ func (*ConcludeNoChangesTool) ProviderVisible(ctx context.Context) bool {
 	return ok
 }
 
-func (*ConcludeNoChangesTool) Unavailable(context.Context) string {
-	return "conclude_no_changes is only available while a planning turn is running — it is how a plan ends when nothing needs changing, not a way to end an execution turn"
+func (*ConcludeNoChangesTool) Unavailable(context.Context) tool.Refusal {
+	return tool.Refusal{
+		Code:    codeNoPlanningTurn,
+		Message: "conclude_no_changes is only available while a planning turn is running — it is how a plan ends when nothing needs changing, not a way to end an execution turn",
+	}
 }
 
 func (*ConcludeNoChangesTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	submission, ok := planSubmissionFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("conclude_no_changes is only available while planning; there is no planning turn to conclude in this phase")
+		return "", tool.Refusal{
+			Code:    codeNoPlanningTurn,
+			Message: "conclude_no_changes is only available while planning; there is no planning turn to conclude in this phase",
+		}
 	}
 	var payload struct {
 		Reason string `json:"reason"`

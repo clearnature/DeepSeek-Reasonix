@@ -240,6 +240,7 @@ type Tool struct {
 	CapabilityID string
 	Output       string // ToolResult: the result text fed to the model
 	Err          string // ToolResult: non-empty when the call failed or was blocked
+	RefusalCode  string // ToolResult: dotted identity of a host refusal; Err is only its wording
 	ReadOnly     bool
 	Bound        OutputBound // ToolResult: how Output was fitted into context
 	DurationMs   int64       // ToolResult: wall-clock execution time in milliseconds

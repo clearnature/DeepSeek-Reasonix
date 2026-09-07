@@ -45,10 +45,10 @@ type ContextualTool interface {
 // available again. Only the tool knows that — the same state ProviderVisible
 // reads — so a name-keyed table of excuses elsewhere would be half the contract
 // kept where the other half drifts from it. The registry test enforces this, so
-// a new ContextualTool cannot ship with a blank reason.
+// a new ContextualTool cannot ship with a blank reason or a blank identity.
 type ContextualReasoner interface {
 	ContextualTool
-	Unavailable(context.Context) string
+	Unavailable(context.Context) Refusal
 }
 
 // Previewer is an optional capability a writer Tool may implement: given the

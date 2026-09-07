@@ -33,9 +33,13 @@ func init() {
 // so they say it once. What makes them available is a job context on the turn.
 type noJobs struct{}
 
-func (noJobs) Unavailable(context.Context) string {
-	return "background jobs are not available in this context"
+// The fact all three prove is the same one: this turn carries no job context.
+var noJobContext = tool.Refusal{
+	Code:    "jobs.no_job_context",
+	Message: "background jobs are not available in this context",
 }
+
+func (noJobs) Unavailable(context.Context) tool.Refusal { return noJobContext }
 
 type bashOutput struct{ noJobs }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"reasonix/internal/plancontract"
+	"reasonix/internal/tool"
 )
 
 // SubmitPlanTool is the planner's structured exit: it hands the host a plan as
@@ -99,14 +100,24 @@ func (*SubmitPlanTool) ProviderVisible(ctx context.Context) bool {
 	return ok
 }
 
-func (*SubmitPlanTool) Unavailable(context.Context) string {
-	return "submit_plan is only available while a planning turn is running — this turn is executing, so keep task state with todo_write instead"
+// Both plan tools read the same predicate — a planning submission on the turn
+// — so they share one identity and keep their own wording.
+const codeNoPlanningTurn = "plan.no_planning_turn"
+
+func (*SubmitPlanTool) Unavailable(context.Context) tool.Refusal {
+	return tool.Refusal{
+		Code:    codeNoPlanningTurn,
+		Message: "submit_plan is only available while a planning turn is running — this turn is executing, so keep task state with todo_write instead",
+	}
 }
 
 func (*SubmitPlanTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	submission, ok := planSubmissionFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("submit_plan is only available while planning; there is no plan to submit in this phase")
+		return "", tool.Refusal{
+			Code:    codeNoPlanningTurn,
+			Message: "submit_plan is only available while planning; there is no plan to submit in this phase",
+		}
 	}
 	var plan plancontract.Plan
 	if err := json.Unmarshal(args, &plan); err != nil {
