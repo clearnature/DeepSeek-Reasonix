@@ -59,40 +59,45 @@
 
 ## 四、目标架构设计建议（蓝图）
 
-```
-目标：Reasonix team = 基础编排能力层（可被模型工具面 + host 命令面共同驱动）
+**第一性前提：Reasonix 的产品主体是 agent，因此编排系统的主要调用者必须是模型。**
+host 命令只是人机兜底（手动/调试），模型工具面是架构主轴——不是可后补的工具清单。
+（task/send_message 已证明"模型可用编排件"范式；team 管理与之同族，必须同层开放。）
 
-┌ 调用面（双层）
-│  模型工具族：team_group_create / team_group_add_task / team_group_status /
-│              team_group_dissolve + send_message(teammate) / team_plan_approval
-│  host 命令：/team-*（人类手动，保留）
+```
+目标：Reasonix team = 基础编排能力层，主要被模型工具面驱动（agent 自主当 leader），host 命令辅助
+
+┌ 调用面（主轴）
+│  模型工具族（第一公民）：team_group_create / team_group_add_task / team_group_status /
+│                         team_group_dissolve + send_message(teammate) / team_plan_approval
+│  host 命令：/team-*（人类手动兜底，同一 Controller 路径封装，无双份语义）
 ├ 组聚合根（新）：TeamGroup{ name, members[], state(active/ dissolving), tasks[], 事务边界 }
 │   └ 持久化：原子快照（P10 snapshotPath 落地）+ 构造加载（跨重启存活）
 ├ 既有：TeammateStore（成员执行/状态）/ jobs（job 生命周期）/ 完成事件（状态迁移触发器）
 │   └ 接线：inboxRoot 落盘（mailbox 磁盘层启用）
 ├ 任务板（可选阶段）：teammate 可 task_list 自助（拉模式补充，保留推）
-└ 生命周期语义：事务开始=组 active；全部成员完成（完成事件聚合）→ 
+└ 生命周期语义：事务开始=组 active；全部成员完成（完成事件聚合）→
      dissolve（协作收尾 or 自动清组）→ 归档 transcript + 释放 mailbox
 ```
 
 设计要点：
-- **组 = 现有 TeammateStore 之上的聚合视图**（成员复用，不重造执行器）——状态与成员仍由 TeammateStore/jobs 负责，组只加"集合 + 事务状态 + 批量生命周期 + 持久化"
-- **模型工具面封装同一 Controller 路径**（applyTeamCommand 同源逻辑，避免双份语义）
-- **实时注入**单独立项：需设计"teammate 消息 → leader 下轮前缀"的位置固定注入（碰缓存红线，哲学审核后做）
-- 磁盘策略：组快照（状态）+ mailbox 落盘（消息）两处即够，无需 qwen 全磁盘任务板（我们事件驱动更强）
+- **模型工具面封装同一 Controller 路径**（applyTeamCommand 同源逻辑，避免双份语义）——工具面与命令面是同层能力的两个入口，不是两套实现
+- **组 = 现有 TeammateStore 之上的聚合视图**（成员复用，不重造执行器）
+- 实时注入单独立项（位置固定协议，哲学审核后做）
+- 磁盘策略：组快照 + mailbox 落盘两处即够（事件驱动优势保留，不倒退到全磁盘轮询）
 
-## 五、演化路径（架构级阶段，非补丁）
+## 五、演化路径（架构级阶段）
+
+> 顺序依"调用面 = 架构主轴"重排：先打通模型编排能力（主体开放），组/持久化作为其支撑随后。
+> 每阶段独立可交付、守卫测试、防丢模板（上游无路径文件）。
 
 | 阶段 | 交付 | 架构意义 |
 |---|---|---|
-| A | 组聚合根（内存）+ /team-group start/status/dissolve（host）| 建立组状态模型与事务边界（可测）|
-| B | 组快照持久化 + boot 接线 inboxRoot | 组跨重启存活（磁盘策略定案）|
-| C | leader 模型工具族（组管理封装 host 逻辑）| 承认"模型是指挥者"范式（调用面补齐）|
+| A | **模型工具面打底**：把现有 applyTeamCommand 同源逻辑封装为 leader 工具族（team_* 基本盘：create/assign/status/remove/broadcast）——先让模型能编（复用现有单成员）| 主体开放（agent 可当 leader），范式定锚 |
+| B | 组聚合根 + /team-group 命令/工具（批量 create + status + dissolve）| 事务边界与批量生命周期 |
+| C | 组快照持久化 + boot 接线 inboxRoot | 跨重启存活 |
 | D | dissolve 语义：事务完成自动释放 vs 显式（用户决策）| 生命周期闭环 |
 | E | 实时注入（位置固定协议，单独哲学审核）| "点"到"流" |
 | F | 任务板拉模式（teammate 自助）| 可选，看需求 |
-
-每阶段独立可交付、守卫测试、防丢模板（上游无路径文件）。
 
 ---
 
