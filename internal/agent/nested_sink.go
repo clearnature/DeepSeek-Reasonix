@@ -35,6 +35,9 @@ func (s nestedSink) Emit(e event.Event) {
 	case event.ToolDispatch, event.ToolResult, event.ToolProgress:
 		e.Tool.ParentID = s.parentID
 		e.Tool.ID = namespaceToolID(s.parentID, e.Tool.ID)
+		// Re-parented work changes producer: in the parent's stream this is the
+		// child's, whatever role the child plays in its own.
+		e.Source = event.UsageSourceSubagent
 		s.parent.Emit(e)
 	case event.Usage:
 		if e.UsageSource == "" {

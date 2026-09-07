@@ -6,7 +6,7 @@ import { nextId } from "./ids";
 // what the card renders, and putting it there would make every append rewrite it.
 const thoughtSince = new Map<string, number>();
 
-export function appendText(items: Item[], text: string, field: "text" | "reasoning"): Item[] {
+export function appendText(items: Item[], text: string, field: "text" | "reasoning", source?: string): Item[] {
   const last = items[items.length - 1];
   if (last && last.t === "say" && !last.done) {
     const next = items.slice();
@@ -22,7 +22,7 @@ export function appendText(items: Item[], text: string, field: "text" | "reasoni
   }
   const id = nextId();
   if (field === "reasoning") thoughtSince.set(id, Date.now());
-  return [...items, { t: "say", id, text: "", done: false, [field]: text }];
+  return [...items, { t: "say", id, text: "", done: false, source, [field]: text }];
 }
 
 // Settles the message still being written. turn_done settles every open one:
@@ -64,7 +64,7 @@ export function foldMessage(items: Item[], ev: WireEvent): Item[] {
   }
   if (at < 0) {
     if (!ev.text && !ev.reasoning) return items;
-    return [...items, { t: "say", id: nextId(), text: ev.text ?? "", reasoning: ev.reasoning, done: true }];
+    return [...items, { t: "say", id: nextId(), text: ev.text ?? "", reasoning: ev.reasoning, done: true, source: ev.source }];
   }
   const open = items[at] as Extract<Item, { t: "say" }>;
   const next = items.slice();
@@ -76,6 +76,7 @@ export function foldMessage(items: Item[], ev: WireEvent): Item[] {
     thoughtMs: ran,
     text: ev.text || open.text,
     reasoning: ev.reasoning || open.reasoning,
+    source: open.source ?? ev.source,
   };
   return next;
 }

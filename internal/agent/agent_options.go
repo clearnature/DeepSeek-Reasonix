@@ -48,6 +48,10 @@ type Options struct {
 	// provider instance. It is attached to emitted Usage events so downstream
 	// usage accounting can attribute tokens to the exact model.
 	ModelRef string
+	// EventSource names the producer of this agent's settled frames — executor
+	// unless a caller says otherwise, so a two-model stream says which model
+	// wrote each one rather than leaving it to be inferred.
+	EventSource string
 	// RequireVisibleFinal makes internal callers reject reasoning-only responses.
 	RequireVisibleFinal bool
 	// Gate is the per-call permission gate. nil disables gating.

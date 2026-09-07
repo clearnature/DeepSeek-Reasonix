@@ -717,6 +717,7 @@ func (s trackedChildSink) Emit(e event.Event) {
 	t.mu.Unlock()
 	switch e.Kind {
 	case event.ToolDispatch, event.ToolResult, event.ToolProgress:
+		e.Source = event.UsageSourceSubagent
 		t.sink.Emit(e)
 	case event.Usage:
 		if e.UsageSource == "" {

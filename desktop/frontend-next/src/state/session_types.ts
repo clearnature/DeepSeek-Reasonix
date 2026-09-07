@@ -20,7 +20,9 @@ export type Item =
       authoredTurn?: number;
       msgIndex?: number;
     }
-  | { t: "say"; id: string; text: string; reasoning?: string; done: boolean; thoughtMs?: number }
+  // source names which model wrote it — a turn can carry two, and the card is
+  // where the answer has to survive.
+  | { t: "say"; id: string; text: string; reasoning?: string; done: boolean; thoughtMs?: number; source?: string }
   | { t: "tool"; id: string; tool: Tool; running: boolean; children: Tool[] }
   | { t: "reads"; id: string; tools: Tool[] }
   | { t: "guardian"; id: string; g: Guardian }

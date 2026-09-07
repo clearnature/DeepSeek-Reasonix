@@ -38,6 +38,10 @@ type Event struct {
 	Readiness       *FinalReadiness     `json:"readiness,omitempty"`
 	Receipt         *CompletionReceipt  `json:"receipt,omitempty"`
 	CheckpointTurn  *int                `json:"checkpointTurn,omitempty"`
+	// Which producer wrote this frame: the executor, the planner, a sub-agent.
+	// A turn can carry two models, and the alternative is reading it off the
+	// last phase marker — an adjacency a replay cannot even see.
+	Source string `json:"source,omitempty"`
 	// turn_started: the authored message this turn is about — its turn number
 	// in the conversation, and the session index it takes. A client mints its
 	// own user row, so this is the only thing that names which one.
@@ -112,7 +116,7 @@ type StreamAttempt struct {
 
 // ToWire converts a typed runtime event into the shared frontend JSON contract.
 func ToWire(e event.Event) Event {
-	w := Event{Kind: kindNames[e.Kind], Text: e.Text, Detail: e.Detail, Reasoning: e.Reasoning, ItemID: e.ItemID}
+	w := Event{Kind: kindNames[e.Kind], Text: e.Text, Detail: e.Detail, Reasoning: e.Reasoning, ItemID: e.ItemID, Source: e.Source}
 	if len(e.MemoryCitations) > 0 {
 		w.MemoryCitations = ToWireMemoryCitations(e.MemoryCitations)
 	}

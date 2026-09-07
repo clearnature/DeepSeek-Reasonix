@@ -342,7 +342,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         ...s,
         doing: "思考中",
         outWindow: sample(s.outWindow, estimateTokens(ev.text ?? ""), Date.now()),
-        items: appendText(s.items, ev.text ?? "", "reasoning"),
+        items: appendText(s.items, ev.text ?? "", "reasoning", ev.source),
       };
 
     case "text":
@@ -350,7 +350,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         ...s,
         doing: "正在回答",
         outWindow: sample(s.outWindow, estimateTokens(ev.text ?? ""), Date.now()),
-        items: appendText(s.items, ev.text ?? "", "text"),
+        items: appendText(s.items, ev.text ?? "", "text", ev.source),
       };
 
     case "message":

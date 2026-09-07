@@ -1791,6 +1791,7 @@ func readOnlyAgentConstruction(reg *tool.Registry, opts Options) (*tool.Registry
 // writers, while PlannerMCPExecution allows authorized, non-destructive MCP
 // through the stable use_capability proxy without requiring readOnlyHint.
 func NewPlannerAgent(prov provider.Provider, reg *tool.Registry, sess *Session, opts Options, sink event.Sink) *Agent {
+	opts.EventSource = event.UsageSourcePlanner
 	opts.ReadOnlyExecution = true
 	opts.PlannerMCPExecution = true
 	// The coordinator needs visible plan text to hand off to the executor;

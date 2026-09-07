@@ -259,6 +259,8 @@ type Agent struct {
 	svc agentServices
 	// role is what this agent is; see agent_role.go.
 	role agentRole
+	// eventSource names this agent as the producer of its own frames.
+	eventSource string
 	// sess is the state one conversation owns; SetSession restarts it. See
 	// sessionstate.go.
 	sess              sessionRuntime
@@ -691,7 +693,7 @@ func (a *Agent) SetSink(sink event.Sink) {
 	if nilutil.IsNil(sink) {
 		sink = event.Discard
 	}
-	a.svc.sink = sink
+	a.svc.sink = withProducer(sink, a.eventSource)
 }
 
 func (a *Agent) consumeSteer() (text, itemID string, host, ok bool) {
@@ -777,6 +779,10 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 	if nilutil.IsNil(sink) {
 		sink = event.Discard
 	}
+	if opts.EventSource == "" {
+		opts.EventSource = event.UsageSourceExecutor
+	}
+	sink = withProducer(sink, opts.EventSource)
 	gate := opts.Gate
 	if nilutil.IsNil(gate) {
 		gate = nil
@@ -845,6 +851,7 @@ func New(prov provider.Provider, tools *tool.Registry, session *Session, opts Op
 			readOnlyExecution:   opts.ReadOnlyExecution,
 			plannerMCPExecution: opts.PlannerMCPExecution,
 		},
+		eventSource: opts.EventSource,
 		recovery: recoveryIdentity{
 			agentID: strings.TrimSpace(opts.RecoveryAgentID),
 			taskID:  strings.TrimSpace(opts.RecoveryTaskID),
