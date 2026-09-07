@@ -67,6 +67,29 @@ func (t *teamTool) ProviderVisible(ctx context.Context) bool {
 	return ok
 }
 
+func (t *teamTool) executeMail(name, text string) (string, error) {
+	name = strings.TrimSpace(name)
+	text = strings.TrimSpace(text)
+	if name == "" || text == "" {
+		return "", fmt.Errorf("team mail: name and text are required")
+	}
+	if err := t.ts.PostMail(name, text); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("mail queued for %q — delivered on its next assignment", name), nil
+}
+
+func (t *teamTool) executeShutdown(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("team shutdown: name is required")
+	}
+	if err := t.ts.RequestShutdown(name); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("shutdown requested for %q — it will wind down its current work", name), nil
+}
+
 func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	var p struct {
 		Action string `json:"action"`
@@ -121,15 +144,6 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			b.WriteString("\n")
 		}
 		return strings.TrimSuffix(b.String(), "\n"), nil
-	case "shutdown":
-		name := strings.TrimSpace(p.Name)
-		if name == "" {
-			return "", fmt.Errorf("team shutdown: name is required")
-		}
-		if err := t.ts.RequestShutdown(name); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("shutdown requested for %q — it will wind down its current work", name), nil
 	case "remove":
 		name := strings.TrimSpace(p.Name)
 		if name == "" {
@@ -140,15 +154,9 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		}
 		return fmt.Sprintf("teammate %q removed", name), nil
 	case "mail":
-		name := strings.TrimSpace(p.Name)
-		text := strings.TrimSpace(p.Text)
-		if name == "" || text == "" {
-			return "", fmt.Errorf("team mail: name and text are required")
-		}
-		if err := t.ts.PostMail(name, text); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("mail queued for %q — delivered on its next assignment", name), nil
+		return t.executeMail(p.Name, p.Text)
+	case "shutdown":
+		return t.executeShutdown(p.Name)
 	case "broadcast":
 		text := strings.TrimSpace(p.Text)
 		if text == "" {
