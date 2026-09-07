@@ -58,8 +58,22 @@ func main() {
 	update := flag.Bool("update", false, "rewrite the baseline from the current tree")
 	strict := flag.Bool("strict", false, "report every finding, ignoring the baseline")
 	allowWiden := flag.Bool("allow-widen", false, "let -update raise a budget. Lowering one needs nothing; raising one carries debt forward, which is the diff a reviewer has to be shown on purpose")
-	only := flag.String("only", "", "comma-separated paths: report file budgets for these only, so a change can be checked without reading the whole tree's recorded debt (repo-wide ceilings still report). Pair with `git diff --name-only`.")
+	only := flag.String("only", "", "comma-separated paths: report file budgets for these only, so a change can be checked without reading the whole tree's recorded debt (repo-wide ceilings still report).")
+	changed := flag.Bool("changed", false, "set -only to what the working tree changed against HEAD, including files git has not started tracking. `git diff` alone answers nothing about a new file, which is how a narrowed gate reports green over one it never opened.")
 	flag.Parse()
+
+	if *changed {
+		if *only != "" {
+			fmt.Fprintln(os.Stderr, "repolint: -changed and -only both name the universe; pass one")
+			os.Exit(2)
+		}
+		list, err := changedPaths(*root)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "repolint:", err)
+			os.Exit(2)
+		}
+		*only = list
+	}
 
 	if *baselinePath == "" {
 		*baselinePath = filepath.Join(*root, "tools", "repolint", "baseline.json")

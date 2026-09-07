@@ -51,7 +51,7 @@ lint-install:
 # unknown program it must assume writes — so only this form can be cited as
 # evidence that the standards gate passed.
 check:
-	go run ./tools/repolint -only "$$(git diff --name-only HEAD | paste -sd, -)"
+	go run ./tools/repolint -changed
 
 lint-update:
 	go run ./tools/repolint -update

@@ -230,13 +230,17 @@ never touched. To see only what your own edits owe:
 make check
 ```
 
-Repo-wide ceilings still report under `-only`, because a file can push the tree
-past one without exceeding its own budget.
+Repo-wide ceilings still report under a narrowed run, because a file can push
+the tree past one without exceeding its own budget.
 
-Run it through `make`, not as `go run ./tools/repolint -only ...`. The host
-recognizes a `make` target as a check whose result it can read, while an
-arbitrary `go run ./tools/...` is a program it has to assume writes — so only
-the `make` form can be cited as evidence that this gate passed.
+`make check` owns the evidence-bearing changed-file universe — everything the
+worktree altered *and* everything it added that git has not been told about.
+Never substitute a direct `go run ./tools/repolint` invocation for it when
+recording verification evidence: the host recognizes a `make` target as a check
+whose result it can read, while an arbitrary `go run ./tools/...` is a program
+it has to assume writes, and the flags behind the target are its implementation
+rather than the contract. Building that universe from `git diff` alone once let
+a new file reach the gate unopened and be reported clean.
 
 ## Import cycle rule
 
