@@ -27,15 +27,14 @@
 - 现象：SetStallAbort 定义存在但**从未配置**——stallAbort=0 = abort 禁用（仅 jobs 层警告）。早前判"T6 已实现"只核验了 checkStalled 存在，未核验**启用**。
 - 修复：boot SetStallAbort(600s)（76b2b572a）。教训：功能存在 ≠ 生效，须验装配启用（同 saveMainRequest 教训族）。
 
-### G2（记录为 debt）：调用面双份语义（违反架构报告"同源无双份"）
+### G2（已评估，维持 debt）：调用面双份语义
 - 现象：team 工具 Execute 与 /team-* applyTeamCommand **各自实现校验/文案**（都调 ts 方法但中间逻辑重复），非"工具封装同一 Controller 路径"。
 - 影响：改语义需两处同步；文案漂移风险。
 - 缓解：两者都薄（薄封装 ts 方法），重复面小。彻底共享 = 抽 team 命令语义层（applyTeamCommand 供工具调）——成本高，标记 debt，下阶段做。
 
-### G3（记录）：文档落后于实现形态
+### G3（已修 8da9a2e5c）：工具形态补齐
 - 现象：audit 记"leader→teammate 直投缺 🟡 / send_message teammate 路由"——实现为 **team tool mail action**（send_message 未扩展）；"approve 应答工具/命令"——/team-approve 命令做了但 **team 工具无 approve action**（半）。
-- 影响：文档 ≠ 实现的形态命名（能力等价但入口不同）。
-- 处置：本报告即同步；后续工具形态再决策（拆独立工具 or 保持单工具多 action）。
+- approve 模型工具 action 已补（8da9a2e5c），工具面与 /team-approve 对齐；mail/team_message 形态差异记录为设计选择（send_message 保持 task 路由，mail 走 team 工具）。
 
 ## 三、测试与规范基线
 
