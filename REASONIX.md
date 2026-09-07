@@ -109,6 +109,25 @@ tests never see. Calibrate `check-bundle-budget.mjs` to the dev baseline when
 it fails after a merge (upstream budgets exclude dev frontend increments:
 Virtuoso/team panels/locale copy).
 
+## 本地命令防丢模板（/compress-fast 教训，2026-09-07）
+
+本地特有**动作型命令**（调 controller/agent API、无模型往返）多次被上游收敛吞掉：
+实现内联在 controller.go + 无守卫测试 → merge 整文件侧胜静默蒸发、编译照过
+（/compress-fast 丢了 4 次，恢复见 8ada459db）。
+
+重建/新增时必须按此模板：
+
+1. **实现体放上游无路径的独立文件**（`internal/agent/fast_compress.go`、
+   `internal/control/fast_compress.go` 这类新文件）——merge 永不覆盖；依赖的
+   上游符号被改名/删签名时编译失败即时暴露。
+2. controller.go 只留**最少路由 case**（分发唯一入口，无法避开）。别试图注册进
+   `c.Commands()`——那是自定义命令+skill 目录（Render→文本→turn），不承载内置
+   动作命令，注册无效。
+3. **守卫测试锁行为**（路由直达 + 效果断言，如 fast_compress_test.go×2）：case
+   被 merge 吞掉即 CI 红，禁止静默。
+
+禁止再原样内联进 controller.go。
+
 ## Import cycle rule
 
 Before importing a new internal package from a non-test file, verify the target package's **test files** aren't already importing back to you:
