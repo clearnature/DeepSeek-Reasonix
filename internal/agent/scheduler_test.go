@@ -330,3 +330,29 @@ func TestSchedulerTryClaimWritePaths(t *testing.T) {
 		t.Fatalf("disjoint claim should be free: %v", err)
 	}
 }
+
+// TestReadOnlyParallelUnaffectedByWriterLimit locks in the qwen-parallel
+// contract (B): read-only researchers share the total slot pool only and are
+// never blocked by exhausted writer slots, so a team of read-only members can
+// run concurrently while a single writer holds the workspace.
+func TestReadOnlyParallelUnaffectedByWriterLimit(t *testing.T) {
+	s := NewSubagentScheduler(4, 1)
+	ws := WritePathSet{WholeWorkspace: true}
+	releaseWriter, err := s.Acquire(context.Background(), AcquireRequest{Writer: true, WritePaths: ws})
+	if err != nil {
+		t.Fatalf("writer acquire: %v", err)
+	}
+	defer releaseWriter()
+
+	releases := make([]func(), 0, 3)
+	for range 3 {
+		release, err := s.Acquire(context.Background(), AcquireRequest{Writer: false})
+		if err != nil {
+			t.Fatalf("read-only acquire blocked by writer slot: %v", err)
+		}
+		releases = append(releases, release)
+	}
+	for _, r := range releases {
+		r()
+	}
+}
