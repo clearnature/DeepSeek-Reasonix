@@ -343,7 +343,7 @@ func (c *Controller) openTurnBoundary(ctx context.Context, turn orchestratedTurn
 // readiness follow-up — is more work inside the turn the host already named,
 // not a turn of its own, so it opens no boundary and closes none.
 func (c *Controller) continueAnnouncedTurn(ctx context.Context) context.Context {
-	return agent.WithHostTurnBoundary(ctx, agent.HostTurnBoundary{})
+	return agent.WithHostTurnBoundary(ctx, agent.HostTurnBoundary{HostAuthored: true})
 }
 
 // gatePlanApproval turns a finished planning turn// gatePlanApproval turns a finished planning turn into the user's decision and,

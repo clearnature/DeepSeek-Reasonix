@@ -687,10 +687,14 @@ type historyMessage struct {
 	// The session index this message occupies, which is what a checkpoint's
 	// boundary names. A reader rebuilding a transcript joins on it rather than
 	// on where a row happened to land after host chrome was dropped.
-	MsgIndex   int               `json:"msgIndex"`
-	ToolCalls  []historyToolCall `json:"toolCalls,omitempty"`
-	ToolCallID string            `json:"toolCallId,omitempty"`
-	ToolName   string            `json:"toolName,omitempty"`
+	MsgIndex int `json:"msgIndex"`
+	// HostAuthored marks a user-role message the host wrote. It is the writer's
+	// own declaration, so a reader never has to decide from the wording whether
+	// a line was typed by the person or injected on their behalf.
+	HostAuthored bool              `json:"hostAuthored,omitempty"`
+	ToolCalls    []historyToolCall `json:"toolCalls,omitempty"`
+	ToolCallID   string            `json:"toolCallId,omitempty"`
+	ToolName     string            `json:"toolName,omitempty"`
 }
 
 func historyMessages(msgs []provider.Message) []historyMessage {
@@ -703,7 +707,7 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 				continue
 			}
 		}
-		hm := historyMessage{Role: string(m.Role), Content: m.Content, MsgIndex: i}
+		hm := historyMessage{Role: string(m.Role), Content: m.Content, MsgIndex: i, HostAuthored: m.HostAuthored}
 		if m.Role == provider.RoleUser {
 			// Content is what the model saw, and one @-reference expands into a
 			// whole file. A reopened session has to show what was typed.

@@ -63,11 +63,13 @@ type AuthoredTurnIdentity struct {
 }
 
 // HostTurnBoundary declares that the host announced this run's turn boundary,
-// so the run announces none of its own. Authored is the identity it published;
-// nil means this run continues a turn the host already announced and opens
-// none — which is what a synthetic continuation is.
+// so the run announces none of its own. Authored is the identity it published,
+// nil when the run continues a turn already announced. HostAuthored is a
+// separate fact: a turn can open none and still be the user's, because their
+// line only has to read like one the host writes.
 type HostTurnBoundary struct {
-	Authored *AuthoredTurnIdentity
+	Authored     *AuthoredTurnIdentity
+	HostAuthored bool
 }
 
 type hostTurnBoundaryKey struct{}
@@ -105,6 +107,7 @@ func (a *Agent) LandAuthoredUserMessage(ctx context.Context, msg provider.Messag
 	if boundary.Authored != nil && boundary.Authored.Raw != "" {
 		msg.RawContent = boundary.Authored.Raw
 	}
+	msg.HostAuthored = boundary.HostAuthored
 	index := a.sess.conversation.addIndexed(msg)
 	if boundary.Authored != nil {
 		a.verifyAuthoredLanding(*boundary.Authored, msg, index)

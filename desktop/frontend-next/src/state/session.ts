@@ -726,8 +726,9 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; plan: Plan
     if (m.role === "user") {
       // An attachment rides in as the "@path" token it was referenced by, so a
       // turn that was nothing but a dropped file still has text here. What is
-      // left with none is host chrome, and that is what goes.
-      const text = stripControl(m.content);
+      // left with none is host chrome, and so is a line the host composed —
+      // the kernel says which, and drawing it would put words in your mouth.
+      const text = m.hostAuthored ? "" : stripControl(m.content);
       if (text) out.push({ t: "user", id: nextId(), text, msgIndex: m.msgIndex });
       continue;
     }

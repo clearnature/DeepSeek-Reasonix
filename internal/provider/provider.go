@@ -86,6 +86,10 @@ type Message struct {
 	CreatedAt       int64             `json:"createdAt,omitempty"`       // local UI metadata; unix milliseconds; stripped before provider requests
 	Edited          bool              `json:"edited,omitempty"`          // local UI metadata; provider requests ignore it
 	Original        string            `json:"original,omitempty"`        // user prompt before inline edit
+	// HostAuthored marks a user-role message the host composed rather than one
+	// the user typed. Declared by whoever wrote it: the wording cannot tell an
+	// injected line from a user quoting one.
+	HostAuthored bool `json:"host_authored,omitempty"` // local UI metadata; provider requests ignore it
 	// LocalOnly marks durable transcript content that must never be sent to a
 	// model provider. Interrupted streaming output uses it so every frontend can
 	// replay what the user saw without feeding partial reasoning or tool-call
@@ -169,25 +173,6 @@ type MemoryCitation struct {
 	LineEnd   int    `json:"lineEnd,omitempty"`
 	Note      string `json:"note,omitempty"`
 	Kind      string `json:"kind,omitempty"`
-}
-
-// ParseImageDataURL splits a `data:<media-type>;base64,<payload>` URL into its
-// media type and base64 payload. ok is false for anything that isn't a base64
-// data URL — providers that need the split (Anthropic) skip those silently.
-func ParseImageDataURL(dataURL string) (mediaType, base64Data string, ok bool) {
-	rest, found := strings.CutPrefix(dataURL, "data:")
-	if !found {
-		return "", "", false
-	}
-	meta, payload, found := strings.Cut(rest, ",")
-	if !found {
-		return "", "", false
-	}
-	mt, found := strings.CutSuffix(meta, ";base64")
-	if !found || mt == "" {
-		return "", "", false
-	}
-	return mt, payload, true
 }
 
 // ToolCall is a tool invocation requested by the model. Arguments is raw JSON.

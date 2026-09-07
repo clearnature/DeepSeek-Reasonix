@@ -7,6 +7,10 @@ export interface HistoryMessage {
   // Where this message sits in the session log. The rebuild drops host chrome,
   // so a row's place on screen is not its place in the record.
   msgIndex?: number;
+  // The host wrote this user-role line, not the person: a goal continuation, an
+  // approved plan's execution. It is the writer's own declaration — nothing
+  // here decides it from the wording.
+  hostAuthored?: boolean;
   reasoning?: string;
   images?: number; // attachments on a user turn; an image-only one has no text
   toolCalls?: { id: string; name: string; arguments?: string }[];
