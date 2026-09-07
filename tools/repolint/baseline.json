@@ -2,10 +2,10 @@
   "limits": {
     "banner": 44,
     "commented-code": 1,
-    "complexity": 1943,
-    "essay": 2112,
-    "file-size": 110202,
-    "function-size": 8437,
+    "complexity": 1946,
+    "essay": 2108,
+    "file-size": 109837,
+    "function-size": 8458,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -30,10 +30,10 @@
       "narrative": 3
     },
     "desktop/app.go": {
-      "complexity": 60,
-      "essay": 71,
-      "file-size": 11413,
-      "function-size": 355,
+      "complexity": 57,
+      "essay": 63,
+      "file-size": 11043,
+      "function-size": 354,
       "struct-state": 15
     },
     "desktop/app_team_test.go": {
@@ -279,7 +279,7 @@
     "desktop/settings_app.go": {
       "complexity": 29,
       "essay": 6,
-      "file-size": 3048
+      "file-size": 3014
     },
     "desktop/settings_app_test.go": {
       "test-file-size": 1813
@@ -297,10 +297,10 @@
       "test-file-size": 151
     },
     "desktop/tabs.go": {
-      "complexity": 36,
-      "essay": 64,
-      "file-size": 7577,
-      "function-size": 342,
+      "complexity": 42,
+      "essay": 68,
+      "file-size": 7616,
+      "function-size": 364,
       "struct-state": 23
     },
     "desktop/tabs_order_test.go": {
