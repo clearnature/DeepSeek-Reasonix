@@ -17,7 +17,6 @@ import (
 
 	"reasonix/internal/boot"
 	"reasonix/internal/event"
-	_ "reasonix/internal/provider/anthropic"
 )
 
 type captureSink struct {
