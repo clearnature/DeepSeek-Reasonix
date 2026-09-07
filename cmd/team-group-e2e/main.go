@@ -17,6 +17,7 @@ import (
 
 	"reasonix/internal/boot"
 	"reasonix/internal/event"
+	_ "reasonix/internal/provider/anthropic"
 )
 
 type captureSink struct {
@@ -37,7 +38,11 @@ func (s *captureSink) Emit(e event.Event) {
 		return
 	}
 	<-s.mu
-	s.msgs = append(s.msgs, e.Text)
+	if e.Detail != "" {
+		s.msgs = append(s.msgs, e.Text+" || "+e.Detail)
+	} else {
+		s.msgs = append(s.msgs, e.Text)
+	}
 	s.mu <- struct{}{}
 }
 
