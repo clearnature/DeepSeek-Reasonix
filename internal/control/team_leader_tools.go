@@ -35,16 +35,17 @@ func (t *teamTool) Description() string {
 		"every member), create (register a member), add (assign a task — it " +
 		"forks your prefix as a background job), mail (send a message to one " +
 		"member's inbox, delivered on its next assignment), status (list " +
-		"members), remove (drop a member), broadcast (mail all active " +
-		"members). Running members are steered with the send_message tool by " +
-		"job_id; mail reaches idle members."
+		"members), remove (drop a member), shutdown (ask one member to wind " +
+		"down its work), broadcast (mail all active members). Running members " +
+		"are steered with the send_message tool by job_id; mail reaches idle " +
+		"members."
 }
 
 func (t *teamTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "action":{"type":"string","enum":["group_create","group_delete","create","add","mail","status","remove","broadcast"]},
+  "action":{"type":"string","enum":["group_create","group_delete","create","add","mail","status","shutdown","remove","broadcast"]},
   "name":{"type":"string","description":"team name for group_create / member name for create/add/mail/remove"},
   "role":{"type":"string","description":"role for create, default researcher"},
   "task":{"type":"string","description":"task prompt for add"},
@@ -120,6 +121,15 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			b.WriteString("\n")
 		}
 		return strings.TrimSuffix(b.String(), "\n"), nil
+	case "shutdown":
+		name := strings.TrimSpace(p.Name)
+		if name == "" {
+			return "", fmt.Errorf("team shutdown: name is required")
+		}
+		if err := t.ts.RequestShutdown(name); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("shutdown requested for %q — it will wind down its current work", name), nil
 	case "remove":
 		name := strings.TrimSpace(p.Name)
 		if name == "" {
