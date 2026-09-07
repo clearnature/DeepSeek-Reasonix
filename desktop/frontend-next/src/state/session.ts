@@ -11,6 +11,8 @@ import { showsReceipt } from "./prefs";
 export type { Item, Metrics, PlanStep, RememberedFact, RuntimeNotice, SessionState, TurnTerminal, Waiting };
 import { promptOpen, prompted, sealByReceipt } from "./prompts";
 import { nameTurnStart } from "./turn_start";
+import { appendText, foldMessage, sealSay } from "./say";
+import { nextId } from "./ids";
 export { quoteAmount };
 export { showsReceipt };
 
@@ -36,11 +38,6 @@ export const initialState: SessionState = {
   takeovers: {},
 };
 
-let seq = 0;
-const nextId = () => `i${++seq}`;
-
-// A caller that has to name the item it just added — to take it back when the
-// kernel refuses it — draws from the same sequence, so the two cannot collide.
 export const localId = nextId;
 
 // tool_dispatch and tool_result are two phases of one call; the UI shows one
@@ -152,24 +149,6 @@ function parseRemembered(tool: Tool): RememberedFact | null {
   }
 }
 
-// Settles the message still being written. turn_done settles every open one:
-// a tool call between two answers leaves the earlier card unsealed forever, and
-// an unsealed card keeps a caret blinking and its reveal clock running on text
-// nothing will add to. Returning the same array keeps every card's memo intact.
-function sealSay(items: Item[], all = false): Item[] {
-  let next: Item[] | null = null;
-  for (let i = items.length - 1; i >= 0; i--) {
-    const it = items[i];
-    if (it.t !== "say" || it.done) continue;
-    next ??= items.slice();
-    const ran = it.thoughtMs ?? (it.reasoning ? Date.now() - (thoughtSince.get(it.id) ?? Date.now()) : undefined);
-    thoughtSince.delete(it.id);
-    next[i] = { ...it, done: true, thoughtMs: ran };
-    if (!all) break;
-  }
-  return next ?? items;
-}
-
 // read_file is the most-called tool by a wide margin — 96 calls across a sample
 // of recent sessions, against 47 for bash. One card each is the noise the spec
 // collapses into a single manifest. Merging happens here rather than at render
@@ -211,29 +190,6 @@ function mergeReads(items: Item[]): Item[] {
   const next = items.slice();
   return foldLastRead(next) ? next : items;
 }
-
-function appendText(items: Item[], text: string, field: "text" | "reasoning"): Item[] {
-  const last = items[items.length - 1];
-  if (last && last.t === "say" && !last.done) {
-    const next = items.slice();
-    // Thinking runs until the first answer token, so the clock is the gap
-    // between the two streams, not the length of either.
-    const stop = field === "text" && last.thoughtMs === undefined && last.reasoning;
-    next[next.length - 1] = {
-      ...last,
-      [field]: (last[field] ?? "") + text,
-      ...(stop ? { thoughtMs: Date.now() - (thoughtSince.get(last.id) ?? Date.now()) } : null),
-    };
-    return next;
-  }
-  const id = nextId();
-  if (field === "reasoning") thoughtSince.set(id, Date.now());
-  return [...items, { t: "say", id, text: "", done: false, [field]: text }];
-}
-
-// Keyed by item id rather than carried on the item: a start time is not part of
-// what the card renders, and putting it there would make every append rewrite it.
-const thoughtSince = new Map<string, number>();
 
 // The kernel's contract for a retry: the indicator is transient, and the next
 // stream event clears it. These kinds say nothing about the connection and
@@ -398,7 +354,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       };
 
     case "message":
-      return { ...s, items: sealSay(s.items) };
+      return { ...s, items: foldMessage(s.items, ev) };
 
     case "tool_dispatch":
       return ev.tool
