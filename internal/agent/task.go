@@ -909,7 +909,14 @@ func (t *TaskTool) runBackgroundProfileSpec(ctx context.Context, spec ProfileExe
 	backgroundEvidence := evidence.NewLedger()
 	slotReq := acquireReq
 	trk.queued()
-	job := jm.StartForSession(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
+	start := jm.StartForSession
+	if !writerRegistered {
+		// Read-only background task (no workspace writes): skip the
+		// workspace-lease retain so a research subagent does not lock the
+		// leader out of its own workspace (qwen-style parallel researchers).
+		start = jm.StartForSessionReadonly
+	}
+	job := start(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
 		if writerRegistered {
 			defer mutationObserver.UnregisterWriter(recoveryTaskID)
 		}

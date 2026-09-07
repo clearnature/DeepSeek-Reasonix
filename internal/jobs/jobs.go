@@ -186,6 +186,10 @@ type Job struct {
 	// claims the result either. The caller polls it with wait (bash_output /
 	// steer remain fully usable). Guarded by mu.
 	silentCompletion bool
+	// leaseExempt skips the workspace-lease retain observer for read-only
+	// background jobs (read-only researchers must not lock the leader out of
+	// its own workspace). Writer jobs keep the lease as upstream semantics.
+	leaseExempt bool
 }
 
 // Manager is the session's background-job table. It is safe for concurrent use.
@@ -513,13 +517,17 @@ func (m *Manager) startInvalid(parentSession, kind, label string, validationErr 
 // StartForSession launches a job owned by parentSession. Session-scoped readers
 // only see jobs whose owner matches the active session.
 func (m *Manager) StartForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
-	return m.startForSession(parentSession, kind, label, run, false, false)
+	return m.startForSession(parentSession, kind, label, run, false, false, false)
 }
 
 // StartSilent launches a fire-and-forget job (P5 fork semantics): the terminal
 // result is never delivered back as a P1 completion envelope and no closing
 // Notice is emitted. wait / bash_output / steer remain fully usable — the
 // caller polls the result explicitly. The run func behaves exactly like Start.
+func (m *Manager) StartForSessionReadonly(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
+	return m.startForSession(parentSession, kind, label, run, false, false, true)
+}
+
 func (m *Manager) StartSilent(kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
 	return m.StartSilentForSession("", kind, label, run)
 }
@@ -531,7 +539,7 @@ func (m *Manager) StartSilent(kind, label string, run func(ctx context.Context, 
 // with wait), while steer (SendMessageForSession), bash_output, and wait keep
 // working exactly as for a normal job.
 func (m *Manager) StartSilentForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
-	return m.startForSession(parentSession, kind, label, run, false, true)
+	return m.startForSession(parentSession, kind, label, run, false, true, false)
 }
 
 // StartForeground launches a foreground task job whose terminal result is
@@ -549,10 +557,10 @@ func (m *Manager) StartForeground(kind, label string, run func(ctx context.Conte
 // (the foreground run-loop already surfaced the result in its tool card), so
 // the run-loop must claim the result with ClaimForegroundResult after done.
 func (m *Manager) StartForegroundForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error)) *Job {
-	return m.startForSession(parentSession, kind, label, run, true, false)
+	return m.startForSession(parentSession, kind, label, run, true, false, false)
 }
 
-func (m *Manager) startForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), foreground, silent bool) *Job {
+func (m *Manager) startForSession(parentSession, kind, label string, run func(ctx context.Context, out io.Writer) (string, error), foreground, silent, leaseExempt bool) *Job {
 	parentSession = strings.TrimSpace(parentSession)
 	kind = strings.TrimSpace(kind)
 	if err := validatePathSegment(parentSession, "parentSession"); err != nil {
@@ -584,6 +592,7 @@ func (m *Manager) startForSession(parentSession, kind, label string, run func(ct
 		artifactErr:            artifactErr,
 		foregroundClaimPending: foreground,
 		silentCompletion:       silent,
+		leaseExempt:            leaseExempt,
 	}
 	ctx = WithSession(ctx, parentSession)
 	ctx = context.WithValue(ctx, jobCtxKey{}, j)
@@ -597,7 +606,7 @@ func (m *Manager) startForSession(parentSession, kind, label string, run func(ct
 		j.artifactErr = err.Error()
 	}
 	j.mu.Unlock()
-	if m.onJobStart != nil {
+	if m.onJobStart != nil && !leaseExempt {
 		m.onJobStart(j.done)
 	}
 
