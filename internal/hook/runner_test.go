@@ -573,3 +573,23 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+func TestRunnerCancellationIsNotSurfacedAsHookError(t *testing.T) {
+	hooks := []ResolvedHook{
+		{HookConfig: HookConfig{Command: "hook"}, Event: PostToolUse},
+	}
+	// User aborted the task: the ctx is canceled before the hook runs, so the
+	// spawn tear-down is expected, not a hook error — it must not be notified.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	spawner := func(_ context.Context, in SpawnInput) SpawnResult {
+		return SpawnResult{ExitCode: 1, Stdout: "warning message"}
+	}
+	var notified string
+	notify := func(msg string) { notified = msg }
+	r := NewRunner(hooks, "/tmp", spawner, notify)
+	r.PostToolUse(ctx, "bash", nil, "ok")
+	if notified != "" {
+		t.Fatalf("canceled hook surfaced to user: %q", notified)
+	}
+}

@@ -105,6 +105,9 @@ func (r *Runner) PostToolUse(ctx context.Context, name string, args json.RawMess
 	p := r.payload(PostToolUse)
 	p.ToolName, p.ToolArgs, p.ToolResult = name, args, result
 	rep := Run(ctx, p, r.hooks, r.spawner)
+	if ctx.Err() == context.Canceled {
+		return
+	}
 	r.handle(rep)
 }
 
@@ -120,6 +123,9 @@ func (r *Runner) PostToolUseFailure(ctx context.Context, name string, args json.
 		p.IsInterrupt = errors.Is(err, context.Canceled)
 	}
 	r.handle(Run(ctx, p, r.hooks, r.spawner))
+	if ctx.Err() == context.Canceled {
+		return
+	}
 	// Native Reasonix PostToolUse historically observed both success and
 	// failure. Preserve that contract while Claude hooks use the distinct event.
 	legacy := r.nativeHooks(PostToolUse)
