@@ -1583,6 +1583,12 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 		case "/prometheus":
 			c.applyPrometheus(trimmed, display)
 			return
+		case "/compress-fast":
+			c.applyFastCompress(trimmed)
+			return
+		case "/retrieve_info":
+			c.applyRetrieveInfo(trimmed)
+			return
 		}
 		if c.managementNotice(trimmed) {
 			return
