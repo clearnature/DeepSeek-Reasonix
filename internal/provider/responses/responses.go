@@ -323,12 +323,9 @@ func (c *client) buildRequestBody(req provider.Request) (map[string]any, bool, [
 		body["max_output_tokens"] = maxOutputTokens
 	}
 	if req.ResponseFormat != nil && req.ResponseFormat.Type != "" {
-		// Structured output: Responses text.format. MiMo/DashScope/OpenAI
-		// all accept {"text":{"format":{"type":"json_object"}}}. The model
-		// only emits JSON when the instructions also demand it.
-		body["text"] = map[string]any{
-			"format": map[string]any{"type": req.ResponseFormat.Type},
-		}
+		// Structured output: Responses text.format (json_object, or the local
+		// json_schema extension with name+schema — see encodeResponsesTextFormat).
+		body["text"] = encodeResponsesTextFormat(req.ResponseFormat)
 	}
 	if req.Temperature != nil && !c.caps.ignoresTemperature {
 		body["temperature"] = *req.Temperature
