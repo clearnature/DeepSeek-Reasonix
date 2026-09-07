@@ -81,8 +81,8 @@ type TeammateStore struct {
 	teammates map[string]*Teammate
 	task      *TaskTool
 	jm        *jobs.Manager
-	// inboxRoot persists teammate mail on disk (P6.1 enhancement 2); empty
-	// disables persistence (mail stays ephemeral in the P3 job queue).
+	name      string // explicit group label (qwen TeamFile.name analog); empty = legacy unnamed
+	// inboxRoot persists teammate mail on disk (P6.1); empty = ephemeral.
 	inboxRoot string
 	// sink delivers mailbox-wakeup notices to the leader (P6.2); nil keeps
 	// PostMail silent beyond the disk write.
