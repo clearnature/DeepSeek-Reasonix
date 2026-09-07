@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"reasonix/internal/agent"
 	"reasonix/internal/event"
@@ -51,6 +52,13 @@ func (c *Controller) submitCommandOrTurn(trimmed, input, display string, scopedR
 	if err := c.ensureWriteAuthorityReady(); err != nil {
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelWarn, Text: "input was not accepted: this session is no longer writable — reopen it and try again"})
 		return
+	}
+	if strings.HasPrefix(trimmed, "/team-") {
+		fields := strings.Fields(trimmed)
+		if len(fields) > 0 {
+			c.applyTeamCommand(fields[0], trimmed)
+			return
+		}
 	}
 	c.submitCommandOrTurnReady(trimmed, input, display, scopedRefsOnly, editedOriginal, format)
 }

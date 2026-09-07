@@ -179,7 +179,8 @@ type Controller struct {
 	// jobs is the session-scoped background-job manager. The agent's background
 	// tools spawn into it; Compose drains its completion notes into the next turn;
 	// Close cancels its still-running jobs.
-	jobs *jobs.Manager
+	jobs      *jobs.Manager
+	teammates *agent.TeammateStore // P6 team orchestrator; nil keeps single-agent /team-* disabled
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
 	workspaceLease *workspacelease.Owner
@@ -676,6 +677,7 @@ func New(opts Options) *Controller {
 		goals:                             goalMachine{tokenBudget: opts.GoalTokenBudget},
 		runner:                            opts.Runner,
 		executor:                          opts.Executor,
+		teammates:                         opts.Teammates,
 		guardianSess:                      opts.Guardian,
 		guardianPath:                      guardian.PathFor(opts.SessionPath),
 		evaluator:                         opts.GoalEvaluator,
