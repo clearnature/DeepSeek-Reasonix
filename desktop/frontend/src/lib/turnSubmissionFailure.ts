@@ -45,7 +45,12 @@ export function reduceManagementConfirmation(state: State, submissionId: string,
   if (state.pendingSubmissionId !== submissionId) return state;
   return {
     ...state,
-    items: state.items.filter((item) => !(item.kind === "user" && item.submissionId === submissionId)),
+    // Keep the user's own input visible: a management command is an action the
+    // human took and must stay recorded in the transcript (it settles as a
+    // plain user message; the async result message arrives separately).
+    items: state.items.map((item) =>
+      item.kind === "user" && item.submissionId === submissionId ? { ...item, submissionId: undefined } : item,
+    ),
     pendingUser: undefined,
     pendingSubmissionId: undefined,
     running: false,

@@ -118,7 +118,8 @@ eq(normalizeTurnSubmit(" visible prompt ", " provider prompt ").submit, "provide
 const managementPending = reducer(reducer(initialState, {
   type: "user", text: "/context", seq: 0, submissionId: "management-1",
 }), { type: "management_confirmed", submissionId: "management-1" });
-eq(managementPending.items.some((item) => item.kind === "user" && item.text === "/context"), false, "handled management commands do not remain as conversation turns");
+eq(managementPending.items.some((item) => item.kind === "user" && item.text === "/context"), true, "handled management commands stay recorded as the human's input");
+eq(managementPending.items.some((item) => item.kind === "user" && item.submissionId !== undefined), false, "settled management input detaches from its pending submission");
 eq(managementPending.running, false, "handled management commands release the composer");
 let rejectedVisibleOnlySubmit = false;
 try {
