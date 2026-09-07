@@ -62,6 +62,10 @@ func TestTeamToolCreatesAssignsReportsRemoves(t *testing.T) {
 	if out := call("add", "alice", "write a note about cache", ""); !strings.Contains(out, "job dispatched") {
 		t.Fatalf("add = %q", out)
 	}
+	mailArgs, _ := json.Marshal(map[string]string{"action": "mail", "name": "alice", "text": "please also mention sources"})
+	if out, err := tt.Execute(ctx, mailArgs); err != nil || !strings.Contains(out, "mail queued") {
+		t.Fatalf("mail = %q err=%v", out, err)
+	}
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		out := call("status", "", "", "")

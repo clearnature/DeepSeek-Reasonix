@@ -31,20 +31,21 @@ func (t *teamTool) Name() string { return "team" }
 
 func (t *teamTool) Description() string {
 	return "Orchestrate your team of sub-agents (you are the leader). Actions: " +
-		"group_create (name your team — one active group), group_delete " +
-		"(dissolve the team: stop and drop every member), create (register a " +
-		"member), add (assign one task to a member — it forks your prefix and " +
-		"runs as a background job), status (list members), remove (drop a " +
-		"member), broadcast (mail all active members). Members run " +
-		"concurrently; a member returns to idle when its job completes."
+		"group_create (name your team), group_delete (dissolve: stop and drop " +
+		"every member), create (register a member), add (assign a task — it " +
+		"forks your prefix as a background job), mail (send a message to one " +
+		"member's inbox, delivered on its next assignment), status (list " +
+		"members), remove (drop a member), broadcast (mail all active " +
+		"members). Running members are steered with the send_message tool by " +
+		"job_id; mail reaches idle members."
 }
 
 func (t *teamTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "action":{"type":"string","enum":["group_create","group_delete","create","add","status","remove","broadcast"]},
-  "name":{"type":"string","description":"team name for group_create / member name for create/add/remove"},
+  "action":{"type":"string","enum":["group_create","group_delete","create","add","mail","status","remove","broadcast"]},
+  "name":{"type":"string","description":"team name for group_create / member name for create/add/mail/remove"},
   "role":{"type":"string","description":"role for create, default researcher"},
   "task":{"type":"string","description":"task prompt for add"},
   "text":{"type":"string","description":"message for broadcast"}
@@ -128,6 +129,16 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			return "", err
 		}
 		return fmt.Sprintf("teammate %q removed", name), nil
+	case "mail":
+		name := strings.TrimSpace(p.Name)
+		text := strings.TrimSpace(p.Text)
+		if name == "" || text == "" {
+			return "", fmt.Errorf("team mail: name and text are required")
+		}
+		if err := t.ts.PostMail(name, text); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("mail queued for %q — delivered on its next assignment", name), nil
 	case "broadcast":
 		text := strings.TrimSpace(p.Text)
 		if text == "" {
