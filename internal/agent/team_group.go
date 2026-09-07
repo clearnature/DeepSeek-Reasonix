@@ -6,6 +6,9 @@ import (
 	"strings"
 )
 
+// MaxTeamTeammates caps members per store (qwen MAX_TEAMMATES = 10).
+const MaxTeamTeammates = 10
+
 // Name returns the explicit group label, or "" in the legacy unnamed
 // single-team mode (qwen TeamFile.name analog).
 func (ts *TeammateStore) Name() string {

@@ -115,14 +115,9 @@ type TeammateStore struct {
 	// first Assign (jobs.WithSession) and used by the stall worker to query
 	// job snapshots (P10).
 	session string
-	// snapshotPath persists the team state (P10 crash recovery): teammates,
-	// grants, approvals, tasks — written atomically on mutation, loaded on
-	// store construction. Empty disables persistence.
+	// snapshotPath persists team state atomically (P10); empty disables.
 	snapshotPath string
-	// leader is the first fork source observed from an Assign context. It is
-	// the minimal template auto-advance needs to fork a first-round teammate
-	// (its rebuilt ctx carries no turn context). Set once, never the ctx object
-	// itself — only the *Agent the ctx pointed at (lifecycle-design 主题 5).
+	// leader: first fork source from an Assign ctx (auto-advance template).
 	leader *Agent
 	// autoCh receives waiting task IDs to auto-advance; a single worker goroutine
 	// consumes it serially so assignments never run concurrently for one store
@@ -224,6 +219,9 @@ func (ts *TeammateStore) Create(name, role string, writable ...bool) error {
 	}
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
+	if len(ts.teammates) >= MaxTeamTeammates {
+		return fmt.Errorf("maximum teammates (%d) reached", MaxTeamTeammates)
+	}
 	if _, ok := ts.teammates[name]; ok {
 		return fmt.Errorf("teammate %q already exists", name)
 	}

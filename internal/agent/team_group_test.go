@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -46,5 +47,19 @@ func TestGroupLifecycleCreateRejectDelete(t *testing.T) {
 	// Group name is reusable after delete.
 	if err := ts.CreateGroup("writers"); err != nil {
 		t.Fatalf("recreate after delete: %v", err)
+	}
+}
+
+// TestMemberCapRejectsAtMaxTeamTeammates locks in the qwen MAX_TEAMMATES
+// analog: the 11th member create is refused.
+func TestMemberCapRejectsAtMaxTeamTeammates(t *testing.T) {
+	ts := newGroupTestStore(t)
+	for i := range MaxTeamTeammates {
+		if err := ts.Create(fmt.Sprintf("m%d", i), "coder"); err != nil {
+			t.Fatalf("create %d: %v", i, err)
+		}
+	}
+	if err := ts.Create("overflow", "coder"); err == nil || !strings.Contains(err.Error(), "maximum teammates") {
+		t.Fatalf("overflow create err = %v, want cap refusal", err)
 	}
 }
