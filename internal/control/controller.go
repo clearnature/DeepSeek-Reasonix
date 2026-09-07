@@ -1503,17 +1503,7 @@ func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, sc
 	}
 	switch {
 	case trimmed == "/compact" || strings.HasPrefix(trimmed, "/compact "):
-		focus := strings.TrimSpace(strings.TrimPrefix(trimmed, "/compact"))
-		go func() {
-			if err := c.Compact(context.Background(), focus); err != nil {
-				c.notice("compaction failed: " + err.Error())
-			} else {
-				c.notice("compacted")
-				if err := c.SnapshotRewrite(); err != nil {
-					slog.Warn("controller: snapshot after compact", "err", err)
-				}
-			}
-		}()
+		c.submitCompact(strings.TrimSpace(strings.TrimPrefix(trimmed, "/compact")))
 	case trimmed == "/context":
 		c.noticeDetail(c.ContextReport())
 	case trimmed == "/new":
