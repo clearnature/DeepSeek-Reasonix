@@ -46,7 +46,9 @@ func TestOrchestrationSmokeRunsTeammateChainToIdle(t *testing.T) {
 	jm := jobs.NewManager(sink)
 	defer jm.Close()
 
-	task := agent.NewTaskTool(&smokeProvider{}, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", systemPrompt, nil, 0, "", "", nil).
+	roReg := tool.NewRegistry()
+	roReg.Add(fakeControlTool{})
+	task := agent.NewTaskTool(&smokeProvider{}, nil, roReg, 20, 0, 0, 0, 0, 0, 0, 0.0, "", systemPrompt, nil, 0, "", "", nil).
 		WithTranscripts(agent.NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort")
 	ts := agent.NewTeammateStore(task, jm, t.TempDir())
 	t.Cleanup(ts.Close)

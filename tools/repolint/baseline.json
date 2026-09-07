@@ -3,14 +3,14 @@
     "banner": 44,
     "commented-code": 1,
     "complexity": 1946,
-    "essay": 2108,
-    "file-size": 109837,
-    "function-size": 8458,
+    "essay": 2107,
+    "file-size": 109830,
+    "function-size": 8455,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
     "struct-state": 116,
-    "test-file-size": 70301
+    "test-file-size": 70305
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -614,13 +614,13 @@
       "essay": 18
     },
     "internal/agent/teammate_store.go": {
-      "essay": 29,
-      "file-size": 444,
+      "essay": 28,
+      "file-size": 442,
       "function-size": 45
     },
     "internal/agent/teammate_store_test.go": {
       "banner": 1,
-      "test-file-size": 31
+      "test-file-size": 35
     },
     "internal/agent/textsink.go": {
       "complexity": 9,
@@ -961,8 +961,8 @@
     "internal/control/controller.go": {
       "complexity": 12,
       "essay": 91,
-      "file-size": 5523,
-      "function-size": 84,
+      "file-size": 5521,
+      "function-size": 81,
       "narrative": 4,
       "struct-state": 16
     },
@@ -1348,7 +1348,7 @@
     "internal/provider/responses/responses.go": {
       "complexity": 49,
       "essay": 10,
-      "file-size": 146,
+      "file-size": 143,
       "function-size": 161,
       "struct-state": 5
     },

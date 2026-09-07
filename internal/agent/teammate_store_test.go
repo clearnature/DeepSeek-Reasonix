@@ -21,7 +21,9 @@ func testTaskToolForTeam(t *testing.T) *TaskTool {
 		{Type: provider.ChunkText, Text: "done"},
 		{Type: provider.ChunkDone},
 	}}
-	task := NewTaskTool(sub, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
+	reg := tool.NewRegistry()
+	reg.Add(echoTool{})
+	task := NewTaskTool(sub, nil, reg, 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
 		WithTranscripts(NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort")
 	return task
 }
@@ -309,7 +311,9 @@ func teamAssignCtx(jm *jobs.Manager) context.Context {
 // wiring as testTaskToolForTeam, parameterized so tests can pin job timing.
 func newTaskToolWith(t *testing.T, prov provider.Provider) *TaskTool {
 	t.Helper()
-	return NewTaskTool(prov, nil, tool.NewRegistry(), 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
+	reg := tool.NewRegistry()
+	reg.Add(echoTool{})
+	return NewTaskTool(prov, nil, reg, 20, 0, 0, 0, 0, 0, 0, 0.0, "", "sys", nil, 0, "", "", nil).
 		WithTranscripts(NewSubagentStore(t.TempDir()), t.TempDir(), "base-model", "base-effort")
 }
 

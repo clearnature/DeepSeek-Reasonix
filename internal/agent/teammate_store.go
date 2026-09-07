@@ -461,7 +461,7 @@ func (ts *TeammateStore) Assign(ctx context.Context, name, prompt string, depend
 	// first fork (fail-closed — no silent fallback to the shared checkout),
 	// and the worktree path is the write token, so parallel writers are
 	// physically isolated instead of serialized.
-	grant := CapabilityGrant{CallTools: toolset}
+	grant := CapabilityGrant{CallTools: toolset, ReadOnly: !tm.Writable}
 	paths := ts.grantedPaths(name)
 	if tmWorktree && wsRoot != "" && paths.Empty() {
 		// TOCTOU: a concurrent Assign may have created the worktree between
