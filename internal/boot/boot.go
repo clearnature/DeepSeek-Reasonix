@@ -1801,7 +1801,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		BalanceKey:            entry.APIKey(),
 		BalanceClient:         balanceClient,
 		Jobs:                  jm,
-		Teammates:             newTeammateOrchestration(sink, jm, subagentStore, root, taskModel, taskEffort, newTaskTool, reg),
+		Teammates:             newTeammateOrchestration(sink, jm, subagentStore, root, taskModel, taskEffort, newTaskTool, reg, filepath.Join(sessionDir, "team-inbox"), filepath.Join(sessionDir, "team-snapshot.json")),
 		TaskStore:             opts.TaskStore,
 		WorkspaceLease:        workspaceLease,
 		Registry:              reg,
