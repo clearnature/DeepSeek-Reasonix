@@ -29,7 +29,7 @@ type retrieveInfo struct{}
 func (retrieveInfo) Name() string { return "retrieve_info" }
 
 func (retrieveInfo) Description() string {
-	return "查询本地知识缓存（此前 web_search 蒸馏并落盘的检索结果）。零成本、不联网。命中返回缓存摘要与来源；未命中且系统已配置 deepseek-responses 时自动走该管道联网检索并落盘（复用系统 API 凭据，无需单独提供）；未配置时返回 needs_grant 标志，此时应使用 ask 工具询问用户是否允许联网检索。避免重复联网查询已检索过的事实。"
+	return "深度研究检索系统（比 web_search / web_fetch 更高级的整合入口）：对一个研究问题执行多级检索并产出综合答案。命中本地知识缓存（此前研究蒸馏落盘）时零成本返回，含关键事实与来源；未命中时自动经 deepseek-responses 深度研究管道联网检索（分级深入、多源综合）并蒸馏记忆供后续复用。返回结构：综合答案 + 关键事实列表 + 来源（标题/URL）+ 时效标注。适合研究型、需要权威多源信息的问题；实时性极高的突发信息用 web_search；抓取具体页面用 web_fetch。未配置检索凭据时返回 needs_grant，请用 ask 工具征询用户是否允许联网检索。"
 }
 
 func (retrieveInfo) Schema() json.RawMessage {
