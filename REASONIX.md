@@ -93,7 +93,7 @@ merge 上游前先对照 `docs/merge/merge-hotspot-inventory.md` 定向复查 47
 键 ↔ `recordCompaction`/`setCompactionInt` 解析 ↔ `CompactionRecord` JSON
 tag——任一环缺 = 断链，一次补完（禁止零敲碎打）。失败路径必须落盘
 （`status=failed` + `err_type=`，禁止 return 吞 notice）。详见
-`docs/telemetry-audit-20260813.md`。
+`docs/merge/telemetry-audit-20260813.md`。
 
 `make lint` runs both gates CI runs, at the version in `.golangci-version`;
 `make lint-install` installs it. Do not skip it: a `modernize` finding never

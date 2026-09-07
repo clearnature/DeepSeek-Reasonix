@@ -159,7 +159,7 @@ node_modules/.bin/tsx src/__tests__/——滚动/水合/历史加载等——tsc
 ```
 CompactionTelemetry 结构 ↔ emit 的 detail 键 ↔ recordCompaction/setCompactionInt 解析 ↔ CompactionRecord JSON tag
 ```
-**任一环缺 = 断链，一次补完（禁止零敲碎打）**。失败路径必须落盘（`status=failed` + `err_type=`，禁止 return 吞 notice）。历史教训：PrefixHash / CompactionRecord / Est / Results / SavedChars / ElapsedMs 曾静默丢失——**编译通过 ≠ 无丢失**，必须行为级核对（跑 FastCompress / QueryCompactions 测试 + 实际运行验证 stats 落盘字段）。详见 `docs/telemetry-audit-20260813.md`。
+**任一环缺 = 断链，一次补完（禁止零敲碎打）**。失败路径必须落盘（`status=failed` + `err_type=`，禁止 return 吞 notice）。历史教训：PrefixHash / CompactionRecord / Est / Results / SavedChars / ElapsedMs 曾静默丢失——**编译通过 ≠ 无丢失**，必须行为级核对（跑 FastCompress / QueryCompactions 测试 + 实际运行验证 stats 落盘字段）。详见 `docs/merge/telemetry-audit-20260813.md`。
 
 ## 11. 分支纪律
 
