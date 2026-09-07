@@ -947,7 +947,6 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	if subagentStore != nil {
 		subagentStore.WithDestroyedChecker(jm.IsDestroying)
 	}
-
 	// Permission policy gates every tool call. With no HeadlessApprovalMode
 	// (interactive bootstrap), the temporary gate preserves the legacy behavior
 	// until chat/desktop installs an interactive gate. A real headless caller
@@ -1802,6 +1801,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		BalanceKey:            entry.APIKey(),
 		BalanceClient:         balanceClient,
 		Jobs:                  jm,
+		Teammates:             newTeammateOrchestration(sink, jm, subagentStore, root, taskModel, taskEffort, newTaskTool),
 		TaskStore:             opts.TaskStore,
 		WorkspaceLease:        workspaceLease,
 		Registry:              reg,
