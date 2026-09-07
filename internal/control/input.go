@@ -202,6 +202,20 @@ func (c *Controller) composeWithGoal(
 			text = "<background-jobs>\n" + note + "\n</background-jobs>\n\n" + text
 		}
 	}
+	// Teammate messages to the leader ride the turn the same way (qwen
+	// <teammate_message> analog): drained once, injected ahead of the user
+	// text inside the same appended message — never the cache-stable prefix.
+	if c.teammates != nil {
+		if mail := c.teammates.DrainLeaderMessages(); len(mail) > 0 {
+			var b strings.Builder
+			b.WriteString("<teammate_message>\n")
+			for _, m := range mail {
+				fmt.Fprintf(&b, "From %s: %s\n", m.Name, m.Text)
+			}
+			b.WriteString("</teammate_message>\n\n")
+			text = b.String() + text
+		}
+	}
 	if includeHookContext {
 		if block := c.drainHookContextBlock(); block != "" {
 			text = block + "\n\n" + text

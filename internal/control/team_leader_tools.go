@@ -33,19 +33,19 @@ func (t *teamTool) Description() string {
 	return "Orchestrate your team of sub-agents (you are the leader). Actions: " +
 		"group_create (name your team), group_delete (dissolve: stop and drop " +
 		"every member), create (register a member), add (assign a task — it " +
-		"forks your prefix as a background job), mail (send a message to one " +
-		"member's inbox, delivered on its next assignment), status (list " +
-		"members), remove (drop a member), shutdown (ask one member to wind " +
-		"down its work), broadcast (mail all active members). Running members " +
-		"are steered with the send_message tool by job_id; mail reaches idle " +
-		"members."
+		"forks your prefix as a background job), tasks (list the team's task " +
+		"board), mail (send a message to one member's inbox, delivered on its " +
+		"next assignment), status (list members), remove (drop a member), " +
+		"shutdown (ask one member to wind down its work), broadcast (mail all " +
+		"active members). Running members are steered with the send_message " +
+		"tool by job_id; mail reaches idle members."
 }
 
 func (t *teamTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "action":{"type":"string","enum":["group_create","group_delete","create","add","mail","status","shutdown","remove","broadcast"]},
+  "action":{"type":"string","enum":["group_create","group_delete","create","add","tasks","mail","status","shutdown","remove","broadcast"]},
   "name":{"type":"string","description":"team name for group_create / member name for create/add/mail/remove"},
   "role":{"type":"string","description":"role for create, default researcher"},
   "task":{"type":"string","description":"task prompt for add"},
@@ -65,6 +65,25 @@ func (t *teamTool) ProviderVisible(ctx context.Context) bool {
 	}
 	_, ok := jobs.FromContext(ctx)
 	return ok
+}
+
+func (t *teamTool) executeTasks() (string, error) {
+	tasks := t.ts.Tasks()
+	if len(tasks) == 0 {
+		return "no tasks", nil
+	}
+	var b strings.Builder
+	for _, tk := range tasks {
+		fmt.Fprintf(&b, "- [%s] %s → %s\n", tk.Status, tk.Owner, truncateText(tk.Prompt, 80))
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+func truncateText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func (t *teamTool) executeMail(name, text string) (string, error) {
@@ -153,6 +172,8 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			return "", err
 		}
 		return fmt.Sprintf("teammate %q removed", name), nil
+	case "tasks":
+		return t.executeTasks()
 	case "mail":
 		return t.executeMail(p.Name, p.Text)
 	case "shutdown":
