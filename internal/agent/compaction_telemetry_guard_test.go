@@ -21,7 +21,7 @@ func TestCompactionDetailKeysAreParsed(t *testing.T) {
 		InputTokens: 5, OutputTokens: 6, CacheHitTokens: 7, CacheMissTokens: 8, CacheWriteTokens: 9,
 		RequestCount: 10, UserTurnsKept: 11, UserTurnsDropped: 12,
 		ViewFP: "view", WireFP: "wire", ToolsCount: 13, ToolsFP: "tools", ToolsSource: "frozen",
-		PrefixHash: "pref", PrefLen: 14, WireLen: 15, ProviderRequestID: "req", Error: "boom",
+		PrefixHash: "pref", PrefLen: 14, WireLen: 15, WireDiff: "i3:origin", ProviderRequestID: "req", Error: "boom",
 	}
 	detail := compactionDetailString(full) + " err_type=boom"
 	emitted := compactionDetailKeys(detail)
@@ -34,7 +34,7 @@ func TestCompactionDetailKeysAreParsed(t *testing.T) {
 			t.Errorf("emit key %q has no case in internal/stats/recorder.go; stats would silently drop it", k)
 		}
 	}
-	for _, must := range []string{"summary_input", "pref_hash", "pref_len", "wire_len", "view_fp", "wire_fp", "tools_source"} {
+	for _, must := range []string{"summary_input", "pref_hash", "pref_len", "wire_len", "wire_diff", "view_fp", "wire_fp", "tools_source"} {
 		if !emitted[must] {
 			t.Errorf("emit lost key %q — the stats record depends on it", must)
 		}

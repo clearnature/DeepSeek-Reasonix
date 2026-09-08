@@ -257,6 +257,8 @@ func (r *Recorder) recordCompaction(e event.Event) {
 			rec.Status = v
 		case "pref_hash":
 			rec.PrefHash = v
+		case "wire_diff":
+			rec.WireDiff = v
 		case "summary_input":
 			rec.SummaryInput = v
 		case "view_fp":

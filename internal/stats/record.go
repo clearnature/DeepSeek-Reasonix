@@ -119,8 +119,9 @@ type CompactionRecord struct {
 	Results      int     `json:"results,omitempty"`
 	SavedChars   int     `json:"saved_chars,omitempty"`
 	PrefHash     string  `json:"pref_hash,omitempty"`
-	PrefLen      int     `json:"pref_len,omitempty"` // messages the summary prefix carries
-	WireLen      int     `json:"wire_len,omitempty"` // messages the frozen wire unit carries
+	PrefLen      int     `json:"pref_len,omitempty"`  // messages the summary prefix carries
+	WireLen      int     `json:"wire_len,omitempty"`  // messages the frozen wire unit carries
+	WireDiff     string  `json:"wire_diff,omitempty"` // first field diverging from the frozen bytes
 	SummaryInput string  `json:"summary_input,omitempty"`
 }
 

@@ -85,6 +85,7 @@ func (a *Agent) fillCompactionWireTelemetry(tele *CompactionTelemetry, prefix, f
 	tele.PrefLen = len(prefix)
 	if saved := a.savedMainRequest(); saved != nil {
 		tele.WireLen = len(saved.messages)
+		tele.WireDiff = firstWireDiff(saved.messages, prefix)
 	}
 	if schemas, source := a.summaryToolsSource(); source != "none" {
 		tele.ToolsCount = len(schemas)

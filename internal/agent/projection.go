@@ -197,6 +197,7 @@ type CompactionTelemetry struct {
 	PrefixHash        string `json:"pref_hash,omitempty"`    // summarize-prefix fingerprint (drift vs expiry)
 	PrefLen           int    `json:"pref_len,omitempty"`     // messages the summary prefix carries
 	WireLen           int    `json:"wire_len,omitempty"`     // messages the frozen wire unit carries
+	WireDiff          string `json:"wire_diff,omitempty"`    // first field diverging from the frozen bytes
 	Error             string `json:"error,omitempty"`
 }
 
