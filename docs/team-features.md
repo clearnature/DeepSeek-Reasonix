@@ -33,3 +33,34 @@
   在 teammate 运行时作为 steer 投递，空闲时留存并在其完成时通知 leader。
 - 完成反馈默认走用户下一轮（qwen 模式）；`team_mail`（teammate→leader）
   与运行中 steering 经 `send_message`（job_id）投递。
+
+### 任务板（qwen task_* 对齐）
+
+- `task_create` 发布无主任务（open）→ 任意 teammate `task_list` 找到后
+  `task_update owner=<自己>` 认领 → 完成后 `task_update status=done`。
+- 仲裁：仅 owner 可完成；二次认领被拒（同 owner 幂等）；`task_stop`
+  停成员工作时自动把其认领的任务释放回 open。
+- 任务板随团队快照持久化（重启恢复）；成员完成时若有 open 任务，
+  自动发看板唤醒通知。
+
+### Worktree 隔离（qwen enter/exit_worktree 对齐）
+
+- `enter_worktree {name}`：为 teammate 建独立 git worktree（新分支）并把
+  其写 token 绑定到该路径——后续写入全部落在 worktree 内（我们架构下
+  替代 qwen 的 cwd 切换，更严格）。
+- `exit_worktree {name, action}`：`keep` 保留 checkout 与分支；`remove`
+  （需 `confirm=true`）删除两者并把成员恢复为只读。
+- 桌面 Team 面板显示成员的 worktree 路径/分支。
+
+### 调度（qwen loop_wakeup + cron 对齐）
+
+- `loop_wakeup {delay_seconds, prompt}`：一次性延迟唤醒——到期把 prompt
+  写入 leader inbox，随下一轮到达（不跑无人自动轮，符合 qwen 模式）。
+- `cron_create {schedule_seconds, prompt}` / `cron_list` / `cron_delete`：
+  周期唤醒，同一调度器。
+
+### 子会话（qwen create_sub_session 对齐）
+
+- `create_sub_session {prompt, completion}`：仅在 `reasonix serve` 下可用
+  （daemon-only，与 qwen 一致）；`sent` 投递即返回、`first-turn` 等待首轮
+  并返回输出。无会话桥时原样返回 daemon-only 提示。
