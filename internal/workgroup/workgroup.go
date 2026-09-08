@@ -165,6 +165,12 @@ func (f *folder) tool(e eventwire.Event) {
 	}
 	c, seen := f.calls[t.ID]
 	if !seen {
+		// A partial dispatch is not a call: its contract says a full one follows,
+		// and for a tool that ends the round none ever does. Materializing a Call
+		// from it leaves one open for the rest of the record.
+		if t.Partial {
+			return
+		}
 		c = &Call{ID: t.ID, Source: e.Source, Issuer: event.ToolIssuer(t.Issuer), ParentID: t.ParentID}
 		f.calls[t.ID] = c
 		f.order = append(f.order, t.ID)
@@ -174,6 +180,9 @@ func (f *folder) tool(e eventwire.Event) {
 		c.Rounds = append(c.Rounds, f.round)
 	}
 	if e.Kind == "tool_dispatch" {
+		if t.Partial {
+			return
+		}
 		c.SawDispatch = true
 		f.open[t.ID] = true
 		return

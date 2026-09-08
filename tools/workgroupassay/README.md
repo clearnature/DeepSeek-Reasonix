@@ -14,8 +14,13 @@ go run ./tools/workgroupassay -root DIR
 
 It is in `protocol.go` so changing it is a reviewable diff.
 
-- **Sample**: the first 20 eligible authored turns produced *after* the freeze
-  timestamp, in the order they happened. Not the last 20, not a chosen 20.
+- **Sample**: the first 12 eligible authored turns produced *after* the freeze
+  timestamp, in the order they happened. Not the last 12, not a chosen 12.
+- **The sample is designed, not observed.** The turns come from a written task
+  list. A natural sample was the alternative and was given up on purpose, to
+  buy an answer now instead of waiting days for one; the price is that the
+  group sizes carry the task author's idea of what an agent does. Nothing here
+  may be reported as "what ordinary use looks like".
 - **Eligible**: the turn carries a named `authoredTurn` (which only the current
   schema emits, and which a synthetic continuation never gets), and its
   session's trajectory reads `complete` — a truncated log is a prefix and

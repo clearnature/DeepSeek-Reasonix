@@ -389,3 +389,45 @@ func TestSabotageCuttingOnHostBookkeepingFragmentsTheTurn(t *testing.T) {
 			workgroup.Shape(groups))
 	}
 }
+
+// A round-ending tool is dispatched as a speculative partial and the run exits
+// before its arguments finish: no full dispatch, no result. Real data held two
+// — both conclude_no_changes — and every fixture above missed them, because the
+// stub answers with complete tool calls and never streams one. Left open, such
+// an id makes every later boundary seal a group over a running call.
+func TestASpeculativePartialIsNotACall(t *testing.T) {
+	reading := runTrace(t, traceCase{input: "go", executor: [][]provider.Chunk{
+		{callTodo("call-real", "real")},
+		{provider.Chunk{Type: provider.ChunkToolCallStart, ToolCall: &provider.ToolCall{
+			ID: "call-partial", Name: "conclude_no_changes",
+		}}},
+		{say("done")},
+	}})
+	assertParity(t, reading)
+	// The shape has to be in the record, or this passes on a frame nobody sent.
+	var partials, settled int
+	for _, e := range reading.replay {
+		if e.Tool == nil || e.Tool.ID != "call-partial" {
+			continue
+		}
+		if e.Tool.Partial {
+			partials++
+		} else {
+			settled++
+		}
+	}
+	if partials == 0 || settled != 0 {
+		t.Fatalf("the fixture recorded %d partial and %d settled frames for the "+
+			"round-ending call; it has to be partial-only to test anything", partials, settled)
+	}
+	calls, groups := workgroup.Fold(reading.replay, workgroup.V1())
+	requireNoDuplicates(t, groups)
+	for _, c := range calls {
+		if c.ID == "call-partial" {
+			t.Fatalf("a partial-only dispatch materialized a call: %+v", c)
+		}
+	}
+	if len(groups) != 1 || !slices.Contains(groups[0].Members, "call-real") {
+		t.Fatalf("groups = %v, want the settled call alone", workgroup.Shape(groups))
+	}
+}

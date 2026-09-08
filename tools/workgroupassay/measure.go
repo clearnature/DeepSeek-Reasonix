@@ -111,6 +111,10 @@ func measure(sample []turn) {
 	fmt.Printf("   turns with no assistant call     %d\n", a.ZeroCallTurns)
 	fmt.Printf("   turns with exactly one           %d\n", a.OneCallTurns)
 
+	if designedSample {
+		fmt.Printf("\nthis sample was designed, not observed: the turns come from a written task\n")
+		fmt.Printf("list, so the group sizes carry its author's idea of what an agent does.\n")
+	}
 	fmt.Printf("\nverdict (frozen before the sample existed)\n")
 	if a.noGo() {
 		fmt.Printf("   NO-GO: most groups hold one call AND few turns have %d+ to fold.\n", richTurnCalls)
