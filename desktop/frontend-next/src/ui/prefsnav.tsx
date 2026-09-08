@@ -113,3 +113,86 @@ export const NAV: [string, [Section, string][]][] = [
     ],
   ],
 ];
+
+/** When a change to this setting is in force.
+ *
+ *  Three answers, and they are declared rather than derived: nothing here may
+ *  be read off a handler's name, a hint's wording or a component's type. Each
+ *  value below was taken from what the endpoint behind the control actually
+ *  does — whether its handler reaches the kernel's runtime rebuild — not from
+ *  what the screen says about itself.
+ *
+ *  immediate       canonical state changed and the running runtime already
+ *                  shows it; nothing is reassembled.
+ *  runtime-rebuild canonical state changed and this session's runtime is
+ *                  rebuilt to adopt it. Refused while a turn is running.
+ *  restart         written and kept now; this process goes on without it and
+ *                  the next launch starts with it. Saved is not the same fact
+ *                  as in force, and the row says both.
+ *  none            nothing here changes anything: the block only reports. */
+export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "none";
+
+export interface SettingEntry {
+  /** Which page it is on. */
+  section: Section;
+  /** The id the block renders, and what a search result scrolls to. */
+  anchor: string;
+  title: string;
+  /** Words someone might look for that the title does not contain. These buy
+   *  discoverability and nothing else: an alias never becomes the setting's
+   *  name, its identity, or anything a judgement is made on. */
+  keywords?: string[];
+  apply: ApplySemantics;
+}
+
+// One row per block the settings screen renders, checked both ways against
+// what it really renders — a block with no row here fails, and a row nothing
+// renders fails too.
+export const SETTINGS: SettingEntry[] = [
+  { section: "session", anchor: "preset", title: "执行设定", apply: "immediate", keywords: ["均衡", "交付", "完成判定"] },
+  { section: "session", anchor: "plan-mode", title: "计划模式", apply: "immediate", keywords: ["只读", "先规划"] },
+  { section: "session", anchor: "session-dir", title: "这个会话在哪写", apply: "none", keywords: ["工作目录", "路径"] },
+
+  { section: "model", anchor: "roles", title: "分工", apply: "runtime-rebuild", keywords: ["子代理", "规划", "执行", "审查"] },
+  { section: "model", anchor: "model", title: "模型", apply: "runtime-rebuild", keywords: ["切换", "端点"] },
+  { section: "model", anchor: "effort", title: "推理强度", apply: "runtime-rebuild", keywords: ["思考", "reasoning", "档位"] },
+  { section: "model", anchor: "context", title: "上下文维护", apply: "runtime-rebuild", keywords: ["上下文窗口", "压缩", "compaction"] },
+  // Adding a source does not rebuild; changing which protocol a source is
+  // reached through switches the model, and that does. The stronger of the two
+  // is what the row promises, because the weaker one would be a promise this
+  // block cannot keep.
+  { section: "model", anchor: "providers", title: "连接", apply: "runtime-rebuild", keywords: ["提供商", "api key", "密钥", "协议", "地址"] },
+
+  { section: "tools", anchor: "approval", title: "工具批准", apply: "immediate", keywords: ["权限", "yolo", "询问", "放行"] },
+  { section: "tools", anchor: "rules", title: "明确的规矩", apply: "runtime-rebuild", keywords: ["permissions", "允许", "拒绝", "配方"] },
+  { section: "tools", anchor: "sandbox", title: "沙箱", apply: "runtime-rebuild", keywords: ["隔离", "联网", "写权限", "ssh-agent"] },
+  { section: "tools", anchor: "shell", title: "命令交给谁执行", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
+
+  { section: "hooks", anchor: "hooks", title: "自动化", apply: "immediate", keywords: ["钩子", "hook", "触发"] },
+
+  { section: "ext", anchor: "ext-runtime", title: "运行时", apply: "immediate", keywords: ["扩展", "沙盒"] },
+  { section: "ext", anchor: "plugins", title: "插件包", apply: "immediate", keywords: ["安装", "市场"] },
+  { section: "ext", anchor: "mcp", title: "外部工具", apply: "immediate", keywords: ["mcp", "服务器", "连接外部"] },
+  { section: "ext", anchor: "skills", title: "技能", apply: "immediate", keywords: ["skill", "技能包"] },
+
+  { section: "network", anchor: "network", title: "网络", apply: "immediate", keywords: ["代理", "proxy", "抓取", "超时"] },
+  { section: "remote", anchor: "remote", title: "远程", apply: "immediate", keywords: ["ssh", "机器", "远端工作区"] },
+  { section: "account", anchor: "account", title: "账号", apply: "immediate", keywords: ["登录", "社区"] },
+  { section: "versions", anchor: "versions", title: "版本", apply: "immediate", keywords: ["更新", "升级"] },
+  { section: "memory", anchor: "memory", title: "记忆", apply: "immediate", keywords: ["记住", "忘记", "事实"] },
+  { section: "usage", anchor: "usage", title: "用量与成本", apply: "none", keywords: ["token", "花费", "缓存命中"] },
+  { section: "storage", anchor: "storage", title: "存储", apply: "restart", keywords: ["搬家", "迁移", "磁盘", "位置"] },
+  { section: "advanced", anchor: "elsewhere", title: "还不在这一版里", apply: "none", keywords: ["配置文件"] },
+
+  { section: "appearance", anchor: "language", title: "语言", apply: "restart", keywords: ["中文", "english", "界面语言"] },
+  { section: "appearance", anchor: "window", title: "窗口", apply: "immediate", keywords: ["托盘", "关闭行为"] },
+  { section: "appearance", anchor: "size", title: "大小", apply: "immediate", keywords: ["缩放", "字号"] },
+  { section: "appearance", anchor: "font", title: "字体", apply: "immediate", keywords: ["等宽", "mono"] },
+  { section: "appearance", anchor: "wallpaper", title: "壁纸", apply: "immediate", keywords: ["背景", "图片"] },
+  { section: "appearance", anchor: "weight", title: "文字粗细", apply: "immediate", keywords: ["加粗", "字重"] },
+  { section: "appearance", anchor: "contrast", title: "文字对比度", apply: "immediate", keywords: ["柔和", "对比"] },
+  { section: "appearance", anchor: "mode", title: "明暗", apply: "immediate", keywords: ["深色", "浅色", "跟随系统"] },
+  { section: "appearance", anchor: "scheme", title: "配色", apply: "immediate", keywords: ["主题", "theme", "色板"] },
+];
+
+export const SETTING_AT = (anchor: string) => SETTINGS.find((s) => s.anchor === anchor);

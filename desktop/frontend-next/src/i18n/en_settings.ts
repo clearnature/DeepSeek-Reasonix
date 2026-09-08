@@ -2,6 +2,15 @@
 // alone — one catalogue is still the model, and this file is read as its
 // continuation: same keying by Chinese source text, same grouping by screen.
 export const EN_SETTINGS: Record<string, string> = {
+  // 找设置，以及改它要付什么
+  "搜索设置…": "Search settings…",
+  "搜索设置": "Search settings",
+  "没有匹配的设置": "No matching setting",
+  "立即生效": "In effect now",
+  "重建运行时": "Rebuilds the runtime",
+  "重启后生效": "Takes effect after a restart",
+  "已保存 · 重启后生效": "Saved · takes effect after a restart",
+
   // ── 设置：分区与导航 ─────────────────────────────────────────────
   "设置分类": "Settings sections",
   "这个设置分区出错了": "This settings section failed",

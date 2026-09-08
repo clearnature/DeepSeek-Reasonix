@@ -178,6 +178,10 @@ export const ACTIONS: UIAction[] = [
   { id: "theme.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "pane.close", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "settings.section", kind: "navigation", target: "none", proof: "interaction" },
+  // Finding a setting changes what is on screen and nothing else: it reaches
+  // no kernel state, and the jump it offers is settings.section, because
+  // arriving from a search is the same arrival as arriving from the nav.
+  { id: "settings.search", kind: "view", target: "none", proof: "interaction" },
   { id: "workspace.isolate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "reasoning.effort", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "tool-approval.mode", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

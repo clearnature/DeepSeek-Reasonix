@@ -1,11 +1,12 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { listenAction } from "./listen";
 import { useRuntimeReload } from "./RuntimeReload";
 import type { AccountState, AgentPort, Appearance as Look, ApprovalMode, CapabilityScope, McpEntry, ModelEntry, PluginPackage, Preset, RoleAssignments, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV } from "./prefsnav";
+import { ICON, NAV, SETTING_AT, SETTINGS } from "./prefsnav";
+import { Group } from "./Group";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
 import { Remotes } from "./Remotes";
@@ -88,6 +89,10 @@ interface Props {
 
 export function Settings({ hub, onError, port, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, reloadThemes, at: opened, account: acct, reloadAccount }: Props) {
   const [at, setAt] = useState<Section>((opened as Section) || "session");
+  // 搜索的语料是这张表，不是屏幕上的 DOM：分区是按需挂载的，读 DOM 就只搜得到
+  // 当前这一页，而为了搜索把每一页都挂起来会让隐藏页面开始发请求。
+  const [query, setQuery] = useState("");
+  const [landed, setLanded] = useState("");
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [roles, setRoles] = useState<RoleAssignments | null>(null);
   const [protocol, setProtocol] = useState<Record<string, string>>({});
@@ -282,6 +287,34 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
   const shown = (id: Section) =>
     (id !== "remote" || remoteBook !== null) && (id !== "advanced" || ELSEWHERE.length > 0);
 
+  // 搜索命中的是这张表里的条目，包括当前没有挂载的那些分区；能不能显示由 shown
+  // 决定，和它有没有被渲染过无关。
+  const found = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return SETTINGS.filter((e) => shown(e.section) && matches(e, q));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, remoteBook]);
+  // 落点：跳过去之后短暂标一下「就是这里」。这是导航反馈，不是状态变化。
+  const go = (section: Section, anchor: string) => {
+    setAt(section);
+    setQuery("");
+    setLanded(anchor);
+  };
+  useEffect(() => {
+    if (!landed) return;
+    const el = root.current?.querySelector<HTMLElement>(`#set-${CSS.escape(landed)}`);
+    el?.scrollIntoView({ block: "start", behavior: "smooth" });
+    // 「就是这里」是一次导航反馈，不是这个设置变了 —— 所以它只是元素上短暂的
+    // 一个标记，不进 React 状态，也不用往每个块穿一个纯表现的 prop。
+    el?.setAttribute("data-landed", "");
+    const done = setTimeout(() => setLanded(""), 900);
+    return () => {
+      clearTimeout(done);
+      el?.removeAttribute("data-landed");
+    };
+  }, [landed, at]);
+
   return (
     <div
       className="prefs"
@@ -296,10 +329,55 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
       <div className="prefs-sheet" role="dialog" aria-modal="true" aria-label={t("设置")}>
       <div className="prefs-hd">
         <h2>{t("设置")}</h2>
-        <p>{t("改动立刻生效；需要重建运行时的项目，在任务运行期间无法修改")}</p>
+        {/* 原来这里挂着一句「改动立刻生效；需要重建运行时的……」。它对三档里的
+            两档说了话，而且要读的人自己判断手上这一项属于哪一档 —— 那句话现在
+            落在每一个设置块自己身上。 */}
+        <input
+          className="prefs-find"
+          value={query}
+          // Typing filters and Escape takes the filter back: two events on one
+          // box, both operating the same one thing.
+          data-action-change="settings.search"
+          data-action-keydown="settings.search"
+          placeholder={t("搜索设置…")}
+          aria-label={t("搜索设置")}
+          spellCheck={false}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // 一层一层退：有搜索就先退搜索，没有才退整个设置。
+            if (e.key === "Escape" && query) {
+              e.stopPropagation();
+              setQuery("");
+            }
+          }}
+        />
         <button className="btn sm" data-action="settings.close" onClick={onClose}>
           {t("关闭")} <span className="esc">Esc</span>
         </button>
+        {found !== null && (
+          <div className="prefs-found" role="listbox" aria-label={t("搜索设置")}>
+            {found.length === 0 ? (
+              <p className="none">{t("没有匹配的设置")}</p>
+            ) : (
+              found.map((e) => (
+                <button
+                  key={e.anchor}
+                  role="option"
+                  aria-selected={false}
+                  data-action="settings.section"
+                  data-value={e.section}
+                  data-target={e.anchor}
+                  onClick={() => go(e.section, e.anchor)}
+                >
+                  <span className="where">{t(SECTION_NAME[e.section] ?? e.section)}</span>
+                  <span className="what">{t(e.title)}</span>
+                  {SETTING_AT(e.anchor)?.apply === "runtime-rebuild" && <span className="cost">{t("重建运行时")}</span>}
+                  {SETTING_AT(e.anchor)?.apply === "restart" && <span className="cost">{t("重启后生效")}</span>}
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       <ConfigTrouble port={port} onRepaired={onChanged} />
@@ -342,7 +420,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           <div className="prefs-col">
           {at === "session" && (
             <>
-              <Group title={t("执行设定")} now={preset} hint={t("决定任务完成的判定标准。切换立刻生效，不会重建运行时。")}>
+              <Group id="preset" title={t("执行设定")} now={preset} hint={t("决定任务完成的判定标准。切换立刻生效，不会重建运行时。")}>
                 <div className="seg" data-text role="radiogroup" aria-label={t("执行设定")}>
                   {PRESETS.map(([id, name]) => (
                     <button key={id} role="radio" data-action="chrome.preset" data-value={id}
@@ -357,7 +435,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               {/* An on/off that reverses by clicking again is a switch, not two
                   options — the same control the recipes and the sandbox's
                   network egress use. */}
-              <Group title={t("计划模式")} hint={t("开启时 agent 无法获得写权限。该限制由工具本身实施，不依赖提示词中的约定。")}>
+              <Group id="plan-mode" title={t("计划模式")} hint={t("开启时 agent 无法获得写权限。该限制由工具本身实施，不依赖提示词中的约定。")}>
                 <div className="lrow">
                   <span className="tx">
                     <span className="lb">{t("只读地出计划")}</span>
@@ -374,7 +452,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                   />
                 </div>
               </Group>
-              <Group title={t("这个会话在哪写")}>
+              <Group id="session-dir" title={t("这个会话在哪写")}>
                 <div className="kv">
                   <span className="k">{t("工作目录")}</span>
                   <span className="v">{status?.cwd ?? "—"}</span>
@@ -408,7 +486,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                   <span className="why">{failed}</span>
                 </div>
               )}
-              <Group title={t("分工")} now={roles ? t("{n} 个已指派", { n: assigned }) : undefined}
+              <Group id="roles" title={t("分工")} now={roles ? t("{n} 个已指派", { n: assigned }) : undefined}
                 hint={t("每个位置默认使用主模型，只有明确指派过的才会单独设置。更换指派与更换主模型一样需要重建运行时，任务运行期间无法修改。")}>
                 <Roles models={models} roles={roles} main={status?.modelRef} busy={busy}
                   onSet={(role, ref) => run(`role:${role}`, async () => {
@@ -416,12 +494,12 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                     loadRoles();
                   })} />
               </Group>
-              <Group title={t("模型")} now={nav.model} hint={t("切换会保留对话并重建运行时，任务运行期间无法切换。标签只显示已探测到的能力；留空表示端点未声明，不代表不支持。")}>
+              <Group id="model" title={t("模型")} now={nav.model} hint={t("切换会保留对话并重建运行时，任务运行期间无法切换。标签只显示已探测到的能力；留空表示端点未声明，不代表不支持。")}>
                 <Models models={models} current={status?.modelRef} busy={busy} protocol={protocol}
                   onPick={(ref) => run(ref, () => port.setModel(ref))} />
               </Group>
               {efforts.length > 0 ? (
-                <Group title={t("推理强度")} hint={t("以下档位由当前模型的端点支持，auto 表示使用端点自身的默认值。")}>
+                <Group id="effort" title={t("推理强度")} hint={t("以下档位由当前模型的端点支持，auto 表示使用端点自身的默认值。")}>
                   <div className="seg" role="group" aria-label={t("推理强度")}>
                     {efforts.map((e) => (
                       <button key={e} data-action="reasoning.effort" data-value={e}
@@ -433,13 +511,13 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                   </div>
                 </Group>
               ) : (
-                <Group title={t("推理强度")} hint={t("当前模型未提供可调的推理档位，因此不显示该选项。")} />
+                <Group id="effort" title={t("推理强度")} hint={t("当前模型未提供可调的推理档位，因此不显示该选项。")} />
               )}
-              <Group title={t("上下文维护")}
+              <Group id="context" title={t("上下文维护")}
                 hint={t("对话长到一定程度会折叠成摘要再继续。折叠点取「窗口比例」与「压缩阈值」中先到的那个。")}>
                 <Compaction port={port} onChanged={onChanged} />
               </Group>
-              <Group
+              <Group id="providers"
                 title={t("连接")}
                 hint={t("模型的来源。添加时只需填写地址和 key；协议、模型列表和图片支持会自动向端点探测，探测不到的才需要手动填写。")}
               >
@@ -452,7 +530,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
 
           {at === "tools" && (
             <>
-              <Group title={t("工具批准")} now={approval} hint={t("这是 agent 访问你的文件前的唯一审批入口，被拦下的操作没有其他途径可以绕过。")}>
+              <Group id="approval" title={t("工具批准")} now={approval} hint={t("这是 agent 访问你的文件前的唯一审批入口，被拦下的操作没有其他途径可以绕过。")}>
                 {/* Four rows of label-and-description was 190px for one choice,
                     and it was the only choice in this pane shaped that way. The
                     description follows the selection instead: what a档 does is
@@ -469,19 +547,19 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                 </div>
                 <p className="note">{t(APPROVALS.find(([id]) => id === status?.toolApprovalMode)?.[2] ?? "")}</p>
               </Group>
-              <Group
+              <Group id="rules"
                 title={t("明确的规矩")}
                 hint={t("上一项决定是否向你询问，此处决定哪些操作始终禁止、哪些无需询问。改动会重建运行时，任务运行期间无法修改。")}
               >
                 <Rules port={port} onChanged={onChanged} />
               </Group>
-              <Group
+              <Group id="sandbox"
                 title={t("沙箱")}
                 hint={t("批准之后可以操作的范围。该限制不依赖 agent 自觉：写入范围由工具实施，命令隔离由操作系统实施。")}
               >
                 <Sandbox port={port} onChanged={onChanged} />
               </Group>
-              <Group
+              <Group id="shell"
                 title={t("命令交给谁执行")}
                 hint={t("agent 的所有命令都由该程序执行，它也决定命令使用哪种语法；选择错误会导致每条命令都执行失败。下方只列出本机已安装的程序。更换需要重建运行时，任务运行期间无法修改。")}
               >
@@ -491,7 +569,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "hooks" && (
-            <Group
+            <Group id="hooks"
               title={t("自动化")}
               hint={t("在 agent 执行任务前后运行你自己的命令。这些命令在本机以你的权限运行；可以拦截 agent 的两个事件已在下方标出。")}
             >
@@ -510,14 +588,14 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               )}
               {/* 装完、改完、删完都要过这一步才算数——把它放在包列表上面，
                   因为它管的是整个运行时，不是某一个包。 */}
-              <Group
+              <Group id="ext-runtime"
                 title={t("运行时")}
                 hint={t("修改扩展代码，或安装、删除、启用或停用插件包之后，用它使改动生效。当前这一轮不受影响，下一轮开始使用新的配置。")}
                 action={reload.action}
               >
                 {reload.note}
               </Group>
-              <Group
+              <Group id="plugins"
                 title={t("插件包")}
                 now={packages.length ? t("{n} 个", { n: packages.length }) : undefined}
                 hint={t("一个包可以同时提供技能、命令、自动化钩子和外部服务。安装与导入是同一个操作：提供一个仓库地址，或本机的一个文件夹。")}
@@ -552,7 +630,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               {/* Below the packages: what was added by hand. A server the user
                   typed in themselves is not part of anyone's package, and
                   filing it under one would misname where it came from. */}
-              <Group
+              <Group id="mcp"
                 title={t("外部工具")}
                 now={looseMcp.length ? t("{n} 个服务", { n: looseMcp.length }) : undefined}
                 hint={t("你自行接入的 MCP 服务。它们提供的能力与内置工具等同，列出的每一项都可以操作你的文件和数据。关闭后会立即从本轮工具列表中移除，重启后保持关闭。")}
@@ -577,7 +655,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                 ))}
                 {looseMcp.length === 0 && !adding && <div className="empty">{t("没有自己接入的外部服务。")}</div>}
               </Group>
-              <Group
+              <Group id="skills"
                 title={t("技能")}
                 now={looseSkills.length ? t("{on}/{all} 开着", { on: looseOn, all: looseSkills.length }) : undefined}
                 hint={t(
@@ -595,7 +673,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "network" && (
-            <Group
+            <Group id="network"
               title={t("网络")}
               hint={t("模型请求、MCP 远程服务和网页抓取都经由此处。配置错误通常表现为聊天无响应，建议先测试连接，测试会指出中断的环节。")}
             >
@@ -604,7 +682,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "remote" && (
-            <Group
+            <Group id="remote"
               title={t("远程")}
               hint={t("接入另一台机器上的工作区：内核在远程运行，界面仍在本机。远程面板与本地面板并排显示，每处都会标明所在的机器。")}
             >
@@ -613,7 +691,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "account" && (
-            <Group
+            <Group id="account"
               title={t("账号")}
               hint={t("Reasonix 本身不需要账号，仅在需要联网的功能中使用：社区发帖、崩溃问题跟进，以及后续的技能发布。")}
             >
@@ -622,7 +700,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "versions" && (
-            <Group
+            <Group id="versions"
               title={t("版本")}
               hint={t("当前安装的版本、可用更新，以及出现问题时如何回退。回退后将固定在你选择的版本，不会被自动更新覆盖。")}
             >
@@ -631,7 +709,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "memory" && (
-            <Group
+            <Group id="memory"
               title={t("记忆")}
               hint={t("agent 自动记录的内容：你没有配置过，但它会据此执行。此处按触发时机分组，并标出上一轮实际使用的条目。")}
             >
@@ -640,7 +718,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "usage" && (
-            <Group
+            <Group id="usage"
               title={t("用量与成本")}
               hint={t("本机记录的 token 用量与花费，仅保存在这台机器上，不会上传。命中缓存的输入按缓存价计费，因此命中率直接影响费用。")}
             >
@@ -649,7 +727,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "storage" && (
-            <Group title={t("存储")} hint={t("数据的存储位置与占用空间。会话和索引会持续增长，配置和凭据不会，因此只有前者可以迁移。迁移在重启后生效。")}><Storage port={port} /></Group>
+            <Group id="storage" title={t("存储")} hint={t("数据的存储位置与占用空间。会话和索引会持续增长，配置和凭据不会，因此只有前者可以迁移。迁移在重启后生效。")}><Storage port={port} /></Group>
           )}
 
           {at === "appearance" && (
@@ -657,7 +735,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "advanced" && (
-            <Group title={t("还不在这一版里")} hint={t("以下项目尚未提供设置界面，此处仅说明它们当前的位置。")}>
+            <Group id="elsewhere" title={t("还不在这一版里")} hint={t("以下项目尚未提供设置界面，此处仅说明它们当前的位置。")}>
               {ELSEWHERE.map((x) => (
                 <div className="lrow" key={x}>
                   <span className="ds">{x}</span>
@@ -675,21 +753,14 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
   );
 }
 
-function Group({
-  title, hint, now, action, children,
-}: {
-  title: string; hint?: string; now?: string; action?: React.ReactNode; children?: React.ReactNode;
-}) {
-  return (
-    <section className="grp">
-      <div className="grp-hd">
-        <h2>{title}</h2>
-        {now && <span className="now">{now}</span>}
-        {action}
-      </div>
-      {hint && <p className="hint">{hint}</p>}
-      {children && <div className="grp-items">{children}</div>}
-    </section>
-  );
-}
+const SECTION_NAME: Partial<Record<Section, string>> = Object.fromEntries(
+  NAV.flatMap(([, items]) => items),
+) as Partial<Record<Section, string>>;
 
+// Title, aliases, and the page it is on. An alias is a way in and nothing
+// more: it never becomes the setting's name and no judgement reads it.
+function matches(e: (typeof SETTINGS)[number], q: string): boolean {
+  if (e.title.toLowerCase().includes(q)) return true;
+  if ((SECTION_NAME[e.section] ?? "").toLowerCase().includes(q)) return true;
+  return (e.keywords ?? []).some((k) => k.toLowerCase().includes(q));
+}

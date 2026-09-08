@@ -1,3 +1,4 @@
+import { ApplyNote } from "./Group";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { TrayPrefs, AgentPort, Appearance as Look, ThemePack } from "../port/port";
 import { MONO_FAMILIES, UI_FAMILIES, installed, readDefault, readSteps } from "./look";
@@ -214,7 +215,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
   return (
     <>
-      <section className="grp">
+      <section className="grp" id="set-language" data-setting="language">
         <div className="grp-hd">
           <h2>{t("语言")}</h2>
         </div>
@@ -231,10 +232,11 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           </div>
           <p className="note">{t("改语言要重开窗口才生效")}</p>
         </div>
+        <ApplyNote id="language" />
       </section>
 
       {tray && (
-        <section className="grp">
+        <section className="grp" id="set-window" data-setting="window">
           <div className="grp-hd">
             <h2>{t("窗口")}</h2>
           </div>
@@ -272,10 +274,11 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
               />
             </div>
           </div>
+          <ApplyNote id="window" />
         </section>
       )}
 
-      <section className="grp">
+      <section className="grp" id="set-size" data-setting="size">
         <div className="grp-hd">
           <h2>{t("大小")}</h2>
         </div>
@@ -317,9 +320,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             </div>
           </div>
         </div>
+        <ApplyNote id="size" />
       </section>
 
-      <section className="grp">
+      <section className="grp" id="set-font" data-setting="font">
         <div className="grp-hd">
           <h2>{t("字体")}</h2>
         </div>
@@ -342,9 +346,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             onPick={(v) => set({ fontMono: v })}
           />
         </div>
+        <ApplyNote id="font" />
       </section>
 
-      <section className="grp">
+      <section className="grp" id="set-wallpaper" data-setting="wallpaper">
         <div className="grp-hd">
           <h2>{t("壁纸")}</h2>
           {look.wallpaper && (
@@ -467,9 +472,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             </>
           )}
         </div>
+        <ApplyNote id="wallpaper" />
       </section>
 
-      <section className="grp">
+      <section className="grp" id="set-weight" data-setting="weight">
         <div className="grp-hd">
           <h2>{t("文字粗细")}</h2>
         </div>
@@ -483,9 +489,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             ))}
           </div>
         </div>
+        <ApplyNote id="weight" />
       </section>
 
-      <section className="grp">
+      <section className="grp" id="set-contrast" data-setting="contrast">
         <div className="grp-hd">
           <h2>{t("文字对比度")}</h2>
         </div>
@@ -499,9 +506,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             ))}
           </div>
         </div>
+        <ApplyNote id="contrast" />
       </section>
 
-      <section className="grp">
+      <section className="grp" id="set-mode" data-setting="mode">
         <div className="grp-hd">
           <h2>{t("明暗")}</h2>
         </div>
@@ -515,9 +523,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             ))}
           </div>
         </div>
+        <ApplyNote id="mode" />
       </section>
 
-      <section className="grp">
+      <section className="grp" id="set-scheme" data-setting="scheme">
         <div className="grp-hd">
           <h2>{t("配色")}</h2>
           <span className="now">{packs.length ? t("{n} 个已装", { n: packs.length }) : ""}</span>
@@ -545,6 +554,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           ))}
           {packs.length === 0 && <p className="note">{t("尚未安装配色包。将包含 theme.json 的目录放入 themes/ 后即会显示在此处。")}</p>}
         </div>
+        <ApplyNote id="scheme" />
       </section>
     </>
   );
