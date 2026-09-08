@@ -185,7 +185,7 @@ type Controller struct {
 	// wait analog): completion wakes a model turn when no user turn owns the
 	// controller. Cap-1 channel batches bursts; digestDone closes from Close.
 	autoDigest bool
-	digestCh   chan struct{}
+	digestCh   chan string
 	digestDone chan struct{}
 	digestOnce sync.Once
 	// workspaceLease is the Delivery writer owner shared with the executor.

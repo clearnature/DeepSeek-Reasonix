@@ -237,6 +237,7 @@ type recordingProvider struct {
 	name     string
 	streams  [][]provider.Chunk
 	requests []provider.Request
+	mu       sync.Mutex
 }
 
 func (p *recordingProvider) Name() string {
@@ -247,7 +248,9 @@ func (p *recordingProvider) Name() string {
 }
 
 func (p *recordingProvider) Stream(_ context.Context, req provider.Request) (<-chan provider.Chunk, error) {
+	p.mu.Lock()
 	p.requests = append(p.requests, req)
+	p.mu.Unlock()
 	i := len(p.requests) - 1
 	if i >= len(p.streams) {
 		i = len(p.streams) - 1
@@ -259,6 +262,12 @@ func (p *recordingProvider) Stream(_ context.Context, req provider.Request) (<-c
 	}
 	close(ch)
 	return ch, nil
+}
+
+func (p *recordingProvider) recorded() []provider.Request {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]provider.Request(nil), p.requests...)
 }
 
 func requestMessagesText(messages []provider.Message) string {

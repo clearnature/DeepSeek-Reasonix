@@ -10,7 +10,7 @@
     "marker": 0,
     "narrative": 72,
     "struct-state": 117,
-    "test-file-size": 70305
+    "test-file-size": 70314
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -968,7 +968,7 @@
     },
     "internal/control/controller_test.go": {
       "essay": 1,
-      "test-file-size": 4628
+      "test-file-size": 4637
     },
     "internal/control/extension_ui.go": {
       "essay": 4,

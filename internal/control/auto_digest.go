@@ -10,16 +10,17 @@ import (
 
 // The leader digest round is the qwen waitForTeammateActivity analog: a
 // teammate job completion wakes the leader model without waiting for the next
-// user turn. The worker drains completed-job notes and runs one synchronous
-// turn that asks the model to digest them and report. Design:
-// docs/team/20260909-live-feedback-design.md (6.1-6.7).
+// user turn. The round is a lightweight completion notice — the teammate's
+// result envelope already rides the leader transcript prefix (appended when
+// the fork finished), so the digest turn's model can read it and report.
+// Design: docs/team/20260909-live-feedback-design.md (6.1-6.7).
 const digestRoundTimeout = 10 * time.Minute
 
 // teamDigestInstruction frames the auto round as a digest-and-report turn and
 // forbids redispatch, so a completion cannot cascade into new background work
 // from an unattended model turn (loop guard; mechanism gate is prompt-level in
 // v1, see design 6.3).
-const teamDigestInstruction = "Digest the results and report; if a result drifts from its task you may say so. This is an automatic digest round — do not dispatch new background tasks now."
+const teamDigestInstruction = "Summarize the completed teammate task and its delivered result into the running work state, then report concisely. This is an automatic digest round — do not dispatch new background tasks now."
 
 // startDigestRound wires the completion callback and launches the single
 // digest worker. Only when orchestration exists and DigestAuto is on (tests
@@ -29,13 +30,13 @@ func (c *Controller) startDigestRound() {
 	if c.teammates == nil || !c.autoDigest {
 		return
 	}
-	c.digestCh = make(chan struct{}, 1)
+	c.digestCh = make(chan string, 1)
 	c.digestDone = make(chan struct{})
 	c.digestOnce.Do(func() {
 		c.teammates.SetCompletionCallback(func(name string, _ jobs.Status) {
 			// Cap 1 collapses a burst of completions into one round.
 			select {
-			case c.digestCh <- struct{}{}:
+			case c.digestCh <- name:
 			default:
 			}
 		})
@@ -56,56 +57,48 @@ func (c *Controller) digestWorker() {
 		select {
 		case <-c.digestDone:
 			return
-		case <-c.digestCh:
+		case name := <-c.digestCh:
 			// Batch: drain every completion signalled while this round waited.
-		loop:
 			for {
 				select {
-				case <-c.digestCh:
+				case n := <-c.digestCh:
+					name = n
 				default:
-					break loop
+					goto run
 				}
 			}
-			c.runDigestRound()
+		run:
+			c.runDigestRound(name)
 		}
 	}
 }
 
-// runDigestRound runs one model turn that digests the completed jobs. The
-// completion notes are drained here (the user-turn compose path drains them
-// only when a user submits), so an idle leader still learns the results.
+// runDigestRound runs one model turn that digests the completed teammate job.
 // ErrTurnRunning means a user turn owns the controller — it already injected
-// the notes via compose, so this round is dropped, not retried.
-func (c *Controller) runDigestRound() {
+// the completion context, so this round is dropped, not retried.
+func (c *Controller) runDigestRound(name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), digestRoundTimeout)
 	defer cancel()
-	input := c.digestPrompt()
-	if input == "" {
-		return
-	}
-	if err := c.RunTurn(ctx, input); err != nil {
+	if err := c.RunTurn(ctx, c.digestPrompt(name)); err != nil {
 		if err == ErrTurnRunning {
-			return // the user turn that owns the controller carries the notes
+			return // the user turn that owns the controller carries the context
 		}
 		c.notice("team digest failed: " + err.Error())
 	}
 }
 
-// digestPrompt assembles the auto-round input from the drained completion
-// notes plus the live roster. Empty when there is nothing to digest.
-func (c *Controller) digestPrompt() string {
-	var note string
-	if c.jobs != nil {
-		note = c.jobs.DrainCompletedNoteForSession(c.parentSessionID())
-	}
-	if strings.TrimSpace(note) == "" {
+// digestPrompt assembles the auto-round input for a completed teammate.
+func (c *Controller) digestPrompt(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("<team_digest>\n")
-	b.WriteString("The following teammate task(s) completed since your last turn. ")
-	b.WriteString(teamDigestInstruction + "\n")
-	b.WriteString(note)
+	b.WriteString("Teammate ")
+	b.WriteString(name)
+	b.WriteString(" finished its task. ")
+	b.WriteString(teamDigestInstruction)
 	b.WriteString("\n</team_digest>")
 	return b.String()
 }
