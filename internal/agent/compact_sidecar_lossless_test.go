@@ -126,6 +126,12 @@ func TestLoadProjectionSidecarRestoresWireBytes(t *testing.T) {
 			t.Fatalf("restored tool %d diverged: %+v vs %+v", i, restored.tools[i], frozenTools[i])
 		}
 	}
+	// Compaction telemetry compares wire_fp against the summary prefix hash;
+	// restoring the bytes without the fingerprint emits an empty wire_fp and
+	// silently loses that comparison.
+	if got, want := a.sess.wireFP(), providerVisibleFingerprint(wire); got != want || got == "" {
+		t.Fatalf("restored wire fingerprint = %q, want %q", got, want)
+	}
 
 	// First post-resume compaction must replay the restored bytes, not the
 	// cropped fallback.

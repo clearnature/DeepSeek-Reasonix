@@ -187,6 +187,10 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		// unit.
 		if len(st.LastWireMessages) > 0 {
 			a.sess.lastMainReq.Store(&mainRequestBytes{messages: st.LastWireMessages, tools: st.LastWireTools})
+			// The frozen bytes are also the last wire unit; without this the
+			// compaction telemetry reports an empty wire_fp and the summary
+			// prefix can no longer be compared against what was sent.
+			a.sess.setWireFP(providerVisibleFingerprint(st.LastWireMessages))
 		}
 		a.sess.checkpointState = "restored"
 		if needsNormalization {
