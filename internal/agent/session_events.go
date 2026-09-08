@@ -355,81 +355,9 @@ func replaySessionEventLogWithContext(ctx context.Context, path string, limits s
 	}
 	replay := sessionEventReplay{size: info.Size()}
 	if info.Size() > limits.maxBytes {
-		return replay, sessionReplayLimitError(path, "encoded_bytes", info.Size(), limits.maxBytes)
+		return replaySessionEventLogTail(ctx, f, path, info.Size(), limits, hasher, replay)
 	}
-	// Stat and read are not atomic across processes. LimitReader keeps a log
-	// that grows after Stat inside the same byte budget.
-	limited := &io.LimitedReader{R: &contextReader{ctx: ctx, reader: f}, N: limits.maxBytes + 1}
-	dec := json.NewDecoder(limited)
-	for {
-		if err := ctx.Err(); err != nil {
-			return replay, err
-		}
-		var rec sessionEventWireRecord
-		if err := dec.Decode(&rec); err != nil {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return replay, ctxErr
-			}
-			if limited.N == 0 {
-				return replay, sessionReplayLimitError(path, "encoded_bytes", limits.maxBytes+1, limits.maxBytes)
-			}
-			if errors.Is(err, io.EOF) {
-				return replay, nil
-			}
-			replay.damaged = true
-			return replay, nil
-		}
-		if rec.SchemaVersion != sessionEventSchemaVersion {
-			return replay, fmt.Errorf("decode session event log %s: unsupported schema version %d", path, rec.SchemaVersion)
-		}
-		if replay.records >= limits.maxRecords {
-			return replay, sessionReplayLimitError(path, "event_records", int64(replay.records+1), int64(limits.maxRecords))
-		}
-		switch rec.Type {
-		case sessionEventTypeReplace:
-			msgs, collectionItems, err := decodeSessionEventMessages(ctx, path, rec.Messages, 0, 0, limits)
-			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					return replay, ctxErr
-				}
-				if errors.Is(err, ErrSessionReplayLimitExceeded) {
-					return replay, err
-				}
-				replay.damaged = true
-				return replay, nil
-			}
-			replay.msgs = msgs
-			replay.collectionItems = collectionItems
-			replay.times = make([]time.Time, len(replay.msgs))
-			hasher.rehash(msgs)
-		case sessionEventTypeAppend:
-			if rec.MessageIndex != len(replay.msgs) {
-				replay.damaged = true
-				return replay, nil
-			}
-			msgs, collectionItems, err := decodeSessionEventMessages(ctx, path, rec.Messages, len(replay.msgs), replay.collectionItems, limits)
-			if err != nil {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					return replay, ctxErr
-				}
-				if errors.Is(err, ErrSessionReplayLimitExceeded) {
-					return replay, err
-				}
-				replay.damaged = true
-				return replay, nil
-			}
-			replay.msgs = append(replay.msgs, msgs...)
-			replay.collectionItems = collectionItems
-			for range msgs {
-				replay.times = append(replay.times, rec.CreatedAt)
-			}
-			hasher.addAll(msgs)
-		default:
-			return replay, fmt.Errorf("decode session event log %s: unsupported event type %q", path, rec.Type)
-		}
-		replay.records++
-		replay.lastGoodEnd = dec.InputOffset()
-	}
+	return replaySessionEventRecords(ctx, f, path, 0, limits, hasher, replay)
 }
 
 // decodeSessionEventMessages preflights both the top-level message count and
