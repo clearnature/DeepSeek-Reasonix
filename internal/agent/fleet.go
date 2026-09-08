@@ -358,6 +358,7 @@ func (f *FleetTool) runFleet(ctx context.Context, sink event.Sink, specs []Profi
 			Tool: event.Tool{
 				ID: subID, ParentID: parentID, Name: "task",
 				Args: string(dispatchArgs), ReadOnly: spec.Grant.ReadOnly,
+				Issuer: event.IssuedByHost,
 			},
 		})
 		publishGraph(sink, fleetQueuedDelta(parentID, plan, idx, spec.Context.Upstream))
@@ -378,7 +379,7 @@ func (f *FleetTool) runFleet(ctx context.Context, sink event.Sink, specs []Profi
 				res.status = agentgraph.StateFailed
 				res.failure = classifyFleetFailure(err)
 			}
-			report := event.Tool{ID: subID, ParentID: parentID, Name: "task", Output: out}
+			report := event.Tool{ID: subID, ParentID: parentID, Name: "task", Output: out, Issuer: event.IssuedByHost}
 			if err != nil {
 				report.Output, report.Err = "", err.Error()
 			}

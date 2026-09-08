@@ -42,6 +42,10 @@ var mirroredWireTypes = []wireMirror{
 	// A page that cannot read the coverage is back to the empty array that meant
 	// three different things.
 	{"internal/serve/wirelog.go", "trajectoryView", tsWireFile, "TrajectoryRead"},
+	// The tool frame itself. Who issued a call is the one thing separating the
+	// model's work from the host's own bookkeeping, and a page that cannot read
+	// it folds them together.
+	{"internal/eventwire/wire.go", "Tool", tsWireFile, "Tool"},
 	{"internal/control/boundary.go", "SandboxSettings", tsBoundaryFile, "SandboxSettings"},
 	// The MCP row: a status the host answered with and the page cannot read is a
 	// row that goes back to reading the server's own prose for it.

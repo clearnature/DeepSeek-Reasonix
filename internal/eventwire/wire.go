@@ -410,7 +410,7 @@ func toWireTool(t event.Tool) *Tool {
 		DurationMs: t.DurationMs, ContextTokens: t.ContextTokens(),
 		Partial: t.Partial, StartedAt: t.StartedAt, EndedAt: t.EndedAt,
 		ArgChars: t.ArgChars, Refreshed: t.Refreshed,
-		ParentID: t.ParentID, AttemptID: t.AttemptID,
+		ParentID: t.ParentID, AttemptID: t.AttemptID, Issuer: string(t.Issuer),
 		Diff: t.Diff, Added: t.Added, Removed: t.Removed,
 	}
 	if b := t.Bound; b.Kind != event.BoundWhole {
@@ -462,19 +462,23 @@ type Tool struct {
 	DurationMs int64  `json:"durationMs,omitempty"`
 	// ContextTokens is what this call left in the prompt (args + result), so a
 	// card can say which step is eating the window. Estimated, never billed.
-	ContextTokens int             `json:"contextTokens,omitempty"`
-	StartedAt     int64           `json:"startedAt,omitempty"` // unix ms; zero when the call never ran
-	EndedAt       int64           `json:"endedAt,omitempty"`
-	Partial       bool            `json:"partial,omitempty"`
-	ArgChars      int             `json:"argChars,omitempty"`
-	Refreshed     bool            `json:"refreshed,omitempty"`
-	ParentID      string          `json:"parentId,omitempty"`
-	AttemptID     string          `json:"attemptId,omitempty"` // host-local stream_attempt id for speculative partials
-	Diff          string          `json:"diff,omitempty" externalizable:"true"`
-	Added         int             `json:"added,omitempty"`
-	Removed       int             `json:"removed,omitempty"`
-	Profile       *Profile        `json:"profile,omitempty"`
-	Execution     *ShellExecution `json:"execution,omitempty"`
+	ContextTokens int    `json:"contextTokens,omitempty"`
+	StartedAt     int64  `json:"startedAt,omitempty"` // unix ms; zero when the call never ran
+	EndedAt       int64  `json:"endedAt,omitempty"`
+	Partial       bool   `json:"partial,omitempty"`
+	ArgChars      int    `json:"argChars,omitempty"`
+	Refreshed     bool   `json:"refreshed,omitempty"`
+	ParentID      string `json:"parentId,omitempty"`
+	// Issuer is who initiated the call: model, host, user, provider. A reader
+	// folding tool work needs it — nothing else on the frame separates a call
+	// the model asked for from one the host minted for it.
+	Issuer    string          `json:"issuer,omitempty"`
+	AttemptID string          `json:"attemptId,omitempty"` // host-local stream_attempt id for speculative partials
+	Diff      string          `json:"diff,omitempty" externalizable:"true"`
+	Added     int             `json:"added,omitempty"`
+	Removed   int             `json:"removed,omitempty"`
+	Profile   *Profile        `json:"profile,omitempty"`
+	Execution *ShellExecution `json:"execution,omitempty"`
 }
 
 // ShellExecution is the JSON form of event.ShellExecution (local UI metadata).

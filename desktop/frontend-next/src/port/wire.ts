@@ -76,6 +76,20 @@ export interface Bound {
   path?: string;
 }
 
+/** Who initiated a tool invocation.
+ *
+ *  - model: the call came out of a model response's tool_calls.
+ *  - host: the host invoked it itself — seeding an approved plan, advancing a
+ *    step, closing a goal, expanding one delegation call into its items.
+ *  - user: a person invoked it directly, by slash command or inline shell.
+ *  - provider: the provider ran it on its side and reported only a result.
+ *
+ *  Absent on frames written before the field existed. Absent is unknown, not
+ *  "model" — a fold that assumes otherwise counts the host's own bookkeeping
+ *  as the model's work.
+ */
+export type ToolIssuer = "model" | "host" | "user" | "provider";
+
 export interface Tool {
   id?: string;
   name: string;
@@ -98,6 +112,10 @@ export interface Tool {
   argChars?: number;
   refreshed?: boolean;
   parentId?: string;
+  // Who initiated this call. A separate axis from Event.source, which says who
+  // produced the frame: an executor frame carries calls the model asked for,
+  // calls the host minted for it, and calls the provider ran on its own side.
+  issuer?: ToolIssuer;
   attemptId?: string;
   diff?: string;
   added?: number;

@@ -31,7 +31,7 @@ func (c *Controller) seedPlanTodos(plan string) string {
 	if args == "" {
 		return ""
 	}
-	t := event.Tool{ID: "plan-seed", Name: "todo_write", Args: args, ReadOnly: true}
+	t := event.Tool{ID: "plan-seed", Name: "todo_write", Args: args, ReadOnly: true, Issuer: event.IssuedByHost}
 	c.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: t})
 	t.Output = "task list seeded from the approved plan"
 	c.sink.Emit(event.Event{Kind: event.ToolResult, Tool: t})
@@ -58,7 +58,7 @@ func (c *Controller) completePlanTodos(args string) {
 	if done == "" {
 		return
 	}
-	t := event.Tool{ID: "plan-seed", Name: "todo_write", Args: done, ReadOnly: true}
+	t := event.Tool{ID: "plan-seed", Name: "todo_write", Args: done, ReadOnly: true, Issuer: event.IssuedByHost}
 	c.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: t})
 	t.Output = "approved plan finished"
 	c.sink.Emit(event.Event{Kind: event.ToolResult, Tool: t})

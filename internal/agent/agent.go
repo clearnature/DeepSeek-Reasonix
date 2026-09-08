@@ -1124,7 +1124,7 @@ func (a *Agent) emitTodoState(todos []evidence.TodoItem, itemIndex int) {
 		return
 	}
 	id := fmt.Sprintf("host-advance-%d-%d", a.hostAdvanceSeq.Add(1), itemIndex)
-	t := event.Tool{ID: id, Name: "todo_write", Args: string(args), ReadOnly: true}
+	t := event.Tool{ID: id, Name: "todo_write", Args: string(args), ReadOnly: true, Issuer: event.IssuedByHost}
 	a.svc.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: t})
 	t.Output = "task list advanced by complete_step"
 	a.svc.sink.Emit(event.Event{Kind: event.ToolResult, Tool: t})
@@ -1462,7 +1462,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 			if tc := chunk.ToolCall; tc != nil {
 				partialCalls = upsertPartialToolCall(partialCalls, *tc)
 				sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: event.Tool{
-					ID: tc.ID, Name: tc.Name, ReadOnly: a.toolReadOnly(tc.Name), Partial: true, AttemptID: attemptID,
+					ID: tc.ID, Name: tc.Name, ReadOnly: a.toolReadOnly(tc.Name), Partial: true, AttemptID: attemptID, Issuer: event.IssuedByModel,
 				}})
 			}
 		case provider.ChunkToolCallArgsDelta:
@@ -1478,7 +1478,7 @@ func (a *Agent) streamWithFrozen(ctx context.Context, turn int, sink event.Sink,
 				partialCalls = upsertPartialToolCall(partialCalls, *tc)
 				lastArgProgress = time.Now()
 				sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: event.Tool{
-					ID: tc.ID, Name: tc.Name, ReadOnly: a.toolReadOnly(tc.Name), Partial: true, ArgChars: chunk.ArgChars, AttemptID: attemptID,
+					ID: tc.ID, Name: tc.Name, ReadOnly: a.toolReadOnly(tc.Name), Partial: true, ArgChars: chunk.ArgChars, AttemptID: attemptID, Issuer: event.IssuedByModel,
 				}})
 			}
 		case provider.ChunkToolCall:
@@ -1677,7 +1677,7 @@ func toProviderToolExecution(in *tool.ShellExecution) *provider.ToolExecution {
 func (a *Agent) emitFullToolDispatch(ctx context.Context, c provider.ToolCall, refreshed bool) {
 	t, _, ambiguous := a.svc.tools.ResolveCall(c.Name)
 	ok := t != nil && len(ambiguous) == 0
-	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed}
+	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed, Issuer: event.IssuedByModel}
 	ev.FileDiff = event.FileDiff{Diff: c.Diff, Added: c.Added, Removed: c.Removed}
 	if ok && ev.Diff == "" && ev.Added == 0 && ev.Removed == 0 {
 		if ch, ok := tool.PreviewChange(ctx, t, json.RawMessage(c.Arguments)); ok {
@@ -1712,6 +1712,7 @@ func (a *Agent) emitResolvedToolDispatch(c provider.ToolCall, profile *event.Pro
 		CapabilityID: c.CapabilityID,
 		ReadOnly:     *c.ResolvedReadOnly,
 		Refreshed:    true,
+		Issuer:       event.IssuedByModel,
 		Profile:      profile,
 		FileDiff: event.FileDiff{
 			Diff: c.Diff, Added: c.Added, Removed: c.Removed,

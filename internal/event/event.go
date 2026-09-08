@@ -264,6 +264,9 @@ type Tool struct {
 	// sub-agent's calls carry the parent `task` call's ID so a frontend can nest
 	// them under it. Empty for top-level calls.
 	ParentID string
+	// Issuer is who initiated this invocation. It must be the same on a call's
+	// dispatch and its result; a result-only call carries it alone.
+	Issuer ToolIssuer
 	// AttemptID is the host-local stream_attempt id that produced a speculative
 	// partial ToolDispatch. Empty for committed/full dispatches and for nested
 	// sub-agent tools. Frontends must only journal partial events whose

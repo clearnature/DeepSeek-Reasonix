@@ -35,6 +35,7 @@ func (a *Agent) absorbProviderRunCall(text *strings.Builder, sink event.Sink, ch
 	sink.Emit(event.Event{Kind: event.ToolResult, Tool: event.Tool{
 		ID: tc.ID, Name: tc.Name, Args: tc.Arguments,
 		Output: chunk.Text, ReadOnly: true, AttemptID: attemptID,
+		Issuer: event.IssuedByProvider,
 	}})
 }
 

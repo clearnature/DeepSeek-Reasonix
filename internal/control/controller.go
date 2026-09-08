@@ -979,9 +979,10 @@ func (c *Controller) RunShell(command string) {
 		c.sink.Emit(event.Event{
 			Kind: event.ToolDispatch,
 			Tool: event.Tool{
-				ID:   id,
-				Name: "bash",
-				Args: fmt.Sprintf(`{"command":%q}`, command),
+				ID:     id,
+				Name:   "bash",
+				Args:   fmt.Sprintf(`{"command":%q}`, command),
+				Issuer: event.IssuedByUser,
 				Execution: &event.ShellExecution{
 					Kind: desc.Kind, Shell: desc.Shell, ShellVersion: desc.ShellVersion,
 					Platform: desc.Platform, SupportsAndAnd: desc.SupportsAndAnd,
@@ -1051,7 +1052,7 @@ func (c *Controller) RunShell(command string) {
 			Kind: event.ToolResult,
 			Tool: event.Tool{
 				ID: id, Name: "bash", Output: res.Combined, Err: errText,
-				DurationMs: durationMs, Execution: ex,
+				DurationMs: durationMs, Execution: ex, Issuer: event.IssuedByUser,
 			},
 		})
 		return nil

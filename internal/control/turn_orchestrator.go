@@ -155,6 +155,7 @@ func (o *turnOrchestrator) runSubagentSkillTurns(ctx context.Context, skills []s
 			Name:     "run_skill",
 			Args:     string(args),
 			ReadOnly: sk.ReadOnly,
+			Issuer:   event.IssuedByUser,
 		}
 		if c.skillProfile != nil {
 			toolEvent.Profile = c.skillProfile(sk)
@@ -653,7 +654,7 @@ func (c *Controller) completeRemainingGoalTodos() {
 	if err != nil {
 		return
 	}
-	t := event.Tool{ID: "goal-final", Name: "todo_write", Args: string(args), ReadOnly: true}
+	t := event.Tool{ID: "goal-final", Name: "todo_write", Args: string(args), ReadOnly: true, Issuer: event.IssuedByHost}
 	c.sink.Emit(event.Event{Kind: event.ToolDispatch, Tool: t})
 	t.Output = "goal completed"
 	c.sink.Emit(event.Event{Kind: event.ToolResult, Tool: t})

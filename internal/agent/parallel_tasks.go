@@ -182,6 +182,7 @@ func (p *ParallelTasksTool) Execute(ctx context.Context, args json.RawMessage) (
 			Tool: event.Tool{
 				ID: subID, ParentID: parentID, Name: "task",
 				Args: string(dispatchArgs), ReadOnly: true,
+				Issuer: event.IssuedByHost,
 			},
 		})
 		// Nothing orders these, so a slot is the only thing one can wait for.
@@ -209,14 +210,14 @@ func (p *ParallelTasksTool) Execute(ctx context.Context, args json.RawMessage) (
 				}
 				sink.Emit(event.Event{
 					Kind: event.ToolResult,
-					Tool: event.Tool{ID: subID, ParentID: parentID, Name: "task", Err: errText},
+					Tool: event.Tool{ID: subID, ParentID: parentID, Name: "task", Err: errText, Issuer: event.IssuedByHost},
 				})
 				doneCh <- subResult{index: idx, err: runErr}
 				return
 			}
 			sink.Emit(event.Event{
 				Kind: event.ToolResult,
-				Tool: event.Tool{ID: subID, ParentID: parentID, Name: "task", Output: output},
+				Tool: event.Tool{ID: subID, ParentID: parentID, Name: "task", Output: output, Issuer: event.IssuedByHost},
 			})
 			answer, ref := splitSubagentRunResult(output)
 			doneCh <- subResult{index: idx, output: answer, ref: ref}
