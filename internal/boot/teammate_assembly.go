@@ -39,6 +39,9 @@ func newTeammateOrchestration(sink event.Sink, jm *jobs.Manager, store *agent.Su
 		reg.Add(control.NewEnterWorktreeTool(ts))
 		reg.Add(control.NewExitWorktreeTool(ts))
 		reg.Add(control.NewTaskStopTool(ts))
+		for _, wt := range control.NewWakeupTools(ts) {
+			reg.Add(wt)
+		}
 	}
 	return ts
 }
