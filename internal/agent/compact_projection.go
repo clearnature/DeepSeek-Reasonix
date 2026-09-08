@@ -200,9 +200,8 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
-	res, err := a.foldToSummaryMode(ctx, nil, prepared.fold, prepared.instructions, prepared.inputMode)
+	res, tele, err := a.foldSummaryWithChunkedFallback(ctx, trigger, nil, prepared.fold, prepared.instructions, result.SourceTokens, prepared.inputMode)
 	summary := res.Text
-	tele := a.telemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res, nil, prepared.fold)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -433,7 +432,8 @@ func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int
 // resilient fragment/tree-reduce path used for over-length sessions.
 func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger string, prefix, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
 	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
-	if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired)) {
+	var ctxLimit *provider.ContextLimitError
+	if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired) && !errors.As(err, &ctxLimit)) {
 		return res, tele, err
 	}
 	// When foldExtra is nil (view replay fits), the full fold region is in prefix.
