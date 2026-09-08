@@ -99,6 +99,9 @@ type Options struct {
 	MaxStepsKey string
 	RequireKey  bool
 	Sink        event.Sink
+	// SubSessionSpawner backs the create_sub_session tool (serve supplies it;
+	// nil keeps the tool reporting the daemon-only message, qwen semantics).
+	SubSessionSpawner control.SubSessionSpawner
 	// EffortOverride is a session-local reasoning effort override. Nil means use
 	// the resolved provider config; a non-nil empty string means provider default.
 	EffortOverride *string
@@ -666,6 +669,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 	sysPrompt = config.ApplyOfficialDeepSeekV4ProPersona(sysPrompt, entry)
 
 	reg := tool.NewRegistry()
+	reg.Add(control.NewCreateSubSessionTool(opts.SubSessionSpawner))
 	writeRoots := cfg.WriteRootsForRoot(root)
 	writeRoots = appendUniquePaths(writeRoots, additionalDirs...)
 	if opts.WorkspaceOnly {

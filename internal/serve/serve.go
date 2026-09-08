@@ -91,7 +91,11 @@ type Server struct {
 	detached      map[string]*detachedSession
 	tagsMu        sync.Mutex
 	tags          map[*control.Controller]*sessionTagSink
-	hostGate      hostGateState // hostGuard allowlist state; see hostguard.go
+	// subMu guards subSessions: sent-mode create_sub_session controllers kept
+	// alive until server shutdown.
+	subMu       sync.Mutex
+	subSessions map[string]*control.Controller
+	hostGate    hostGateState // hostGuard allowlist state; see hostguard.go
 	// mirroredMu guards mirrored: sessions whose lease was handed to a local
 	// runtime via POST /handoff. Serve answers reads from the transcript file
 	// and mirrors the writer's frames, but holds no write authority.

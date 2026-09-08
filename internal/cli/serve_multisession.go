@@ -22,11 +22,12 @@ func newServeBootstrap() (*serve.Broadcaster, *serve.SessionTagSink, *config.Con
 	return bc, serve.NewSessionTagSink(bc), cfg
 }
 
-func setupCLIMultiSessionProfile(ctx context.Context, model string, maxSteps int, preset string, tag *serve.SessionTagSink, leases *control.SessionLeaseKeeper) (*control.Controller, boot.Options, error) {
+func setupCLIMultiSessionProfile(ctx context.Context, model string, maxSteps int, preset string, tag *serve.SessionTagSink, leases *control.SessionLeaseKeeper, spawner control.SubSessionSpawner) (*control.Controller, boot.Options, error) {
 	migrateMCPConfigForCLIWorkspace()
 	opts := cliProfileBuildOptions(model, maxSteps, false, tag, cliBuildOverrides{
 		Preset: preset, OnSessionRecovered: cliSessionRecoveredHandler(leases),
 	})
+	opts.SubSessionSpawner = spawner
 	ctrl, err := boot.Build(ctx, opts)
 	return ctrl, opts, err
 }

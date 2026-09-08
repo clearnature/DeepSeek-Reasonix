@@ -956,7 +956,16 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 	// Keep the browser reachable when the selected provider has no saved key.
 	// The loopback-only provider setup surface stores the missing credential and
 	// rebuilds this controller in place before the normal web UI is exposed.
-	ctrl, serveBuildOpts, err := setupCLIMultiSessionProfile(ctx, *model, *maxSteps, deprecatedMode, sessionTag, leases)
+	// Sub-session bridge (qwen create_sub_session): the spawner closes over
+	// the server, which is built after the controller — the closure resolves
+	// it lazily on first tool call.
+	var srv *serve.Server
+	ctrl, serveBuildOpts, err := setupCLIMultiSessionProfile(ctx, *model, *maxSteps, deprecatedMode, sessionTag, leases, control.SubSessionSpawnerFunc(func(ctx context.Context, prompt, completion string) (string, error) {
+		if srv == nil {
+			return "", fmt.Errorf("create_sub_session: serve frontend not ready")
+		}
+		return srv.SpawnSubSession(ctx, prompt, completion)
+	}))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.M.ErrorPrefix, err)
 		return 1
@@ -983,7 +992,7 @@ func runServeWithOptions(args []string, opts serveRunOptions) int {
 		return 1
 	}
 
-	srv := newCLIMultiSessionServer(ctrl, bc, sessionTag, serveCfg, leases, serveBuildOpts)
+	srv = newCLIMultiSessionServer(ctrl, bc, sessionTag, serveCfg, leases, serveBuildOpts)
 	defer srv.Close()
 	return runServeFrontend(ctrl, srv, serveCfg, serveFrontendOptions{
 		command: opts.command, address: *addr,
