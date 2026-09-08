@@ -121,10 +121,17 @@ export const ACTIONS: UIAction[] = [
   { id: "settings.close", kind: "navigation", target: "none", proof: "interaction" },
   { id: "pane.activate", kind: "navigation", target: "none", proof: "interaction" },
   { id: "session.new", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  // The bytes reach the host as the file is chosen, before anything is sent:
+  // the picker's button only opens a dialog, and this is where the upload is.
+  { id: "session.attach", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "capability.scope", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "model.select", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "network.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "onboarding.connect", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  // Handing the reader to a browser. The vendor's console during setup and a
+  // link in the transcript are the same thing to do, and neither moves any
+  // state — which is why it is one id and why it is not a mutation.
+  { id: "external.open", kind: "shell-native", target: "none", proof: "interaction" },
   { id: "remote-host.remove", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "task.summarize-phase", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "workspace.remove", kind: "destructive", target: "none", proof: "authority-effect" },
@@ -136,6 +143,9 @@ export const ACTIONS: UIAction[] = [
   // new one, and the host asked differs.
   { id: "session.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "remote.open", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  // Asking a machine whether it answers. Nothing on either side changes, and
+  // asking twice is the point when the first answer was "not yet".
+  { id: "remote.probe", kind: "repeatable", target: "entity", proof: "authority-effect" },
   { id: "workspace.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
 
   // ── Taking a change back ─────────────────────────────────────────────────

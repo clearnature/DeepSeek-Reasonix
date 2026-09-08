@@ -140,6 +140,8 @@ export function Remotes({ hub, onError }: Props) {
             <span className="st">{t(STATUS_LABEL[host.status] ?? host.status)}</span>
             <button
               className="rmtlnk"
+              data-action="remote.probe"
+              data-target={host.name}
               disabled={probing === host.name}
               onClick={() => {
                 setProbing(host.name);

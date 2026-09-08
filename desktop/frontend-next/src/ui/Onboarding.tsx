@@ -167,7 +167,7 @@ export function Onboarding({ port, setup, onDone }: Props) {
             {/* 这一步应用替不了：key 只能在服务商那边生成。不给入口，
                 没有 key 的人就卡死在这个框上，而界面什么都没说。 */}
             {vendor?.console && (
-              <button type="button" className="onb-getkey" onClick={() => open(vendor.console!)}>
+              <button type="button" className="onb-getkey" data-action="external.open" onClick={() => open(vendor.console!)}>
                 {t("还没有？去拿一个")}
               </button>
             )}
@@ -188,7 +188,7 @@ export function Onboarding({ port, setup, onDone }: Props) {
             <div className="onb-err">
               {err.text}
               {fixAt && (
-                <button type="button" className="onb-fix" onClick={() => open(fixAt)}>
+                <button type="button" className="onb-fix" data-action="external.open" onClick={() => open(fixAt)}>
                   {t("打开 {name} 控制台", { name: t(pick) })}
                 </button>
               )}

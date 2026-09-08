@@ -435,6 +435,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
             选择器是唯一不需要预备动作的入口。 */}
         <input
           ref={picker}
+          data-action-change="session.attach"
           type="file"
           accept="image/*"
           multiple
