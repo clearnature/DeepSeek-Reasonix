@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import type { AgentPort, CompactionSettings } from "../port/port";
@@ -43,6 +43,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
     }
   };
 
+  const sent = useRef<number | null>(null);
   const commit = () => {
     const text = draft.trim();
     // An empty field is the default, which is a value and not a missing one.
@@ -51,7 +52,12 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
       setError(t("请填一个整数，或者留空用默认值。"));
       return;
     }
-    if (next !== box.soft_limit_tokens) void save(next);
+    // Enter commits and then blurs, so this runs twice for one keystroke.
+    // Declaring the window rebuilds the runtime; doing it twice is not free.
+    if (next !== sent.current && next !== box.soft_limit_tokens) {
+      sent.current = next;
+      void save(next);
+    }
   };
 
   const off = box.soft_limit_tokens < 0;
@@ -86,8 +92,15 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
           placeholder={String(box.default_soft_limit)}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
+          // Enter is the aimed-at commit and carries the identity. Blur still
+          // saves — clicking away is an answer too — but a write that only
+          // ever hangs off blur has no gesture anyone made on purpose, and a
+          // census built on user input cannot see it at all.
+          data-action-keydown="compaction.threshold"
           onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key !== "Enter") return;
+            commit();
+            e.currentTarget.blur();
           }}
         />
       </div>

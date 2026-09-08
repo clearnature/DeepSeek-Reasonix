@@ -70,6 +70,9 @@ export const ACTIONS: UIAction[] = [
 
   // ── What is waiting to be sent ───────────────────────────────────────────
   { id: "queue.edit", kind: "kernel-mutation", target: "entity", proof: "interaction" },
+  // Giving a session a name of your own. The sidebar's tree and the pane tabs
+  // rename the same session through the same host call, so it is one id.
+  { id: "session.rename", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "queue.cancel", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "queue.retry", kind: "repeatable", target: "entity", proof: "interaction" },
   { id: "queue.refresh", kind: "repeatable", target: "entity", proof: "interaction" },
@@ -165,6 +168,9 @@ export const ACTIONS: UIAction[] = [
   { id: "roles.model", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "permissions.rule-level", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "sandbox.workspace-root", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  // Where compaction starts. Declaring it rebuilds the runtime, which is why
+  // it must not be able to fire twice for one keystroke.
+  { id: "compaction.threshold", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "panel.move", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "panel.delegate-placement", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "context.window-tokens", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

@@ -31,6 +31,14 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
   // 裁掉（点了像没反应），所以菜单挂在 fixed 上，位置由触发点决定。
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editing, setEditing] = useState("");
+  // Enter commits and then blurs, and both would otherwise send the same name.
+  const renamed = useRef<Record<string, string>>({});
+  const rename = (rt: RuntimeView, was: string, raw: string) => {
+    const next = raw.trim();
+    if (!next || next === was || renamed.current[rt.id] === next) return;
+    renamed.current[rt.id] = next;
+    onRename(rt, next);
+  };
   // Which close is waiting on an answer. The ids only: which of them still
   // exist and which are still running are read off the current tabs on every
   // render and again when the answer comes, because a set captured when the
@@ -161,10 +169,16 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
               onClick={(ev) => ev.stopPropagation()}
               onBlur={(ev) => {
                 setEditing("");
-                if (ev.currentTarget.value.trim() !== title) onRename(rt, ev.currentTarget.value.trim());
+                rename(rt, title, ev.currentTarget.value);
               }}
+              data-action-keydown="session.rename"
+              data-target={rt.id}
               onKeyDown={(ev) => {
-                if (ev.key === "Enter") ev.currentTarget.blur();
+                if (ev.key === "Enter") {
+                  // The aimed-at commit; the blur it causes is guarded above.
+                  rename(rt, title, ev.currentTarget.value);
+                  ev.currentTarget.blur();
+                }
                 if (ev.key === "Escape") {
                   // Abandoning a rename is not stopping the run behind it.
                   ev.stopPropagation();

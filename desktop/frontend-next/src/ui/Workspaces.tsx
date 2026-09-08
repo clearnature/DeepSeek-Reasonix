@@ -53,6 +53,16 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
   // Renaming is a pencil, not a double-click: a single click already opens the
   // session, so a double one would open it twice on the way to the edit.
   const [editing, setEditing] = useState("");
+  // What was already sent for this session, so Enter's commit and the blur it
+  // causes do not both reach the host with the same name.
+  const renamed = useRef<Record<string, string>>({});
+  const rename = (session: { path: string; title?: string; name: string }, raw: string) => {
+    const next = raw.trim();
+    const was = session.title || session.name;
+    if (!next || next === was || renamed.current[session.path] === next) return;
+    renamed.current[session.path] = next;
+    onRename(session.path, next);
+  };
   // Folders the reader asked to see in full.
   const [whole, setWhole] = useState<Set<string>>(new Set());
   // Conversations whose conflict copies the reader asked to see.
@@ -322,11 +332,17 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                             onClick={(ev) => ev.stopPropagation()}
                             onBlur={(ev) => {
                               setEditing("");
-                              const next = ev.currentTarget.value.trim();
-                              if (next && next !== (session.title || session.name)) onRename(session.path, next);
+                              rename(session, ev.currentTarget.value);
                             }}
+                            data-action-keydown="session.rename"
+                            data-target={session.path}
                             onKeyDown={(ev) => {
-                              if (ev.key === "Enter") ev.currentTarget.blur();
+                              if (ev.key === "Enter") {
+                                // The aimed-at commit. Blur saves too, and its
+                                // own guard keeps that from sending twice.
+                                rename(session, ev.currentTarget.value);
+                                ev.currentTarget.blur();
+                              }
                               if (ev.key === "Escape") {
                                 // Abandoning a rename is not stopping the run behind it.
                                 ev.stopPropagation();
