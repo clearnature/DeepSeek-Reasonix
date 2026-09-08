@@ -717,7 +717,9 @@ func (t *TaskTool) resolveWriterClaims(writePaths []string, requireClaim bool) (
 	if len(writePaths) > 0 {
 		return NormalizeWritePaths(t.workspaceRoot, writePaths)
 	}
-	if !requireClaim { return WritePathSet{}, nil }
+	if !requireClaim {
+		return WritePathSet{}, nil
+	}
 	return WholeWorkspaceWriteClaim(t.workspaceRoot)
 }
 
@@ -908,7 +910,9 @@ func (t *TaskTool) runBackgroundProfileSpec(ctx context.Context, spec ProfileExe
 	slotReq := acquireReq
 	trk.queued()
 	start := jm.StartForSession
-	if !writerRegistered { start = jm.StartForSessionReadonly }
+	if !writerRegistered {
+		start = jm.StartForSessionReadonly
+	}
 	job := start(jobs.SessionFromContext(ctx), "task", label, func(jobCtx context.Context, _ io.Writer) (result string, err error) {
 		if writerRegistered {
 			defer mutationObserver.UnregisterWriter(recoveryTaskID)

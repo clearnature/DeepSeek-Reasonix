@@ -781,6 +781,9 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 	for _, id := range ready {
 		ts.enqueueAuto(id)
 	}
+	if flipped != "" {
+		ts.checkGroupCompleted(flipped)
+	}
 }
 
 // cleanupWorktreeAfterDone runs the D1 worktree auto-cleanup for a teammate
