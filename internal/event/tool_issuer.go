@@ -27,3 +27,12 @@ const (
 // person typed are not the model working. An unset issuer answers false rather
 // than guess — guessing "model" is what counts a seeded task list as a step.
 func (i ToolIssuer) ModelWork() bool { return i == IssuedByModel }
+
+// AssistantWork is the wider set: a provider-executed call is not something the
+// model issued, but it is still the assistant working. The host's bookkeeping
+// and a line a person typed are not. Kept apart from ModelWork rather than
+// widening it — "who issued this" and "does this count as the assistant's work"
+// are two questions, and collapsing them refolds the taxonomy.
+func (i ToolIssuer) AssistantWork() bool {
+	return i == IssuedByModel || i == IssuedByProvider
+}
