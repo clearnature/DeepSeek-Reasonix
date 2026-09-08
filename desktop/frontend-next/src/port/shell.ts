@@ -10,6 +10,10 @@ export interface ContextBreakdown {
   user: number;
   reply: number;
   output: number;
+  // Where this session actually folds — the lower of the window share and the
+  // economic soft limit. Zero means nothing folds automatically. The window is
+  // not a substitute: against a 1M window the default limit fires at 16%.
+  compact_at: number;
 }
 
 // One interpreter this machine really has. path is where it was probed, so a

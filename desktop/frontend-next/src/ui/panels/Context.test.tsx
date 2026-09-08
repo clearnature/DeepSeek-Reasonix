@@ -1,0 +1,103 @@
+import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Context } from "./Context";
+import type { ContextBreakdown } from "../../port/port";
+
+// A 1M window running under the default economic limit: the session folds at
+// 160k, which is 16% of what the model could hold. Everything here turns on the
+// two numbers being different.
+const wide = (over: Partial<ContextBreakdown> = {}): ContextBreakdown => ({
+  used: 82_000, window: 1_000_000, compact_at: 160_000,
+  system: 20_000, tools: 12_000, user: 10_000, reply: 20_000, output: 20_000,
+  ...over,
+});
+
+const draw = (ctx: ContextBreakdown) => renderToStaticMarkup(<Context ctx={ctx} row={false} legend />);
+
+// The bar's width is the whole claim: it is what a reader takes as "how far
+// along am I", and it was measured against the wrong number.
+const width = (html: string) => {
+  const bars = html.match(/class="ctxbar"[^>]*>(.*?)<\/div>/s)?.[1] ?? "";
+  return [...bars.matchAll(/width:\s*([\d.]+)%/g)].reduce((a, m) => a + Number(m[1]), 0);
+};
+
+describe("the context gauge's denominator", () => {
+  // The defect this panel was carrying: 82k of 1M reads as 8% full, and the
+  // session compacts at 160k with the bar still nearly empty. The reader
+  // concludes the host folded for no reason.
+  it("counts down to the fold point, not to the window", () => {
+    expect(width(draw(wide()))).toBeCloseTo(51.25, 1);
+  });
+
+  it("says which two numbers the leading figure is", () => {
+    const html = draw(wide());
+    expect(html).toContain("下次维护");
+    expect(html).toContain("82k / 160k");
+  });
+
+  // Capacity does not disappear: it answers a different question — whether the
+  // model is simply too small — and it is the only place a relay's wrong window
+  // can be corrected.
+  it("keeps the window as a second, quieter figure", () => {
+    const html = draw(wide());
+    expect(html).toContain("模型容量");
+    expect(html).toContain("ctxcapbar");
+    expect(html).toContain("1.0M");
+  });
+
+  // A full bar at the fold point and a full bar at the window are the same
+  // pixels saying different things; only one of them is a deadline.
+  it("does not let the capacity bar borrow the maintenance reading", () => {
+    const html = draw(wide());
+    const cap = html.match(/class="ctxcapbar"[^>]*>.*?width:\s*([\d.]+)%/s)?.[1];
+    expect(Number(cap)).toBeCloseTo(8.2, 1);
+  });
+});
+
+describe("what the gauge says as the fold point approaches", () => {
+  // The kernel tells the model to work narrower at 75% of the trigger and to
+  // land what it knows at 92%. The panel reuses those, so the screen and the
+  // conversation are never under two different pressures.
+  it("stays quiet below the kernel's first rung", () => {
+    const html = draw(wide({ used: 100_000 }));
+    expect(html).not.toContain('data-press');
+  });
+
+  it("says the model has been told to narrow at the first rung", () => {
+    const html = draw(wide({ used: 124_000 }));
+    expect(html).toContain('data-press="near"');
+    expect(html).toContain("收窄");
+  });
+
+  it("says maintenance is close at the second", () => {
+    const html = draw(wide({ used: 150_000 }));
+    expect(html).toContain('data-press="soon"');
+  });
+
+  // Compaction is routine maintenance. Painted as a warning it reads as a
+  // malfunction, and every long session looks broken.
+  it("never dresses routine maintenance as a fault", () => {
+    const html = draw(wide({ used: 158_000 }));
+    expect(html).not.toContain('data-lvl="warn"');
+    expect(html).not.toContain('data-lvl="err"');
+  });
+});
+
+describe("when there is no fold point to count down to", () => {
+  // A ratio placed past the window is how maintenance is retired. There is no
+  // deadline left, so inventing one would be a countdown to nothing.
+  it("draws the window alone once the fold point is out of reach", () => {
+    const html = draw(wide({ compact_at: 1_200_000 }));
+    expect(html).not.toContain("下次维护");
+    expect(html).not.toContain("模型容量");
+    expect(width(html)).toBeCloseTo(8.2, 1);
+  });
+
+  // An undeclared window is what turns maintenance off entirely, and it says so
+  // rather than drawing a gauge with no denominator.
+  it("keeps saying why an undeclared window draws nothing", () => {
+    const html = draw(wide({ window: 0, compact_at: 0 }));
+    expect(html).toContain("不会自动压缩");
+    expect(html).not.toContain("ctxbar");
+  });
+});

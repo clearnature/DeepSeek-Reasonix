@@ -40,7 +40,9 @@ export class MockShell extends MockExtensions {
   // window is simply the one that was declared, which is what the panel needs
   // to be developed against a source that reports none.
   async setContextWindow(window: number): Promise<ContextBreakdown> {
-    this.ctx = { ...this.ctx, window };
+    // The fold point moves with the window, so a mock that changed one and not
+    // the other would draw a pair the kernel can never produce.
+    this.ctx = { ...this.ctx, window, compact_at: Math.min(Math.round(window * 0.85), 160000) };
     return { ...this.ctx };
   }
 
@@ -68,4 +70,4 @@ export class MockShell extends MockExtensions {
 
 // 够把分段条和悬停面板画出来的一份构成：工具定义比对话本身还大，正是这个面板
 // 要让人看见的那种情况。
-const CONTEXT: ContextBreakdown = { used: 24800, window: 128000, system: 5200, tools: 7400, user: 1800, reply: 3100, output: 7300 };
+const CONTEXT: ContextBreakdown = { used: 24800, window: 128000, compact_at: 108800, system: 5200, tools: 7400, user: 1800, reply: 3100, output: 7300 };

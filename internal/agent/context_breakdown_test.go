@@ -36,3 +36,34 @@ func TestContextBreakdownReportsZeroForClassesWithNoMessages(t *testing.T) {
 		t.Fatalf("a fresh session has no turns yet: %+v", b)
 	}
 }
+
+// The window is not the boundary. A 1M window under the default soft limit
+// folds at 160k, so a panel handed only the window draws a gauge that is 16%
+// full at the moment maintenance fires — and the reader concludes the host
+// folded for no reason. The breakdown carries the boundary in force, read from
+// the same rule that fires it rather than recomputed by whoever draws it.
+func TestContextBreakdownCarriesTheBoundaryInForce(t *testing.T) {
+	a := New(nil, nil, NewSession("你是一个助手"), Options{ContextWindow: 1_000_000}, nil)
+	if got := a.ContextBreakdown().CompactAt; got != defaultContextSoftLimitTokens {
+		t.Fatalf("CompactAt = %d, want the economic bound %d against a 1M window", got, defaultContextSoftLimitTokens)
+	}
+
+	// Under a window small enough that its capacity share is the lower of the
+	// two, the same field must follow the other bound.
+	small := New(nil, nil, NewSession("你是一个助手"), Options{ContextWindow: 128_000}, nil)
+	if got, want := small.ContextBreakdown().CompactAt, small.compactTrigger(); got != want {
+		t.Fatalf("CompactAt = %d, want the capacity share %d", got, want)
+	}
+	if small.ContextBreakdown().CompactAt >= small.ContextBreakdown().Window {
+		t.Fatal("a capacity-bound session must fold before its window, not at it")
+	}
+}
+
+// An undeclared window is what turns automatic maintenance off, and it must
+// read as "no boundary" rather than as a boundary of zero tokens away.
+func TestContextBreakdownReportsNoBoundaryWithoutAWindow(t *testing.T) {
+	a := New(nil, nil, NewSession("你是一个助手"), Options{}, nil)
+	if got := a.ContextBreakdown().CompactAt; got != 0 {
+		t.Fatalf("CompactAt = %d, want 0 when nobody declared a window", got)
+	}
+}

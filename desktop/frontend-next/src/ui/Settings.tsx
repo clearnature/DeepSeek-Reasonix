@@ -516,7 +516,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                 <Group id="effort" title={t("推理强度")} hint={t("当前模型未提供可调的推理档位，因此不显示该选项。")} />
               )}
               <Group id="context" title={t("上下文维护")}
-                hint={t("对话长到一定程度会折叠成摘要再继续。折叠点取「窗口比例」与「压缩阈值」中先到的那个。")}>
+                hint={t("对话长到一定程度会自动整理成摘要再继续。整理点取「经济维护阈值」与「容量保护」中先到的那个。")}>
                 <Compaction port={port} onChanged={onChanged} />
               </Group>
               <Group id="providers"

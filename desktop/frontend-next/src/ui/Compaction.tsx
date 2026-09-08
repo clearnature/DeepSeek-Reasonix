@@ -5,13 +5,31 @@ import type { AgentPort, CompactionSettings } from "../port/port";
 
 const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
+// Which of the three answers a stored value is. The field holds one number and
+// the number is not the intent: 0 and 160000 fold at the same place today and
+// mean different things the moment the default moves, and a negative value is
+// not a smaller threshold at all — it retires the economic bound and leaves the
+// window share still firing. Nobody should have to type a minus sign to say
+// "protect capacity only", and nobody reading one should have to guess that it
+// still folds.
+type Mode = "default" | "custom" | "capacity";
+
+const modeOf = (stored: number): Mode => (stored < 0 ? "capacity" : stored > 0 ? "custom" : "default");
+
 // Two bounds decide when a session folds and only the lower one fires, so the
-// number in force is shown beside the field rather than left to be worked out:
+// number in force is shown beside the choice rather than left to be worked out:
 // a 1M window against the default soft limit folds at 160k, and a screen that
 // showed the setting alone would read as broken.
 export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: () => void }) {
   const [box, setBox] = useState<CompactionSettings | null>(null);
+  const [used, setUsed] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  // What the reader has asked for, which leads the stored value: "custom" is a
+  // choice before it is a number, and deriving the mode from storage alone left
+  // that click with nothing to show — the field appears only once a value has
+  // been committed, so it could never be committed.
+  const [choice, setChoice] = useState<Mode | null>(null);
+  const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const field = useId();
@@ -21,10 +39,21 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
       .compaction()
       .then((s) => {
         setBox(s);
-        setDraft(s.soft_limit_tokens > 0 ? String(s.soft_limit_tokens) : "");
+        setDraft(String(s.soft_limit_tokens > 0 ? s.soft_limit_tokens : s.default_soft_limit));
+        setChoice(null);
+        // Advanced opens itself for a session already running under something
+        // other than the default: hiding the setting in force behind a
+        // disclosure is how a screen comes to disagree with the session.
+        setAdvanced(s.soft_limit_tokens !== 0);
       })
       .catch(() => setBox(null));
+    // The threshold is a number until it is next to the session's own usage,
+    // and then it is a distance. A gauge that fails to load costs the reader
+    // the distance, not the setting.
+    port.context().then((c) => setUsed(c.used)).catch(() => setUsed(null));
   }, [port]);
+
+  const sent = useRef<number | null>(null);
 
   if (!box) return <div className="empty">{t("读不到压缩配置。")}</div>;
 
@@ -34,7 +63,8 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
     try {
       const saved = await port.saveCompaction(value);
       setBox(saved);
-      setDraft(saved.soft_limit_tokens > 0 ? String(saved.soft_limit_tokens) : "");
+      setDraft(String(saved.soft_limit_tokens > 0 ? saved.soft_limit_tokens : saved.default_soft_limit));
+      setChoice(null);
       onChanged();
     } catch (e) {
       setError(reason(e));
@@ -43,68 +73,170 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
     }
   };
 
-  const sent = useRef<number | null>(null);
-  const commit = () => {
-    const text = draft.trim();
-    // An empty field is the default, which is a value and not a missing one.
-    const next = text === "" ? 0 : Number(text);
-    if (!Number.isFinite(next) || !Number.isInteger(next)) {
-      setError(t("请填一个整数，或者留空用默认值。"));
-      return;
-    }
-    // Enter commits and then blurs, so this runs twice for one keystroke.
-    // Declaring the window rebuilds the runtime; doing it twice is not free.
-    if (next !== sent.current && next !== box.soft_limit_tokens) {
-      sent.current = next;
-      void save(next);
-    }
+  // Declaring the bound rebuilds the runtime, so one gesture must reach the
+  // kernel once: Enter commits and then blurs, which runs a text field's commit
+  // twice for a single keystroke.
+  const send = (value: number) => {
+    if (value === sent.current || value === box.soft_limit_tokens) return;
+    sent.current = value;
+    void save(value);
   };
 
-  const off = box.soft_limit_tokens < 0;
-  // Zero window is the kernel's own "nobody declared one", and it stops
-  // maintenance regardless of what either bound says.
-  const why = box.context_window === 0
-    ? t("这个来源没有声明上下文窗口，所以不会自动压缩。")
-    : off
-      ? t("经济边界已关闭，只按窗口比例折叠：{n}。", { n: tokens(box.trigger) })
-      : box.trigger < box.context_window * box.ratio
-        ? t("当前生效的是这个阈值：{n}。", { n: tokens(box.trigger) })
-        : t("窗口比例更早到达，当前折叠点是 {n}，这个阈值不会触发。", { n: tokens(box.trigger) });
+  const mode = choice ?? modeOf(box.soft_limit_tokens);
+  const commitCustom = () => {
+    const text = draft.trim();
+    if (text === "") return;
+    const next = Number(text);
+    if (!Number.isFinite(next) || !Number.isInteger(next) || next <= 0) {
+      setError(t("请填一个大于 0 的整数。"));
+      return;
+    }
+    setError("");
+    send(next);
+  };
+
+  const pick = (next: Mode) => {
+    setError("");
+    setChoice(next);
+    if (next === "default") return send(0);
+    if (next === "capacity") return send(-1);
+    // Custom is not a value on its own — it opens the field on whatever is
+    // already there, and the write happens when a number is committed.
+  };
+
+  const win = box.context_window;
+  const capacity = Math.round(win * box.ratio);
+  // A window nobody declared is what turns automatic maintenance off entirely,
+  // and it outranks whatever either bound says.
+  const off = win === 0;
+  const economicWins = !off && mode !== "capacity" && box.trigger < capacity;
+  const pct = off || !used ? 0 : Math.min((used / box.trigger) * 100, 100);
 
   return (
     <>
+      <div className="cmp">
+        {off ? (
+          <p className="note">{t("这个来源没有声明上下文窗口，所以不会自动整理上下文。先在右侧「上下文」里填上这个模型的窗口。")}</p>
+        ) : (
+          <>
+            <div className="cmpg">
+              <div className="r">
+                <span className="k">{t("当前")}</span>
+                <b>{used === null ? "—" : tokens(used)}</b>
+              </div>
+              <div className="r">
+                <span className="k">{t("下次整理")}</span>
+                <b>{tokens(box.trigger)}</b>
+              </div>
+              <div className="r">
+                <span className="k">{t("模型窗口")}</span>
+                <b>{tokens(win)}</b>
+              </div>
+            </div>
+            {used !== null && (
+              <div className="cmpbar" role="presentation">
+                <i style={{ width: `${pct}%` }} />
+              </div>
+            )}
+            <p className="note">
+              {economicWins
+                ? t("经济维护阈值会先到，因此本会话预计在 {n} tokens 左右自动整理上下文。", { n: tokens(box.trigger) })
+                : t("模型窗口的容量保护会先到，因此本会话预计在 {n} tokens 左右自动整理上下文。", { n: tokens(box.trigger) })}
+            </p>
+          </>
+        )}
+      </div>
+
       <div className="lrow">
         <span className="tx">
-          <label className="lb" htmlFor={field}>{t("压缩阈值")}</label>
+          <span className="lb">{t("整理策略")}</span>
+          {/* Which of the three is in force, said while the block is closed:
+              folded, the panel could otherwise not distinguish a session on the
+              default from one somebody had changed. */}
           <span className="ds">
-            {t("可见输入到这个大小就折叠，与模型声明的窗口无关。留空使用默认 {n}，填负数关闭。", {
-              n: tokens(box.default_soft_limit),
-            })}
+            {mode === "capacity" ? t("只按模型容量保护") : mode === "custom" ? t("自定义 {n}", { n: tokens(box.soft_limit_tokens) }) : t("使用默认值")}
           </span>
         </span>
-        <input
-          id={field}
-          className="in"
-          type="text"
-          inputMode="numeric"
-          value={draft}
-          disabled={busy}
-          placeholder={String(box.default_soft_limit)}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          // Enter is the aimed-at commit and carries the identity. Blur still
-          // saves — clicking away is an answer too — but a write that only
-          // ever hangs off blur has no gesture anyone made on purpose, and a
-          // census built on user input cannot see it at all.
-          data-action-keydown="compaction.threshold"
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
-            commit();
-            e.currentTarget.blur();
-          }}
-        />
+        <button
+          className="more"
+          data-action="compaction.advanced"
+          aria-expanded={advanced}
+          onClick={() => setAdvanced((v) => !v)}
+        >
+          {advanced ? t("收起") : t("高级设置")}
+        </button>
       </div>
-      <p className="note">{why}</p>
+
+      {advanced && (
+        <>
+          <div className="lrow">
+            <span className="tx">
+              <span className="lb">{t("经济维护阈值")}</span>
+              <span className="ds">
+                {t("可见输入到这个大小就整理，与模型声明的窗口无关。默认 {n}。", { n: tokens(box.default_soft_limit) })}
+              </span>
+            </span>
+            <div className="seg" data-text role="group" aria-label={t("经济维护阈值")}>
+              {([
+                ["default", t("使用默认值")],
+                ["custom", t("自定义")],
+                ["capacity", t("只按模型容量保护")],
+              ] as [Mode, string][]).map(([m, label]) => (
+                <button
+                  key={m}
+                  data-action="compaction.threshold"
+                  data-value={m}
+                  aria-pressed={mode === m}
+                  disabled={busy}
+                  onClick={() => pick(m)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {mode === "custom" && (
+            <div className="lrow">
+              <span className="tx">
+                <label className="lb" htmlFor={field}>{t("阈值")}</label>
+                <span className="ds">{t("tokens")}</span>
+              </span>
+              <input
+                id={field}
+                className="in"
+                type="text"
+                inputMode="numeric"
+                value={draft}
+                disabled={busy}
+                placeholder={String(box.default_soft_limit)}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitCustom}
+                // Enter is the aimed-at commit and carries the identity. Blur
+                // still saves — clicking away is an answer too — but a write
+                // that only ever hangs off blur has no gesture anyone made on
+                // purpose, and a census built on user input cannot see it.
+                data-action-keydown="compaction.threshold"
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  commitCustom();
+                  e.currentTarget.blur();
+                }}
+              />
+            </div>
+          )}
+
+          <div className="lrow">
+            <span className="tx">
+              <span className="lb">{t("容量保护")}</span>
+              <span className="ds">
+                {t("模型窗口的 {p}%，永远生效 —— 关掉经济阈值关不掉它。", { p: String(Math.round(box.ratio * 100)) })}
+              </span>
+            </span>
+            <span className="sc">{off ? "—" : tokens(capacity)}</span>
+          </div>
+        </>
+      )}
       {error && <p className="note" data-lvl="warn">{error}</p>}
     </>
   );

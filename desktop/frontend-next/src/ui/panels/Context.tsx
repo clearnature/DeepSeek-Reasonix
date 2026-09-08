@@ -48,8 +48,14 @@ function place(anchor: RefObject<HTMLElement | null>) {
  *  at 70% without saying whether that is a tool catalogue, a memory file, or
  *  one enormous output — and those are fixed in completely different ways. The
  *  breakdown stays folded because it is a diagnosis, not a running number.
- *  row=false leaves the figure to the head card and captions the gauge with
- *  what it is instead — a share of the window, not the same number again. */
+ *
+ *  The denominator is the fold point, never the window. They are different
+ *  numbers and only one of them is a deadline: the window says what the model
+ *  could hold, and against a 1M window the default soft limit fires at 16% of
+ *  it — a gauge drawn the other way reads nearly empty at the moment
+ *  maintenance happens, and the reader concludes the host is malfunctioning.
+ *  The window keeps a row of its own because it is still the number a relay
+ *  gets wrong, and the only place it can be corrected. */
 export function Context({ ctx, row = true, legend = false, port, onCtx }: {
   ctx: ContextBreakdown | null;
   row?: boolean;
@@ -101,40 +107,54 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
     );
     return legend ? <div className="block" data-b="ctx">{missing}</div> : missing;
   }
-  const pct = Math.min((used / ctx.window) * 100, 100);
+  // A fold point past the window is how maintenance is retired: the ratio was
+  // placed where usage cannot reach it. There is no deadline left to count
+  // down to, so the capacity row is the whole gauge rather than a footnote.
+  const folds = ctx.compact_at > 0 && ctx.compact_at <= ctx.window;
+  const denom = folds ? ctx.compact_at : ctx.window;
+  const pct = Math.min((used / denom) * 100, 100);
+  // The kernel's own two rungs, not a second opinion: it tells the model to
+  // work narrower at 75% of the trigger and to land what it knows at 92%, and
+  // a panel inventing its own thresholds would report a pressure the session
+  // is not under. Neither is a fault — maintenance is routine — so they read
+  // as accent, never as warn or error.
+  const press = !folds ? undefined : pct >= 92 ? "soon" : pct >= 75 ? "near" : undefined;
   const shown = parts().map(([k, label, why]) => ({ k, label, why, n: ctx[k] || 0 })).filter((p) => p.n > 0);
   const sum = shown.reduce((a, p) => a + p.n, 0) || 1;
+
+  // One span, because .drow .v spaces its children: the two halves of
+  // "24.8k / 200k" are one figure, not two gauges.
+  // A relay's window is one number somebody typed for every model it forwards,
+  // so the denominator is a guess as often as a fact — and this is the only
+  // place it is read.
+  const windowFigure = (
+    <span className="ctxq">
+      {tokens(Math.round(used))} /{" "}
+      {settable ? (
+        <button
+          className="ctxden"
+          aria-expanded={editing}
+          title={t("这个窗口是谁填的说不准 —— 点一下改成这个模型真正的上限")}
+          onClick={() => setEditing((v) => !v)}
+        >
+          {tokens(ctx.window)}
+        </button>
+      ) : (
+        tokens(ctx.window)
+      )}
+    </span>
+  );
 
   const body = (
     <>
       <Row
-        k={t(row ? "上下文窗口" : "上下文构成")}
-        v={
-          // One span, because .drow .v spaces its children: the two halves of
-          // "24.8k / 200k" are one figure, not two gauges.
-          <span className="ctxq">
-            {tokens(Math.round(used))} /{" "}
-            {/* A relay's window is one number somebody typed for every model it
-                forwards, so the denominator is a guess as often as a fact — and
-                here is the only place it is read. */}
-            {settable ? (
-              <button
-                className="ctxden"
-                aria-expanded={editing}
-                title={t("这个窗口是谁填的说不准 —— 点一下改成这个模型真正的上限")}
-                onClick={() => setEditing((v) => !v)}
-              >
-                {tokens(ctx.window)}
-              </button>
-            ) : (
-              tokens(ctx.window)
-            )}
-          </span>
-        }
+        k={folds ? t("下次维护") : t(row ? "上下文窗口" : "上下文构成")}
+        v={folds ? <span className="ctxq">{tokens(Math.round(used))} / {tokens(ctx.compact_at)}</span> : windowFigure}
       />
-      {editing && field}
+      {!folds && editing && field}
       <div
         className="ctxbar"
+        data-press={press}
         ref={bar}
         tabIndex={0}
         role="group"
@@ -148,6 +168,24 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
           <i key={p.k} data-p={p.k} style={{ width: `${(p.n / sum) * pct}%` }} />
         ))}
       </div>
+      {press && (
+        <p className="ctxnote" data-press={press}>
+          {press === "soon"
+            ? t("快到维护点了，接下来会自动整理上下文。")
+            : t("接近维护点，模型已经被告知要收窄接下来的工作。")}
+        </p>
+      )}
+      {/* Capacity is the diagnosis, not the deadline: it answers "is this model
+          simply too small" and it is where a wrong window is corrected. */}
+      {folds && (
+        <div className="ctxcap">
+          <Row k={t("模型容量")} v={windowFigure} />
+          <div className="ctxcapbar" role="presentation">
+            <i style={{ width: `${Math.min((used / ctx.window) * 100, 100)}%` }} />
+          </div>
+        </div>
+      )}
+      {folds && editing && field}
       {legend && (
         <div className="ctxlg">
           {shown.map((p) => (

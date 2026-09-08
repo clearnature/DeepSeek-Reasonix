@@ -19,12 +19,20 @@ type contextView struct {
 	User   int `json:"user"`
 	Reply  int `json:"reply"`
 	Output int `json:"output"`
+	// Where maintenance actually happens, which is the lower of the two bounds
+	// and not the window: drawn against the window, a 1M session reads 16% full
+	// at the moment it folds.
+	CompactAt int `json:"compact_at"`
 }
 
 func (s *Server) contextView() contextView {
 	used, window := s.ctl().ContextSnapshot()
 	b := s.ctl().ContextBreakdown()
-	return contextView{used, window, b.System, b.Tools, b.User, b.Reply, b.Output}
+	return contextView{
+		Used: used, Window: window,
+		System: b.System, Tools: b.Tools, User: b.User, Reply: b.Reply, Output: b.Output,
+		CompactAt: b.CompactAt,
+	}
 }
 
 // setContextWindow declares the window for the model this session runs on. A

@@ -15,6 +15,10 @@ type ContextBreakdown struct {
 	Output int `json:"output"` // what tools returned
 	Total  int `json:"total"`
 	Window int `json:"window"`
+	// CompactAt is the lower of the two configured bounds, which is where this
+	// session actually folds: against a 1M window the default soft limit fires
+	// at 160k, so a gauge drawn against the window reads 16% when it happens.
+	CompactAt int `json:"compactAt"`
 }
 
 // ContextBreakdown measures the visible request one message class at a time.
@@ -24,9 +28,10 @@ func (a *Agent) ContextBreakdown() ContextBreakdown {
 	}
 	visible := a.modelVisibleMessages()
 	out := ContextBreakdown{
-		Total:  a.ContextUsedTokens(),
-		Window: a.ContextWindow(),
-		Tools:  a.classTokens(nil, true),
+		Total:     a.ContextUsedTokens(),
+		Window:    a.ContextWindow(),
+		CompactAt: a.compactTrigger(),
+		Tools:     a.classTokens(nil, true),
 	}
 	for _, class := range []struct {
 		role provider.Role

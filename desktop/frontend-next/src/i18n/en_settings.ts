@@ -373,13 +373,29 @@ export const EN_SETTINGS: Record<string, string> = {
   "这台机器": "This machine",
   "改动立刻生效；需要重建运行时的项目，在任务运行期间无法修改": "Changes take effect immediately; the ones that rebuild the runtime cannot be changed while a task is running",
   "上下文维护": "Context maintenance",
-  "对话长到一定程度会折叠成摘要再继续。折叠点取「窗口比例」与「压缩阈值」中先到的那个。": "A long conversation folds into a summary and carries on. The fold happens at whichever comes first, the window share or the threshold.",
-  "压缩阈值": "Fold threshold",
-  "可见输入到这个大小就折叠，与模型声明的窗口无关。留空使用默认 {n}，填负数关闭。": "Fold once visible input reaches this size, whatever window the model declares. Empty uses the default {n}; a negative value turns it off.",
+  "对话长到一定程度会自动整理成摘要再继续。整理点取「经济维护阈值」与「容量保护」中先到的那个。": "A long conversation is tidied into a summary and carries on. That happens at whichever comes first, the economic threshold or the capacity guard.",
   "读不到压缩配置。": "The compaction settings could not be read.",
-  "请填一个整数，或者留空用默认值。": "Enter a whole number, or leave it empty for the default.",
-  "这个来源没有声明上下文窗口，所以不会自动压缩。": "This source declares no context window, so nothing folds automatically.",
-  "经济边界已关闭，只按窗口比例折叠：{n}。": "The threshold is off; folding follows the window share alone, at {n}.",
-  "当前生效的是这个阈值：{n}。": "This threshold is the one in force: {n}.",
-  "窗口比例更早到达，当前折叠点是 {n}，这个阈值不会触发。": "The window share is reached first, so folding happens at {n} and this threshold never fires.",
+  "请填一个大于 0 的整数。": "Enter a whole number greater than 0.",
+  "这个来源没有声明上下文窗口，所以不会自动整理上下文。先在右侧「上下文」里填上这个模型的窗口。":
+    "This source declares no context window, so nothing is tidied automatically. Declare this model's window in the Context panel on the right first.",
+  "当前": "Now",
+  "下次整理": "Next tidy-up",
+  "模型窗口": "Model window",
+  "经济维护阈值会先到，因此本会话预计在 {n} tokens 左右自动整理上下文。":
+    "The economic threshold comes first, so this session should tidy its context automatically at around {n} tokens.",
+  "模型窗口的容量保护会先到，因此本会话预计在 {n} tokens 左右自动整理上下文。":
+    "The window's capacity guard comes first, so this session should tidy its context automatically at around {n} tokens.",
+  "整理策略": "Tidy-up policy",
+  "自定义 {n}": "Custom, {n}",
+  "高级设置": "Advanced",
+  "经济维护阈值": "Economic threshold",
+  "可见输入到这个大小就整理，与模型声明的窗口无关。默认 {n}。":
+    "Tidy up once visible input reaches this size, whatever window the model declares. Default {n}.",
+  "使用默认值": "Use the default",
+  "自定义": "Custom",
+  "只按模型容量保护": "Capacity guard only",
+  "阈值": "Threshold",
+  "容量保护": "Capacity guard",
+  "模型窗口的 {p}%，永远生效 —— 关掉经济阈值关不掉它。":
+    "{p}% of the model's window, always in force — turning the economic threshold off does not turn this off.",
 };

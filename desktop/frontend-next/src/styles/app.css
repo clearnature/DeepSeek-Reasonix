@@ -3738,6 +3738,29 @@
   .more .c { font: var(--w-reg) 10.5px var(--mono); color: var(--ghost) }
   .more:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-xs) }
 
+  /* 折叠开关排在设置行右侧时，那 14px 是上一块的间距，不是这一行的。 */
+  .lrow .more { margin-top: 0; margin-left: auto; flex: none }
+
+  /* 整理什么时候发生，先答成一段距离再答成一个设置：三个数字加一根条，
+     阈值才不是一个孤零零的常数。压缩是例行维护，所以这根条走 accent。 */
+  .cmp { padding: 10px 12px 12px }
+  .cmpg { display: flex; flex-wrap: wrap; gap: 4px 20px }
+  .cmpg .r { display: flex; align-items: baseline; gap: 7px }
+  .cmpg .k { font: var(--w-reg) 11px var(--ui); color: var(--faint) }
+  .cmpg b {
+    font: var(--w-med) 13px var(--mono); color: var(--text);
+    font-variant-numeric: tabular-nums; letter-spacing: var(--track-tight);
+  }
+  .cmpbar {
+    height: 5px; margin-top: 9px; border-radius: var(--r-md);
+    background: var(--overlay); overflow: hidden;
+  }
+  .cmpbar > i {
+    display: block; height: 100%; border-radius: var(--r-md);
+    background: var(--accent); transition: width .3s var(--ease-out);
+  }
+  .cmp .note { margin-top: 8px }
+
   .expert { margin-top: 12px; display: flex; flex-direction: column; gap: 10px }
   .rule { padding: 10px 12px; border: 1px solid var(--hair); border-radius: var(--r-sm) }
   /* 能挡住 agent 的规则配错了，表现是「这软件卡住了」，用户想不到是自己两周
@@ -5519,6 +5542,28 @@
   .ctxbar > i[data-p="user"]   { background: var(--accent) }
   .ctxbar > i[data-p="reply"]  { background: var(--ok) }
   .ctxbar > i[data-p="output"] { background: var(--faint) }
+
+  /* 到维护点的两级：内核在 75% 让模型收窄、92% 让它把结果落下来，这里画的是
+     同一件事。压缩是例行维护不是故障，所以走 accent 而不是 warn/err —— 一旦
+     染成警告色，正常的一次折叠看起来就像出了问题。
+     圈在外面而不是里面，也不是染槽：inset 阴影被分段条盖住，染槽剩下的余量越
+     接近维护点越窄 —— 两种画法都是压力最高时最看不见。 */
+  .ctxbar[data-press="near"] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent) }
+  .ctxbar[data-press="soon"] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 58%, transparent) }
+  .ctxnote[data-press] { color: var(--accent-ink) }
+
+  /* 模型容量是次级诊断：它回答「是不是这个模型本来就太小」，不是倒计时。
+     所以比主仪表矮一半、灰一档，读起来是脚注而不是第二个进度条。 */
+  .ctxcap { margin-top: 9px }
+  .ctxcap .drow .k, .ctxcap .drow .v { color: var(--ghost) }
+  .ctxcapbar {
+    height: 3px; margin-top: 4px; border-radius: var(--r-md);
+    background: var(--overlay); overflow: hidden;
+  }
+  .ctxcapbar > i {
+    display: block; height: 100%; border-radius: var(--r-md);
+    background: var(--faint); transition: width .3s var(--ease-out);
+  }
 
   /* 常驻图例：这一块就是为构成而存在的，把构成藏到 hover 后面等于这块只剩一根条。 */
   .ctxlg { display: grid; gap: 4px }
