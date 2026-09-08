@@ -161,3 +161,35 @@ func TestLedgerMixedOriginalBucketsContinueAccumulating(t *testing.T) {
 		t.Fatalf("ledger buckets = %+v", q)
 	}
 }
+
+// An unpriced entry (title/auxiliary work) must not hide the priced entries'
+// estimate on either display path. On the display=="" path it also used to
+// leave Selected nil, which keeps the session currency empty — and an empty
+// session currency is what keeps display empty, so the session stayed
+// unavailable forever.
+func TestLedgerUnpricedEntryKeepsEstimate(t *testing.T) {
+	priced := CostQuote{
+		Original:        Money{Amount: "2", Currency: "CNY"},
+		Valuations:      map[string]Valuation{"CNY": {Money: Money{Amount: "2", Currency: "CNY"}, Basis: BasisIdentity}},
+		CostComplete:    true,
+		DisplayComplete: true, Complete: true,
+		DisplayStatus: DisplayStatusMatched, ModelRef: "m", PricingFingerprint: "fp",
+	}
+	unpriced := CostQuote{
+		Original:         Money{Currency: ""},
+		IncompleteReason: "no_price",
+		ModelRef:         "title", PricingFingerprint: "fp",
+	}
+	for _, display := range []string{"", "CNY"} {
+		l := NewLedger()
+		l.Add(priced, UsageTokens{PromptTokens: 1}, time.Time{})
+		l.Add(unpriced, UsageTokens{PromptTokens: 1}, time.Time{})
+		q := l.Total(display)
+		if q.DisplayStatus == DisplayStatusUnavailable || q.Selected == nil {
+			t.Fatalf("display=%q hid the estimate: %+v", display, q)
+		}
+		if q.Selected.Amount != "2" {
+			t.Fatalf("display=%q selected = %+v, want 2", display, q.Selected)
+		}
+	}
+}

@@ -570,9 +570,13 @@ func (a *quoteAccumulator) add(quote CostQuote) {
 }
 
 func (a *quoteAccumulator) addOriginal(original Money, currency string) {
-	if currency != "" {
-		a.originalTotals[currency] = a.originalTotals[currency].Add(original.AmountValue())
+	if currency == "" {
+		// An unpriced entry carries no original-currency charge; folding its
+		// empty currency into the totals flips originalComplete and hides the
+		// priced entries' estimate behind unavailable.
+		return
 	}
+	a.originalTotals[currency] = a.originalTotals[currency].Add(original.AmountValue())
 	if a.originalCurrency == "" {
 		a.originalCurrency = currency
 		a.originalTotal = original.AmountValue()
@@ -641,6 +645,19 @@ func (a *quoteAccumulator) finish() CostQuote {
 		a.out.AggregateMode = AggregateModeSingleCurrency
 		return a.out
 	}
+	// display=="" has no valuation to fall back on, so an incomplete cost fact
+	// (unpriced title/auxiliary entry) would otherwise hide the priced entries'
+	// total behind unavailable — and, because Selected stays nil, also leave the
+	// session currency empty, which keeps display empty. Same partial-fact
+	// treatment as the a.display != "" path below.
+	if a.display == "" && a.originalComplete && a.originalCurrency != "" && !a.costFactsComplete {
+		selected := a.out.Original
+		a.out.Selected = &selected
+		a.out.DisplayStatus = DisplayStatusMatched
+		a.out.AggregateMode = AggregateModeSingleCurrency
+		a.out.IncompleteReason = firstNonEmpty(a.out.IncompleteReason, "incomplete_cost_fact")
+		return a.out
+	}
 	valuation, found := a.out.Valuations[a.display]
 	if found && a.displayComplete && a.costFactsComplete {
 		selected := valuation.Money
@@ -653,6 +670,17 @@ func (a *quoteAccumulator) finish() CostQuote {
 		} else {
 			a.out.AggregateMode = AggregateModeSingleCurrency
 		}
+		return a.out
+	}
+	// Unpriced entries (title/auxiliary work) carry no charge of their own, so
+	// the priced ones still form a valid estimate. Showing it with an incomplete
+	// marker beats hiding the whole session cost behind unavailable.
+	if valuation, ok := a.out.Valuations[a.display]; ok && a.display != "" && !a.costFactsComplete {
+		selected := valuation.Money
+		a.out.Selected = &selected
+		a.out.DisplayStatus = DisplayStatusMatched
+		a.out.AggregateMode = AggregateModeSingleCurrency
+		a.out.IncompleteReason = firstNonEmpty(a.out.IncompleteReason, "incomplete_cost_fact")
 		return a.out
 	}
 	a.out.DisplayComplete = false
