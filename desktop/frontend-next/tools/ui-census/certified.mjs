@@ -5,10 +5,10 @@
 // depending on each other.
 import { certifyRoots } from "../../src/ui/roots.ts";
 import { productFiles, resolveSpec, trees } from "./source.mjs";
-import { PRIMITIVES } from "./sites.mjs";
 
+// Which files are primitives is not this tool's to decide: certifyRoots reads
+// the one declaration, so there is no list here to drift from the gate's.
 const census = certifyRoots(new Map([...trees].filter(([p]) => productFiles.has(p))), {
-  skip: (p) => PRIMITIVES.has(p),
   resolve: (from, spec) => resolveSpec(from, spec),
 });
 

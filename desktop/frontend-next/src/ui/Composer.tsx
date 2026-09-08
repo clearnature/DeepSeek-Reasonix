@@ -461,6 +461,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
             shortened from stays readable on hover. */}
         <Picker
           className="mode"
+          data-action="model.select"
           place="bottom"
           title={status?.modelRef ?? modelLb}
           current={status?.modelRef}

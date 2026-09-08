@@ -14,12 +14,52 @@
 
 import { parse } from "@babel/parser";
 
-type Node = { type: string; loc?: { start: { line: number } } } & Record<string, unknown>;
+export type Node = { type: string; loc?: { start: { line: number } } } & Record<string, unknown>;
 
 // The line these tables draw: does a person's action on the page content
 // produce it? Scrolling, wheeling, pointing, dragging and selecting do.
 // Resizing the window, focusing it, going offline, a transition ending and a
 // media query flipping do not — those are the environment's.
+// The components whose own internals are not entry points: a person acts on
+// the call site that hands them a handler, not on the button inside them.
+//
+// One declaration, because there were two. The vitest gate and the census tool
+// each kept a list of the same fact, and adding Seg to only one of them read
+// as "an input proven to write the host that the product names no action for"
+// — a seal breaking on a bookkeeping slip rather than on a real gap.
+//
+// A callback here is certified, not guessed. `onPick` is an interaction
+// because Menu says so and its body raises one, never because the name starts
+// with "on": that spelling test is what left every Picker call site outside
+// the interaction universe, model switching among them. The event named is
+// the DOM event inside the component that ends up calling the prop, and
+// primitives.test.ts holds each declaration to a body that really reaches it.
+export interface Primitive {
+  /** Path within src/, however the caller spells the rest of it. */
+  file: string;
+  /** Callback prop → the DOM event inside this component that raises it. A
+   *  prop absent here is not an input: a primitive forwards what it declares
+   *  and nothing else. */
+  callbacks: Record<string, string>;
+}
+
+export const PRIMITIVES: Primitive[] = [
+  { file: "ui/Switch.tsx", callbacks: { onClick: "click" } },
+  { file: "ui/Menu.tsx", callbacks: { onPick: "click" } },
+  { file: "ui/Seg.tsx", callbacks: { onClick: "click" } },
+];
+
+/** A primitive is the file, wherever the tree being scanned is rooted. The
+ *  callers key their trees three different ways — the gate relative to the
+ *  package, the census absolute, and the fixture corpus under a root that is
+ *  not src at all — so this matches the path's tail rather than assuming one
+ *  of them. Anchoring it to a literal "/src/" quietly un-certified the fixture
+ *  corpus's own Switch, and the frozen reports caught it: two call sites lost
+ *  their identity to one root inside the component, which is the exact rule
+ *  that corpus exists to hold. */
+export const primitiveAt = (list: Primitive[], path: string): Primitive | undefined =>
+  list.find((p) => path === p.file || path.endsWith("/" + p.file));
+
 export const USER_INPUT = new Set([
   "click", "dblclick", "auxclick", "contextmenu", "keydown", "keyup", "keypress",
   "pointerdown", "pointerup", "pointermove", "pointercancel", "mousedown", "mouseup",
@@ -135,8 +175,12 @@ export interface Census {
   refused: Note[];
 }
 export interface Options {
-  skip?: (path: string) => boolean;
   resolve?: (from: string, spec: string) => string | null;
+  /** Which components are certified interaction primitives, and which of their
+   *  callbacks carry a person's input. Defaults to the one declaration both
+   *  callers share; passing a list is for fixtures that need to state a
+   *  contract, never for a caller keeping a second copy of this one. */
+  primitives?: Primitive[];
 }
 
 /** Sources, or trees already parsed by the caller. A second reader that parses
@@ -430,7 +474,10 @@ export function certifyRoots(sources: Map<string, string | Node>, opts: Options 
 
 
   for (const [path, tree] of trees) {
-    const skipped = opts.skip?.(path) ?? false;
+    const certified = opts.primitives ?? PRIMITIVES;
+    // A primitive's own body is not where its input is performed, so its
+    // handlers are not roots — the call site that hands it the callback is.
+    const skipped = !!primitiveAt(certified, path);
     // 1. JSX handlers. One root per handler, so membership is per handler too:
     // a generic data-action on an element carrying several of them cannot say
     // which input it names, and naming all of them called typing in a box the
@@ -454,10 +501,15 @@ export function certifyRoots(sources: Map<string, string | Node>, opts: Options 
         // where its interaction lives, and a prop spelled onClick is not proof.
         const el = jsxName(n.name as Node);
         let abstraction: "host" | "primitive" | "wiring" | "unknown" = "host";
+        // Set only for a certified primitive: the contract that says which of
+        // its props are inputs, so this does not fall back to reading names.
+        let contract: Primitive | undefined;
         if (/^[A-Z]/.test(el)) {
           const imp = importsOf.get(path)?.get(el);
           const decl = imp?.file ?? (declaresLocally(trees.get(path)!, imp?.name ?? el) ? path : null);
-          abstraction = decl === null ? "unknown" : (opts.skip?.(decl) ?? false) ? "primitive" : "wiring";
+          const prim = decl === null ? undefined : primitiveAt(certified, decl);
+          contract = prim;
+          abstraction = decl === null ? "unknown" : prim ? "primitive" : "wiring";
         }
         const a: Record<string, unknown> = {};
         for (const at of (n.attributes as Node[])) {
@@ -471,8 +523,12 @@ export function certifyRoots(sources: Map<string, string | Node>, opts: Options 
               : c.type === "JSXExpressionContainer" ? firstString(c.expression) ?? "" : "")
               .filter(Boolean).join(" ").replace(/\s+/g, " ").slice(0, 60)
           : "";
+        // A host element's props are the DOM's, so the name is the event. A
+        // certified primitive's are not: what `onPick` raises is Menu's to
+        // declare, and a prop it does not declare is not an input however it
+        // is spelled — Picker takes an onHover that opens nothing.
         const handlers = Object.keys(a)
-          .map((name) => ({ name, event: eventOfProp(name) }))
+          .map((name) => ({ name, event: contract ? contract.callbacks[name] ?? null : eventOfProp(name) }))
           .filter((h): h is { name: string; event: string } => !!h.event && USER_INPUT.has(h.event));
         if (handlers.length && abstraction !== "host" && abstraction !== "primitive") {
           const note = { path, line: n.loc!.start.line, why: abstraction === "wiring" ? "COMPONENT_PROP_WIRING" : "UNRESOLVED_INTERACTION_ABSTRACTION", detail: "<" + el + " " + handlers.map((h) => h.name).join(" ") + ">" };

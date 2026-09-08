@@ -33,7 +33,12 @@ interface Props {
   pending?: boolean;
 }
 
-export function Picker({ label, items, current, onPick, place, className, title, pending }: Props) {
+// data-* rides through to the item that raises the pick, the way Switch and Seg
+// carry theirs: the action's identity is written at the call site, and the
+// answer this menu gives is the item's own value.
+export function Picker({
+  label, items, current, onPick, place, className, title, pending, ...id
+}: Props & { [K in `data-${string}`]?: string }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const wrap = useRef<HTMLDivElement>(null);
@@ -151,6 +156,8 @@ export function Picker({ label, items, current, onPick, place, className, title,
               </div>
             ) : (
               <button
+                {...id}
+                data-value={it.value}
                 className={it.plain ? "mi plain" : "mi"}
                 role="menuitem"
                 data-on={it.value === current ? "" : undefined}
