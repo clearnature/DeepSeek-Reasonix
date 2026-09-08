@@ -32,7 +32,7 @@ func newTeammateOrchestration(sink event.Sink, jm *jobs.Manager, store *agent.Su
 	// running with only a warning when the threshold is left at zero.
 	ts.SetStallAbort(600 * time.Second)
 	if ts != nil {
-		reg.Add(control.NewTeamLeaderTool(ts))
+		reg.Add(control.NewTeamLeaderTool(ts, root))
 	}
 	return ts
 }

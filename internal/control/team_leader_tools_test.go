@@ -25,7 +25,7 @@ func newSmokeTeamTool(t *testing.T) (tool.Tool, *jobs.Manager) {
 	ts := agent.NewTeammateStore(task, jm, t.TempDir())
 	t.Cleanup(ts.Close)
 	ts.SetSink(sink)
-	return NewTeamLeaderTool(ts), jm
+	return NewTeamLeaderTool(ts, t.TempDir()), jm
 }
 
 // TestTeamToolCreatesAssignsReportsRemoves locks in the model-callable

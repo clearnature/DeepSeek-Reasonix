@@ -14,17 +14,17 @@ import (
 // teamTool is the leader's model-callable orchestration tool: it exposes team
 // management (create member, assign work, roster status, remove, broadcast)
 // to the model so an agent can act as its own team leader — the orchestration
-// layer's primary caller, per the 2026-09-07 architecture report. Host
-// /team-* commands remain the human fallback over the same TeammateStore.
+// layer's primary caller, per the 2026-09-07 architecture report.
 // ProviderVisible mirrors send_message: leader contexts carry a job manager,
 // sub-agents and teammates have it cleared, so they never see this tool.
 type teamTool struct {
-	ts *agent.TeammateStore
+	ts            *agent.TeammateStore
+	workspaceRoot string
 }
 
 // NewTeamLeaderTool wraps a TeammateStore as the leader orchestration tool.
-func NewTeamLeaderTool(ts *agent.TeammateStore) tool.Tool {
-	return &teamTool{ts: ts}
+func NewTeamLeaderTool(ts *agent.TeammateStore, workspaceRoot string) tool.Tool {
+	return &teamTool{ts: ts, workspaceRoot: workspaceRoot}
 }
 
 func (t *teamTool) Name() string { return "team" }
@@ -38,7 +38,9 @@ func (t *teamTool) Description() string {
 		"next assignment), status (list members), remove (drop a member), " +
 		"shutdown (ask one member to wind down its work), approve (answer a " +
 		"member's plan request: request_id + decision allow/deny), broadcast " +
-		"(mail all active members). Running members are steered with the " +
+		"(mail all active members), grant (restricted-writer write paths or " +
+		"worktree mode for a member), revoke (drop a member's write token). " +
+		"Running members are steered with the " +
 		"send_message tool by job_id; mail reaches idle members."
 }
 
@@ -46,11 +48,13 @@ func (t *teamTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "action":{"type":"string","enum":["group_create","group_delete","create","add","tasks","mail","status","shutdown","approve","remove","broadcast"]},
-  "name":{"type":"string","description":"team name for group_create / member name for create/add/mail/remove"},
+  "action":{"type":"string","enum":["group_create","group_delete","create","add","tasks","mail","status","shutdown","approve","remove","broadcast","grant","revoke"]},
+  "name":{"type":"string","description":"team name for group_create / member name for create/add/mail/remove/grant/revoke"},
   "role":{"type":"string","description":"role for create, default researcher"},
   "task":{"type":"string","description":"task prompt for add"},
   "text":{"type":"string","description":"message for broadcast"},
+  "paths":{"type":"array","items":{"type":"string"},"description":"workspace-relative write paths for grant (restricted writer token)"},
+  "worktree":{"type":"boolean","description":"grant worktree mode (dedicated branch) instead of explicit paths"},
   "request_id":{"type":"string","description":"approval request id for approve"},
   "decision":{"type":"string","enum":["allow","deny"],"description":"verdict for approve"}
 },
@@ -126,13 +130,15 @@ func (t *teamTool) executeShutdown(name string) (string, error) {
 
 func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	var p struct {
-		Action    string `json:"action"`
-		Name      string `json:"name"`
-		Role      string `json:"role"`
-		Task      string `json:"task"`
-		Text      string `json:"text"`
-		RequestID string `json:"request_id"`
-		Decision  string `json:"decision"`
+		Action    string   `json:"action"`
+		Name      string   `json:"name"`
+		Role      string   `json:"role"`
+		Task      string   `json:"task"`
+		Text      string   `json:"text"`
+		Paths     []string `json:"paths"`
+		Worktree  bool     `json:"worktree"`
+		RequestID string   `json:"request_id"`
+		Decision  string   `json:"decision"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("team: invalid args: %w", err)
@@ -213,7 +219,46 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			sent++
 		}
 		return fmt.Sprintf("broadcast mailed to %d active teammate(s)", sent), nil
+	case "grant":
+		return t.executeGrant(p.Name, p.Worktree, p.Paths)
+	case "revoke":
+		return t.executeRevoke(p.Name)
 	default:
-		return "", fmt.Errorf("team: unknown action %q (create|add|status|remove|broadcast)", p.Action)
+		return "", fmt.Errorf("team: unknown action %q", p.Action)
 	}
+}
+
+func (t *teamTool) executeGrant(name string, worktree bool, paths []string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("team grant: name is required")
+	}
+	if worktree {
+		if err := t.ts.GrantWorktree(name); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("teammate %q granted worktree mode — dedicated branch on next assignment", name), nil
+	}
+	if len(paths) == 0 {
+		return "", fmt.Errorf("team grant: paths (or worktree) is required")
+	}
+	ws, err := agent.NormalizeWritePaths(t.workspaceRoot, paths)
+	if err != nil {
+		return "", err
+	}
+	if err := t.ts.Grant(name, ws); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("teammate %q granted write token over %d path(s) — now a restricted writer", name, len(ws.Paths)), nil
+}
+
+func (t *teamTool) executeRevoke(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("team revoke: name is required")
+	}
+	if err := t.ts.Revoke(name); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("teammate %q write token revoked — back to read-only", name), nil
 }

@@ -2,8 +2,8 @@
   "limits": {
     "banner": 44,
     "commented-code": 1,
-    "complexity": 1946,
-    "essay": 2107,
+    "complexity": 1947,
+    "essay": 2108,
     "file-size": 109835,
     "function-size": 8461,
     "layering": 2,
@@ -1018,6 +1018,12 @@
     },
     "internal/control/slash.go": {
       "complexity": 4
+    },
+    "internal/control/team_leader_tools.go": {
+      "complexity": 1
+    },
+    "internal/control/teammate_command.go": {
+      "essay": 1
     },
     "internal/control/turn_orchestrator.go": {
       "essay": 10,

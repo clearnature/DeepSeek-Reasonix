@@ -64,12 +64,13 @@ func TestOrchestrationSmokeRunsTeammateChainToIdle(t *testing.T) {
 		SessionPath:  t.TempDir(),
 	})
 
-	c.Submit("/team-create smoke1 researcher")
-	if _, ok := ts.Status("smoke1"); !ok {
-		t.Fatal("smoke1 not registered after /team-create")
+	if err := ts.Create("smoke1", "researcher"); err != nil {
+		t.Fatal("smoke1 create failed: ", err)
 	}
-
-	c.Submit("/team-add smoke1 简述前缀缓存如何降低推理成本")
+	ctx := jobs.WithSession(jobs.WithManager(context.Background(), jm), c.parentSessionID())
+	if _, err := ts.Assign(ctx, "smoke1", "简述前缀缓存如何降低推理成本"); err != nil {
+		t.Fatal("smoke1 add failed: ", err)
+	}
 
 	deadline := time.Now().Add(30 * time.Second)
 	for {

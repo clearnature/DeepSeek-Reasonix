@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -54,8 +55,13 @@ func TestAutoDigestRoundRunsAfterTeammateCompletion(t *testing.T) {
 	})
 	defer c.Close()
 
-	c.Submit("/team-create smoke2 researcher")
-	c.Submit("/team-add smoke2 简述前缀缓存如何降低推理成本")
+	if err := ts.Create("smoke2", "researcher"); err != nil {
+		t.Fatalf("team create: %v", err)
+	}
+	ctx := jobs.WithSession(jobs.WithManager(context.Background(), jm), c.parentSessionID())
+	if _, err := ts.Assign(ctx, "smoke2", "简述前缀缓存如何降低推理成本"); err != nil {
+		t.Fatalf("team add: %v", err)
+	}
 
 	// Wait for the teammate job to finish AND the auto digest round to have
 	// run: the last recorded leader turn must carry the digest block.
