@@ -156,6 +156,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
           data-busy={adder.busy ? "" : undefined}
           title={t("打开或新建项目…")}
           aria-label={t("打开或新建项目…")}
+          data-action="workspace.add"
           onClick={() => adder.add("rail")}
         >
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -182,9 +183,14 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
         </button>
       </div>
 
+      {/* Naming a folder by typing it is the same thing as naming it with the
+          picker: one intent, two ways in, and the id belongs to the intent —
+          which is why this is the id the empty transcript's own button already
+          carries. */}
       {adder.typing === "rail" && (
         <form
           className="addpath"
+          data-action-submit="workspace.add"
           onSubmit={(ev) => {
             ev.preventDefault();
             const input = ev.currentTarget.elements.namedItem("path") as HTMLInputElement | null;
