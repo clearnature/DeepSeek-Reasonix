@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"reasonix/internal/agent"
+	"reasonix/internal/config"
 	"reasonix/internal/jobs"
 	"reasonix/internal/tool"
 )
@@ -20,11 +23,22 @@ import (
 type teamTool struct {
 	ts            *agent.TeammateStore
 	workspaceRoot string
+	// sched backs the loop_wakeup/cron_* actions (one instance per tool so the
+	// persisted schedule file has a single writer).
+	sched *wakeupScheduler
 }
 
 // NewTeamLeaderTool wraps a TeammateStore as the leader orchestration tool.
 func NewTeamLeaderTool(ts *agent.TeammateStore, workspaceRoot string) tool.Tool {
-	return &teamTool{ts: ts, workspaceRoot: workspaceRoot}
+	persist := ""
+	if snap := ts.SnapshotPath(); snap != "" {
+		persist = filepath.Join(filepath.Dir(snap), "wakeups.json")
+	}
+	sched := newWakeupScheduler(func(prompt string) error {
+		return ts.PostMailToLeader("wakeup", prompt)
+	}, persist)
+	sched.onError = ts.EmitNotice
+	return &teamTool{ts: ts, workspaceRoot: workspaceRoot, sched: sched}
 }
 
 func (t *teamTool) Name() string { return "team" }
@@ -48,13 +62,22 @@ func (t *teamTool) Schema() json.RawMessage {
 	return json.RawMessage(`{
 "type":"object",
 "properties":{
-  "action":{"type":"string","enum":["group_create","group_delete","create","add","tasks","mail","status","shutdown","approve","remove","broadcast","grant","revoke"]},
+  "action":{"type":"string","enum":["group_create","group_delete","create","add","tasks","mail","status","shutdown","approve","remove","broadcast","grant","revoke","task_create","task_list","task_update","task_stop","enter_worktree","exit_worktree","loop_wakeup","cron_create","cron_list","cron_delete"]},
   "name":{"type":"string","description":"team name for group_create / member name for create/add/mail/remove/grant/revoke"},
   "role":{"type":"string","description":"role for create, default researcher"},
   "task":{"type":"string","description":"task prompt for add"},
   "text":{"type":"string","description":"message for broadcast"},
   "paths":{"type":"array","items":{"type":"string"},"description":"workspace-relative write paths for grant (restricted writer token)"},
   "worktree":{"type":"boolean","description":"grant worktree mode (dedicated branch) instead of explicit paths"},
+  "prompt":{"type":"string","description":"task text for task_create / wake-up prompt for loop_wakeup and cron_create"},
+  "task_id":{"type":"string","description":"board task id for task_update (from task_list)"},
+  "owner":{"type":"string","description":"claiming teammate name for task_update"},
+  "status":{"type":"string","description":"task_update status: done to complete, open to release"},
+  "disposition":{"type":"string","description":"exit_worktree disposition: keep (default) or remove"},
+  "confirm":{"type":"boolean","description":"required true when exit_worktree disposition=remove"},
+  "delay_seconds":{"type":"integer","description":"one-shot delay for loop_wakeup"},
+  "schedule_seconds":{"type":"integer","description":"repeat interval for cron_create"},
+  "id":{"type":"string","description":"wake-up id for cron_delete (from cron_list)"},
   "request_id":{"type":"string","description":"approval request id for approve"},
   "decision":{"type":"string","enum":["allow","deny"],"description":"verdict for approve"}
 },
@@ -128,18 +151,31 @@ func (t *teamTool) executeShutdown(name string) (string, error) {
 	return fmt.Sprintf("shutdown requested for %q — it will wind down its current work", name), nil
 }
 
+// teamToolParams is the union of every action's arguments (single tool, many
+// actions — qwen tool-surface convergence).
+type teamToolParams struct {
+	Action          string   `json:"action"`
+	Name            string   `json:"name"`
+	Role            string   `json:"role"`
+	Task            string   `json:"task"`
+	Text            string   `json:"text"`
+	Paths           []string `json:"paths"`
+	Worktree        bool     `json:"worktree"`
+	RequestID       string   `json:"request_id"`
+	Decision        string   `json:"decision"`
+	Prompt          string   `json:"prompt"`
+	TaskID          string   `json:"task_id"`
+	Owner           string   `json:"owner"`
+	Status          string   `json:"status"`
+	Disposition     string   `json:"disposition"`
+	Confirm         bool     `json:"confirm"`
+	DelaySeconds    int      `json:"delay_seconds"`
+	ScheduleSeconds int      `json:"schedule_seconds"`
+	ID              string   `json:"id"`
+}
+
 func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
-	var p struct {
-		Action    string   `json:"action"`
-		Name      string   `json:"name"`
-		Role      string   `json:"role"`
-		Task      string   `json:"task"`
-		Text      string   `json:"text"`
-		Paths     []string `json:"paths"`
-		Worktree  bool     `json:"worktree"`
-		RequestID string   `json:"request_id"`
-		Decision  string   `json:"decision"`
-	}
+	var p teamToolParams
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("team: invalid args: %w", err)
 	}
@@ -224,6 +260,47 @@ func (t *teamTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	case "revoke":
 		return t.executeRevoke(p.Name)
 	default:
+		return t.executeExtended(ctx, p)
+	}
+}
+
+// executeExtended routes the board/worktree/scheduler actions folded into the
+// team tool (qwen tool-surface convergence), keeping Execute's own switch small.
+func (t *teamTool) executeExtended(ctx context.Context, p teamToolParams) (string, error) {
+	switch p.Action {
+	case "task_create":
+		id, err := t.ts.BoardCreate(p.Prompt)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("task %q published on the board — teammates claim it with team task_update", id), nil
+	case "task_list":
+		return t.executeBoardList()
+	case "task_update":
+		return t.executeBoardUpdate(p.TaskID, p.Owner, p.Status)
+	case "task_stop":
+		return t.executeTaskStop(p.Name)
+	case "enter_worktree":
+		path, branch, err := t.ts.EnterWorktree(ctx, p.Name, config.DeliveryWorktreeDir())
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("teammate %q entered worktree %s on branch %s — its writes are bound there until exit_worktree", strings.TrimSpace(p.Name), path, branch), nil
+	case "exit_worktree":
+		remove := strings.TrimSpace(p.Disposition) == "remove"
+		if remove && !p.Confirm {
+			return "", fmt.Errorf("team exit_worktree: disposition=remove deletes the worktree and branch; pass confirm=true")
+		}
+		return t.ts.ExitWorktree(ctx, p.Name, remove)
+	case "loop_wakeup":
+		return t.executeLoopWakeup(p.DelaySeconds, p.Prompt)
+	case "cron_create":
+		return t.executeCronCreate(p.ScheduleSeconds, p.Prompt)
+	case "cron_list":
+		return t.executeCronList()
+	case "cron_delete":
+		return t.executeCronDelete(p.ID)
+	default:
 		return "", fmt.Errorf("team: unknown action %q", p.Action)
 	}
 }
@@ -261,4 +338,97 @@ func (t *teamTool) executeRevoke(name string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("teammate %q write token revoked — back to read-only", name), nil
+}
+
+func (t *teamTool) executeBoardList() (string, error) {
+	items := t.ts.BoardList()
+	if len(items) == 0 {
+		return "task board is empty — publish work with team task_create", nil
+	}
+	var b strings.Builder
+	for _, v := range items {
+		fmt.Fprintf(&b, "- %s [%s] owner=%s: %s\n", v.ID, v.Status, v.Owner, v.Prompt)
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+func (t *teamTool) executeBoardUpdate(taskID, owner, status string) (string, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return "", fmt.Errorf("team task_update: task_id is required")
+	}
+	switch strings.TrimSpace(status) {
+	case agent.BoardDone:
+		if err := t.ts.BoardUpdate(taskID, owner, agent.BoardDone); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("task %q marked done", taskID), nil
+	case agent.BoardOpen:
+		if err := t.ts.BoardUpdate(taskID, owner, agent.BoardOpen); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("task %q released to open", taskID), nil
+	default:
+		if err := t.ts.BoardClaim(taskID, owner); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("task %q claimed by %q", taskID, owner), nil
+	}
+}
+
+func (t *teamTool) executeTaskStop(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if err := t.ts.TeamStop(name); err != nil {
+		return "", err
+	}
+	released := t.ts.ReleaseBoardTasks(name)
+	return fmt.Sprintf("stopped %q (job killed, member idle); %d claimed board task(s) released", name, released), nil
+}
+
+func (t *teamTool) executeLoopWakeup(delaySeconds int, prompt string) (string, error) {
+	if delaySeconds <= 0 || strings.TrimSpace(prompt) == "" {
+		return "", fmt.Errorf("team loop_wakeup: delay_seconds and prompt are required")
+	}
+	e := &wakeupEntry{ID: fmt.Sprintf("wake-%d", time.Now().UnixNano()), Prompt: prompt,
+		Delay: (time.Duration(delaySeconds) * time.Second).String(), Created: time.Now()}
+	if err := t.sched.add(e); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("wake-up %s armed for %ds", e.ID, delaySeconds), nil
+}
+
+func (t *teamTool) executeCronCreate(scheduleSeconds int, prompt string) (string, error) {
+	if scheduleSeconds <= 0 || strings.TrimSpace(prompt) == "" {
+		return "", fmt.Errorf("team cron_create: schedule_seconds and prompt are required")
+	}
+	e := &wakeupEntry{ID: fmt.Sprintf("cron-%d", time.Now().UnixNano()), Prompt: prompt,
+		Schedule: (time.Duration(scheduleSeconds) * time.Second).String(), Created: time.Now()}
+	if err := t.sched.add(e); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("cron %s created (every %ds)", e.ID, scheduleSeconds), nil
+}
+
+func (t *teamTool) executeCronList() (string, error) {
+	items := t.sched.list()
+	if len(items) == 0 {
+		return "no scheduled wake-ups", nil
+	}
+	var b strings.Builder
+	for _, v := range items {
+		kind, every := "wake", v.Delay
+		if v.Schedule != "" {
+			kind, every = "cron", v.Schedule
+		}
+		fmt.Fprintf(&b, "- %s [%s every %s]: %s\n", v.ID, kind, every, v.Prompt)
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+func (t *teamTool) executeCronDelete(id string) (string, error) {
+	id = strings.TrimSpace(id)
+	if !t.sched.remove(id) {
+		return "", fmt.Errorf("team cron_delete: unknown id %q", id)
+	}
+	return fmt.Sprintf("wake-up %s cancelled", id), nil
 }

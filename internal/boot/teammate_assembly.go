@@ -32,16 +32,11 @@ func newTeammateOrchestration(sink event.Sink, jm *jobs.Manager, store *agent.Su
 	// running with only a warning when the threshold is left at zero.
 	ts.SetStallAbort(600 * time.Second)
 	if ts != nil {
+		// One leader-facing orchestration tool (qwen surface convergence): team
+		// carries every action. Teammates keep task_list/task_update to claim.
 		reg.Add(control.NewTeamLeaderTool(ts, root))
-		reg.Add(control.NewTaskCreateTool(ts))
 		reg.Add(control.NewTaskListTool(ts))
 		reg.Add(control.NewTaskUpdateTool(ts))
-		reg.Add(control.NewEnterWorktreeTool(ts))
-		reg.Add(control.NewExitWorktreeTool(ts))
-		reg.Add(control.NewTaskStopTool(ts))
-		for _, wt := range control.NewWakeupTools(ts) {
-			reg.Add(wt)
-		}
 	}
 	return ts
 }
