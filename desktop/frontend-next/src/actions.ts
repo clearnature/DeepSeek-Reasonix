@@ -176,6 +176,29 @@ export const ACTIONS: UIAction[] = [
   { id: "wallpaper.remove", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "wallpaper.change", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "theme.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+
+  // ── How the window looks ─────────────────────────────────────────────────
+  // Named for what a person is doing, not for the control they reached for.
+  // The interface scale has a row of presets and a slider beside it, and both
+  // are the same intent; changing the background's darkening is not a
+  // different capability from changing its opacity, so the four sliders share
+  // one id and say which parameter on data-value.
+  //
+  // These stay apart on purpose. theme.activate installs a palette pack;
+  // appearance.scheme is light, dark or follow-the-system. wallpaper.change
+  // and wallpaper.remove decide which image there is; appearance.background is
+  // how the image that is already there is drawn. And weight and contrast are
+  // two different things a reader wants, however alike they look in CSS.
+  { id: "appearance.language", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.zoom", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.background", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
+  { id: "appearance.font", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
+  // Kept where the window keeps them, the way chrome.theme already is: these
+  // are this browser's, and no kernel state moves.
+  { id: "appearance.scheme", kind: "view", target: "none", proof: "browser" },
+  { id: "appearance.weight", kind: "view", target: "none", proof: "browser" },
+  { id: "appearance.contrast", kind: "view", target: "none", proof: "browser" },
   { id: "pane.close", kind: "destructive", target: "none", proof: "authority-effect" },
   { id: "settings.section", kind: "navigation", target: "none", proof: "interaction" },
   // Finding a setting changes what is on screen and nothing else: it reaches

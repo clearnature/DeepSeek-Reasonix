@@ -225,7 +225,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="seg" data-text role="group" aria-label={t("语言")}>
             {LANGS.map(([id, name]) => (
-              <button key={id} aria-pressed={langNow === id} onClick={() => setLang(id)}>
+              <button key={id} data-action="appearance.language" data-value={id} aria-pressed={langNow === id} onClick={() => setLang(id)}>
                 {t(name)}
               </button>
             ))}
@@ -288,7 +288,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             <span className="tx">{t("界面")}</span>
             <div className="seg" data-text role="group" aria-label={t("界面大小")}>
               {ZOOMS.map(([v, name]) => (
-                <button key={v} aria-pressed={(look.zoom || 1) === v} onClick={() => set({ zoom: v })}>
+                <button key={v} data-action="appearance.zoom" aria-pressed={(look.zoom || 1) === v} onClick={() => set({ zoom: v })}>
                   {t(name)}
                 </button>
               ))}
@@ -305,6 +305,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
               step={ZOOM_RANGE.step}
               value={look.zoom || 1}
               aria-label={t("界面大小微调")}
+              data-action="appearance.zoom"
               onChange={(e) => set({ zoom: Number(e.target.value) })}
             />
             <span className="now">{pct(look.zoom || 1)}</span>
@@ -313,7 +314,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
             <span className="tx">{t("正文")}</span>
             <div className="seg" data-text role="group" aria-label={t("正文字号")}>
               {readSteps().map(([v, name]) => (
-                <button key={v} aria-pressed={(look.readSize || readDefault()) === v} onClick={() => set({ readSize: v })}>
+                <button key={v} data-action="appearance.reading-size" aria-pressed={(look.readSize || readDefault()) === v} onClick={() => set({ readSize: v })}>
                   {t(name)}
                 </button>
               ))}
@@ -412,6 +413,8 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                   max={1}
                   step={0.05}
                   value={look.wallpaper.opacity}
+                  data-action="appearance.background"
+                  data-value="opacity"
                   onChange={(e) => setPaper({ opacity: Number(e.target.value) })}
                 />
                 <span className="now">{pct(look.wallpaper.opacity)}</span>
@@ -426,6 +429,8 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                   max={1}
                   step={0.05}
                   value={look.wallpaper.dim}
+                  data-action="appearance.background"
+                  data-value="dim"
                   onChange={(e) => setPaper({ dim: Number(e.target.value) })}
                 />
                 <span className="now">{pct(look.wallpaper.dim)}</span>
@@ -441,6 +446,8 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                   step={0.05}
                   value={look.wallpaper.focusX}
                   disabled={!crop.x}
+                  data-action="appearance.background"
+                  data-value="focus-x"
                   onChange={(e) => setPaper({ focusX: Number(e.target.value) })}
                 />
                 <span className="now">{pct(look.wallpaper.focusX)}</span>
@@ -456,6 +463,8 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                   step={0.05}
                   value={look.wallpaper.focusY}
                   disabled={!crop.y}
+                  data-action="appearance.background"
+                  data-value="focus-y"
                   onChange={(e) => setPaper({ focusY: Number(e.target.value) })}
                 />
                 <span className="now">{pct(look.wallpaper.focusY)}</span>
@@ -483,7 +492,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="seg" data-text role="group" aria-label={t("文字粗细")}>
             {WEIGHTS.map(([id, name, why]) => (
-              <button key={id || "auto"} aria-pressed={weight === id} title={t(why)} onClick={() => onWeight(id)}>
+              <button key={id || "auto"} data-action="appearance.weight" data-value={id || "auto"} aria-pressed={weight === id} title={t(why)} onClick={() => onWeight(id)}>
                 {t(name)}
               </button>
             ))}
@@ -500,7 +509,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="seg" data-text role="group" aria-label={t("文字对比度")}>
             {CONTRASTS.map(([id, name, why]) => (
-              <button key={id || "auto"} aria-pressed={contrast === id} title={t(why)} onClick={() => onContrast(id)}>
+              <button key={id || "auto"} data-action="appearance.contrast" data-value={id || "auto"} aria-pressed={contrast === id} title={t(why)} onClick={() => onContrast(id)}>
                 {t(name)}
               </button>
             ))}
@@ -517,7 +526,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <div className="grp-items">
           <div className="seg" data-text role="group" aria-label={t("明暗")}>
             {SCHEMES.map(([id, name]) => (
-              <button key={id} aria-pressed={theme === id} onClick={() => onTheme(id)}>
+              <button key={id} data-action="appearance.scheme" data-value={id} aria-pressed={theme === id} onClick={() => onTheme(id)}>
                 {t(name)}
               </button>
             ))}
@@ -589,7 +598,9 @@ function FontPick({
           placeholder={options.length ? t("默认 · 本机有 {n} 个可选", { n: options.length }) : t("默认")}
           spellCheck={false}
           autoComplete="off"
-          onChange={(e) => onPick(e.target.value)}
+          data-action="appearance.font"
+        data-target={slot}
+        onChange={(e) => onPick(e.target.value)}
         />
         <datalist id={list}>
           {options.map((f) => (
@@ -597,7 +608,7 @@ function FontPick({
           ))}
         </datalist>
         {value && (
-          <button className="nowbtn" onClick={() => onPick("")} title={t("回到默认字体")}>
+          <button className="nowbtn" data-action="appearance.font" data-target={slot} data-value="default" onClick={() => onPick("")} title={t("回到默认字体")}>
             {t("清除")}
           </button>
         )}
