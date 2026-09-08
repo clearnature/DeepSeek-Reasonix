@@ -48,8 +48,14 @@ export interface UIAction {
 }
 
 export const ACTIONS: UIAction[] = [
-  // ── The chrome: identity, and the two switches always on screen ──────────
+  // ── The window's own switches, and the way into the turn's policy ────────
+  // chrome.preset keeps the id it was registered under when the preset still
+  // lived in the title bar: where a control is drawn is not its identity,
+  // which is why the settings sheet has always rendered it too. The composer's
+  // panel renders it beside reasoning.effort and tool-approval.mode, which the
+  // settings sheet already owned — one question, three ids that already exist.
   { id: "chrome.preset", kind: "kernel-mutation", target: "none", proof: "interaction" },
+  { id: "chrome.policy", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.focus", kind: "view", target: "none", proof: "browser" },
   { id: "chrome.settings", kind: "navigation", target: "none", proof: "interaction" },
   { id: "chrome.theme", kind: "view", target: "none", proof: "browser" },

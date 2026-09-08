@@ -8,9 +8,6 @@ export interface MenuItem {
   right?: string;
   plain?: boolean;
   divide?: boolean;
-  // 有档位的选项在行尾画出它的刻度，和输入框上那个电平是同一件事 —— 打开菜单
-  // 看到的就是一道从低到高的色阶，而不是六个一样的词。
-  meter?: number;
   // A group caption. It labels the rows under it and cannot be chosen, so it
   // is not a button — a menu whose headings take focus is a menu you arrow
   // through twice.
@@ -30,9 +27,13 @@ interface Props {
   place: "top" | "bottom";
   className?: string;
   title?: string;
+  // The choice already made is being applied and has not landed. Marked on the
+  // trigger alone: whatever else is on that shelf is still the reader's to
+  // change while this one waits.
+  pending?: boolean;
 }
 
-export function Picker({ label, items, current, onPick, place, className, title }: Props) {
+export function Picker({ label, items, current, onPick, place, className, title, pending }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const wrap = useRef<HTMLDivElement>(null);
@@ -111,6 +112,7 @@ export function Picker({ label, items, current, onPick, place, className, title 
         className={className}
         aria-haspopup="menu"
         aria-expanded={open}
+        data-pending={pending ? "" : undefined}
         title={title}
         onClick={() => setOpen((v) => !v)}
       >
@@ -160,11 +162,6 @@ export function Picker({ label, items, current, onPick, place, className, title 
                   <span className="lb">{it.label}</span>
                   {it.desc && <span className="ds">{it.desc}</span>}
                 </span>
-                {it.meter !== undefined && (
-                  <span className="bars mi-bars" data-lv={it.meter} aria-hidden="true">
-                    <i /><i /><i /><i /><i />
-                  </span>
-                )}
                 {it.right && <span className="rt">{it.right}</span>}
               </button>
             )}

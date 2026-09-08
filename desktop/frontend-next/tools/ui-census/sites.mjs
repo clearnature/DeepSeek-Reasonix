@@ -11,7 +11,7 @@ const CTL = new Set(["Switch", "Menu"]);
 // As two literals these matched only when the census ran on `src` from the
 // package root: scanning a copy elsewhere silently counted the primitives' own
 // handlers as three extra interaction roots.
-const PRIMITIVES = new Set(["Switch.tsx", "Menu.tsx"].map((f) => join(SRC, "ui", f)));
+const PRIMITIVES = new Set(["Switch.tsx", "Menu.tsx", "Seg.tsx"].map((f) => join(SRC, "ui", f)));
 // Callees whose implementation is outside the module graph: the platform. Not
 // a list of helpers believed pure — those are decided by the fixpoint.
 const PLATFORM = /^(String|Number|Boolean|Object|Array|JSON|Math|Date|Promise|Set|Map|console|window|document|navigator|localStorage|sessionStorage|requestAnimationFrame|cancelAnimationFrame|setTimeout|clearTimeout|setInterval|clearInterval|structuredClone|encodeURIComponent|decodeURIComponent|alert|confirm|prompt|matchMedia|getComputedStyle|URL|Blob|FileReader|IntersectionObserver|ResizeObserver|MutationObserver|AbortController|crypto|performance|queueMicrotask|isNaN|parseInt|parseFloat)$/;

@@ -195,8 +195,12 @@ export const EN: Record<string, string> = {
   "发送": "Send",
   "描述一个任务，回车发送…　/ 调用命令与技能，@ 引用文件": "Describe a task and press Enter…　/ for commands and skills, @ to reference files",
   "知道了": "Got it",
-  "强度": "Effort",
-  "批准": "Approvals",
+  // 输入框：这一轮怎么跑
+  "本轮执行策略": "How this turn runs",
+  "这一轮怎么跑：执行方式、思考强度、工具权限": "How this turn runs: execution, effort, tool permissions",
+  "执行方式": "Execution",
+  "思考强度": "Effort",
+  "工具权限": "Tool permissions",
   // 输入框：拖进来与粘贴
   "松手 → 附上 {n} 张图": "Release to attach {n} images",
   "松手 → 附上 {a} 张图，引用 {r} 个文件": "Release to attach {a} images and reference {r} files",

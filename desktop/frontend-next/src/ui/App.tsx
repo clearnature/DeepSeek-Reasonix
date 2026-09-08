@@ -455,12 +455,6 @@ export function App({ hub }: { hub: HubPort }) {
   // while a turn runs — so approving mode, preset and model all changed on disk
   // while the screen went on showing what they were when it opened.
   const [settingsPulse, setSettingsPulse] = useState(0);
-  // The chrome's own controls change this session's posture — its preset, its
-  // plan mode. Nothing about the pane list or the account moved, so reloading
-  // those left the button showing the posture it had when the window opened.
-  // What has to hear about it is the pane holding that fact.
-  const onSessionSettingChanged = useCallback(() => setSettingsPulse((n) => n + 1), []);
-
   const onSettingsChanged = useCallback(() => {
     reloadAccount();
     setSettingsPulse((n) => n + 1);
@@ -562,7 +556,6 @@ export function App({ hub }: { hub: HubPort }) {
         theme={theme}
         onTheme={setTheme}
         onSettings={showPrefs}
-        onChanged={onSessionSettingChanged}
         account={account}
         focus={focus}
         onFocus={() => setFocus((v) => !v)}

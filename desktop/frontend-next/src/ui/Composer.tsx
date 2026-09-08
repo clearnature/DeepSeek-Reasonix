@@ -1,22 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t } from "../i18n";
-import type { AgentPort, ApprovalMode, ModelEntry, SessionStatus, Attachment } from "../port/port";
+import type { AgentPort, ModelEntry, SessionStatus, Attachment } from "../port/port";
 import { Picker } from "./Menu";
+import { Policy } from "./Policy";
 import { modelMenu } from "./modelmenu";
 import { CompletionMenu, useCompletion } from "./Completion";
 import { useIme } from "./ime";
 import { countLines, pasteIsLong, planTone, planVerb } from "./intake";
 import { useIntake } from "./useIntake";
 import type { Dropped } from "./filedrop";
-
-// 从紧到松排，和闸门环的缺口一个方向。「不打扰」在内核是 permission.Deny：
-// 它比「询问」更严，不是更松 —— 排在询问前面才不会被读反。
-const APPROVALS: [ApprovalMode, string, string][] = [
-  ["dontAsk", "不打扰", "不弹审批；要批准才能做的一概不做。"],
-  ["ask", "询问", "每次动手前问你。"],
-  ["auto", "自动", "低风险自己过，写操作仍然问。"],
-  ["yolo", "全放行", "不问了。只在你完全信任这个工作区时用。"],
-];
 
 // Only the ladder the kernel would accept for the model in hand. A fixed list
 // here offered rungs a given model does not have, and picking one looked like
@@ -35,11 +27,6 @@ function effortsFor(models: ModelEntry[], ref?: string): string[] {
   if (model) return model.efforts ?? [];
   return EFFORT_FALLBACK;
 }
-
-// 强度是有序的，批准是有序的 —— 一排全等的胶囊把这件事藏了起来。两个刻度把
-// 它画回来：几格电平表示这一轮想得多深，环的缺口表示闸门开了多大。
-const LEVEL: Record<string, number> = { auto: 0, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
-const GATE: Record<ApprovalMode, number> = { dontAsk: 0, ask: 1, auto: 2, yolo: 3 };
 
 interface Props {
   port: AgentPort;
@@ -97,7 +84,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
   const [shots, setShots] = useState<Chip[]>([]);
   const picker = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelEntry[]>([]);
-  const [switching, setSwitching] = useState(false);
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
   const box = useRef<HTMLTextAreaElement>(null);
   // Set only when a completion moved the caret: the browser puts it at the end
   // of a programmatic value, which is wrong for anything accepted mid-line.
@@ -260,15 +247,15 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
     onReceive: receive,
   });
 
-  const apv = status?.toolApprovalMode ?? "ask";
-  const eff = status?.effort || "auto";
   const efforts = effortsFor(models, status?.modelRef);
   const modelLb = status?.modelRef?.split("/").pop() ?? status?.label ?? "—";
   // Every one of these rebuilds the runtime kernel-side (~0.4s on a real
-  // session). Without a pending state the click reads as a dead control.
-  const change = (p: Promise<void>) => {
-    setSwitching(true);
-    void p.then(onChanged).catch(onError).finally(() => setSwitching(false));
+  // session). Without a pending state the click reads as a dead control —— 而
+  // 等的是哪一个就只标哪一个：一整排一起变灰，说的是「现在什么都不能改」，
+  // 而实际上只有这一个在等内核回话。
+  const change = (key: string, p: Promise<void>) => {
+    setBusy((b) => ({ ...b, [key]: true }));
+    void p.then(onChanged).catch(onError).finally(() => setBusy((b) => ({ ...b, [key]: false })));
   };
 
   return (
@@ -433,7 +420,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
             }
             if (e.key === "Tab" && e.shiftKey) {
               e.preventDefault();
-              change(port.setPlanMode(!status?.plan));
+              change("plan", port.setPlanMode(!status?.plan));
             }
           }}
         />
@@ -441,7 +428,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
           {text.length || ""}
         </span>
       </div>
-      <div className="row" data-busy={switching ? "" : undefined}>
+      <div className="row">
         {/* 拖进来和粘贴都走同一条路，但那两个都得先有一张图在手边。点开系统
             选择器是唯一不需要预备动作的入口。 */}
         <input
@@ -478,7 +465,8 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
           title={status?.modelRef ?? modelLb}
           current={status?.modelRef}
           items={modelMenu(models)}
-          onPick={(ref) => change(port.setModel(ref))}
+          pending={busy["model"]}
+          onPick={(ref) => change("model", port.setModel(ref))}
           label={
             <>
               <span className="dot" aria-hidden="true" />
@@ -486,35 +474,13 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
             </>
           }
         />
-        {/* An endpoint that names no levels gets no control: a picker whose
-            every rung is refused downstream reads as a dead one. */}
-        {efforts.length > 0 && (
-          <>
-            <span className="sep" aria-hidden="true" />
-            <Picker
-              className="mode plain"
-              place="bottom"
-              current={eff}
-              items={efforts.map((v) => ({ value: v, label: v, meter: LEVEL[v] }))}
-              onPick={(v) => change(port.setEffort(v))}
-              label={
-                <>
-                  <span className="bars" data-lv={LEVEL[eff] ?? 0} aria-hidden="true">
-                    <i /><i /><i /><i /><i />
-                  </span>
-                  <span className="lb">{t("强度")}</span>
-                  {/* key 让值换一次就重挂载一次 —— 这是那半秒里唯一能看出「改动生效了」的地方 */}
-                  <span className="vl" data-lv={LEVEL[eff] ?? 0} key={eff}>{eff}</span>
-                </>
-              }
-            />
-          </>
-        )}
+        <span className="sep" aria-hidden="true" />
         <button
           className="mode tog"
           data-action="plan.mode"
+          data-pending={busy["plan"] ? "" : undefined}
           aria-pressed={status?.plan ?? false}
-          onClick={() => change(port.setPlanMode(!status?.plan))}
+          onClick={() => change("plan", port.setPlanMode(!status?.plan))}
         >
           <span className="ic" aria-hidden="true">
             <svg viewBox="0 0 16 16">
@@ -532,34 +498,18 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
             <span className="lb">{t("执行计划中")}</span>
           </span>
         )}
-        <Picker
-          className={apv === "yolo" ? "mode plain danger" : "mode plain"}
-          place="bottom"
-          current={apv}
-          items={APPROVALS.map(([v, lb, ds]) => ({ value: v, label: t(lb), desc: t(ds) }))}
-          onPick={(v) => change(port.setApprovalMode(v as ApprovalMode))}
-          label={
-            <>
-              <span className="gate" data-g={GATE[apv]} aria-hidden="true">
-                <svg viewBox="0 0 16 16">
-                  <circle cx="8" cy="8" r="4.4" pathLength={1} />
-                  {/* 闭合的环只说明「没开口」；一律不做还要再画一杠 */}
-                  <path className="bar" d="M5.4 8h5.2" />
-                </svg>
-              </span>
-              <span className="lb">{t("批准")}</span>
-              <span className="vl" data-g={GATE[apv]} key={apv}>
-                {t(APPROVALS.find(([m]) => m === apv)?.[1] ?? "")}
-              </span>
-            </>
-          }
-        />
+        {/* 执行方式、思考强度、工具权限说的是同一件事：这一轮怎么跑。它们原来
+            一个在窗口顶栏、两个在这里，要拼出下一轮会怎么执行得看两个地方。
+            模型和计划留在外面：一个是最常改也最认得出的选择，一个说的是这一轮
+            的意图，不是一项偏好。 */}
+        <span className="sep" aria-hidden="true" />
+        <Policy port={port} status={status} efforts={efforts} onChanged={onChanged} />
         <span className="go">
           <button
             className="btn send"
             data-primary
             data-action={running ? "session.stop" : "session.send"}
-            onClick={() => (running ? change(port.cancel()) : send())}
+            onClick={() => (running ? change("cancel", port.cancel()) : send())}
           >
             <span className="ic" aria-hidden="true">
               <svg className="i-send" viewBox="0 0 16 16">

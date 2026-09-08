@@ -36,7 +36,7 @@ const resolve = (from: string, spec: string) => {
 };
 // The controls whose own internals are not entry points: a person acts on the
 // call site that hands them a handler.
-const PRIMITIVES = new Set(["src/ui/Switch.tsx", "src/ui/Menu.tsx"]);
+const PRIMITIVES = new Set(["src/ui/Switch.tsx", "src/ui/Menu.tsx", "src/ui/Seg.tsx"]);
 const census = certifyRoots(sources, { skip: (p) => PRIMITIVES.has(p), resolve });
 
 const registered = new Set(ACTIONS.map((a) => a.id));

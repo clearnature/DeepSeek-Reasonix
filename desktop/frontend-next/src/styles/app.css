@@ -195,7 +195,6 @@
   [data-titlebar="app"] .chrome { --wails-draggable: drag; -webkit-app-region: drag }
   [data-titlebar="app"] .chrome button,
   [data-titlebar="app"] .chrome .picker,
-  [data-titlebar="app"] .chrome .themer { --wails-draggable: no-drag; -webkit-app-region: no-drag }
   /* macOS floats its lights over the corner at a y AppKit owns — measured centre
      25.5px, which is the platform's own unified-toolbar metric. The row matches
      that height rather than the spec's 39px, or the lights sit 6px below the
@@ -332,7 +331,6 @@
   .mi .lb { display: block; font: var(--w-med) 12.5px var(--ui); color: var(--text) }
   .mi .ds { display: block; margin-top: 2px; font: var(--w-reg) 11.5px/1.5 var(--ui); color: var(--muted) }
   .mi .rt { margin-left: auto; padding-left: 10px; font: var(--w-reg) 10.5px var(--mono); color: var(--faint); white-space: nowrap; flex: none }
-  .mi .mi-bars { margin: 5px 0 0 auto; padding-left: 16px; box-sizing: content-box }
   .mi[data-on] .rt { color: var(--accent-ink) }
   .menu .div { height: 1px; margin: 5px 4px; background: var(--hair) }
   .mi.plain .lb { font-weight: var(--w-reg); color: var(--muted) }
@@ -432,59 +430,9 @@
     color: var(--muted); font: var(--w-med) 11.5px var(--mono);
     transition: color .15s; animation: modeval .34s var(--ease-spring);
   }
-  .mode .vl[data-g] { font-size: 11px; font-family: var(--ui) }
   .mode:hover .lb, .mode[aria-expanded="true"] .lb { color: var(--muted) }
   .mode:hover .vl, .mode[aria-expanded="true"] .vl { color: var(--text) }
-  /* 默认值该安静，调离默认才该被看见 —— 分量跟着它真实的代价走 */
-  .mode .vl[data-lv="1"], .mode .vl[data-lv="2"], .mode .vl[data-g="0"] { color: var(--text) }
-  .mode .vl[data-lv="3"] { color: var(--net) }
-  .mode .vl[data-lv="4"], .mode .vl[data-lv="5"] { color: var(--accent-ink) }
-  .mode .vl[data-g="2"] { color: var(--net) }
   @keyframes modeval { from { opacity: 0; transform: translateY(2.5px) } to { opacity: 1; transform: none } }
-
-  /* 电平：想得多深是有档的，就该画成有档的样子。auto 那档一格不亮，改由一道
-     很慢的波从左扫到右 —— 意思是这个数不是你定的。 */
-  .bars { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 9px; flex: none }
-  .bars i {
-    width: 2px; border-radius: var(--r-xs); background: var(--ghost); opacity: .42;
-    transition: opacity .22s var(--ease-out), background-color .22s;
-  }
-  .bars i:nth-child(1) { height: 3px }
-  .bars i:nth-child(2) { height: 4.5px }
-  .bars i:nth-child(3) { height: 6px }
-  .bars i:nth-child(4) { height: 7.5px }
-  .bars i:nth-child(5) { height: 9px }
-  /* 升档时逐格点亮（延迟只挂在点亮那一侧，所以降档是一起灭的） */
-  .bars i:nth-child(2) { transition-delay: .05s }
-  .bars i:nth-child(3) { transition-delay: .1s }
-  .bars i:nth-child(4) { transition-delay: .15s }
-  .bars i:nth-child(5) { transition-delay: .2s }
-  .bars[data-lv="1"] i:nth-child(-n+1),
-  .bars[data-lv="2"] i:nth-child(-n+2) { opacity: 1; background: var(--muted) }
-  .bars[data-lv="3"] i:nth-child(-n+3) { opacity: 1; background: var(--net) }
-  .bars[data-lv="4"] i:nth-child(-n+4),
-  .bars[data-lv="5"] i:nth-child(-n+5) { opacity: 1; background: var(--accent) }
-  /* auto 一格不亮 —— 一直在动的默认态是噪音，那道波只在你摸上去时走一次 */
-  .mode:hover .bars[data-lv="0"] i { animation: barwave 1.3s var(--ease) }
-  @keyframes barwave { 0%, 62%, 100% { opacity: .42 } 22% { opacity: .85 } }
-
-  /* 闸门：批准挡掉多少，就画成环缺多大一个口。最紧那档是闭环加一杠 —— 不是
-     「没开口」，是「一律不做」，两件事不能长一个样。 */
-  .gate { display: grid; place-items: center; width: 12px; height: 12px; flex: none }
-  .gate svg { width: 12px; height: 12px; transform: rotate(-90deg) }
-  .gate circle {
-    fill: none; stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round;
-    stroke-dasharray: 1; stroke-dashoffset: 0;
-    transition: stroke-dashoffset .42s var(--ease-out), stroke .22s;
-  }
-  .gate .bar {
-    fill: none; stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round;
-    transform: scaleX(0); transform-origin: center;
-    transition: transform .34s var(--ease-spring), stroke .22s;
-  }
-  .gate[data-g="0"] .bar { transform: none }
-  .gate[data-g="2"] circle { stroke: var(--net); stroke-dashoffset: .24 }
-  .gate[data-g="3"] circle { stroke: var(--err); stroke-dashoffset: .68 }
 
   .mode .ic { display: grid; place-items: center; width: 12px; height: 12px; flex: none }
   .mode .ic svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round }
@@ -539,15 +487,7 @@
   .thbtn[data-th="dark"] .t-dark { display: inline; fill: currentColor }
 
   /* 分段控件只留给「三档之间没有优劣」的单选，比如执行设定 */
-  .themer { display: inline-flex; padding: 2px; gap: 2px; background: var(--overlay); border: 1px solid var(--border); border-radius: var(--r-sm); }
-  .themer button { padding: 3px 9px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--faint); font: var(--w-med) 11px var(--ui); cursor: pointer; }
-  .themer button:hover { color: var(--text); }
-  .themer button[aria-pressed="true"] { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.1); }
-  .themer button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   /* 请求发出去了、内核还没回答：既不能装作已经切换，也不能一点反应都没有 */
-  .themer button:disabled { cursor: default }
-  .themer button:disabled:not([data-asking]) { color: var(--ghost) }
-  .themer button[data-asking] { color: var(--text); box-shadow: inset 0 -1.5px 0 var(--accent) }
 
   .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--ghost); flex: none }
   @keyframes tick { 0%, 100% { opacity: .3 } 50% { opacity: 1 } }
@@ -2296,18 +2236,40 @@
      关在里面，输入框自己的描边（.compose::after）会横穿过菜单。 */
   .compose .row > * { position: relative; z-index: 1; animation: rowin .32s var(--ease-out) both }
   @keyframes rowin { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
-  /* A model/effort switch rebuilds the runtime; keep the row live-looking but
-     uninteractive rather than letting a second click queue another rebuild. */
-  .compose .row[data-busy] { pointer-events: none }
-  .compose .row[data-busy] > * { opacity: .5; transition: opacity .12s }
+  /* A model switch rebuilds the runtime; keep the control live-looking but
+     uninteractive rather than letting a second click queue another rebuild.
+     只标在等的那一个上：整排一起变灰说的是「现在什么都不能改」，而那从来
+     不是真的 —— 另外几个仍然是你的。 */
+  .compose .row [data-pending] { pointer-events: none; opacity: .5; transition: opacity .12s }
   /* 那半秒不该看着像死了：一道光扫过这排，说明改动正在生效 */
-  .compose .row[data-busy]::after {
+  .compose .row:has([data-pending])::after {
     content: ""; position: absolute; left: 0; right: 0; bottom: -7px; height: 1px;
     background: linear-gradient(90deg, transparent, var(--net), transparent);
     background-size: 34% 100%; background-repeat: no-repeat;
     animation: rowsweep 1.1s linear infinite;
   }
   @keyframes rowsweep { from { background-position: -34% 0 } to { background-position: 134% 0 } }
+
+  /* ── 这一轮怎么跑 ────────────────────────────────────────────────────────
+     执行方式、思考强度、工具权限是同一个问题的三个变量，所以画在一块面板里；
+     内核那边它们是三个独立的 effect，所以各自等、各自被拒。槽本身用树里已有
+     的 .seg —— 设置页画的就是这同样三个字段，两处不该长得不一样。 */
+  .policy .vl { font-family: var(--ui); font-size: 11.5px; animation: polval .12s var(--ease-out) both }
+  @keyframes polval { from { opacity: 0 } to { opacity: 1 } }
+  /* 开合是一整块面板就地展开，比换地方的菜单短。右对齐：这颗按钮挨着发送，
+     左对齐会把 300px 的面板推出窗口右缘。 */
+  .polmenu {
+    min-width: 296px; padding: 13px 14px 12px; left: auto; right: 0;
+    display: flex; flex-direction: column; gap: 16px;
+    transform-origin: bottom right; transition-duration: .2s;
+  }
+  .segf { display: flex; flex-direction: column; gap: 7px }
+  .seglb { font: var(--w-med) 10px var(--mono); letter-spacing: var(--track-cap); text-transform: uppercase; color: var(--faint) }
+  .polmenu .note { margin: 0; font: var(--w-reg) 11px/1.6 var(--ui); color: var(--faint) }
+  .polmenu .note.segbad { color: var(--err) }
+  /* 问出去了还没回话：不整组变灰，只在那一档下面压一条线。 */
+  .seg button[data-asking] { color: var(--text); box-shadow: inset 0 -1.5px 0 var(--accent) }
+  .seg button:disabled:not([data-asking]) { color: var(--ghost) }
   /* 两个图标叠在同一格里交叉旋入，按钮不跳宽 */
   .btn.send { display: inline-flex; align-items: center; gap: 6px; position: relative; overflow: hidden }
   /* One sweep across the primary button on hover. It is the end of a sentence,
@@ -2810,7 +2772,7 @@
     .reload, .reload .rdot, .rnote { animation: none !important }
     .pane[data-run="done"] .rmark { animation: none !important; filter: none !important }
     .bar .c::after { display: none }
-    .bars i, .mode .vl, .mode.danger::before, .mode.tog .ic path,
+    .mode .vl, .mode.danger::before, .mode.tog .ic path,
     .compose .row > *, .call[data-running] > .g .sym,
     .app[data-run="running"] .sessrow[data-on][data-live] .pip { animation: none !important }
     /* The down marker says "receiving" through that breath alone, so stopping the
@@ -2824,7 +2786,7 @@
     /* 动画停了，「正在跑」这件事还得说 —— 换成不动的实心表达 */
     .call[data-running] > .g .line { background: color-mix(in srgb, var(--net) 55%, var(--hair)) }
     /* 扫过去的那道光停下来就看不见了，换成一整条静止的线，「在生效」这句话还在 */
-    .compose .row[data-busy]::after { animation: none; background: var(--net); opacity: .5 }
+    .compose .row:has([data-pending])::after { animation: none; background: var(--net); opacity: .5 }
     .scroll { scroll-behavior: auto }
     * { transition-duration: .01ms !important }
   }
@@ -5689,7 +5651,6 @@
    手写 nth-child 链的问题不是难看，是列表长度一变就得回来补规则。 */
 @supports (animation-delay: calc(sibling-index() * 1ms)) {
   .compose .row > *,
-  .mode:hover .bars[data-lv="0"] i,
   .fan > .slotbox .slot,
   .mgrp,
   .hits > *,
@@ -5697,7 +5658,6 @@
     animation-delay: calc((sibling-index() - 1) * var(--m-step));
   }
   .compose .row { --m-step: 30ms }
-  .mode .bars { --m-step: 80ms }
   .fan { --m-step: 40ms }
   .mgrp { --m-step: 50ms }
 }
