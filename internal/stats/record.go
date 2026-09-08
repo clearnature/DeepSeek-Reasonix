@@ -119,6 +119,8 @@ type CompactionRecord struct {
 	Results      int     `json:"results,omitempty"`
 	SavedChars   int     `json:"saved_chars,omitempty"`
 	PrefHash     string  `json:"pref_hash,omitempty"`
+	PrefLen      int     `json:"pref_len,omitempty"` // messages the summary prefix carries
+	WireLen      int     `json:"wire_len,omitempty"` // messages the frozen wire unit carries
 	SummaryInput string  `json:"summary_input,omitempty"`
 }
 

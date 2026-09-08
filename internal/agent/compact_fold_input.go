@@ -82,6 +82,10 @@ func (a *Agent) fillCompactionWireTelemetry(tele *CompactionTelemetry, prefix, f
 	tele.ViewFP = providerVisibleFingerprint(modelInputMessages(view))
 	tele.WireFP = a.sess.wireFP()
 	tele.PrefixHash = summarizePrefixHash(prefix)
+	tele.PrefLen = len(prefix)
+	if saved := a.savedMainRequest(); saved != nil {
+		tele.WireLen = len(saved.messages)
+	}
 	if schemas, source := a.summaryToolsSource(); source != "none" {
 		tele.ToolsCount = len(schemas)
 		tele.ToolsFP = toolsFingerprint(schemas)

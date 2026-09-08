@@ -195,6 +195,8 @@ type CompactionTelemetry struct {
 	ToolsFP           string `json:"tools_fp,omitempty"`
 	ToolsSource       string `json:"tools_source,omitempty"` // frozen | live | none
 	PrefixHash        string `json:"pref_hash,omitempty"`    // summarize-prefix fingerprint (drift vs expiry)
+	PrefLen           int    `json:"pref_len,omitempty"`     // messages the summary prefix carries
+	WireLen           int    `json:"wire_len,omitempty"`     // messages the frozen wire unit carries
 	Error             string `json:"error,omitempty"`
 }
 

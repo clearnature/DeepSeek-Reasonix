@@ -138,10 +138,11 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 // Every key here must have a matching case in internal/stats/recorder.go;
 // compaction_telemetry_guard_test.go fails the build when one side drifts.
 func compactionDetailString(t CompactionTelemetry) string {
-	detail := fmt.Sprintf("trigger=%s mode=%s summary_input=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d view_fp=%s wire_fp=%s tools_count=%d tools_fp=%s tools_source=%s pref_hash=%s",
+	detail := fmt.Sprintf("trigger=%s mode=%s summary_input=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d view_fp=%s wire_fp=%s tools_count=%d tools_fp=%s tools_source=%s pref_hash=%s pref_len=%d wire_len=%d",
 		t.Trigger, t.Mode, t.SummaryInputMode, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount,
-		t.UserTurnsKept, t.UserTurnsDropped, t.ViewFP, t.WireFP, t.ToolsCount, t.ToolsFP, t.ToolsSource, t.PrefixHash)
+		t.UserTurnsKept, t.UserTurnsDropped, t.ViewFP, t.WireFP, t.ToolsCount, t.ToolsFP, t.ToolsSource, t.PrefixHash,
+		t.PrefLen, t.WireLen)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}

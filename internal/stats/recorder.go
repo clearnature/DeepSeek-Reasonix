@@ -330,6 +330,10 @@ func setCompactionInt(rec *CompactionRecord, key, val string) {
 		rec.UserKept = n
 	case "user_dropped":
 		rec.UserDrop = n
+	case "pref_len":
+		rec.PrefLen = n
+	case "wire_len":
+		rec.WireLen = n
 	}
 }
 
