@@ -25,7 +25,11 @@ diff.
   A turn with nothing to fold is evidence about coverage, and dropping it would
   answer a different question and flatter the feature.
 - **Out**: turns written for this experiment, benchmark and fixture runs, and
-  anything shaped to call more tools than the work needed.
+  anything shaped to call more tools than the work needed. Enforced, not
+  merely stated: a workspace under a temp root is where a driven run lives, so
+  its sessions never enter the sample. Before that check the only thing keeping
+  a scripted run out was that it happened before the freeze, which says nothing
+  about the next one.
 - **No verdict before the sample is whole.** Under 20 the tool prints the count
   and stops.
 

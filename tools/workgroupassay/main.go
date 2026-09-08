@@ -29,8 +29,9 @@ type turn struct {
 func main() {
 	root := flag.String("root", "", "session root to scan (default: the configured one)")
 	flag.Parse()
-	dirs := scanRoots(*root)
+	dirs, scratch := scanRoots(*root)
 	turns, skipped := collect(dirs)
+	skipped.scratchWorkspaces = scratch
 	sort.Slice(turns, func(i, j int) bool {
 		if !turns[i].at.Equal(turns[j].at) {
 			return turns[i].at.Before(turns[j].at)
@@ -40,47 +41,91 @@ func main() {
 	report(turns, skipped)
 }
 
-func scanRoots(root string) []string {
+func scanRoots(root string) ([]string, int) {
 	if strings.TrimSpace(root) != "" {
-		return []string{root}
+		return []string{root}, 0
 	}
+	projects, scratch := projectSessionDirs()
 	seen := map[string]bool{}
 	var out []string
-	for _, d := range append([]string{config.SessionDir()}, projectSessionDirs()...) {
+	for _, d := range append([]string{config.SessionDir()}, projects...) {
 		if d != "" && !seen[d] {
 			seen[d] = true
 			out = append(out, d)
 		}
 	}
-	return out
+	return out, scratch
 }
 
 // projectSessionDirs finds the per-project session directories a Studio window
-// writes into, which is where ordinary use lands.
-func projectSessionDirs() []string {
+// writes into. Workspaces under a temp root are left out: a run driven from a
+// scratch directory is an experiment, and the protocol excludes those by
+// construction rather than by hoping none happen after the freeze.
+func projectSessionDirs() ([]string, int) {
 	home := config.ReasonixHomeDir()
 	if home == "" {
-		return nil
+		return nil, 0
 	}
 	entries, err := os.ReadDir(filepath.Join(home, "projects"))
 	if err != nil {
-		return nil
+		return nil, 0
 	}
+	scratch := scratchSlugs()
 	var out []string
+	skipped := 0
 	for _, e := range entries {
-		if e.IsDir() {
-			out = append(out, filepath.Join(home, "projects", e.Name(), "sessions"))
+		if !e.IsDir() {
+			continue
+		}
+		if underScratch(e.Name(), scratch) {
+			skipped++
+			continue
+		}
+		out = append(out, filepath.Join(home, "projects", e.Name(), "sessions"))
+	}
+	return out, skipped
+}
+
+// scratchSlugs is what a session directory's name starts with when its
+// workspace lives under a temp root. Built with the host's own slug function,
+// so this reads the encoding the host wrote rather than guessing at names.
+func scratchSlugs() []string {
+	var out []string
+	for _, root := range []string{os.TempDir(), "/tmp", "/private/tmp"} {
+		for _, p := range []string{root, resolved(root)} {
+			if abs, err := filepath.Abs(p); err == nil && abs != "" && abs != string(filepath.Separator) {
+				if slug := config.WorkspaceSlug(abs); slug != "" {
+					out = append(out, slug)
+				}
+			}
 		}
 	}
 	return out
 }
 
+func resolved(path string) string {
+	if p, err := filepath.EvalSymlinks(path); err == nil {
+		return p
+	}
+	return path
+}
+
+func underScratch(name string, slugs []string) bool {
+	for _, s := range slugs {
+		if strings.HasPrefix(name, s) {
+			return true
+		}
+	}
+	return false
+}
+
 // skipReasons counts what the protocol turned away, so a small sample can say
 // why rather than look like nothing happened.
 type skipReasons struct {
-	beforeFreeze  int
-	truncatedLogs int
-	unnamedTurns  int
+	beforeFreeze      int
+	truncatedLogs     int
+	unnamedTurns      int
+	scratchWorkspaces int
 }
 
 func collect(dirs []string) ([]turn, skipReasons) {
@@ -183,8 +228,10 @@ func report(turns []turn, skipped skipReasons) {
 	fmt.Printf("  protocol frozen at %s; sample is the first %d eligible authored turns after it\n",
 		frozenAt, sampleSize)
 	fmt.Printf("  eligible so far: %d\n", len(turns))
-	fmt.Printf("  turned away: %d session(s) before the freeze, %d truncated, %d unnamed turns\n",
+	fmt.Printf("  turned away: %d session(s) before the freeze, %d truncated, %d unnamed turns,\n",
 		skipped.beforeFreeze, skipped.truncatedLogs, skipped.unnamedTurns)
+	fmt.Printf("               %d workspace(s) under a temp root — experiments, not ordinary use\n",
+		skipped.scratchWorkspaces)
 	if len(turns) < sampleSize {
 		fmt.Printf("\nNo result yet. %d more eligible authored turn(s) are owed.\n", sampleSize-len(turns))
 		fmt.Printf("Reading a partial sample is the sequential decision this protocol exists to prevent,\n")

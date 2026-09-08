@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"reasonix/internal/config"
 	"reasonix/internal/event"
 	"reasonix/internal/eventwire"
 	"reasonix/internal/workgroup"
@@ -131,4 +132,40 @@ func TestOnlyNamedTurnsInACompleteLogAreEligible(t *testing.T) {
 	if !truncated(path) {
 		t.Fatal("a log whose witness says truncated was read as complete")
 	}
+}
+
+// The protocol says the natural sample excludes experiments. Saying it is not
+// enough: before this, the only thing keeping a scripted run out was that it
+// happened before the freeze, which says nothing about the next one. A
+// workspace under a temp root is where a driven run lives, and the check reads
+// the host's own slug encoding rather than guessing at directory names.
+func TestWorkspacesUnderATempRootAreNotOrdinaryUse(t *testing.T) {
+	slugs := scratchSlugs()
+	if len(slugs) == 0 {
+		t.Fatal("no temp-root slugs were derived, so nothing would ever be excluded")
+	}
+	for _, tc := range []struct {
+		name    string
+		dir     string
+		scratch bool
+	}{
+		{"a driven run's workspace", config.WorkspaceSlug(filepath.Join(os.TempDir(), "assay", "ws")), true},
+		{"the system temp root itself", config.WorkspaceSlug(filepath.Join("/private/tmp", "run")), true},
+		{"a person's own project", config.WorkspaceSlug(filepath.Join(home(t), "projects", "thing")), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := underScratch(tc.dir, slugs); got != tc.scratch {
+				t.Fatalf("underScratch(%q) = %v, want %v", tc.dir, got, tc.scratch)
+			}
+		})
+	}
+}
+
+func home(t *testing.T) string {
+	t.Helper()
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory to build a non-temp path from")
+	}
+	return dir
 }
