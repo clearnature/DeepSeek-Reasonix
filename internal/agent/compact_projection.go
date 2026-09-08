@@ -431,10 +431,29 @@ func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int
 // foldSummaryWithChunkedFallback retries summary size failures through the
 // resilient fragment/tree-reduce path used for over-length sessions.
 func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger string, prefix, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
-	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
-	var ctxLimit *provider.ContextLimitError
-	if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired) && !errors.As(err, &ctxLimit)) {
+	// Pre-flight: a fold already over the safe prompt budget would 400 on the
+	// provider — go straight to the fragmenting path instead of burning the
+	// doomed single call. validateSafeSummaryRequest no-ops when enforcement
+	// is off (window-independent gateways keep the original request shape).
+	var res foldSummary
+	var tele CompactionTelemetry
+	var chunkedReason error
+	preflight := a.validateSafeSummaryRequest(fold, instructions)
+	if preflight == nil {
+		var err error
+		res, tele, err = a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
+		var ctxLimit *provider.ContextLimitError
+		if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired) && !errors.As(err, &ctxLimit)) {
+			return res, tele, err
+		}
+		chunkedReason = err
+	} else if len(fold) == 0 {
+		// Empty fold with an over-budget instruction set: single call is the
+		// only shape (instructions ride the prefix), so surface the rejection.
+		res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
 		return res, tele, err
+	} else {
+		chunkedReason = preflight
 	}
 	// When foldExtra is nil (view replay fits), the full fold region is in prefix.
 	chunkedInput := fold
@@ -452,7 +471,7 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 	}
 	if chunkedErr != nil {
 		tele = a.telemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked, nil, chunkedInput)
-		tele.Error = fmt.Sprintf("%v (chunked fallback: %v)", err, chunkedErr)
+		tele.Error = fmt.Sprintf("%v (chunked fallback: %v)", chunkedReason, chunkedErr)
 		return chunked, tele, chunkedErr
 	}
 	return chunked, a.telemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked, nil, chunkedInput), nil
