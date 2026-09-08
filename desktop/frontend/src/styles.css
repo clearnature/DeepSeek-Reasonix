@@ -26946,7 +26946,8 @@ body > .mermaid-diagram--fullscreen {
   max-width: 100%;
   overflow: hidden;
   color: var(--fg);
-  font-size: 16px;
+  /* 11px keeps long tiered durations ("3天12小时5分") on one line. */
+  font-size: 11px;
   font-weight: 680;
   line-height: 1.18;
   text-overflow: ellipsis;

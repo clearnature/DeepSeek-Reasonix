@@ -37,10 +37,13 @@ function fmtCompact(n: number): string {
 function fmtDuration(ms: number, t: ReturnType<typeof useI18n>['t']): string {
   if (ms <= 0) return "-";
   const totalSeconds = Math.max(1, Math.round(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes <= 0) return t("context.durationSeconds", { seconds });
-  return t("context.durationMinutesSeconds", { minutes, seconds });
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (days > 0) return t("context.durationDaysHoursMinutes", { days, hours, minutes });
+  if (hours > 0) return t("context.durationHoursMinutes", { hours, minutes });
+  if (minutes > 0) return t("context.durationMinutes", { minutes });
+  return t("context.durationSeconds", { seconds: totalSeconds });
 }
 
 export function ContextWindowRing({ enabled = true, context, tabId, turnCost, turnRateBand, currency, cacheHitTokens, cacheMissTokens, balance }: ContextWindowRingProps) {
