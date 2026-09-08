@@ -125,6 +125,10 @@ type TeammateStore struct {
 	autoCh     chan string
 	doneCh     chan struct{}
 	workerOnce sync.Once
+	// completionFn fires outside the lock after each teammate job reaches a
+	// terminal state (HandleJobDone): the leader digest round hooks here so
+	// completion feedback does not wait for the next user turn. Nil disables.
+	completionFn func(name string, status jobs.Status)
 }
 
 // NewTeammateStore wires a registry to the task tool that executes assignments.
@@ -783,6 +787,9 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 	}
 	if flipped != "" {
 		ts.checkGroupCompleted(flipped)
+	}
+	if ts.completionFn != nil && flipped != "" {
+		ts.completionFn(flipped, st)
 	}
 }
 

@@ -4,7 +4,7 @@
     "commented-code": 1,
     "complexity": 1946,
     "essay": 2107,
-    "file-size": 109837,
+    "file-size": 109814,
     "function-size": 8455,
     "layering": 2,
     "marker": 0,
@@ -428,7 +428,7 @@
     },
     "internal/agent/compact_projection.go": {
       "essay": 1,
-      "file-size": 121,
+      "file-size": 91,
       "function-size": 17
     },
     "internal/agent/context_manager.go": {
@@ -615,7 +615,7 @@
     },
     "internal/agent/teammate_store.go": {
       "essay": 28,
-      "file-size": 445,
+      "file-size": 452,
       "function-size": 45
     },
     "internal/agent/teammate_store_test.go": {
