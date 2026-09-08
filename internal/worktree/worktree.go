@@ -35,6 +35,33 @@ type Availability struct {
 	SourceDirty bool   `json:"sourceDirty,omitempty"`
 }
 
+// Remove tears down a managed worktree and its branch for the
+// enter_worktree/exit_worktree tool pair (qwen ExitWorktree remove analog).
+// It refuses unmanaged branches and is idempotent when the worktree or branch
+// is already gone.
+func Remove(ctx context.Context, sourceRoot, worktreeRoot, branch string) error {
+	sourceRoot = strings.TrimSpace(sourceRoot)
+	worktreeRoot = strings.TrimSpace(worktreeRoot)
+	branch = strings.TrimSpace(branch)
+	if sourceRoot == "" || worktreeRoot == "" || branch == "" {
+		return errors.New("remove needs sourceRoot, worktreeRoot and branch")
+	}
+	if !strings.HasPrefix(branch, "reasonix/") {
+		return fmt.Errorf("refuse to remove unmanaged branch %q", branch)
+	}
+	if _, stderr, err := runGit(ctx, sourceRoot, "worktree", "remove", "--force", worktreeRoot); err != nil {
+		if !strings.Contains(strings.ToLower(stderr), "is not a working tree") {
+			return fmt.Errorf("remove worktree: %w%s", err, stderrSuffix(stderr))
+		}
+	}
+	if _, stderr, err := runGit(ctx, sourceRoot, "branch", "-D", branch); err != nil {
+		if !strings.Contains(strings.ToLower(stderr), "not found") {
+			return fmt.Errorf("remove worktree branch %q: %w%s", branch, err, stderrSuffix(stderr))
+		}
+	}
+	return nil
+}
+
 // RollbackCreate removes a worktree and its branch only while they still match
 // the exact clean result returned by Create. Any user or Git mutation makes the
 // rollback fail closed and leaves the workspace available for recovery.

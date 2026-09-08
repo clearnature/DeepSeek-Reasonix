@@ -37,6 +37,10 @@ type Teammate struct {
 	// dedicated git worktree (team-<name> branch) so parallel writers never
 	// touch the main checkout. The worktree path doubles as the write token.
 	Worktree bool
+	// WorktreeRoot/WorktreeBranch record the active enter_worktree session so
+	// exit_worktree can keep or tear down the same checkout (qwen session).
+	WorktreeRoot   string
+	WorktreeBranch string
 }
 
 // TeammateState is the assignment lifecycle of a teammate.
