@@ -1534,7 +1534,7 @@
   .call[data-k="me"]    > .g .sym { background: var(--text); color: var(--surface) }
   /* 一轮从这里开始。滚回去找东西时这张卡是唯一的锚点，而它原来跟一次工具调用
      的头部一样轻。轮号刻意不写 —— 回退入口就在卡上，没有编号要用眼睛去对。 */
-  .call[data-k="me"] { margin-top: 20px }
+  .call[data-k="me"] { margin-top: 28px }
   .call[data-k="me"]::before {
     content: ""; grid-column: 1 / -1; height: 1px; margin-bottom: 12px; background: var(--hair);
   }
@@ -1542,6 +1542,23 @@
   .call[data-k="deleg"] > .g .line { background: color-mix(in srgb, var(--deleg) 30%, transparent) }
   .call[data-k="write"] > .g .line { background: color-mix(in srgb, var(--accent) 34%, transparent) }
   .call[data-k="ask"]   > .g .line { background: color-mix(in srgb, var(--accent) 55%, transparent) }
+
+  /* ── 四档份量 ────────────────────────────────────────────────────────────
+     一轮的锚点、最终的回答、中间做过的事、要你定的事。四者原来共用一张卡的
+     重量，一屏滚下来只能靠符号的颜色分辨。这里改的只是各自值多少地方 ——
+     成员不动，语义投影不动。 */
+
+  /* 回答是这一轮的产出，不是又一条时间线。--muted 是留给过程的，正文用
+     --text；符号退成一个记号，不再是一枚有环有底的按钮。正文仍然全铺（理由
+     见 .out .txt 上面那段），所以份量只能靠字色和留白来分。 */
+  .call[data-k="say"] > .g .sym { background: none; box-shadow: none }
+  .call[data-k="say"] > .c { padding: var(--y-panel) 0 }
+  .call[data-k="say"] > .c > .out > .txt { color: var(--text); line-height: 1.78 }
+
+  /* 中间做过的事是扫的，不是读的：一步一行，参数长了省略，而不是把这一行折成
+     两行 —— 折行让同一类卡在一屏里高矮不齐，层次就得逐张对齐才看得出来。
+     锚点、回答和要你定的事都还可以折：它们本来就是读的。 */
+  .call:not([data-k="me"], [data-k="say"], [data-k="ask"]) > .c > .hl { flex-wrap: nowrap }
 
   /* 份量不同，入场就不该相同：一行只淡入，一张卡带位移，一整块面板从上沿展开 */
   .term-l, .dl, .plan .s { animation: line var(--m-line) both }

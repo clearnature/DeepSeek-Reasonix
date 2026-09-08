@@ -78,6 +78,9 @@ export function ToolCard({
   // Which server answered belongs on the card, not in a panel: this is the
   // moment the user can judge whether an external service should have run.
   const from = mcpOrigin(shown);
+  // The interpreter that actually ran it, or the remote tool a capability call
+  // resolved to. Anything else the name already said.
+  const tag = tagFor(tool);
   // A delegated step is only auditable if it names the profile that ran: "a
   // subagent" is not a thing you can go read, "skill:security-review" is.
   const who = tool.profile?.name?.trim();
@@ -106,10 +109,12 @@ export function ToolCard({
       </div>
       <div className="c">
         <div className="hl" data-swap={settling.swap ? "" : undefined}>
-          <span className={running ? "nm shim" : "nm"}>{head}</span>
+          {/* 名字是给人读的，id 是给人查的。标签只在它说了名字没说的事时才占地方
+              （见 tagFor），所以精确的那个字符串挂在这里，一直够得着。 */}
+          <span className={running ? "nm shim" : "nm"} title={shown}>{head}</span>
           {who && <span className="who" title={t("按 {name} 这份技能的设定跑的子代理", { name: who })}>{who}</span>}
           {from && <span className="src" title={t("外部服务 {name} 提供的工具", { name: from.server })}>{from.server}</span>}
-          <span className="tag" title={tagHint(tool)}>{tagFor(tool)}</span>
+          {tag && <span className="tag" title={tagHint(tool)}>{tag}</span>}
           {arg && <span className={streaming ? "arg shim" : "arg"}>{arg}</span>}
           {bad && <span className="fail">{badLabel}</span>}
           <Cost tools={[tool]} />
@@ -183,6 +188,7 @@ export function ToolCard({
 
 function NestedCall({ tool }: { tool: Tool }) {
   const shown = tool.resolvedName || tool.name;
+  const tag = tagFor(tool);
   return (
     <div className="call" data-call={tool.id || undefined} data-k={KINDED.has(categoryOf(shown)) ? categoryOf(shown) : undefined}>
       <div className="g">
@@ -191,8 +197,8 @@ function NestedCall({ tool }: { tool: Tool }) {
       </div>
       <div className="c">
         <div className="hl">
-          <span className="nm">{labelFor(shown)}</span>
-          <span className="tag" title={tagHint(tool)}>{tagFor(tool)}</span>
+          <span className="nm" title={shown}>{labelFor(shown)}</span>
+          {tag && <span className="tag" title={tagHint(tool)}>{tag}</span>}
           {tool.args && <span className="arg">{shortArgs(tool.args)}</span>}
           <Cost tools={[tool]} />
         </div>
@@ -234,10 +240,13 @@ const childTokens = (kids: Tool[]) => kids.reduce((n, k) => n + (k.contextTokens
 // interpreter instead: the name above already says "Bash", and on a host without
 // one the command was actually handed to PowerShell — which is the difference
 // between a command that works and the same text failing on '&&'.
-const tagFor = (tool: Tool) => {
+// Nothing at all when the id is the very string the name above was derived
+// from: "Read" beside read_file is one fact printed twice, and it was on every
+// card in the record.
+const tagFor = (tool: Tool): string | null => {
   const ex = tool.execution;
   if (ex?.kind === "shell" && ex.shell) return ex.shell;
-  return mcpOrigin(tool.resolvedName || tool.name)?.tool ?? (tool.resolvedName || tool.name);
+  return mcpOrigin(tool.resolvedName || tool.name)?.tool ?? null;
 };
 
 const SHELL_HINT: Record<string, string> = {
