@@ -249,10 +249,12 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
 
   const efforts = effortsFor(models, status?.modelRef);
   const modelLb = status?.modelRef?.split("/").pop() ?? status?.label ?? "—";
-  // Every one of these rebuilds the runtime kernel-side (~0.4s on a real
-  // session). Without a pending state the click reads as a dead control —— 而
-  // 等的是哪一个就只标哪一个：一整排一起变灰，说的是「现在什么都不能改」，
-  // 而实际上只有这一个在等内核回话。
+  // A model switch rebuilds the runtime kernel-side (~0.4s on a real session);
+  // the other controls on this shelf may land immediately, and which is which
+  // is the kernel's to say, not this file's. Either way the click needs a
+  // pending state or it reads as a dead control —— 而等的是哪一个就只标哪一
+  // 个：一整排一起变灰，说的是「现在什么都不能改」，而实际上只有这一个在等
+  // 内核回话。
   const change = (key: string, p: Promise<void>) => {
     setBusy((b) => ({ ...b, [key]: true }));
     void p.then(onChanged).catch(onError).finally(() => setBusy((b) => ({ ...b, [key]: false })));
