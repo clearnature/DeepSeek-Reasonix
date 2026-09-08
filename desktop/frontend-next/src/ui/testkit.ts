@@ -30,3 +30,10 @@ globalThis.matchMedia ??= ((query: string) =>
     removeEventListener() {},
     dispatchEvent: () => false,
   }) as MediaQueryList) as typeof globalThis.matchMedia;
+
+// jsdom has no scrolling, so it implements none of the methods that ask for
+// it. Left out, a tab strip keeping the selected tab in view throws inside a
+// requestAnimationFrame — outside React, where it is reported as an unhandled
+// error the file still passes with, which is exactly how a real one would go
+// unnoticed later.
+Element.prototype.scrollIntoView ??= function scrollIntoView() {};

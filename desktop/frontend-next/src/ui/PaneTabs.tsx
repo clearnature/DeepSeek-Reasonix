@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { RuntimeView } from "../port/hub";
 import { arrowTabs } from "./tablist";
 import { pinToViewport } from "./place";
 import { useMarker } from "./marker";
+import { useDismiss } from "./dismiss";
 
 export interface TabView {
   rt: RuntimeView;
@@ -30,8 +31,13 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
   // 裁掉（点了像没反应），所以菜单挂在 fixed 上，位置由触发点决定。
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editing, setEditing] = useState("");
-  // Which close is waiting on an answer, and what it would take with it.
-  const [confirm, setConfirm] = useState<{ ids: string[]; live: string[] } | null>(null);
+  // Which close is waiting on an answer. The ids only: which of them still
+  // exist and which are still running are read off the current tabs on every
+  // render and again when the answer comes, because a set captured when the
+  // question was asked stops being true while it is on screen — a pane can
+  // finish, or be closed from somewhere else, in the seconds it takes to read.
+  const [confirm, setConfirm] = useState<{ ids: string[]; kind: string; from: string } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
 
   // A tab scrolled out of the strip is a tab you cannot see you are on. On the
   // next frame: this fires exactly when a second pane opens, which is also when
@@ -69,52 +75,57 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
     };
   }, [menu]);
 
+  // What the question is about, now: ids whose tab is still on the strip, and
+  // of those the ones still working. Derived rather than stored — see above.
+  const present = confirm ? confirm.ids.filter((id) => tabs.some((t) => t.rt.id === id)) : [];
+  const liveNow = present.filter((id) => tabs.find((t) => t.rt.id === id)?.live);
+  const nameOf = (id: string) => tabs.find((t) => t.rt.id === id)?.title ?? id;
+
+  // Back to the control that asked, which is the close button on the tab this
+  // is about — looked up now rather than held since it was pressed, because
+  // the pane it sits on may have gone in the meantime. A menu item cannot be
+  // returned to at all: choosing it is what closed the menu.
+  const cancel = useCallback(() => {
+    const at = confirm?.from;
+    setConfirm(null);
+    const back = at ? bar.current?.querySelector<HTMLElement>(`[data-pane="${CSS.escape(at)}"] .ptab-x`) : null;
+    (back ?? bar.current?.querySelector<HTMLElement>('[aria-selected="true"]'))?.focus();
+  }, [confirm?.from]);
+
+  useDismiss(!!confirm, box, cancel);
+
+  // Nothing left to close: the question answered itself elsewhere, and leaving
+  // it up would offer to stop panes that are already gone.
+  useEffect(() => {
+    if (confirm && present.length === 0) cancel();
+    // The sources, not the projection of them: depending on present.length
+    // declares an edge to a value derived here, which nothing outside this
+    // render can trace back — and the census loses the whole cell's provenance
+    // with it, taking five unrelated handlers in this file from read-only to
+    // "might write".
+  }, [confirm, tabs, cancel]);
+
   // Closing what is still working needs an answer first; closing idle panes is
   // just tidying and happens straight away.
-  const close = (ids: string[]) => {
-    const live = ids.filter((id) => tabs.find((t) => t.rt.id === id)?.live);
-    if (live.length === 0) {
+  const close = (ids: string[], kind: string, from: string) => {
+    if (!ids.some((id) => tabs.find((t) => t.rt.id === id)?.live)) {
       onClose(ids);
       return;
     }
-    setConfirm({ ids, live });
+    setConfirm({ ids, kind, from });
+  };
+
+  // The answer acts on what is live at this moment, not on what was live when
+  // the question went up. An id whose pane has since gone is not sent back to
+  // the host, and a pane that has since finished is closed without the claim
+  // that closing stops it.
+  const commit = () => {
+    const ids = confirm ? confirm.ids.filter((id) => tabs.some((t) => t.rt.id === id)) : [];
+    setConfirm(null);
+    if (ids.length > 0) onClose(ids);
   };
 
   const others = (id: string) => tabs.filter((t) => t.rt.id !== id).map((t) => t.rt.id);
-
-  if (confirm) {
-    const names = confirm.live
-      .map((id) => tabs.find((t) => t.rt.id === id)?.title ?? id)
-      .slice(0, 3)
-      .join("、");
-    return (
-      <div className="panetabs">
-        <div className="tabconfirm" role="alertdialog">
-          <span className="q">
-            {confirm.ids.length > 1 ? t("关闭 {n} 个面板？", { n: confirm.ids.length }) : t("关闭这个面板？")}
-          </span>
-          <span className="h">
-            {confirm.live.length === 1 ? t("{names} 还在跑", { names }) : t("其中 {n} 个还在跑：{names}", { n: confirm.live.length, names })}
-            {t("，关掉会停下它")}
-          </span>
-          <div className="a">
-            <button onClick={() => setConfirm(null)}>{t("取消")}</button>
-            <button
-              data-danger=""
-              data-action="pane.close"
-              autoFocus
-              onClick={() => {
-                onClose(confirm.ids);
-                setConfirm(null);
-              }}
-            >
-              {t("关闭")}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="panetabs" ref={bar} role="tablist" aria-label={t("会话面板")} onKeyDown={arrowTabs}>
@@ -122,6 +133,7 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
         <div
           key={rt.id}
           className="ptab"
+          data-pane={rt.id}
           data-action-click="pane.activate"
           role="tab"
           tabIndex={rt.id === active ? 0 : -1}
@@ -176,7 +188,7 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
             aria-label={t("关闭这个面板")}
             onClick={(ev) => {
               ev.stopPropagation();
-              close([rt.id]);
+              close([rt.id], "one", rt.id);
             }}
           >
             ×
@@ -186,6 +198,46 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
       ))}
 
       {mark && <i className="tabmark" style={{ width: mark.len, transform: `translateX(${mark.at}px)` }} />}
+
+      {confirm && present.length > 0 && (
+        <div
+          className="tabconfirm"
+          role="alertdialog"
+          // Named by the question it is asking, so the accessible name and
+          // what is on screen cannot drift apart.
+          aria-labelledby="tabconfirm-q"
+          ref={(el) => {
+            // The same node the dismiss watches: without it every press inside
+            // the question reads as a press away, and answering cancels first.
+            box.current = el;
+            if (!el) return;
+            // Anchored under the tab this is about, through the same viewport
+            // seam the context menu uses — a bubble near the right edge is
+            // moved rather than clipped, and the zoom is corrected in one place.
+            const tab = bar.current?.querySelector<HTMLElement>(`[data-pane="${CSS.escape(confirm.from)}"]`);
+            const at = (tab ?? bar.current)?.getBoundingClientRect();
+            if (at) pinToViewport(el, at.left, at.bottom + 6);
+          }}
+        >
+          <span className="q" id="tabconfirm-q">
+            {present.length > 1 ? t("关闭 {n} 个面板？", { n: present.length }) : t("关闭这个面板？")}
+          </span>
+          <span className="h">
+            {liveNow.length === 0
+              ? t("都已经停下了")
+              : (liveNow.length === 1
+                  ? t("{names} 还在跑", { names: nameOf(liveNow[0]) })
+                  : t("其中 {n} 个还在跑：{names}", { n: liveNow.length, names: liveNow.slice(0, 3).map(nameOf).join("、") })) +
+                t("，关掉会停下它")}
+          </span>
+          <div className="a">
+            <button onClick={cancel}>{t("取消")}</button>
+            <button data-danger="" data-action="pane.close" data-value={confirm.kind} autoFocus onClick={commit}>
+              {t("关闭")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {menu && (
         <div
@@ -204,7 +256,7 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
           <button role="menuitem" onClick={() => { const id = menu.id; setMenu(null); setEditing(id); }}>
             {t("重命名")}
           </button>
-          <button role="menuitem" data-action="pane.close" data-value="one" onClick={() => { const id = menu.id; setMenu(null); close([id]); }}>
+          <button role="menuitem" data-action="pane.close" data-value="one" onClick={() => { const id = menu.id; setMenu(null); close([id], "one", id); }}>
             {t("关闭")}
           </button>
           <button
@@ -212,11 +264,11 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
             data-value="others"
             role="menuitem"
             disabled={tabs.length < 2}
-            onClick={() => { const id = menu.id; setMenu(null); close(others(id)); }}
+            onClick={() => { const id = menu.id; setMenu(null); close(others(id), "others", id); }}
           >
             关闭其他（{Math.max(tabs.length - 1, 0)}）
           </button>
-          <button role="menuitem" data-action="pane.close" data-value="all" onClick={() => { setMenu(null); close(tabs.map((t) => t.rt.id)); }}>
+          <button role="menuitem" data-action="pane.close" data-value="all" onClick={() => { const id = menu.id; setMenu(null); close(tabs.map((t) => t.rt.id), "all", id); }}>
             全部关闭（{tabs.length}）
           </button>
         </div>

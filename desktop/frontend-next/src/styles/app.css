@@ -4038,7 +4038,7 @@
       animation: none !important; animation-delay: 0s !important;
     }
     /* 队列一次能进来几十行，逐行入场就是几十次移动。行在不在是状态，动不动不是。 */
-    .queue, .qi, .ovf { animation: none !important }
+    .queue, .qi, .ovf, .tabconfirm { animation: none !important }
   }
 
   .ws[data-busy] { opacity: .5; pointer-events: none }
@@ -5341,22 +5341,28 @@
   .tabmenu button:disabled { color: var(--ghost); cursor: default }
 
   /* 关掉还在跑的东西要先问一声，并且说清会停下哪几个 */
+  /* 就地浮在它所关于的那个页签下面。整条页签条被确认界面换掉时，读起来是界面
+     换了一张脸，而不是「这一个要确认」—— 而且看不出正在确认的是哪一个。
+     进场只做位移和淡入；相邻的右键菜单也没有退场动画，一个确认框不该比它重。 */
   .tabconfirm {
-    flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0;
-    padding: 6px 10px 8px; animation: card .16s var(--ease-out) both;
+    position: fixed; z-index: 61; width: max-content; max-width: min(340px, 92vw);
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 9px 11px 10px; border-radius: var(--r-sm);
+    background: var(--float); border: 1px solid var(--border);
+    box-shadow: var(--shadow-float);
+    animation: tabconfirmin .18s var(--ease-out) both;
   }
-  .tabconfirm .q { flex: none; font: var(--w-med) 12px var(--ui); color: var(--text) }
-  .tabconfirm .h {
-    flex: 1; min-width: 0; font: var(--w-reg) 11px var(--ui); color: var(--muted);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .tabconfirm .a { flex: none; display: flex; gap: 4px }
+  @keyframes tabconfirmin { from { opacity: 0; transform: translateY(-3px) } to { opacity: 1; transform: none } }
+  .tabconfirm .q { font: var(--w-med) 12px var(--ui); color: var(--text) }
+  .tabconfirm .h { font: var(--w-reg) 11px/1.55 var(--ui); color: var(--muted) }
+  .tabconfirm .a { display: flex; gap: 6px; margin-top: 6px; justify-content: flex-end }
   .tabconfirm .a button {
     padding: 4px 10px; border-radius: var(--r-xs); cursor: pointer;
     border: 1px solid var(--border); background: transparent; color: var(--muted);
     font: var(--w-med) 11px var(--ui);
   }
   .tabconfirm .a button:hover { color: var(--text); border-color: var(--faint) }
+  .tabconfirm .a button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   .tabconfirm .a button[data-danger] { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, var(--border)) }
   .tabconfirm .a button[data-danger]:hover { background: var(--err); border-color: var(--err); color: var(--accent-fg) }
 
