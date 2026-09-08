@@ -112,7 +112,7 @@ async function main() {
 
   if (sabotage === "trajectory") {
     const replayed = await port.trajectory();
-    for (const ev of replayed) fold(ev);
+    for (const ev of replayed.events) fold(ev);
   }
 
   await until("the run graph to load", () => store.read().phase === "live");

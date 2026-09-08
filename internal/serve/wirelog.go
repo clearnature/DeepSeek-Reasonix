@@ -2,11 +2,14 @@ package serve
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 
+	"reasonix/internal/fileutil"
 	"reasonix/internal/store"
 )
 
@@ -57,8 +60,55 @@ var wireLogSkipped = map[string]bool{
 	"adjudications_changed": true,
 }
 
+// codeTrajectoryUnreadable refuses a read that could not establish coverage.
+// It is not "the session has no frames": that answer is a claim, and a log this
+// handler could not read supports none.
+const codeTrajectoryUnreadable = "trajectory.unreadable"
+
+// trajectoryAvailability is what the returned frames cover. The three answers
+// are kept apart because a reader that cannot tell them apart reads absence as
+// a quiet session: a run nothing records, a log the cap stopped extending, and
+// a recorded session that has produced no frames yet all used to answer with
+// the same empty array.
+type trajectoryAvailability string
+
+const (
+	// trajectoryComplete: every qualifying frame this session produced, from its
+	// start to what is durable now, is in Events. Empty Events under this answer
+	// means the session produced none — not that none were kept.
+	trajectoryComplete trajectoryAvailability = "complete"
+	// trajectoryTruncated: Events is a trustworthy prefix and nothing more. What
+	// follows the last one is unknown, never "nothing happened".
+	trajectoryTruncated trajectoryAvailability = "truncated"
+	// trajectoryNotRecorded: nothing recorded this session, so there is no prefix
+	// at all. Answered from the writer's own precondition, never from a missing
+	// file, which cannot tell this from a log that has not been written to yet.
+	trajectoryNotRecorded trajectoryAvailability = "not_recorded"
+)
+
+// trajectoryView is the read model: the frames, and what they cover. Coverage
+// travels with the frames because a caller cannot reconstruct it from them —
+// the last line of a log the cap closed looks exactly like the last line of a
+// session that ended there.
+type trajectoryView struct {
+	Availability trajectoryAvailability `json:"availability"`
+	Events       []json.RawMessage      `json:"events"`
+}
+
+// wireLogMeta is what the log does not contain. One field, because the boundary
+// itself would be a seq and the broadcaster numbers frames per process: a
+// resumed session restarts at one, so a number here would name a numbering that
+// no longer exists. The last retained line is readable from the log anyway.
+type wireLogMeta struct {
+	Truncated bool `json:"truncated"`
+}
+
 type wireLog struct {
 	mu sync.Mutex
+	// The log this process has already witnessed a refusal against. Every frame
+	// after the first refused one is refused too; keyed by path because /resume
+	// and /new move the writer to another log.
+	witnessed string
 }
 
 // attachWireLog mirrors qualifying broadcast frames to the current session's
@@ -69,14 +119,26 @@ func (s *Server) attachWireLog() {
 	go func() {
 		defer unsubscribe()
 		for frame := range ch {
-			// Path is read per frame, not cached: /resume and /new swap it
-			// underneath and the next row belongs to the new session.
-			s.wire.write(store.SessionWireLog(s.ctl().SessionPath()), frame.Data)
+			// The session is read per frame, not cached: /resume and /new swap it
+			// underneath and the next row belongs to the new one.
+			s.wire.write(s.recordedSession(), frame.Data)
 		}
 	}()
 }
 
-func (w *wireLog) write(path string, frame []byte) {
+// recordedSession is the session whose frames are being recorded, and empty
+// when nothing records them. Both the writer and the reader ask it, so what
+// /trajectory reports about coverage is the writer's own precondition rather
+// than an inference from the filesystem.
+func (s *Server) recordedSession() string {
+	if s.wire == nil {
+		return ""
+	}
+	return s.ctl().SessionPath()
+}
+
+func (w *wireLog) write(sessionPath string, frame []byte) {
+	path := store.SessionWireLog(sessionPath)
 	if path == "" {
 		return
 	}
@@ -97,32 +159,84 @@ func (w *wireLog) write(path string, frame []byte) {
 	}
 	defer f.Close()
 	// A runaway turn must not fill the disk; drop rather than truncate, so what
-	// is on disk stays a prefix of what happened.
+	// is on disk stays a prefix of what happened. The prefix is only honest if
+	// it says so, which is what the witness is for.
 	if st, err := f.Stat(); err == nil && st.Size() > wireLogMaxBytes {
+		w.witness(sessionPath)
 		return
 	}
 	_, _ = f.Write(append(frame, '\n'))
 }
 
+// witness records that the cap refused a frame. Written on the refusal and not
+// on the crossing, so a log over the cap with no witness is a session that
+// stopped before the next frame arrived rather than one that dropped it.
+func (w *wireLog) witness(sessionPath string) {
+	path := store.SessionWireLogMeta(sessionPath)
+	if path == "" || w.witnessed == path {
+		return
+	}
+	body, err := json.Marshal(wireLogMeta{Truncated: true})
+	if err != nil {
+		return
+	}
+	if err := fileutil.AtomicWriteFile(path, body, 0o600); err != nil {
+		return
+	}
+	w.witnessed = path
+}
+
+// truncationWitnessed reads the log's refusal record. Missing is the ordinary
+// answer and means no frame was refused; anything else is unreadable, and an
+// unreadable witness may not be reported as an intact log.
+func truncationWitnessed(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var meta wireLogMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return false, err
+	}
+	return meta.Truncated, nil
+}
+
+// trajectory answers with the persisted frames and what they cover. A read that
+// fails is refused rather than answered: an empty array is a claim about the
+// session, and a log that could not be read supports no claim at all.
 func (s *Server) trajectory(w http.ResponseWriter, _ *http.Request) {
-	path := store.SessionWireLog(s.ctl().SessionPath())
-	if path == "" {
-		writeJSON(w, []any{})
+	sessionPath := s.recordedSession()
+	if sessionPath == "" {
+		writeJSON(w, trajectoryView{Availability: trajectoryNotRecorded, Events: []json.RawMessage{}})
 		return
 	}
 	s.wire.mu.Lock()
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(store.SessionWireLog(sessionPath))
+	witnessed, witnessErr := truncationWitnessed(store.SessionWireLogMeta(sessionPath))
 	s.wire.mu.Unlock()
-	if err != nil {
-		writeJSON(w, []any{})
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		refuse(w, http.StatusInternalServerError, codeTrajectoryUnreadable, err.Error(), nil)
 		return
 	}
-	out := []json.RawMessage{}
+	if witnessErr != nil {
+		refuse(w, http.StatusInternalServerError, codeTrajectoryUnreadable, witnessErr.Error(), nil)
+		return
+	}
+	// The witness is the only authority. Past the cap the next frame will be
+	// refused, but until one is nothing has been dropped — reading truncation off
+	// a log's size reports a session that grew large as one that lost frames.
+	view := trajectoryView{Availability: trajectoryComplete, Events: []json.RawMessage{}}
+	if witnessed {
+		view.Availability = trajectoryTruncated
+	}
 	for line := range strings.SplitSeq(strings.TrimRight(string(data), "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		out = append(out, json.RawMessage(line))
+		view.Events = append(view.Events, json.RawMessage(line))
 	}
-	writeJSON(w, out)
+	writeJSON(w, view)
 }

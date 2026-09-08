@@ -3,6 +3,7 @@ import { decimals } from "../i18n/format";
 import { t } from "../i18n";
 import { categoryOf } from "./icons";
 import type { Span, TrajRow } from "../state/trajectory";
+import type { TrajectoryAvailability } from "../port/wire";
 
 // The table renders spans; a file wants the text they carry. Both halves of a
 // span are values, so this reads them rather than knowing which kinds exist.
@@ -11,10 +12,13 @@ const flat = (spans: Span[]) => spans.map((x) => ("b" in x ? x.b : "n" in x ? x.
 // What a row is, without the drawing: when it started, how long it ran, what
 // ran. Anything reading this back — a script, a spreadsheet, an issue — wants
 // those four, and the rendered payload as the human-readable line.
-function serialise(rows: TrajRow[]) {
+function serialise(rows: TrajRow[], availability: TrajectoryAvailability | undefined) {
   return JSON.stringify(
     {
       exported: new Date().toISOString(),
+      // The file outlives the window that made it, so it carries what the rows
+      // cover. A prefix handed over without that reads as a whole session.
+      availability,
       span: rows.length ? Number(Math.max(...rows.map((r) => r.at + (r.dur ?? 0))).toFixed(3)) : 0,
       rows: rows.map((r) => ({
         seq: r.seq,
@@ -64,7 +68,15 @@ function Track({ row, span }: { row: TrajRow; span: number }) {
   );
 }
 
-export function Trajectory({ rows, onSave }: { rows: TrajRow[]; onSave: (name: string, content: string) => Promise<string | null> }) {
+export function Trajectory({
+  rows,
+  availability,
+  onSave,
+}: {
+  rows: TrajRow[];
+  availability?: TrajectoryAvailability;
+  onSave: (name: string, content: string) => Promise<string | null>;
+}) {
   // 壳能给出落盘路径，浏览器只能说它交给了下载 —— 两句话不一样，别混着说。
   const [saved, setSaved] = useState<{ to: string; path: boolean } | null>(null);
   // 轴的跨度是最后一段活动结束的时刻 —— 不是最后一行开始的时刻，一行现在
@@ -78,7 +90,7 @@ export function Trajectory({ rows, onSave }: { rows: TrajRow[]; onSave: (name: s
           disabled={rows.length === 0}
           onClick={() => {
             const name = `trajectory-${new Date().toISOString().slice(0, 19).replace("T", "-").replace(/:/g, "")}.json`;
-            void onSave(name, serialise(rows)).then((to) => setSaved({ to: to ?? name, path: to !== null }));
+            void onSave(name, serialise(rows, availability)).then((to) => setSaved({ to: to ?? name, path: to !== null }));
           }}
         >
           {t("导出")}
@@ -122,9 +134,18 @@ export function Trajectory({ rows, onSave }: { rows: TrajRow[]; onSave: (name: s
           ))}
         </tbody>
       </table>
-      {/* serve builds no trajectory.Recorder — only the CLI does — so there is
-          nothing on disk to reload. Say so rather than imply otherwise. */}
-      <div className="traj-note">{t("实时事件流 · 仅本次连接，切换或重进会话后重建")}</div>
+      {/* What the rows cover, in the host's words. The table cannot tell a
+          session that did little from one whose record stops early, and reading
+          the last row as the end is exactly the mistake. */}
+      <div className="traj-note" data-coverage={availability ?? "unread"}>
+        {availability === "truncated"
+          ? t("记录到容量上限就停了 —— 最后一行之后还发生过什么，没有留下")
+          : availability === "not_recorded"
+            ? t("这次运行没有记录轨迹 —— 下面只是本次连接看到的实时事件")
+            : availability === "complete"
+              ? t("完整记录 · 重进会话会照原样重建")
+              : t("还没读到这份轨迹覆盖了多少")}
+      </div>
     </>
   );
 }

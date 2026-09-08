@@ -1,4 +1,4 @@
-import type { WireEvent } from "../port/wire";
+import type { TrajectoryAvailability, WireEvent } from "../port/wire";
 import { seconds, tokens } from "../i18n/format";
 
 export type Span = { t: string } | { b: string } | { n: string };
@@ -26,6 +26,11 @@ export interface TrajState {
   // A round's usage arrives once the round has closed, so "whichever one is
   // still open" resolves to nothing and the tokens go on the floor.
   rounds: Record<string, number>;
+  // What the replayed rows cover, as the host answered it. Undefined until that
+  // read lands: before it does the table knows nothing about its own extent,
+  // and saying "complete" on the way there is the guess this field exists to
+  // stop.
+  availability?: TrajectoryAvailability;
 }
 
 export const initialTraj: TrajState = { rows: [], t0: 0, open: {}, rounds: {} };
@@ -244,9 +249,14 @@ function record(ev: WireEvent): Made | null {
 
 export function reduceTraj(
   s: TrajState,
-  ev: WireEvent | { kind: "__clear" } | { kind: "__user"; text: string },
+  ev:
+    | WireEvent
+    | { kind: "__clear" }
+    | { kind: "__user"; text: string }
+    | { kind: "__coverage"; availability: TrajectoryAvailability },
 ): TrajState {
   if (ev.kind === "__clear") return initialTraj;
+  if (ev.kind === "__coverage") return { ...s, availability: ev.availability };
   // The kernel emits no event for your own turn, so the row that opens every
   // trajectory has to be written here or it is missing entirely.
   const r: Made | null =

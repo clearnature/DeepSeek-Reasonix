@@ -32,7 +32,7 @@ export type { AccountState, AccountUser, ApprovalMode, ApprovalVerdict, Capabili
   ShellOption, ShellSettings, SkillCatalog, SkillEntry, UpdateProgress, VersionEntry,
   VersionHub, WalletLine, WalletReading, ChangeDiff, WorkspaceChange, WorkspaceChanges, WorkspaceEntry, WorkspaceInfo };
 
-import type { ExecutionGraphRead, WireEvent } from "./wire";
+import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { Appearance, ThemePack } from "./look";
 import type { ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./boundary";
@@ -304,8 +304,10 @@ export interface AgentPort {
   // transaction id the commit returned.
   undoRewind(transactionId: string): Promise<void>;
   // Replaying the persisted wire frames rebuilds the trajectory pane row for
-  // row; the live stream only ever covers the current connection.
-  trajectory(): Promise<WireEvent[]>;
+  // row; the live stream only ever covers the current connection. The read says
+  // what its frames cover, because absence has three meanings and the frames
+  // themselves tell none of them apart.
+  trajectory(): Promise<TrajectoryRead>;
   /** The run graph as the kernel's durable facts justify it, with the frame it
    *  is at least as new as. This is the execution model's authority: it is what
    *  a view is built from, and what it goes back to after a hole — the delta

@@ -163,6 +163,7 @@ const SAID: Record<string, string> = {
   "config.unparsed": "配置文件读不了，所以这次没保存",
   "changes.path_outside_tree": "{path} 不在这个工作树里，看不了它的改动",
   "changes.diff_failed": "读不出这个文件的改动 —— git 那边没给出结果",
+  "trajectory.unreadable": "读不出这次运行的轨迹记录，所以说不准它覆盖了多少",
   "config.editing_disabled": "这台服务器没有开放配置编辑",
   "config.not_repairable": "这个文件得手动改：{detail}",
   "runtime.rebuild_failed": "设置写进去了，但运行时没能照新设置重建：{detail}",

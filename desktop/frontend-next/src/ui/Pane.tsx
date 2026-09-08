@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { HttpError } from "../port/port";
 import type { AgentPort, ApprovalVerdict, Checkpoint, ContextBreakdown, JobEntry, McpEntry, Queue as QueueSnapshot, RewindScope, SessionStatus, WorkspaceChanges } from "../port/port";
 import type { RuntimeView } from "../port/hub";
+import type { TrajectoryRead } from "../port/wire";
 import { fromHistory, initialState, localId, quoteAmount, reduce } from "../state/session";
 import { pairCheckpoints } from "../state/checkpoints";
 import { initialTraj, reduceTraj } from "../state/trajectory";
@@ -169,9 +170,19 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     [port, reloadMcp, rebuild, graphStore, readGraph, refreshStatus],
   );
 
+  // What the rows cover is dispatched before the rows themselves, so the table
+  // never spends a frame showing a prefix as if it were the whole record.
+  const replayTrajectory = useCallback(
+    (read: TrajectoryRead) => {
+      trajDispatch({ kind: "__coverage", availability: read.availability });
+      read.events.forEach((e) => trajDispatch(e));
+    },
+    [],
+  );
+
   useEffect(() => {
     let alive = true;
-    port.trajectory().then((evs) => alive && evs.forEach((e) => trajDispatch(e))).catch(() => {});
+    port.trajectory().then((r) => alive && replayTrajectory(r)).catch(() => {});
     port.checkpoints().then((cps) => alive && setCheckpoints(cps)).catch(() => {});
     // The record and the numbers over it are two reads, not one. /status can go
     // to the network — the provider's wallet endpoint rides it — and pairing the
@@ -227,7 +238,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     // the one it left while that read is in flight.
     graphStore.resetForSession();
     void graphStore.bootstrap(readGraph).catch(() => {});
-    port.trajectory().then((evs) => evs.forEach((e) => trajDispatch(e))).catch(() => {});
+    port.trajectory().then(replayTrajectory).catch(() => {});
     port.checkpoints().then(setCheckpoints).catch(() => setCheckpoints([]));
     // Two reads, the same way the first mount takes them: the record does not
     // wait behind the numbers over it.
@@ -633,7 +644,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       </div>
 
       <div className="scroll" data-pane="traj" hidden={tab !== "traj"}>
-        {tab === "traj" && <Trajectory rows={traj.rows} onSave={(n, c) => port.saveText(n, c)} />}
+        {tab === "traj" && <Trajectory rows={traj.rows} availability={traj.availability} onSave={(n, c) => port.saveText(n, c)} />}
       </div>
 
       <div className="scroll" data-pane="graph" hidden={tab !== "graph"}>

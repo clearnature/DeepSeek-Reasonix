@@ -591,3 +591,21 @@ export interface WireEvent {
   // the next frame does not restate.
   seq?: number;
 }
+
+/** What the frames in a TrajectoryRead cover.
+ *
+ *  - complete: every frame the session produced, from its start to what is
+ *    durable now. `events: []` under this answer means it produced none.
+ *  - truncated: the frames are a trustworthy prefix and nothing more. What
+ *    follows the last one is unknown — never "nothing happened".
+ *  - not_recorded: nothing recorded this session, so there is no prefix at all.
+ */
+export type TrajectoryAvailability = "complete" | "truncated" | "not_recorded";
+
+/** The frames, and what they cover. Coverage travels with them because it
+ *  cannot be read off them: the last line of a log the host stopped extending
+ *  looks exactly like the last line of a session that ended there. */
+export interface TrajectoryRead {
+  availability: TrajectoryAvailability;
+  events: WireEvent[];
+}

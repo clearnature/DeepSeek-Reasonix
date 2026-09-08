@@ -165,6 +165,8 @@ export const EN_KERNEL: Record<string, string> = {
   "图片太大了，先压到 {limit} MB 以内": "That image is too large — bring it under {limit} MB",
   "{path} 不在这个工作树里，看不了它的改动": "{path} is not inside this working tree, so its changes cannot be shown",
   "读不出这个文件的改动 —— git 那边没给出结果": "Could not read this file's changes — git returned nothing usable",
+  "读不出这次运行的轨迹记录，所以说不准它覆盖了多少":
+    "Could not read this run's trajectory record, so how much it covers is unknown",
   "没有这个待回答的问题": "There is no such open question",
   "这个回答是给上一次启动的内核的，重新连一次": "That answer was meant for an earlier run of the kernel — connect again",
   "这次连接已经结束了，这个问题不用答了": "That connection has ended, so the question no longer needs an answer",

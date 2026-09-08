@@ -9,6 +9,7 @@ import { EN_KERNEL } from "./en_kernel";
 import { EN_REMOTE } from "./en_remote";
 import { EN_WINDOW } from "./en_window";
 import { EN_GRAPH } from "./en_graph";
+import { EN_TRAJECTORY } from "./en_trajectory";
 import { EN_SETTINGS } from "./en_settings";
 import { EN_METRICS } from "./en_metrics";
 import { EN_STORAGE } from "./en_storage";
@@ -21,6 +22,7 @@ export const EN: Record<string, string> = {
   ...EN_REMOTE,
   ...EN_WINDOW,
   ...EN_GRAPH,
+  ...EN_TRAJECTORY,
   // ── 转录：卡片与流 ───────────────────────────────────────────────
   "描述任务，其余交给 Reasonix": "Describe the task; Reasonix takes it from there",
   "可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。":
@@ -73,12 +75,9 @@ export const EN: Record<string, string> = {
   // ── 面板与栏 ─────────────────────────────────────────────────────
   "活动": "Activity",
   "轨迹": "Trajectory",
-  "时间轴": "Timeline",
   "你说过的话": "What you said",
   "第 {n} 句": "Message {n}",
   "{n} 个文件": "{n} files",
-  "存到 {path}": "Saved to {path}",
-  "已下载 {name}": "Downloaded {name}",
   "工作区": "Workspaces",
   "收起工作区栏": "Collapse the workspace rail",
   "收起度量栏": "Collapse the metrics rail",
@@ -545,8 +544,6 @@ export const EN: Record<string, string> = {
   "筛选": "Filter",
   "补全": "Completions",
   "交还给插件": "Hand back to the extension",
-  "实时事件流 · 仅本次连接，切换或重进会话后重建":
-    "Live event stream · this connection only; it is rebuilt when you switch or reopen a session",
   "连不上内核：/status 没有回应。": "Cannot reach the kernel: /status did not answer.",
   "同时调整正文与次要文字的对比度。深色主题下若觉得刺眼，可调向「柔和」。": "Adjusts the contrast of body and secondary text together. If a dark theme feels harsh, move it toward Soft.",
   "配色包安装在记忆目录的 themes/ 下，每个目录包含一个 theme.json。配色包会应用表面色、强调色、圆角和字体；状态色（成功/警告/失败）不受影响。":

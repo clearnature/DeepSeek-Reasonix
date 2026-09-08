@@ -146,6 +146,18 @@ func SessionWireLog(sessionPath string) string {
 	return sessionStem(sessionPath) + ".wire.jsonl"
 }
 
+// SessionWireLogMeta records what the wire log does not contain
+// (<id>.wire.meta.json). A frame the capacity cap refused leaves the log a
+// valid prefix, and nothing inside a prefix says it is one. It is kept beside
+// the log rather than in it because a dropped-frame notice is not something the
+// agent did, and a reader folding the frames would have to know to skip it.
+func SessionWireLogMeta(sessionPath string) string {
+	if sessionPath == "" {
+		return ""
+	}
+	return sessionStem(sessionPath) + ".wire.meta.json"
+}
+
 // SessionEventLogDamaged is the salvage sidecar for event-log bytes that tail
 // repair would otherwise discard (<id>.events.jsonl.damaged). It must NOT end
 // in .jsonl: older binaries scanning a shared session directory classify any
@@ -327,6 +339,7 @@ func SessionSidecarFiles(sessionPath string) []string {
 		SessionExecution(sessionPath),
 		SessionEventLog(sessionPath),
 		SessionWireLog(sessionPath),
+		SessionWireLogMeta(sessionPath),
 		SessionEventLogDamaged(sessionPath),
 		SessionEventIndex(sessionPath),
 		SessionDisplayIndex(sessionPath),

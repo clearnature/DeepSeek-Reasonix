@@ -1,7 +1,7 @@
 import type { PlanAction } from "./session";
 import { HttpError } from "./port";
 import type { AccountState, AgentPort, ChangeDiff, CompactionSettings, Completion, CompletionItem, DeviceGrant, VersionHub, ApprovalMode, ApprovalVerdict, Checkpoint, RewindPlan, RewindResult, RewindScope, HistoryMessage, ModelEntry, Preset, ProviderSetup, RoleAssignments, SessionEntry, SessionStatus, WalletReading, MemoryCatalog, MemoryEdit, UsageReport, MemoryEntry, WorkspaceInfo, WorkspaceChanges, Attachment, DroppedRef, Queue, QueueItem, Queued, TrayPrefs } from "./port";
-import type { ExecutionGraphRead, WireEvent } from "./wire";
+import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import { MockTheme } from "./mock_theme";
 import { SCRIPT, mockMsgIndex, mockTurnStart } from "./fixture";
 import { MockExecutionHold, mockExecutionGraph } from "./mock_graph";
@@ -443,8 +443,8 @@ export class MockPort extends MockTheme implements AgentPort {
     };
   }
 
-  async trajectory(): Promise<WireEvent[]> {
-    return [];
+  async trajectory(): Promise<TrajectoryRead> {
+    return { availability: "complete", events: [] };
   }
 
   async executionGraph(): Promise<ExecutionGraphRead> {

@@ -111,6 +111,7 @@ func TestSessionSidecarFiles(t *testing.T) {
 		"/home/u/.reasonix/sessions/abc.execution.jsonl",
 		"/home/u/.reasonix/sessions/abc.events.jsonl",
 		"/home/u/.reasonix/sessions/abc.wire.jsonl",
+		"/home/u/.reasonix/sessions/abc.wire.meta.json",
 		"/home/u/.reasonix/sessions/abc.events.jsonl.damaged",
 		"/home/u/.reasonix/sessions/abc.event-index.json",
 		"/home/u/.reasonix/sessions/abc.display-index.json",
