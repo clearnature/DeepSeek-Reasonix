@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"os"
 	"testing"
+	"time"
 
 	"reasonix/internal/event"
 	"reasonix/internal/jobs"
@@ -58,7 +60,42 @@ func TestBoardIdempotentSameOwnerClaim(t *testing.T) {
 	}
 }
 
-// TestBoardListTaskBoard unmarshals the claimable board for tool display.
+// TestBoardPersistsAcrossSnapshot round-trips the board through the crash
+// snapshot: a new store loading the same snapshot sees the same items.
+func TestBoardPersistsAcrossSnapshot(t *testing.T) {
+	snap := t.TempDir() + "/team-snapshot.json"
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	ts.SetSnapshotPath(snap)
+	t.Cleanup(ts.Close)
+	id, err := ts.BoardCreate("persisted task")
+	if err != nil {
+		t.Fatalf("BoardCreate: %v", err)
+	}
+	if err := ts.BoardClaim(id, "alpha"); err != nil {
+		t.Fatalf("BoardClaim: %v", err)
+	}
+	// saveSnapshot is async; wait for the file, then a second store loads it.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(snap); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("snapshot never written")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	ts2 := NewTeammateStore(testTaskToolForTeam(t), jm)
+	ts2.SetSnapshotPath(snap)
+	t.Cleanup(ts2.Close)
+	items := ts2.BoardList()
+	if len(items) != 1 || items[0].ID != id || items[0].Owner != "alpha" || items[0].Status != BoardClaimed {
+		t.Fatalf("restored board = %+v, want one claimed item %s", items, id)
+	}
+}
+
 func TestBoardListTaskBoard(t *testing.T) {
 	ts := testBoardStore()
 	_, _ = ts.BoardCreate("task one")
@@ -70,6 +107,27 @@ func TestBoardListTaskBoard(t *testing.T) {
 	for _, v := range got {
 		if v.Status != BoardOpen {
 			t.Fatalf("new board item status = %s, want open", v.Status)
+		}
+	}
+}
+
+// TestReleaseBoardTasksReturnsClaimedToOpen locks the task_stop release: a
+// stopped owner's claimed items go back to the open pool.
+func TestReleaseBoardTasksReturnsClaimedToOpen(t *testing.T) {
+	ts := testBoardStore()
+	a, _ := ts.BoardCreate("one")
+	b, _ := ts.BoardCreate("two")
+	_ = ts.BoardClaim(a, "alpha")
+	_ = ts.BoardClaim(b, "beta")
+	if n := ts.ReleaseBoardTasks("alpha"); n != 1 {
+		t.Fatalf("released = %d, want 1", n)
+	}
+	for _, v := range ts.BoardList() {
+		if v.ID == a && (v.Status != BoardOpen || v.Owner != "") {
+			t.Fatalf("released item = %+v, want open unowned", v)
+		}
+		if v.ID == b && v.Owner != "beta" {
+			t.Fatalf("other owner's item changed: %+v", v)
 		}
 	}
 }

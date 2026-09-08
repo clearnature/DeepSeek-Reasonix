@@ -269,13 +269,15 @@ func (ts *TeammateStore) List() []Teammate {
 // lifecycle state, and write posture. Read-only and non-consuming — safe for
 // the desktop team panel to poll every few seconds.
 type RosterView struct {
-	Name     string `json:"name"`
-	Role     string `json:"role"`
-	State    string `json:"state"`
-	Writable bool   `json:"writable"`
-	Worktree bool   `json:"worktree"`
-	Token    bool   `json:"token"`
-	JobID    string `json:"job_id,omitempty"`
+	Name           string `json:"name"`
+	Role           string `json:"role"`
+	State          string `json:"state"`
+	Writable       bool   `json:"writable"`
+	Worktree       bool   `json:"worktree"`
+	WorktreeRoot   string `json:"worktree_root,omitempty"`
+	WorktreeBranch string `json:"worktree_branch,omitempty"`
+	Token          bool   `json:"token"`
+	JobID          string `json:"job_id,omitempty"`
 }
 
 // Roster returns the non-consuming roster snapshot for the UI (P12). Unlike
@@ -286,13 +288,15 @@ func (ts *TeammateStore) Roster() []RosterView {
 	out := make([]RosterView, 0, len(ts.teammates))
 	for name, tm := range ts.teammates {
 		rv := RosterView{
-			Name:     tm.Name,
-			Role:     tm.Role,
-			State:    string(tm.State),
-			Writable: tm.Writable,
-			Worktree: tm.Worktree,
-			Token:    len(ts.grants[name].Paths) > 0 || tm.Worktree,
-			JobID:    tm.LastJobID,
+			Name:           tm.Name,
+			Role:           tm.Role,
+			State:          string(tm.State),
+			Writable:       tm.Writable,
+			Worktree:       tm.Worktree,
+			WorktreeRoot:   tm.WorktreeRoot,
+			WorktreeBranch: tm.WorktreeBranch,
+			Token:          len(ts.grants[name].Paths) > 0 || tm.Worktree,
+			JobID:          tm.LastJobID,
 		}
 		out = append(out, rv)
 	}
@@ -798,6 +802,11 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 	if ts.completionFn != nil && flipped != "" {
 		ts.completionFn(flipped, st)
 	}
+	// Board wake-up (qwen idle-notification analog): a completion is the
+	// moment to surface unclaimed work so idle members/leader see it.
+	if open := ts.boardOpenCount(); open > 0 {
+		ts.emitNotice(fmt.Sprintf("task board: %d open task(s) awaiting a claim — task_list to see them", open))
+	}
 }
 
 // cleanupWorktreeAfterDone runs the D1 worktree auto-cleanup for a teammate
@@ -1138,6 +1147,30 @@ func (ts *TeammateStore) DrainLeaderMessages() []MailItem {
 // notifyMail emits the mailbox-wakeup notice (P6.2): the leader learns a
 // teammate received mail while idle, so it can decide to assign work that
 // flushes the inbox.
+// emitNotice surfaces a team-state notice on the shared sink (nil-safe).
+func (ts *TeammateStore) emitNotice(text string) {
+	ts.mu.Lock()
+	sink := ts.sink
+	ts.mu.Unlock()
+	if sink != nil {
+		sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: text})
+	}
+}
+
+// boardOpenCount reports unclaimed board items (lock held by caller in
+// HandleJobDone's unlocked tail — acquires its own lock).
+func (ts *TeammateStore) boardOpenCount() int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	n := 0
+	for _, v := range ts.board {
+		if v.Status == BoardOpen {
+			n++
+		}
+	}
+	return n
+}
+
 func (ts *TeammateStore) notifyMail(name string) {
 	ts.mu.Lock()
 	sink := ts.sink

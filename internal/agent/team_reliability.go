@@ -94,12 +94,14 @@ func (ts *TeammateStore) saveSnapshot() {
 			Teammates: make([]Teammate, 0, len(ts.teammates)),
 			Grants:    make(map[string]WritePathSet, len(ts.grants)),
 			Approvals: make(map[string]*approvalReq, len(ts.approvals)),
+			Board:     make(map[string]*TaskBoardItem, len(ts.board)),
 		}
 		for _, tm := range ts.teammates {
 			snap.Teammates = append(snap.Teammates, *tm)
 		}
 		maps.Copy(snap.Grants, ts.grants)
 		maps.Copy(snap.Approvals, ts.approvals)
+		maps.Copy(snap.Board, ts.board)
 		ts.mu.Unlock()
 
 		payload, err := json.Marshal(snap)
@@ -154,11 +156,15 @@ func (ts *TeammateStore) loadSnapshot() {
 			ts.approvals[k] = v
 		}
 	}
+	for k, v := range snap.Board {
+		ts.board[k] = v
+	}
 	ts.mu.Unlock()
 }
 
 type teamSnapshot struct {
-	Teammates []Teammate              `json:"teammates"`
-	Grants    map[string]WritePathSet `json:"grants"`
-	Approvals map[string]*approvalReq `json:"approvals"`
+	Teammates []Teammate                `json:"teammates"`
+	Grants    map[string]WritePathSet   `json:"grants"`
+	Approvals map[string]*approvalReq   `json:"approvals"`
+	Board     map[string]*TaskBoardItem `json:"board,omitempty"`
 }

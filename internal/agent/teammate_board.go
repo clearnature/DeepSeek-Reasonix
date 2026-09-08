@@ -106,3 +106,23 @@ func (ts *TeammateStore) BoardUpdate(id, owner, status string) error {
 	}
 	return nil
 }
+
+// ReleaseBoardTasks returns every task claimed by owner to the open pool (used
+// when that teammate is stopped), reporting how many were released.
+func (ts *TeammateStore) ReleaseBoardTasks(owner string) int {
+	owner = strings.TrimSpace(owner)
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	n := 0
+	for _, v := range ts.board {
+		if v.Status == BoardClaimed && v.Owner == owner {
+			v.Status = BoardOpen
+			v.Owner = ""
+			n++
+		}
+	}
+	if n > 0 && ts.snapshotPath != "" {
+		ts.saveSnapshot()
+	}
+	return n
+}
