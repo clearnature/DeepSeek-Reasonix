@@ -21,9 +21,14 @@ func (c *Controller) submitCompact(focus string) {
 			c.emitAssistantText("compaction failed: " + err.Error())
 			return
 		}
-		after := c.contextTokens()
+		src, result := c.compactionTokens()
+		if src <= 0 || result <= 0 {
+			// Older sidecars carry no receipt sizes; fall back to the prompt
+			// gauges, which are only populated after a main request.
+			src, result = before, c.contextTokens()
+		}
 		c.notice("compacted")
-		c.emitAssistantText(compactionResultText(before, after))
+		c.emitAssistantText(compactionResultText(src, result))
 		if err := c.SnapshotRewrite(); err != nil {
 			slog.Warn("controller: snapshot after compact", "err", err)
 		}
@@ -47,6 +52,17 @@ func (c *Controller) contextTokens() int {
 		return -1
 	}
 	return c.executor.ContextReport().LatestPrompt
+}
+
+// compactionTokens reads the last applied compaction's own source/result sizes.
+// A resumed session compacts before any main request, so the prompt gauges are
+// still zero there while the receipt already carries the real numbers.
+func (c *Controller) compactionTokens() (int, int) {
+	if c.executor == nil {
+		return -1, -1
+	}
+	rep := c.executor.ContextReport()
+	return rep.LastSource, rep.LastResult
 }
 
 func compactionResultText(before, after int) string {
