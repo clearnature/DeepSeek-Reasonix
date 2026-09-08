@@ -1,3 +1,4 @@
+> **2026-09-08 现状更新**：/team-* 命令层已移除，团队编排唯一入口 = `team` 模型工具（qwen 对齐，commit ac3a53d5d）。下表为 2026-09-07 时点审计，命令行 + 工具缺口项多数已由工具 action（group_delete/create/add/tasks/mail/status/remove/shutdown/approve/broadcast/grant/revoke）闭合。
 # Reasonix vs qwen-code Team：功能 + 调用配套全面审核（2026-09-07）
 
 > 方法：两侧调用面逐项对照（qwen 工具名 = tool-names.ts + tools/*.ts 实现；

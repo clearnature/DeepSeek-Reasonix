@@ -1,3 +1,4 @@
+> **2026-09-08 现状更新**：/team-* 命令已移除（唯一入口 = `team` 模型工具，ac3a53d5d）。下文的命令↔工具对齐记录属 2026-09-07 时点，approve/mail/broadcast/grant/revoke 现已全在工具 action。
 # Team 编排实现 × 文档对齐审核（2026-09-07）
 
 > fable5 Step 9 对抗自检：qwen 移植（T1-T11）完成后，逐项核对实现 vs
