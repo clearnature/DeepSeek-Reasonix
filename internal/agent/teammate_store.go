@@ -89,6 +89,8 @@ type TeammateStore struct {
 	sink event.Sink
 	// tasks is the dependency tree (jobID → task); completed gates live here.
 	tasks map[string]*TeamTask
+	// board is the qwen-style claimable task board (open/claimed/done).
+	board map[string]*TaskBoardItem
 	// grants maps teammate name → granted workspace write paths (D1 token
 	// mechanism, MiMo grant-table analog). A granted teammate becomes a
 	// restricted writer: Assign injects WritePathSet{Paths} so its fork runs
@@ -140,6 +142,7 @@ func NewTeammateStore(task *TaskTool, jm *jobs.Manager, inboxRoot ...string) *Te
 	ts := &TeammateStore{
 		teammates: make(map[string]*Teammate),
 		tasks:     make(map[string]*TeamTask),
+		board:     make(map[string]*TaskBoardItem),
 		grants:    make(map[string]WritePathSet),
 		approvals: make(map[string]*approvalReq),
 		askTools:  make(map[string][]string),

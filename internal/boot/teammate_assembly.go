@@ -33,6 +33,9 @@ func newTeammateOrchestration(sink event.Sink, jm *jobs.Manager, store *agent.Su
 	ts.SetStallAbort(600 * time.Second)
 	if ts != nil {
 		reg.Add(control.NewTeamLeaderTool(ts, root))
+		reg.Add(control.NewTaskCreateTool(ts))
+		reg.Add(control.NewTaskListTool(ts))
+		reg.Add(control.NewTaskUpdateTool(ts))
 	}
 	return ts
 }
