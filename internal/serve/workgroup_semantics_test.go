@@ -9,6 +9,7 @@ import (
 	"reasonix/internal/event"
 	"reasonix/internal/eventwire"
 	"reasonix/internal/provider"
+	"reasonix/internal/workgroup"
 )
 
 // Falsification, not measurement: each case asks whether a partition is legal
@@ -17,19 +18,19 @@ import (
 
 // groupsOf drives a turn, checks both readings still agree, and folds the cold
 // one — the reading a reload has, which is the one a partition must work from.
-func groupsOf(t *testing.T, tc traceCase, r workGroupRules) ([]Call, []WorkGroup) {
+func groupsOf(t *testing.T, tc traceCase, r workgroup.Rules) ([]workgroup.Call, []workgroup.Group) {
 	t.Helper()
 	reading := runTrace(t, tc)
 	assertParity(t, reading)
-	return foldWorkGroups(reading.replay, r)
+	return workgroup.Fold(reading.replay, r)
 }
 
-func requireNoDuplicates(t *testing.T, groups []WorkGroup) {
+func requireNoDuplicates(t *testing.T, groups []workgroup.Group) {
 	t.Helper()
-	if bad := duplicateMembership(groups); bad != "" {
+	if bad := workgroup.DuplicateMembership(groups); bad != "" {
 		t.Fatalf("a call landed in more than one group: %s", bad)
 	}
-	if bad := sealedOverAnOpenCall(groups); bad != "" {
+	if bad := workgroup.SealedOverAnOpenCall(groups); bad != "" {
 		t.Fatalf("a group closed while a member was still running: %s", bad)
 	}
 }
@@ -43,10 +44,10 @@ func TestWorkGroupMergesRoundsOfOneProducer(t *testing.T) {
 		{say("second"), callTodo("call-b", "b")},
 		{say("third"), callTodo("call-c", "c")},
 		{say("done")},
-	}}, workGroupV1())
+	}}, workgroup.V1())
 	requireNoDuplicates(t, groups)
 	if len(groups) != 1 || strings.Join(groups[0].Members, ",") != "call-a,call-b,call-c" {
-		t.Fatalf("three rounds of one producer = %v, want one group of all three", groupShape(groups))
+		t.Fatalf("three rounds of one producer = %v, want one group of all three", workgroup.Shape(groups))
 	}
 	// Settled says sat between every pair of them and cut nothing: message
 	// adjacency is not an authority, which is what the real corpus showed.
@@ -68,13 +69,13 @@ func TestWorkGroupMergesRoundsOfOneProducer(t *testing.T) {
 // rule has something to cut — a fixture where only one produces calls would
 // pass with the rule switched off.
 func TestWorkGroupSplitsAtTheProducer(t *testing.T) {
-	_, groups := groupsOf(t, twoProducerCase(), workGroupV1())
+	_, groups := groupsOf(t, twoProducerCase(), workgroup.V1())
 	requireNoDuplicates(t, groups)
 	if len(groups) != 2 {
-		t.Fatalf("groups = %v, want one per producer", groupShape(groups))
+		t.Fatalf("groups = %v, want one per producer", workgroup.Shape(groups))
 	}
 	if groups[0].Source != "planner" || groups[1].Source != "executor" {
-		t.Fatalf("groups = %v, want the planner's then the executor's", groupShape(groups))
+		t.Fatalf("groups = %v, want the planner's then the executor's", workgroup.Shape(groups))
 	}
 }
 
@@ -113,9 +114,9 @@ func TestBarrierKeepsTheCallWholeAndClosesTheGroupAfterIt(t *testing.T) {
 				{callTodo("call-before", "before")},
 				{say("now the barrier"), tc.call},
 				{say("done")},
-			}}, workGroupV1())
+			}}, workgroup.V1())
 			requireNoDuplicates(t, groups)
-			var barred *Call
+			var barred *workgroup.Call
 			for i := range calls {
 				if calls[i].ID == "call-write" {
 					barred = &calls[i]
@@ -133,10 +134,10 @@ func TestBarrierKeepsTheCallWholeAndClosesTheGroupAfterIt(t *testing.T) {
 			last := groups[len(groups)-1]
 			if last.ClosedBy != "barrier settled" {
 				t.Fatalf("groups = %v, want the last one closed after the barred call settled",
-					groupShape(groups))
+					workgroup.Shape(groups))
 			}
 			if !slices.Contains(last.Members, "call-write") {
-				t.Fatalf("the barred call is not in the group that closed for it: %v", groupShape(groups))
+				t.Fatalf("the barred call is not in the group that closed for it: %v", workgroup.Shape(groups))
 			}
 		})
 	}
@@ -149,10 +150,10 @@ func TestProviderCallIsAMember(t *testing.T) {
 		{provider.Chunk{Type: provider.ChunkProviderTool, Text: "two results",
 			ToolCall: &provider.ToolCall{ID: "srv-1", Name: "web_search", Arguments: `{"q":"x"}`}},
 			say("summarised")},
-	}}, workGroupV1())
+	}}, workgroup.V1())
 	requireNoDuplicates(t, groups)
 	if len(groups) != 1 || !slices.Contains(groups[0].Members, "srv-1") {
-		t.Fatalf("groups = %v, want the provider-side call as a member", groupShape(groups))
+		t.Fatalf("groups = %v, want the provider-side call as a member", workgroup.Shape(groups))
 	}
 }
 
@@ -160,14 +161,14 @@ func TestProviderCallIsAMember(t *testing.T) {
 // credit the host to the model; cutting on it would fragment a turn every time
 // a list advanced.
 func TestHostBookkeepingIsNeitherAStepNorABoundary(t *testing.T) {
-	_, groups := groupsOf(t, hostAdvanceCase(), workGroupV1())
+	_, groups := groupsOf(t, hostAdvanceCase(), workgroup.V1())
 	requireNoDuplicates(t, groups)
 	if len(groups) != 1 {
-		t.Fatalf("groups = %v, want one — the host's advance cut the turn up", groupShape(groups))
+		t.Fatalf("groups = %v, want one — the host's advance cut the turn up", workgroup.Shape(groups))
 	}
 	for _, id := range groups[0].Members {
 		if strings.HasPrefix(id, "host-advance") {
-			t.Fatalf("the host's own bookkeeping counted as a step: %v", groupShape(groups))
+			t.Fatalf("the host's own bookkeeping counted as a step: %v", workgroup.Shape(groups))
 		}
 	}
 }
@@ -176,10 +177,10 @@ func TestHostBookkeepingIsNeitherAStepNorABoundary(t *testing.T) {
 // the same way here — the child carries a parent id and its own producer — and
 // the rule reads the structural one.
 func TestSubagentCallsAreNotPromoted(t *testing.T) {
-	_, groups := groupsOf(t, subagentCase(), workGroupV1())
+	_, groups := groupsOf(t, subagentCase(), workgroup.V1())
 	requireNoDuplicates(t, groups)
 	if len(groups) != 1 || strings.Join(groups[0].Members, ",") != "call-task" {
-		t.Fatalf("groups = %v, want only the parent call as a top-level member", groupShape(groups))
+		t.Fatalf("groups = %v, want only the parent call as a top-level member", workgroup.Shape(groups))
 	}
 }
 
@@ -244,15 +245,15 @@ func TestUserIssuedCallEndsTheGroupItLandsIn(t *testing.T) {
 		frame("tool_result", toolFrame("m2", event.IssuedByModel)),
 		{Kind: "turn_done"},
 	}
-	_, groups := foldWorkGroups(frames, workGroupV1())
+	_, groups := workgroup.Fold(frames, workgroup.V1())
 	requireNoDuplicates(t, groups)
 	if len(groups) != 2 {
 		t.Fatalf("groups = %v, want the user's line to end the first and start a second",
-			groupShape(groups))
+			workgroup.Shape(groups))
 	}
 	for _, g := range groups {
 		if slices.Contains(g.Members, "u1") {
-			t.Fatalf("the user's own line counted as the assistant's work: %v", groupShape(groups))
+			t.Fatalf("the user's own line counted as the assistant's work: %v", workgroup.Shape(groups))
 		}
 	}
 }
@@ -268,16 +269,16 @@ func TestATurnWithNoTurnDoneStillCloses(t *testing.T) {
 		frame("tool_dispatch", toolFrame("m1", event.IssuedByModel)),
 		frame("tool_result", toolFrame("m1", event.IssuedByModel)),
 	}
-	_, groups := foldWorkGroups(frames, workGroupV1())
+	_, groups := workgroup.Fold(frames, workgroup.V1())
 	if len(groups) != 1 || groups[0].ClosedBy != "end of record" {
-		t.Fatalf("groups = %v, want one closed by the record ending", groupShape(groups))
+		t.Fatalf("groups = %v, want one closed by the record ending", workgroup.Shape(groups))
 	}
 	next := append(append([]eventwire.Event(nil), frames...), eventwire.Event{Kind: "turn_started"},
 		frame("tool_dispatch", toolFrame("m2", event.IssuedByModel)),
 		frame("tool_result", toolFrame("m2", event.IssuedByModel)))
-	_, groups = foldWorkGroups(next, workGroupV1())
+	_, groups = workgroup.Fold(next, workgroup.V1())
 	if len(groups) != 2 || groups[0].ClosedBy != "next turn" {
-		t.Fatalf("groups = %v, want the next turn to close the unclosed one", groupShape(groups))
+		t.Fatalf("groups = %v, want the next turn to close the unclosed one", workgroup.Shape(groups))
 	}
 }
 
@@ -289,8 +290,8 @@ func TestATurnWithNoTurnDoneStillCloses(t *testing.T) {
 // shows: not a call in two groups any more, but a group sealed while its member
 // is still running, whose result then belongs to no group at all.
 func TestSabotageBarrierSplitInPlaceSealsOverARunningCall(t *testing.T) {
-	r := workGroupV1()
-	r.barrierClosesAfterCall, r.barrierSplitsInPlace = false, true
+	r := workgroup.V1()
+	r.BarrierClosesAfterCall, r.BarrierSplitsInPlace = false, true
 	_, groups := groupsOf(t, traceCase{input: "go", interactive: true, executor: [][]provider.Chunk{
 		{callTodo("call-before", "before")},
 		{say("now the barrier"), provider.Chunk{Type: provider.ChunkToolCall, ToolCall: &provider.ToolCall{
@@ -301,16 +302,16 @@ func TestSabotageBarrierSplitInPlaceSealsOverARunningCall(t *testing.T) {
 	// Atomizing calls first already stops one from landing in two groups, so the
 	// defect a misplaced boundary leaves is this: the group is sealed while its
 	// member is still running, and the result lands outside every group.
-	if sealedOverAnOpenCall(groups) == "" {
+	if workgroup.SealedOverAnOpenCall(groups) == "" {
 		t.Fatalf("splitting at the barrier sealed no group over a running call (%v); "+
-			"the invariant this table rests on is not being checked", groupShape(groups))
+			"the invariant this table rests on is not being checked", workgroup.Shape(groups))
 	}
 }
 
 // Counting the host's bookkeeping credits it to the assistant.
 func TestSabotageCountingHostWorkAddsAStepNobodyTook(t *testing.T) {
-	r := workGroupV1()
-	r.hostCounts = true
+	r := workgroup.V1()
+	r.HostCounts = true
 	_, groups := groupsOf(t, hostAdvanceCase(), r)
 	var host bool
 	for _, g := range groups {
@@ -325,8 +326,8 @@ func TestSabotageCountingHostWorkAddsAStepNobodyTook(t *testing.T) {
 
 // Excluding provider-executed work drops a call the assistant really made.
 func TestSabotageExcludingProviderWorkLosesTheCall(t *testing.T) {
-	r := workGroupV1()
-	r.providerCounts = false
+	r := workgroup.V1()
+	r.ProviderCounts = false
 	_, groups := groupsOf(t, traceCase{input: "go", executor: [][]provider.Chunk{
 		{provider.Chunk{Type: provider.ChunkProviderTool, Text: "two results",
 			ToolCall: &provider.ToolCall{ID: "srv-1", Name: "web_search", Arguments: `{"q":"x"}`}},
@@ -338,19 +339,19 @@ func TestSabotageExcludingProviderWorkLosesTheCall(t *testing.T) {
 		}
 	}
 	if len(groups) != 0 {
-		t.Fatalf("groups = %v, want none once the only call is excluded", groupShape(groups))
+		t.Fatalf("groups = %v, want none once the only call is excluded", workgroup.Shape(groups))
 	}
 }
 
 // Ignoring the producer folds a planner's work and an executor's into one run.
 func TestSabotageIgnoringTheProducerMergesTwoModels(t *testing.T) {
-	r := workGroupV1()
-	r.sourceCuts = false
+	r := workgroup.V1()
+	r.SourceCuts = false
 	_, groups := groupsOf(t, twoProducerCase(), r)
 	if len(groups) != 1 {
 		t.Fatalf("groups = %v, want the two producers wrongly merged into one — "+
 			"if they stay apart, something other than the producer rule is splitting them",
-			groupShape(groups))
+			workgroup.Shape(groups))
 	}
 }
 
@@ -358,8 +359,8 @@ func TestSabotageIgnoringTheProducerMergesTwoModels(t *testing.T) {
 // across it, which is what makes one continuous "Reasonix worked" block out of
 // two separated by the user's own action.
 func TestSabotageTransparentUserLineMergesAcrossIt(t *testing.T) {
-	r := workGroupV1()
-	r.userCuts = false
+	r := workgroup.V1()
+	r.UserCuts = false
 	frames := []eventwire.Event{
 		{Kind: "turn_started"},
 		frame("tool_dispatch", toolFrame("m1", event.IssuedByModel)),
@@ -370,21 +371,21 @@ func TestSabotageTransparentUserLineMergesAcrossIt(t *testing.T) {
 		frame("tool_result", toolFrame("m2", event.IssuedByModel)),
 		{Kind: "turn_done"},
 	}
-	_, groups := foldWorkGroups(frames, r)
+	_, groups := workgroup.Fold(frames, r)
 	if len(groups) != 1 {
 		t.Fatalf("groups = %v, want the two stretches wrongly merged across the user's line",
-			groupShape(groups))
+			workgroup.Shape(groups))
 	}
 }
 
 // Cutting on the host's bookkeeping fragments a turn every time a list moves —
 // which is the round-level shredding WorkGroup exists to avoid.
 func TestSabotageCuttingOnHostBookkeepingFragmentsTheTurn(t *testing.T) {
-	r := workGroupV1()
-	r.hostIsTransparent = false
+	r := workgroup.V1()
+	r.HostIsTransparent = false
 	_, groups := groupsOf(t, hostAdvanceCase(), r)
 	if len(groups) < 2 {
 		t.Fatalf("groups = %v, want the turn fragmented once the host stops being transparent",
-			groupShape(groups))
+			workgroup.Shape(groups))
 	}
 }
