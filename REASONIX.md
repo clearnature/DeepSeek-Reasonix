@@ -116,6 +116,17 @@ agent. It is the Reasonix analog of Claude Code's CLAUDE.md.
   records `os.File.Close` as a frontend driving `Lifecycle.Close`, a false
   "wired" that hides real debt. How a verb is spelled — `/branch`,
   `POST /branches` — is presentation and stays out of it.
+- The desktop's presentation layer answers to canonical state and never
+  redefines it. Six rules, each held by a gate rather than by memory:
+  presentation reorders and reweights what the kernel owns but never restates
+  it; **mount is not a motion cause** — a fact enters once, and replay or
+  virtualization bringing its element back is not that fact happening again;
+  a search alias buys discoverability and never becomes a thing's identity;
+  when a setting takes effect is declared per block, from what its endpoint
+  does, never inferred from wording or handler names; ordering panels by
+  lifecycle moves them and must not remount them; and a control's identity
+  survives a change of where it is drawn — the settings sheet and the composer
+  render `chrome.preset` because that is one intent, not two.
 
 ## Comments
 
