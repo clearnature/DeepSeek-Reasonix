@@ -194,6 +194,7 @@ type CompactionTelemetry struct {
 	ToolsCount        int    `json:"tools_count,omitempty"` // tool schema set the summary sent
 	ToolsFP           string `json:"tools_fp,omitempty"`
 	ToolsSource       string `json:"tools_source,omitempty"` // frozen | live | none
+	PrefixHash        string `json:"pref_hash,omitempty"`    // summarize-prefix fingerprint (drift vs expiry)
 	Error             string `json:"error,omitempty"`
 }
 

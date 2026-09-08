@@ -81,11 +81,23 @@ func (a *Agent) fillCompactionWireTelemetry(tele *CompactionTelemetry, prefix, f
 	view := append(append([]provider.Message(nil), prefix...), fold...)
 	tele.ViewFP = providerVisibleFingerprint(modelInputMessages(view))
 	tele.WireFP = a.sess.wireFP()
+	tele.PrefixHash = summarizePrefixHash(prefix)
 	if schemas, source := a.summaryToolsSource(); source != "none" {
 		tele.ToolsCount = len(schemas)
 		tele.ToolsFP = toolsFingerprint(schemas)
 		tele.ToolsSource = source
 	}
+}
+
+// summarizePrefixHash fingerprints the summarizer's prefix so compaction passes
+// can be compared for drift: a stable hash with a low hit rate means the bytes
+// were never sent before; a changing hash means the boundary moved.
+func summarizePrefixHash(prefix []provider.Message) string {
+	h := providerVisibleFingerprint(provider.ModelMessages(prefix))
+	if len(h) > 12 {
+		h = h[:12]
+	}
+	return h
 }
 
 // telemetryFromSummary builds a compaction record for a fold region and

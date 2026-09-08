@@ -134,14 +134,22 @@ func (a *Agent) recordContextMaintenanceOutcome(inputHash, trigger, action, stat
 	a.emitContextMaintenance(state.LastReceipt)
 }
 
-func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
-	detail := fmt.Sprintf("trigger=%s mode=%s summary_input=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d view_fp=%s wire_fp=%s tools_count=%d tools_fp=%s tools_source=%s",
+// compactionDetailString renders the detail line the stats recorder parses.
+// Every key here must have a matching case in internal/stats/recorder.go;
+// compaction_telemetry_guard_test.go fails the build when one side drifts.
+func compactionDetailString(t CompactionTelemetry) string {
+	detail := fmt.Sprintf("trigger=%s mode=%s summary_input=%s cache=%s src=%d fold=%d spans=%d proj=%d in=%d out=%d hit=%d miss=%d write=%d reqs=%d user_kept=%d user_dropped=%d view_fp=%s wire_fp=%s tools_count=%d tools_fp=%s tools_source=%s pref_hash=%s",
 		t.Trigger, t.Mode, t.SummaryInputMode, t.CacheState, t.SourceTokens, t.FoldTokens, t.Spans, t.ProjectionTokens,
 		t.InputTokens, t.OutputTokens, t.CacheHitTokens, t.CacheMissTokens, t.CacheWriteTokens, t.RequestCount,
-		t.UserTurnsKept, t.UserTurnsDropped, t.ViewFP, t.WireFP, t.ToolsCount, t.ToolsFP, t.ToolsSource)
+		t.UserTurnsKept, t.UserTurnsDropped, t.ViewFP, t.WireFP, t.ToolsCount, t.ToolsFP, t.ToolsSource, t.PrefixHash)
 	if t.ProviderRequestID != "" {
 		detail += " provider_request_id=" + t.ProviderRequestID
 	}
+	return detail
+}
+
+func (a *Agent) emitCompactionTelemetry(t CompactionTelemetry) {
+	detail := compactionDetailString(t)
 	if t.Error != "" {
 		if t.Mode != CompactionModeDegraded {
 			slog.Warn("agent: compaction failed", "detail", detail, "err_type", t.Error)
