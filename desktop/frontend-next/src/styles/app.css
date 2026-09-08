@@ -917,30 +917,41 @@
   .jump:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
   .jump[hidden] { display: none }
 
-  /* 分隔线要通栏，标签要跟文档列左对齐 —— 所以缩进走 padding，元素本身不收窄 */
+  /* 分隔线要通栏，标签要跟文档列左对齐 —— 所以缩进走 padding，元素本身不收窄。
+     面板内导航比外面那排 PaneTabs 低一级：外面回答「我在哪个会话」，这里回答
+     「我怎么看这个会话」。两层用同一根会移动的 tabmark，读起来就成了兄弟关系，
+     每次都得重新判断哪排是换会话 —— 所以 marker 归 PaneTabs 独有，这里当前项
+     只上一层很轻的底色。 */
   .tabs {
     position: relative;
-    display: flex; gap: 2px; flex: none; border-bottom: 1px solid var(--hair);
-    padding: 9px 0 0; padding-inline: max(16px, calc((100% - var(--doc)) / 2 + 18px));
+    display: flex; align-items: center; gap: 2px; flex: none;
+    border-bottom: 1px solid var(--hair);
+    padding: 7px 0; padding-inline: max(16px, calc((100% - var(--doc)) / 2 + 18px));
   }
-  /* One shared marker travels instead of each tab lighting its own underline, so
-     switching gives the eye something to follow — most of all on the keyboard.
-     marker.ts measures the live element; this only says how it moves. The plan
-     cursor is the same idea, generalised. */
+  .vtabs { display: flex; align-items: center; gap: 2px; min-width: 0 }
+  /* marker 现在只有 PaneTabs 一个主人：一根共用的标记在页签间移动，切换时眼睛
+     有东西可跟 —— 键盘上尤其。marker.ts 量活元素，这里只说它怎么走。 */
   .tabmark {
     position: absolute; bottom: 0; left: 0; height: 2px; border-radius: var(--r-xs);
     background: var(--accent); pointer-events: none;
     transition: transform .3s var(--ease-out), width .3s var(--ease-out);
   }
   .tab {
-    padding: 6px 11px 8px; border: 0; background: none; cursor: pointer;
-    font: var(--w-med) 12px var(--ui); color: var(--faint); border-bottom: 2px solid transparent;
-    margin-bottom: -1px; transition: color .15s;
+    flex: none; padding: 5px 11px; border: 0; border-radius: var(--r-sm);
+    background: none; cursor: pointer; white-space: nowrap;
+    font: var(--w-med) 12px var(--ui); color: var(--faint);
+    transition: color .15s, background .15s;
   }
   .tab:hover { color: var(--text) }
-  .tab[aria-selected="true"] { color: var(--text) }
-  .tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
+  .tab[aria-selected="true"], .tab.on { background: var(--overlay); color: var(--text) }
+  .tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   .tab .n { font: var(--w-reg) 10px var(--mono); color: var(--ghost); margin-left: 5px; font-variant-numeric: tabular-nums }
+  /* 诊断入口靠右：它不是第三个目的地，是另一层。 */
+  .tabs > .picker { margin-left: auto }
+  .tabs .picker .projmenu { left: auto; right: 0; transform-origin: top right }
+  .tab.more { display: inline-flex; align-items: center; gap: 5px }
+  .tab.more .cv { font: var(--w-reg) 9.5px var(--ui); color: var(--faint); font-style: normal; transition: transform .18s var(--ease) }
+  .tab.more[aria-expanded="true"] .cv { transform: rotate(180deg) }
 
   /* ── 中栏顶：运行头卡 ─────────────────────────────────────────────── */
   /* 「这个会话在干什么」以前要看四个地方：面包屑尾巴上的目标、输入框上方的运行

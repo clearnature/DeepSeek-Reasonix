@@ -25,9 +25,8 @@ import { key as slotKey, placement } from "./slots";
 import { Metrics } from "./Metrics";
 import { railOf } from "./panels/derive";
 import { ABSENT, accountOf, type Wallet } from "./wallet";
-import { arrowTabs } from "./tablist";
 import { swapping } from "./swap";
-import { useMarker } from "./marker";
+import { PaneNav, type PaneView } from "./PaneNav";
 import { tokensPerSecond } from "../port/tokens";
 
 // PaneReport is what the window's own chrome needs from whichever pane has
@@ -86,7 +85,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const exec = useSyncExternalStore(graphStore.subscribe, graphStore.read);
   const readGraph = useCallback(() => port.executionGraph(), [port]);
   const [status, setStatus] = useState<SessionStatus | null>(null);
-  const [tab, setTab] = useState<"flow" | "line" | "traj" | "graph" | "task">("flow");
+  const [tab, setTab] = useState<PaneView>("flow");
   const [pinned, setPinned] = useState(true);
   const [jump, setJump] = useState(0);
   // What the run graph asked to be shown. The counter is the request, not the
@@ -102,8 +101,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const [queue, setQueue] = useState<QueueSnapshot | null>(null);
   const [slots, setSlots] = useState<Record<string, string>>({});
   const flow = useRef<HTMLDivElement>(null);
-  const tabs = useRef<HTMLDivElement>(null);
-  const tabMark = useMarker(tabs, '.tab[aria-selected="true"]', "x", [tab]);
   const startedAt = useRef(0);
   // Read by the 250ms tick without making it a dependency, so a delta arriving
   // between ticks does not restart the interval.
@@ -550,6 +547,11 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     [],
   );
 
+  // Every route into a view goes through one place, so the menu never grows a
+  // motion language of its own: it says which view, and this says how a pane
+  // changes from one to another.
+  const showView = useCallback((to: PaneView) => swapping(() => setTab(to), "tab"), []);
+
   // The timeline's tab is drawn only while the run has a graph, so a session
   // that delegated nothing is not offered an empty page. Leaving someone parked
   // on a tab that just lost its button is the other half of that.
@@ -586,26 +588,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       onMouseDownCapture={active ? undefined : onFocus}
       onFocusCapture={active ? undefined : onFocus}
     >
-      <div className="tabs" role="tablist" ref={tabs} onKeyDown={arrowTabs}>
-        <button className="tab" role="tab" aria-selected={tab === "flow"} onClick={() => swapping(() => setTab("flow"), "tab")}>
-          {t("活动")}<span className="n">{s.items.length}</span>
-        </button>
-        {exec.graph.nodes.length > 0 && (
-          <button className="tab" role="tab" aria-selected={tab === "line"} onClick={() => swapping(() => setTab("line"), "tab")}>
-            {t("时间线")}<span className="n">{exec.graph.nodes.length}</span>
-          </button>
-        )}
-        <button className="tab" role="tab" aria-selected={tab === "traj"} onClick={() => swapping(() => setTab("traj"), "tab")}>
-          {t("轨迹")}<span className="n">{traj.rows.length}</span>
-        </button>
-        <button className="tab" role="tab" aria-selected={tab === "graph"} onClick={() => swapping(() => setTab("graph"), "tab")}>
-          {t("图")}{exec.graph.nodes.length > 0 && <span className="n">{exec.graph.nodes.length}</span>}
-        </button>
-                <button className="tab" role="tab" aria-selected={tab === "task"} onClick={() => swapping(() => setTab("task"), "tab")}>
-          {t("任务")}{s.plan.length > 0 && <span className="n">{s.plan.filter((x) => x.done).length}/{s.plan.length}</span>}
-        </button>
-        {tabMark && <i className="tabmark" style={{ width: tabMark.len, transform: `translateX(${tabMark.at}px)` }} />}
-      </div>
+      <PaneNav
+        view={tab}
+        onPick={showView}
+        done={s.plan.filter((x) => x.done).length}
+        steps={s.plan.length}
+        nodes={exec.graph.nodes.length}
+        rows={traj.rows.length}
+      />
 
       <Transcript
         items={s.items}

@@ -123,6 +123,10 @@ export const ACTIONS: UIAction[] = [
   { id: "extensions.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
   { id: "settings.close", kind: "navigation", target: "none", proof: "interaction" },
   { id: "pane.activate", kind: "navigation", target: "none", proof: "interaction" },
+  // How this session is being read. One id across a bar button and a menu row,
+  // because reaching a view from the bar and from the detail menu is one intent
+  // in two places, not two things a person can do.
+  { id: "pane.view", kind: "view", target: "none", proof: "interaction" },
   { id: "session.new", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   // The bytes reach the host as the file is chosen, before anything is sent:
   // the picker's button only opens a dialog, and this is where the upload is.

@@ -77,6 +77,9 @@ export const EN: Record<string, string> = {
   // ── 面板与栏 ─────────────────────────────────────────────────────
   "活动": "Activity",
   "轨迹": "Trajectory",
+  "对话": "Conversation",
+  "事件轨迹": "Event trail",
+  "运行图": "Run graph",
   "你说过的话": "What you said",
   "第 {n} 句": "Message {n}",
   "{n} 个文件": "{n} files",
