@@ -181,6 +181,13 @@ type Controller struct {
 	// Close cancels its still-running jobs.
 	jobs      *jobs.Manager
 	teammates *agent.TeammateStore // P6 team orchestrator; nil keeps single-agent /team-* disabled
+	// digestCh/digestDone/digestOnce run the leader auto-digest round (qwen
+	// wait analog): completion wakes a model turn when no user turn owns the
+	// controller. Cap-1 channel batches bursts; digestDone closes from Close.
+	autoDigest bool
+	digestCh   chan struct{}
+	digestDone chan struct{}
+	digestOnce sync.Once
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
 	workspaceLease *workspacelease.Owner
@@ -469,6 +476,10 @@ type Options struct {
 	// Teammates is the team orchestrator for multi-agent sessions (P6).
 	// Nil keeps single-agent behavior.
 	Teammates *agent.TeammateStore
+	// DigestAuto enables the leader auto-digest round: teammate completions
+	// wake an unattended model turn. Off by default so tests and headless
+	// harnesses never run model turns on completion; boot enables it.
+	DigestAuto bool
 	// RecoveryReviewer is the optional independent recovery reviewer (nil =
 	// rule-only path with fail-closed human confirmation for ambiguous cases).
 	RecoveryReviewer recovery.Reviewer
@@ -678,6 +689,7 @@ func New(opts Options) *Controller {
 		runner:                            opts.Runner,
 		executor:                          opts.Executor,
 		teammates:                         opts.Teammates,
+		autoDigest:                        opts.DigestAuto,
 		guardianSess:                      opts.Guardian,
 		guardianPath:                      guardian.PathFor(opts.SessionPath),
 		evaluator:                         opts.GoalEvaluator,
@@ -785,6 +797,7 @@ func New(opts Options) *Controller {
 			func() string { return c.parentSessionID() },
 		))
 	}
+	c.startDigestRound()
 	return c
 }
 
@@ -5511,6 +5524,7 @@ func (c *Controller) close(fireSessionEnd bool, jobsMode closeJobsMode) {
 	// controller; make teardown idempotent so a duplicate Close cannot re-fire
 	// SessionEnd hooks or re-run cleanup. The first caller's jobsMode wins.
 	c.closeOnce.Do(func() {
+		c.stopDigestRound()
 		c.mu.Lock()
 		started := c.startedOnce
 		cancel := c.cancel

@@ -4,12 +4,12 @@
     "commented-code": 1,
     "complexity": 1946,
     "essay": 2107,
-    "file-size": 109814,
-    "function-size": 8455,
+    "file-size": 109829,
+    "function-size": 8458,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
-    "struct-state": 116,
+    "struct-state": 117,
     "test-file-size": 70305
   },
   "files": {
@@ -636,8 +636,8 @@
     "internal/boot/boot.go": {
       "complexity": 258,
       "essay": 77,
-      "file-size": 2073,
-      "function-size": 1702,
+      "file-size": 2074,
+      "function-size": 1703,
       "narrative": 3
     },
     "internal/boot/boot_test.go": {
@@ -961,10 +961,10 @@
     "internal/control/controller.go": {
       "complexity": 12,
       "essay": 91,
-      "file-size": 5521,
-      "function-size": 81,
+      "file-size": 5535,
+      "function-size": 83,
       "narrative": 4,
-      "struct-state": 16
+      "struct-state": 17
     },
     "internal/control/controller_test.go": {
       "essay": 1,
