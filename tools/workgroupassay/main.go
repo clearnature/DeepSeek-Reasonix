@@ -179,7 +179,7 @@ func turnsIn(path string, at time.Time) ([]turn, int) {
 }
 
 func report(turns []turn, skipped skipReasons) {
-	fmt.Printf("P2-2d natural-value assay\n")
+	fmt.Printf("P2-2e natural-value assay\n")
 	fmt.Printf("  protocol frozen at %s; sample is the first %d eligible authored turns after it\n",
 		frozenAt, sampleSize)
 	fmt.Printf("  eligible so far: %d\n", len(turns))

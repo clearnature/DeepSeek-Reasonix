@@ -1,8 +1,3 @@
-// Package workgroup folds a durable trajectory into tool calls and then into
-// runs of one producer's work. It exists for the natural-value assay: whether
-// a turn's execution is worth offering as one foldable unit is a question about
-// real use, and answering it needs one partition both the assay and the
-// semantics tests read. A second copy of these rules would drift from the first.
 package workgroup
 
 import (
@@ -13,9 +8,8 @@ import (
 	"reasonix/internal/eventwire"
 )
 
-// Call is one tool invocation as an atom: a barrier lands between a dispatch
-// and its result, and a call outlives its round, and neither may materialize a
-// second Call for the same id.
+// Call is one tool invocation as an atom. See doc.go for the three lifecycles
+// a frame stream carries and which of them are calls.
 type Call struct {
 	ID            string
 	Source        string

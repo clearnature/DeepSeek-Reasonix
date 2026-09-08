@@ -1,43 +1,54 @@
 # workgroup assay
 
-Answers one question about real use: **is there enough in a turn's execution to
-be worth folding?** Semantics and live/cold parity are settled elsewhere
-(`internal/workgroup`, `internal/serve/workgroup_semantics_test.go`,
-`internal/serve/trace_parity_test.go`); this only measures natural granularity.
+Two assays, one question each. Keeping them apart is the point: mixing their
+turns would put two sampling mechanisms in one denominator.
 
 ```
-go run ./tools/workgroupassay            # reads the default session root
+go run ./tools/workgroupassay            # P2-2e-natural, the current one
 go run ./tools/workgroupassay -root DIR
 ```
 
-## The protocol, frozen before the sample existed
+## P2-2e-natural — is ordinary use worth folding?
 
-It is in `protocol.go` so changing it is a reviewable diff.
+The live assay. Its protocol is in `protocol.go` so changing it is a reviewable
+diff.
 
-- **Sample**: the first 12 eligible authored turns produced *after* the freeze
-  timestamp, in the order they happened. Not the last 12, not a chosen 12.
-- **The sample is designed, not observed.** The turns come from a written task
-  list. A natural sample was the alternative and was given up on purpose, to
-  buy an answer now instead of waiting days for one; the price is that the
-  group sizes carry the task author's idea of what an agent does. Nothing here
-  may be reported as "what ordinary use looks like".
-- **Eligible**: the turn carries a named `authoredTurn` (which only the current
-  schema emits, and which a synthetic continuation never gets), and its
-  session's trajectory reads `complete` — a truncated log is a prefix and
-  cannot answer a question about a whole turn.
-- **A turn with no tool calls is in the sample.** The question is how much of
-  ordinary use is worth folding; dropping the quiet turns would answer a
-  different one and flatter the feature.
-- **No route quotas.** Whatever mix of executor-only and plan-and-execute turns
-  ordinary use produces is the sample; the mix is reported as a description,
-  never selected for.
+- **Sample**: the first 20 eligible authored turns produced *after* the freeze
+  timestamp by ordinary Studio use, in the order they happened. Not the last
+  20, not a chosen 20, not 24 because the answer landed near a line.
+- **Eligible**: the turn carries a named `authoredTurn` — which only the
+  current schema emits, and which a synthetic continuation never gets — and its
+  trajectory reads `complete`, because a prefix cannot answer a question about
+  a whole turn.
+- **In**: quiet turns with no tool call, one-call turns, executor-only turns,
+  plan-and-execute turns, and whatever approvals and asks happen on their own.
+  A turn with nothing to fold is evidence about coverage, and dropping it would
+  answer a different question and flatter the feature.
+- **Out**: turns written for this experiment, benchmark and fixture runs, and
+  anything shaped to call more tools than the work needed.
 - **No verdict before the sample is whole.** Under 20 the tool prints the count
-  and stops. Reading a partial result and acting on it is the sequential
-  decision this exists to prevent.
+  and stops.
+
+## P2-2d-designed — how good can it be where it fits? (completed)
+
+A written task list of 12 turns, run once against a real model. It is recorded
+in `protocol.go` as a reference condition and is **excluded from the natural
+verdict**. Raw trajectory, task list and result:
+`~/.reasonix/research/p2-2d-designed/`.
+
+It cost ¥2.13 and its most durable result was not a number: on its ninth turn
+it broke an invariant ten fixtures had agreed held, because a `Partial=true`
+dispatch is a transport statement and not a promise that a completion frame
+follows. See `internal/workgroup`.
 
 ## The verdict
 
 NO-GO requires **both**: more than half of groups are a single call, **and**
 fewer than 40% of authored turns contain a group of three or more. Anything
-else is not an automatic go — it hands the decision to a human looking at the
-distribution and the actual group shapes.
+else is not an automatic go — it hands the decision to a human reading the
+distributions, the group shapes, and the coverage number below them.
+
+Coverage — how many turns have no assistant-owned call at all — is reported and
+deliberately **not** gated. Adding it to the gate now would be redrawing the
+line after seeing a sample; leaving it out of the report would let a low
+singleton rate read as broad reach when a fold might touch half the turns.

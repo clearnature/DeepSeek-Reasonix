@@ -108,8 +108,24 @@ func measure(sample []turn) {
 	for _, src := range sortedKeys(a.BySource) {
 		fmt.Printf("   %-10s groups %d, median size %.1f\n", src, len(a.BySource[src]), median(a.BySource[src]))
 	}
-	fmt.Printf("   turns with no assistant call     %d\n", a.ZeroCallTurns)
-	fmt.Printf("   turns with exactly one           %d\n", a.OneCallTurns)
+	fmt.Printf("   turns with exactly one call      %d\n", a.OneCallTurns)
+
+	// Reported, never gated: adding it to the gate after a sample has been seen
+	// is redrawing the line, and leaving it out lets a low singleton rate read
+	// as broad reach when a fold might touch half the turns.
+	fmt.Printf("\ncoverage — reported, not gated\n")
+	fmt.Printf("   turns with no assistant-owned call  %d of %d = %.0f%%\n",
+		a.ZeroCallTurns, a.Turns, 100*share(a.ZeroCallTurns, a.Turns))
+
+	fmt.Printf("\nagainst P2-2d-designed (n=%d, %s)\n", designedReference.Turns, designedReference.Note)
+	fmt.Printf("   singleton workgroups   %+.0f pp   (%.0f%% here, %.0f%% there)\n",
+		100*(a.singletonShare()-designedReference.SingletonShare),
+		100*a.singletonShare(), 100*designedReference.SingletonShare)
+	fmt.Printf("   turns with a %d+ group  %+.0f pp   (%.0f%% here, %.0f%% there)\n", richTurnCalls,
+		100*(a.richShare()-designedReference.RichTurnShare),
+		100*a.richShare(), 100*designedReference.RichTurnShare)
+	fmt.Printf("   These are two sampling mechanisms, neither randomized nor paired,\n")
+	fmt.Printf("   both small. The difference is the whole claim; it is not a test.\n")
 
 	if designedSample {
 		fmt.Printf("\nthis sample was designed, not observed: the turns come from a written task\n")
