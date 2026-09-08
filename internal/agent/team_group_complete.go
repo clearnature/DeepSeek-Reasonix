@@ -20,22 +20,26 @@ func (ts *TeammateStore) checkGroupCompleted(flipped string) {
 		return
 	}
 	ts.mu.Lock()
-	members := len(ts.teammates)
+	total := 0
+	pending := 0
 	busy := 0
 	for _, tm := range ts.teammates {
-		if tm.State != TeammateIdle {
+		if tm.State == TeammateRunning {
 			busy++
 		}
 	}
-	pending := 0
 	for _, t := range ts.tasks {
-		if t == nil || !isTerminalStatus(t.Status) {
+		if t == nil {
+			continue
+		}
+		total++
+		if !isTerminalStatus(t.Status) {
 			pending++
 		}
 	}
 	name := ts.name
 	ts.mu.Unlock()
-	if members == 0 || busy != 0 || pending != 0 {
+	if total == 0 || busy != 0 || pending != 0 {
 		return
 	}
 	ts.mu.Lock()
@@ -49,6 +53,6 @@ func (ts *TeammateStore) checkGroupCompleted(flipped string) {
 		group = "team"
 	}
 	sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo,
-		Text: fmt.Sprintf("team group %q: all %d task(s) completed — results delivered, ready to summarize", group, members)})
-	slog.Info("team group completed", "group", name, "members", members)
+		Text: fmt.Sprintf("team group %q: all %d dispatched task(s) completed — results delivered, ready to summarize", group, total)})
+	slog.Info("team group completed", "group", name, "tasks", total)
 }
