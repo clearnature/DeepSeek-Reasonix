@@ -75,15 +75,52 @@ func (c *Controller) digestWorker() {
 
 // runDigestRound runs one model turn that digests the completed teammate job.
 // ErrTurnRunning means a user turn owns the controller — it already injected
-// the completion context, so this round is dropped, not retried.
+// the completion context, so this round is dropped, not retried. A user turn
+// arriving mid-round preempts it via cancelRunningDigest (ctx cancel → silent
+// drop), so a digest round never blocks the user.
 func (c *Controller) runDigestRound(name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), digestRoundTimeout)
-	defer cancel()
-	if err := c.RunTurn(ctx, c.digestPrompt(name)); err != nil {
+	done := make(chan struct{})
+	c.mu.Lock()
+	c.digestCancel = cancel
+	c.digestRoundDone = done
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.digestCancel = nil
+		c.digestRoundDone = nil
+		c.mu.Unlock()
+		close(done) // release a preempting user turn waiting for the slot
+	}()
+	err := c.RunTurn(ctx, c.digestPrompt(name))
+	if err != nil {
 		if err == ErrTurnRunning {
 			return // the user turn that owns the controller carries the context
 		}
+		if ctx.Err() == context.Canceled {
+			return // preempted by a user submission — user turn wins, no noise
+		}
 		c.notice("team digest failed: " + err.Error())
+	}
+}
+
+// cancelRunningDigest interrupts an in-flight digest round and waits briefly
+// for it to release the turn slot, so a user submission can proceed instead
+// of failing with ErrTurnRunning. No-op when no digest round is running.
+func (c *Controller) cancelRunningDigest() {
+	c.mu.Lock()
+	cancel := c.digestCancel
+	done := c.digestRoundDone
+	c.mu.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+		}
 	}
 }
 

@@ -4,8 +4,8 @@
     "commented-code": 1,
     "complexity": 1946,
     "essay": 2107,
-    "file-size": 109829,
-    "function-size": 8458,
+    "file-size": 109835,
+    "function-size": 8461,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -961,8 +961,8 @@
     "internal/control/controller.go": {
       "complexity": 12,
       "essay": 91,
-      "file-size": 5535,
-      "function-size": 83,
+      "file-size": 5541,
+      "function-size": 86,
       "narrative": 4,
       "struct-state": 17
     },

@@ -188,6 +188,9 @@ type Controller struct {
 	digestCh   chan string
 	digestDone chan struct{}
 	digestOnce sync.Once
+	// digestCancel/digestRoundDone preempt an in-flight digest round on user submit.
+	digestCancel    context.CancelFunc
+	digestRoundDone chan struct{}
 	// workspaceLease is the Delivery writer owner shared with the executor.
 	// It is exposed only through a sanitized state snapshot for Desktop recovery.
 	workspaceLease *workspacelease.Owner
@@ -1481,6 +1484,9 @@ func (c *Controller) submitHTTPWithFormat(input, display, format string) {
 }
 
 func (c *Controller) submitCommandOrTurnReady(trimmed, input, display string, scopedRefsOnly bool, editedOriginal, format string) {
+	// User submissions win: preempt any in-flight digest round (never reached
+	// by digest rounds themselves — the worker calls RunTurn directly).
+	c.cancelRunningDigest()
 	runRefTurn := func(input, display string) {
 		c.runRefTurnWithFormat(input, display, format)
 	}
