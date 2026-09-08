@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useState, type ReactNode } from "react";
 import type { AgentPort, ContextBreakdown, JobEntry, McpEntry, WorkspaceChanges } from "../port/port";
 import type { ExtensionSurface } from "../port/wire";
 import type { Metrics as M, PlanStep } from "../state/session";
@@ -16,6 +16,25 @@ import type { Rail } from "./panels/derive";
 import type { Wallet } from "./wallet";
 import { swapping } from "./swap";
 import { ChangePreview } from "./ChangePreview";
+import type { Posture } from "./decisions";
+
+// What the rail can show. Presence is still each panel's own contract — a
+// panel with nothing to say draws nothing — so this decides where something
+// goes, never whether there is something.
+type Section = "cache" | "cost" | "context" | "agents" | "runtime" | "plan" | "files" | "jobs" | "mcp" | "extensions";
+
+// Fixed per posture, and read off neither the panels' contents nor the size of
+// anything: an order that follows the data puts a panel somewhere new the
+// moment it has something, which is the instability this replaces.
+//
+// Working answers "is it alive, what is it doing, how much room is left, where
+// is it in the plan". Review answers "what changed, what came of it, what did
+// it cost" — and context drops, because how full the window is matters while
+// there is a turn to fit and is forensic once there is not.
+const ORDER: Record<Posture, readonly Section[]> = {
+  working: ["context", "runtime", "agents", "plan", "cost", "cache", "files", "jobs", "mcp", "extensions"],
+  review: ["files", "plan", "jobs", "cost", "cache", "context", "runtime", "agents", "mcp", "extensions"],
+};
 
 interface Props extends Rail {
   port: AgentPort;
@@ -24,6 +43,9 @@ interface Props extends Rail {
   mcp: McpEntry[];
   rate: number;
   done: boolean;
+  /** Which reading this rail is for. It decides order and nothing else: what
+   *  each panel is, whether it appears at all, and what it reads are its own. */
+  posture: Posture;
   plan: PlanStep[];
   wallet: Wallet;
   account: string;
@@ -43,11 +65,15 @@ interface Props extends Rail {
   onMoveSurface?: (ext: ExtensionSurface, slot: string) => void;
 }
 
-// Progress, duration, cost and context are the head card's; what is left here
-// is the composition behind them. Two sections answer "is this run healthy",
-// and three more speak only when they have something to report. Everything else is a diagnosis — true, and not
-// worth a permanent nine-panel wall that a glance has to skip six of. The walk
-// behind all of it happens once, in the pane, and arrives here derived.
+// The inspector. Most of these speak only when they have something to report,
+// which is what keeps it from being a permanent nine-panel wall a glance has
+// to skip six of; the order they speak in is the table above. The walk behind
+// all of it happens once, in the pane, and arrives here derived.
+//
+// There is no head card. Three comments in this rail still describe one —
+// "progress, duration, cost and context are the head card's" — and Context
+// still carries a row=true form for it that nothing passes. Whatever that was,
+// it is not on screen, so the figures here are the only ones there are.
 export const Metrics = memo(function Metrics({
   port,
   metrics,
@@ -58,6 +84,7 @@ export const Metrics = memo(function Metrics({
   mcp,
   rate,
   done,
+  posture,
   plan,
   wallet,
   account,
@@ -80,24 +107,37 @@ export const Metrics = memo(function Metrics({
   // reads as the window flinching rather than as the panel leaving.
   const openPreview = useCallback((path: string) => swapping(() => setOpenPath(path), "cpv"), []);
   const closePreview = useCallback(() => swapping(() => setOpenPath(null), "cpv"), []);
+  // One list of panels, built once, ordered by the table below. Two branches
+  // of JSX would be the obvious way to reorder and the wrong one: the same
+  // panel under a different parent is a different element to React, so it
+  // would be torn down and rebuilt — losing whatever it had open, and asking
+  // again for whatever it reads on mount. Changing which posture the rail is
+  // in is not a change to any panel's lifetime.
+  const panel: Record<Section, ReactNode> = {
+    cache: <Cache key="cache" metrics={metrics} done={done} />,
+    cost: <Cost key="cost" metrics={metrics} wallet={wallet} account={account} onRefreshWallet={onRefreshWallet} />,
+    context: <Context key="context" ctx={ctx} row={false} legend port={port} onCtx={onCtx} />,
+    agents: <Agents key="agents" tasks={tasks} />,
+    runtime: <Runtime key="runtime" rate={rate} done={done} stats={stats} files={visible(changes, tree).length} />,
+    plan: <Plan key="plan" steps={plan} />,
+    files: (
+      <Files key="files" changes={changes} yolo={yolo} tree={tree} open={openPath}
+        onOpen={tree?.repo ? openPreview : undefined} />
+    ),
+    jobs: <Jobs key="jobs" jobs={jobs} />,
+    // Not folded behind a diagnostics drawer, which is where this was headed.
+    // Mcp already speaks only when a server has failed or has never been
+    // answered for, so the drawer would be empty on every rail that is fine
+    // and closed over the one thing worth seeing on a rail that is not.
+    mcp: <Mcp key="mcp" servers={mcp} onOpen={onSettings} />,
+    extensions: (
+      <Extensions key="extensions" panels={panels} views={views} onInvoke={onExtInvoke} onMove={onMoveSurface} />
+    ),
+  };
   return (
     <>
       <div className="scroll">
-        {/* 顺序照设计稿：花了多少、省下多少、窗口装了什么、动过哪些文件 ——
-            四个“这一趟在付什么代价”的问题排在一起，子代理和运行详情接在后面。 */}
-        <Cache metrics={metrics} done={done} />
-        <Cost metrics={metrics} wallet={wallet} account={account} onRefreshWallet={onRefreshWallet} />
-        <Context ctx={ctx} row={false} legend port={port} onCtx={onCtx} />
-        <Agents tasks={tasks} />
-        <Runtime rate={rate} done={done} stats={stats} files={visible(changes, tree).length} />
-        <Mcp servers={mcp} onOpen={onSettings} />
-        <Extensions panels={panels} views={views} onInvoke={onExtInvoke} onMove={onMoveSurface} />
-        {/* 最后三块，和设计稿一样：前面那些回答“这一趟在怎么跑”，这三块回答
-            “它在外面做了什么” —— 打算动的、已经动过的、还在后台跑的。这些是
-            跑完了回头看的东西，不是盯着看的。 */}
-        <Plan steps={plan} />
-        <Files changes={changes} yolo={yolo} tree={tree} open={openPath} onOpen={tree?.repo ? openPreview : undefined} />
-        <Jobs jobs={jobs} />
+        {ORDER[posture].map((id) => panel[id])}
       </div>
       {openPath && <ChangePreview port={port} path={openPath} onClose={closePreview} />}
     </>

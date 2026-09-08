@@ -4,9 +4,12 @@ import type { ReactNode } from "react";
  *  label the same size, no answer to "which of these belong together". A group
  *  states the question its rows answer, which is what lets a glance skip six
  *  of them. */
-export function Grp({ name, aside, children }: { name: string; aside?: ReactNode; children: ReactNode }) {
+// id names the block the way the panels that build their own frame already do,
+// so what the rail put where can be read off the document rather than guessed
+// from the words inside it.
+export function Grp({ id, name, aside, children }: { id: string; name: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="dgrp">
+    <section className="dgrp" data-b={id}>
       <h3 className="dgrp-h">
         {name}
         {aside != null && <span className="a">{aside}</span>}

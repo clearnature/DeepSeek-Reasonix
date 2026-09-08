@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, us
 import { money } from "../i18n/format";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
-import { hasPendingDecision, runState } from "./decisions";
+import { hasPendingDecision, posture, runState } from "./decisions";
 import { createPortal } from "react-dom";
 import { HttpError } from "../port/port";
 import type { AgentPort, ApprovalVerdict, Checkpoint, ContextBreakdown, JobEntry, McpEntry, Queue as QueueSnapshot, RewindScope, SessionStatus, WorkspaceChanges } from "../port/port";
@@ -757,6 +757,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
             mcp={mcp}
             rate={tps}
             done={!s.running}
+            posture={posture(run, blocked)}
             plan={s.plan}
             wallet={wallet}
             account={accountOf(status?.modelRef)}

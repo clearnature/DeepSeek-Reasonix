@@ -28,7 +28,7 @@ export function Cost({ metrics, wallet, account, onRefreshWallet }: Props) {
   const peak = metrics.rounds.length ? Math.max(...metrics.rounds) : 0;
   const avg = metrics.rounds.length ? Math.round(metrics.rounds.reduce((a, b) => a + b, 0) / metrics.rounds.length) : 0;
   return (
-    <Grp name={t("成本")} aside={t("本会话")}>
+    <Grp id="cost" name={t("成本")} aside={t("本会话")}>
       <div className="mrow">
         <span className="amt">{money(metrics.cost, metrics.currency)}</span>
         {/* 一个按公布价计出来的数和一个拿兑底表估的数是两种断言。 */}

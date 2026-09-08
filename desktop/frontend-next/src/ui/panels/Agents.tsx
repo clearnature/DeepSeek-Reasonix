@@ -17,7 +17,7 @@ export function Agents({ tasks }: { tasks: Task[] }) {
   const shown = tasks.length > SHOWN ? tasks.slice(-SHOWN) : tasks;
 
   return (
-    <Grp name={t("子代理")} aside={live ? t("{n} 在跑", { n: live }) : undefined}>
+    <Grp id="agents" name={t("子代理")} aside={live ? t("{n} 在跑", { n: live }) : undefined}>
       <Row
         k={t("子代理数量")}
         v={live ? <span className="lk">{t("{n} 并行", { n: live })}</span> : agentsIn(tasks)}

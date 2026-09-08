@@ -34,3 +34,18 @@ export function runState(f: { blocked: boolean; running: boolean; hasItems: bool
   if (!f.hasItems) return "idle";
   return f.terminal?.kind === "completed" ? "done" : "halt";
 }
+
+/** Which of the two readings the inspector is for.
+ *
+ *  Two postures and no more: a rail that reorders itself on every change of
+ *  fact is not lifecycle-aware, it is unstable, and a reader who has to find
+ *  the same panel twice in one turn has lost more than the ordering gave.
+ *
+ *  Derived from the run, never from what the panels happen to hold. "halt"
+ *  answers two different questions — a turn waiting on a decision has not
+ *  finished, and a turn that ended badly has — so blocked is asked separately
+ *  rather than read back out of the state it already collapsed. */
+export type Posture = "working" | "review";
+
+export const posture = (run: RunState, blocked: boolean): Posture =>
+  run === "running" || blocked ? "working" : "review";
