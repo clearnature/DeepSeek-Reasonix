@@ -131,3 +131,28 @@ func TestReleaseBoardTasksReturnsClaimedToOpen(t *testing.T) {
 		}
 	}
 }
+
+// TestFailedCompletionReleasesClaims locks audit #3: a member whose job fails
+// must not hold its board claims (no deadlock); a successful job keeps them.
+func TestFailedCompletionReleasesClaims(t *testing.T) {
+	jm := jobs.NewManager(event.Discard)
+	defer jm.Close()
+	ts := NewTeammateStore(testTaskToolForTeam(t), jm)
+	t.Cleanup(ts.Close)
+	if err := ts.Create("alpha", "researcher"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	id, _ := ts.BoardCreate("work")
+	_ = ts.BoardClaim(id, "alpha")
+	// Simulate the member's running job (HandleJobDone ignores unknown jobs).
+	ts.recordTask("task-1", "alpha", "work", "sess", nil)
+	ts.mu.Lock()
+	ts.teammates["alpha"].LastJobID = "task-1"
+	ts.teammates["alpha"].State = TeammateRunning
+	ts.mu.Unlock()
+	ts.HandleJobDone("task-1", jobs.Failed, nil)
+	items := ts.BoardList()
+	if len(items) != 1 || items[0].Status != BoardOpen || items[0].Owner != "" {
+		t.Fatalf("failed completion left claim held: %+v", items)
+	}
+}

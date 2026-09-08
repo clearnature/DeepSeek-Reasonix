@@ -802,10 +802,15 @@ func (ts *TeammateStore) HandleJobDone(id string, st jobs.Status, err error) {
 	if ts.completionFn != nil && flipped != "" {
 		ts.completionFn(flipped, st)
 	}
+	// A failed/killed member must not hold its claims forever (audit #3):
+	// release the board items it owned so another teammate can pick them up.
+	if flipped != "" && st != jobs.Done {
+		ts.ReleaseBoardTasks(flipped)
+	}
 	// Board wake-up (qwen idle-notification analog): a completion is the
 	// moment to surface unclaimed work so idle members/leader see it.
 	if open := ts.boardOpenCount(); open > 0 {
-		ts.emitNotice(fmt.Sprintf("task board: %d open task(s) awaiting a claim — task_list to see them", open))
+		ts.EmitNotice(fmt.Sprintf("task board: %d open task(s) awaiting a claim — task_list to see them", open))
 	}
 }
 
@@ -1147,8 +1152,9 @@ func (ts *TeammateStore) DrainLeaderMessages() []MailItem {
 // notifyMail emits the mailbox-wakeup notice (P6.2): the leader learns a
 // teammate received mail while idle, so it can decide to assign work that
 // flushes the inbox.
-// emitNotice surfaces a team-state notice on the shared sink (nil-safe).
-func (ts *TeammateStore) emitNotice(text string) {
+// EmitNotice surfaces a team-state notice on the shared sink (nil-safe).
+// Exported so sibling subsystems (wake-up scheduler) report failures too.
+func (ts *TeammateStore) EmitNotice(text string) {
 	ts.mu.Lock()
 	sink := ts.sink
 	ts.mu.Unlock()

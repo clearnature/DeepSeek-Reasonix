@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,5 +73,53 @@ func TestLoopWakeupDeliversToLeaderInbox(t *testing.T) {
 	after, _ := byName["cron_list"].Execute(context.Background(), json.RawMessage(`{}`))
 	if strings.Contains(after, "status sweep") {
 		t.Fatalf("cron entry survived delete: %q", after)
+	}
+}
+
+// TestWakeupPersistsAndRestores locks audit #1: scheduled entries survive a
+// scheduler restart (same persist path) with their intervals intact.
+func TestWakeupPersistsAndRestores(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wakeups.json")
+	s1 := newWakeupScheduler(func(string) error { return nil }, path)
+	if err := s1.add(&wakeupEntry{ID: "cron-1", Prompt: "sweep", Schedule: "3600s", Created: time.Now()}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// A fresh scheduler over the same file restores the entry.
+	s2 := newWakeupScheduler(func(string) error { return nil }, path)
+	got := s2.list()
+	if len(got) != 1 || got[0].ID != "cron-1" || got[0].Prompt != "sweep" {
+		t.Fatalf("restored = %+v, want cron-1 sweep", got)
+	}
+}
+
+// TestWakeupClampsTinySchedule locks audit #4: a sub-minimum schedule is
+// clamped so a typo cannot hammer the inbox.
+func TestWakeupClampsTinySchedule(t *testing.T) {
+	s := newWakeupScheduler(func(string) error { return nil }, "")
+	e := &wakeupEntry{ID: "cron-x", Prompt: "x", Schedule: "1s", Created: time.Now()}
+	if err := s.add(e); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if e.Schedule != minWakeupInterval.String() {
+		t.Fatalf("schedule = %q, want clamped %q", e.Schedule, minWakeupInterval)
+	}
+}
+
+// TestWakeupDeliveryFailureSurfaces locks audit #2: a failing post reaches the
+// onError hook instead of being swallowed.
+func TestWakeupDeliveryFailureSurfaces(t *testing.T) {
+	failed := make(chan string, 1)
+	s := newWakeupScheduler(func(string) error { return fmt.Errorf("inbox full") }, "")
+	s.onError = func(msg string) { failed <- msg }
+	if err := s.add(&wakeupEntry{ID: "wake-1", Prompt: "p", Delay: "10ms", Created: time.Now()}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	select {
+	case msg := <-failed:
+		if !strings.Contains(msg, "inbox full") {
+			t.Fatalf("notice = %q", msg)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("delivery failure was swallowed")
 	}
 }

@@ -126,3 +126,11 @@ func (ts *TeammateStore) ReleaseBoardTasks(owner string) int {
 	}
 	return n
 }
+
+// SnapshotPath reports the team snapshot path ("" when persistence is off) so
+// sibling subsystems can co-locate their own state files.
+func (ts *TeammateStore) SnapshotPath() string {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return ts.snapshotPath
+}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +18,15 @@ import (
 // A wake-up does not run an unattended model turn (our qwen-mode default); it
 // writes into the leader inbox, which compose injects on the next turn.
 
+const (
+	// minWakeupInterval clamps recurring schedules so a typo cannot hammer the
+	// leader inbox (qwen WAKEUP_MIN_SECONDS analog).
+	minWakeupInterval = 10 * time.Second
+	// recurringMaxAge expires a recurring entry so forgotten crons do not run
+	// forever (qwen maxAgeDays analog).
+	recurringMaxAge = 7 * 24 * time.Hour
+)
+
 type wakeupEntry struct {
 	ID       string    `json:"id"`
 	Prompt   string    `json:"prompt"`
@@ -25,14 +36,78 @@ type wakeupEntry struct {
 }
 
 type wakeupScheduler struct {
-	mu      sync.Mutex
-	entries map[string]*wakeupEntry
-	timers  map[string]*time.Timer
-	post    func(prompt string) error
+	mu          sync.Mutex
+	entries     map[string]*wakeupEntry
+	timers      map[string]*time.Timer
+	post        func(prompt string) error
+	onError     func(string) // surfaces delivery failures (never swallow)
+	persistPath string       // "" disables persistence (tests, ephemeral stores)
 }
 
-func newWakeupScheduler(post func(string) error) *wakeupScheduler {
-	return &wakeupScheduler{entries: map[string]*wakeupEntry{}, timers: map[string]*time.Timer{}, post: post}
+func newWakeupScheduler(post func(string) error, persistPath string) *wakeupScheduler {
+	s := &wakeupScheduler{entries: map[string]*wakeupEntry{}, timers: map[string]*time.Timer{}, post: post, persistPath: persistPath}
+	s.load()
+	return s
+}
+
+// load restores scheduled wake-ups after a restart and re-arms them for the
+// remaining interval (an entry whose window already passed fires immediately).
+func (s *wakeupScheduler) load() {
+	if s.persistPath == "" {
+		return
+	}
+	payload, err := os.ReadFile(s.persistPath)
+	if err != nil {
+		return
+	}
+	var entries []wakeupEntry
+	if err := json.Unmarshal(payload, &entries); err != nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range entries {
+		e := &entries[i]
+		every := e.Delay
+		recurring := false
+		if e.Schedule != "" {
+			every, recurring = e.Schedule, true
+		}
+		d, err := time.ParseDuration(every)
+		if err != nil || d <= 0 {
+			continue
+		}
+		if remaining := time.Until(e.Created.Add(d)); remaining > 0 {
+			d = remaining
+		} else {
+			d = time.Millisecond
+		}
+		s.entries[e.ID] = e
+		s.timers[e.ID] = s.arm(e, d, recurring)
+	}
+}
+
+// save persists the current entries (best-effort; a failure keeps the
+// in-memory schedule and surfaces a notice).
+func (s *wakeupScheduler) save() {
+	if s.persistPath == "" {
+		return
+	}
+	s.mu.Lock()
+	entries := make([]wakeupEntry, 0, len(s.entries))
+	for _, v := range s.entries {
+		entries = append(entries, *v)
+	}
+	path := s.persistPath
+	s.mu.Unlock()
+	payload, err := json.Marshal(entries)
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(path, payload, 0o600)
 }
 
 func (s *wakeupScheduler) add(entry *wakeupEntry) error {
@@ -48,23 +123,42 @@ func (s *wakeupScheduler) add(entry *wakeupEntry) error {
 		if err != nil || d <= 0 {
 			return fmt.Errorf("cron: invalid schedule %q", entry.Schedule)
 		}
+		if d < minWakeupInterval {
+			d = minWakeupInterval
+			entry.Schedule = d.String()
+		}
 		every = d
 	} else {
 		return fmt.Errorf("wakeup: delay or schedule is required")
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.entries[entry.ID] = entry
 	recurring := entry.Schedule != ""
 	s.timers[entry.ID] = s.arm(entry, every, recurring)
+	s.mu.Unlock()
+	s.save()
 	return nil
 }
 
-// arm schedules one firing; recurring entries re-arm after each fire.
+// arm schedules one firing; recurring entries re-arm after each fire. A
+// delivery failure is surfaced through onError, never swallowed.
 func (s *wakeupScheduler) arm(entry *wakeupEntry, every time.Duration, recurring bool) *time.Timer {
 	return time.AfterFunc(every, func() {
-		_ = s.post(entry.Prompt)
+		if err := s.post(entry.Prompt); err != nil && s.onError != nil {
+			s.onError(fmt.Sprintf("wake-up %s delivery failed: %v", entry.ID, err))
+		}
 		if recurring {
+			if time.Since(entry.Created) >= recurringMaxAge {
+				s.mu.Lock()
+				delete(s.entries, entry.ID)
+				delete(s.timers, entry.ID)
+				s.mu.Unlock()
+				s.save()
+				if s.onError != nil {
+					s.onError(fmt.Sprintf("cron %s expired after %s and was removed", entry.ID, recurringMaxAge))
+				}
+				return
+			}
 			s.mu.Lock()
 			if _, ok := s.entries[entry.ID]; ok {
 				s.timers[entry.ID] = s.arm(entry, every, recurring)
@@ -76,16 +170,19 @@ func (s *wakeupScheduler) arm(entry *wakeupEntry, every time.Duration, recurring
 
 func (s *wakeupScheduler) remove(id string) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if t, ok := s.timers[id]; ok {
 		t.Stop()
 		delete(s.timers, id)
 	}
-	if _, ok := s.entries[id]; ok {
+	_, existed := s.entries[id]
+	if existed {
 		delete(s.entries, id)
-		return true
 	}
-	return false
+	s.mu.Unlock()
+	if existed {
+		s.save()
+	}
+	return existed
 }
 
 func (s *wakeupScheduler) list() []wakeupEntry {
@@ -215,9 +312,14 @@ func (t *cronDeleteTool) Execute(ctx context.Context, args json.RawMessage) (str
 
 // NewWakeupTools returns the loop_wakeup + cron family sharing one scheduler.
 func NewWakeupTools(ts *agent.TeammateStore) []tool.Tool {
+	persist := ""
+	if snap := ts.SnapshotPath(); snap != "" {
+		persist = filepath.Join(filepath.Dir(snap), "wakeups.json")
+	}
 	sched := newWakeupScheduler(func(prompt string) error {
 		return ts.PostMailToLeader("wakeup", prompt)
-	})
+	}, persist)
+	sched.onError = ts.EmitNotice
 	return []tool.Tool{
 		&loopWakeupTool{sched: sched},
 		&cronCreateTool{sched: sched},

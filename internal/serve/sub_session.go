@@ -9,6 +9,10 @@ import (
 	"reasonix/internal/provider"
 )
 
+// maxLiveSubSessions bounds concurrently live sub-sessions so a runaway model
+// cannot fan out without limit (audit #5/#6 — recursion and leak guard).
+const maxLiveSubSessions = 8
+
 // SpawnSubSession implements control.SubSessionSpawner for the serving
 // frontend (qwen daemon session bridge): an independent session is built with
 // the same boot options as the parent, the prompt is delivered, and
@@ -18,6 +22,12 @@ func (s *Server) SpawnSubSession(ctx context.Context, prompt, completion string)
 	parent, ok := s.ctl().(*control.Controller)
 	if !ok || parent == nil {
 		return "", fmt.Errorf("create_sub_session: parent controller unavailable")
+	}
+	s.subMu.Lock()
+	live := len(s.subSessions)
+	s.subMu.Unlock()
+	if live >= maxLiveSubSessions {
+		return "", fmt.Errorf("create_sub_session: %d sub-sessions already live (limit %d) — exit or finish one first", live, maxLiveSubSessions)
 	}
 	ref := currentModelRef(s.ctl())
 	ctrl, _, err := s.buildTagged(ctx, ref, false)
