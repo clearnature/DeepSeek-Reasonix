@@ -609,6 +609,8 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
 
       <Transcript
         items={s.items}
+        entering={s.entranceOwed}
+        onEntered={(ids) => dispatch({ kind: "__entered", ids } as never)}
         revision={s.revision}
         takeovers={s.takeovers}
         waiting={s.waiting}

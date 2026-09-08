@@ -126,6 +126,16 @@ export interface SessionState {
   // transcript as if they had been said by someone.
   runtime: RuntimeNotice[];
   items: Item[];
+  // Which cards have not yet had their one entrance, and how far this
+  // projection has already let in. Motion describes a state transition, and
+  // the transition here is a fact arriving — not a DOM node being created. A
+  // card mounts again every time virtualization brings its block back, and
+  // replaying that motion says the hour-old thing just happened.
+  //
+  // Presentation bookkeeping, deliberately beside Item rather than on it: what
+  // a card is does not depend on whether its arrival has been shown yet.
+  entranceOwed: string[];
+  enteredThrough: number;
   // Bumped when the transcript's composition changes — a card added, settled,
   // folded, answered — but NOT when a message still being written grows by a
   // chunk. Everything derived from the tool and user cards (the rail's panels,

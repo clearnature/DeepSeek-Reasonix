@@ -1135,7 +1135,10 @@
      绘制也省掉。不用结构伪类挑最后一张——`:nth-last-child` 会让每次追加都
      把整条记录的样式匹配作废。 */
   .chunk { display: flow-root }
-  .chunk > .call {
+  /* display:contents on the frame between them, so the card is still the
+     block's child everywhere layout is concerned and only the selector has to
+     say so. */
+  .chunk > .enterbox > .call {
     content-visibility: auto;
     contain-intrinsic-size: auto 96px;
   }
@@ -1502,7 +1505,17 @@
 
   /* 份量不同，入场就不该相同：一行只淡入，一张卡带位移，一整块面板从上沿展开 */
   .term-l, .dl, .plan .s { animation: line var(--m-line) both }
-  .call, .hits > *, .steps > * { animation: card var(--m-card) both }
+  .hits > *, .steps > * { animation: card var(--m-card) both }
+
+  /* 动画说的是状态转变，从来不是元素活了多久。挂载不是原因：一条记录里的卡
+     每次虚拟化把它那一块带回来都会重新挂载，跟着演一遍入场，等于说一小时前
+     的事刚刚发生。所以入场是一次性的债，由投影记账、由第一次绘制花掉，这个
+     不生成盒子的框只负责把那一次带到卡上。 */
+  .enterbox { display: contents }
+  .enterbox[data-enter] > .call { animation: card var(--m-card) both }
+  /* 子代理自己的步骤是在它跑的时候出现的 —— 那也是事实在到达，只不过发生在
+     一张卡里面而不是旁边。 */
+  .nest-bd .call { animation: card var(--m-card) both }
 
   .nest, .ask { animation: panel var(--m-panel) both }
 
@@ -3100,7 +3113,12 @@
   /* 660 是给读的段落定的行宽。扩展页是表：名字、说明、触发方式、归属、开关
      五列挤在同一个上限里会把说明截掉，所以只有这一页放宽。 */
   .prefs-main[data-sec="ext"] .prefs-col { max-width: 980px }
-  .grp { margin-bottom: 30px; animation: card var(--t-card) var(--ease-out) both }
+  /* 换一个分区是一次导航：换掉的是这一栏，不是下面每个设置块各自刚出现。原来
+     每块各飞一次，四个块就是四次「新东西来了」，而什么都没发生 —— 你只是走到
+     了另一页。 */
+  .grp { margin-bottom: 30px }
+  .prefs-col { animation: navin .14s var(--ease-out) both }
+  @keyframes navin { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
   .grp:last-child { margin-bottom: 0 }
   .grp-hd { display: flex; align-items: baseline; gap: 12px }
   /* An overline, not a headline: the rows under it carry the weight, and a page
@@ -4077,7 +4095,7 @@
 
 
   @media (prefers-reduced-motion: reduce) {
-    .onb-card, .onb-field, .onb-go, .onb-note, .onb-r path, .prefs, .grp { animation: none !important }
+    .onb-card, .onb-field, .onb-go, .onb-note, .onb-r path, .prefs, .prefs-col { animation: none !important }
     .app[data-prefs] > .chrome, .app[data-prefs] > .cols { transform: none }
     /* The entry stagger is decoration; the hover reveal and the accent rule are
        not. A delayed row that never animates would stay invisible, so the delay

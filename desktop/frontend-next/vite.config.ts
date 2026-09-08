@@ -33,6 +33,10 @@ export default defineConfig(({ mode }) => {
   return {
     base: "./",
     plugins: [react()],
+    // Stylesheets are stubbed for tests by default, `?raw` included, so a
+    // guard that reads app.css to check a rule gets an empty string and passes
+    // on nothing. Processing it is what makes that guard able to fail.
+    test: { css: true },
     server: {
       port: 5273,
       // The dev server is cross-origin to serve, which its CSRF guard rejects.

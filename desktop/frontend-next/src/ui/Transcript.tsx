@@ -58,6 +58,11 @@ interface Props {
   onCommitFileRevert: (planId: string, resolution?: string) => Promise<RewindResult>;
   onCommitRewind: (planId: string) => Promise<RewindResult>;
   onUndoRewind: (transactionId: string) => Promise<void>;
+  /** Cards that have not had their one entrance yet. Owed by the projection,
+   *  spent by the first render that draws them — never by the animation, which
+   *  may not run at all. */
+  entering: string[];
+  onEntered: (ids: string[]) => void;
 }
 
 // How many settled cards share one mounting unit. Small enough that scrolling
@@ -93,7 +98,7 @@ function useBlocks(items: Item[], cut: number, revision: number): Item[][] {
   return blocks;
 }
 
-export function Transcript({ items, revision, waiting, scroll, hidden, onPinned, jump, focus, onApprove, onPlan, onAnswer, onSuggest, onForget, onCancelQueued, onExtInvoke, onExtSubmit, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere }: Props) {
+export function Transcript({ items, entering, onEntered, revision, waiting, scroll, hidden, onPinned, jump, focus, onApprove, onPlan, onAnswer, onSuggest, onForget, onCancelQueued, onExtInvoke, onExtSubmit, takeovers = {}, checkpoints, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert, needsProject, onOpenProject, onKeepHere }: Props) {
   // A block the selection touches must not leave the DOM. Unmounting the node a
   // selection is anchored to makes the browser remap that selection onto
   // whatever is still mounted — which reads as "I selected up there and the
@@ -398,7 +403,15 @@ export function Transcript({ items, revision, waiting, scroll, hidden, onPinned,
     if (where) land(where.block, where.into, `[data-call="${CSS.escape(focus.call)}"]`);
   }, [hidden, focus, callBlock, land]);
 
-  const rowProps = { onApprove, onPlan, onAnswer, onForget, onCancelQueued, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert };
+  // Drawn is spent. Not "the animation finished" — reduced motion runs none,
+  // and a card can leave the document before one ends, either of which would
+  // leave the debt standing and let the fact arrive a second time later.
+  useEffect(() => {
+    if (entering.length > 0) onEntered(entering);
+  }, [entering, onEntered]);
+  const owed = useMemo(() => new Set(entering), [entering]);
+
+  const rowProps = { owed, onApprove, onPlan, onAnswer, onForget, onCancelQueued, onExtInvoke, takeovers, onExtSubmit, onPrepareRewind, onCommitRewind, onUndoRewind, onPrepareFileRevert, onCommitFileRevert };
 
   // What you said, and where it sits. Derived from the same blocks the
   // transcript renders, so a mark always knows which block holds it — that is
@@ -499,6 +512,7 @@ const Block = memo(function Block({
 });
 
 interface RowHandlers {
+  owed: Set<string>;
   onApprove: Props["onApprove"];
   onPlan: Props["onPlan"];
   onAnswer: Props["onAnswer"];
@@ -519,6 +533,7 @@ interface RowHandlers {
 // chunk than parsing the message did.
 const Row = memo(function Row({
   it,
+  owed,
   onApprove,
   onPlan,
   onForget,
@@ -534,6 +549,16 @@ const Row = memo(function Row({
   onPrepareFileRevert,
   onCommitFileRevert,
 }: RowHandlers & { it: Item; cp?: Checkpoint }) {
+  // Read once, for the life of this element. The projection spends the debt as
+  // soon as this is drawn, and a card whose answer is still streaming would
+  // otherwise lose the attribute mid-animation and have it cut short. A block
+  // that scrolls back mounts a new Row, which asks again and is told no.
+  const enter = useRef(owed.has(it.id)).current;
+  // display:contents, so this frame carries the one-shot mark and the card
+  // stays exactly the child of .chunk that its layout is written against.
+  return (
+    <div className="enterbox" data-enter={enter ? "" : undefined}>
+      {(() => {
   switch (it.t) {
     case "user":
       return (
@@ -587,6 +612,9 @@ const Row = memo(function Row({
     case "notice":
       return <NoticeCard item={it} />;
   }
+      })()}
+    </div>
+  );
 });
 
 // Counted from the stamp the wait carries rather than from this component's

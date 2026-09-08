@@ -21,6 +21,8 @@ export const initialState: SessionState = {
   terminal: null,
   runtime: [],
   items: [],
+  entranceOwed: [],
+  enteredThrough: 0,
   revision: 0,
   plan: [],
   outWindow: [],
@@ -217,7 +219,33 @@ export function reduce(s: SessionState, ev: SessionEvent): SessionState {
   const next = apply(s, ev);
   if (next.items === s.items) return next;
   const streamed = ev.kind === "text" || ev.kind === "reasoning";
-  return streamed ? next : { ...next, revision: next.revision + 1 };
+  const bumped = streamed ? next : { ...next, revision: next.revision + 1 };
+  return { ...bumped, ...entering(s, bumped, ev) };
+}
+
+// The sequence a card was minted at. One monotonic source mints every id, so
+// "this projection has already let everything through n in" is a number rather
+// than a set to carry and copy.
+const seqOf = (id: string) => (id.startsWith("i") ? Number(id.slice(1)) || 0 : 0);
+const highest = (items: Item[]) => items.reduce((n, i) => Math.max(n, seqOf(i.id)), 0);
+
+/** Which cards owe an entrance after this event, and how far we have let in.
+ *
+ *  A restored transcript owes nothing: those facts are not arriving, they
+ *  arrived. Everything else earns it exactly once, at the event that first
+ *  materialised the card — a delta rewriting a message it already made, a
+ *  dispatch settling into a result, a block scrolling back into the document
+ *  are all the same card and none of them is a new fact. The debt is carried
+ *  rather than cleared here, because several events can land between two
+ *  renders and the one that was never drawn still owes its entrance. */
+function entering(prev: SessionState, next: SessionState, ev: SessionEvent): Partial<SessionState> {
+  if (ev.kind === "__restore") return { entranceOwed: [], enteredThrough: highest(next.items) };
+  const fresh = next.items.filter((i) => seqOf(i.id) > prev.enteredThrough).map((i) => i.id);
+  if (fresh.length === 0) return {};
+  return {
+    entranceOwed: [...prev.entranceOwed, ...fresh],
+    enteredThrough: Math.max(prev.enteredThrough, highest(next.items)),
+  };
 }
 
 // What the wire carries, plus the turns the client owns itself: your own
@@ -232,10 +260,19 @@ export type SessionEvent =
   | { kind: "__queued"; id: string; itemId: string; queued: "steer" | "followup" }
   | { kind: "__decided"; id: string; verdict?: string; answers?: string[][] }
   | { kind: "__forgot"; id: string }
-  | { kind: "__runtime_seen"; id: string };
+  | { kind: "__runtime_seen"; id: string }
+  // The transcript has drawn these cards, so their one entrance is spent.
+  // Render says when, not the animation: a card can leave the document before
+  // its animation ends, and reduced motion runs no animation at all.
+  | { kind: "__entered"; ids: string[] };
 
 function apply(s: SessionState, ev: SessionEvent): SessionState {
   if (ev.kind === "__error") return { ...s, error: ev.text };
+  if (ev.kind === "__entered") {
+    const spent = new Set(ev.ids);
+    const left = s.entranceOwed.filter((id) => !spent.has(id));
+    return left.length === s.entranceOwed.length ? s : { ...s, entranceOwed: left };
+  }
   if (ev.kind === "__runtime_seen") return { ...s, runtime: s.runtime.filter((n) => n.id !== ev.id) };
   if (ev.kind === "inbox_changed") return { ...s, queueMoved: s.queueMoved + 1 };
   // Both event.Message emitters carry assistant text, so nothing on the wire

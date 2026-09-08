@@ -417,7 +417,9 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               </div>
             }
           >
-          <div className="prefs-col">
+          {/* Keyed on the section: replacing this column is the navigation,
+              and it is the one thing here whose mount really is the cause. */}
+          <div className="prefs-col" key={at}>
           {at === "session" && (
             <>
               <Group id="preset" title={t("执行设定")} now={preset} hint={t("决定任务完成的判定标准。切换立刻生效，不会重建运行时。")}>

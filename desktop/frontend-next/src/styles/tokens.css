@@ -111,6 +111,12 @@
     /* 一档份量把时长和缓动一起说完。分开放着的时候，同一档的两处动画可以各
        配各的缓动，而「这是一张卡」本来就同时决定了这两件事。--m-step 是编排：
        一批元素彼此错开多久 —— 过去每个调用点自己定一个数。 */
+    /* Motion describes a state transition, never an element's lifetime.
+       Mount and remount are not causes. A live fact may enter once; replay and
+       virtualization do not replay motion. Navigation moves the containing
+       view, not every child mounted beneath it. Held by src/ui/motion.test.tsx
+       — including on this stylesheet, because the tempting rule and the
+       correct one differ by a selector. */
     --m-line: var(--t-line) var(--ease-out);
     --m-card: var(--t-card) var(--ease-out);
     --m-panel: var(--t-panel) var(--ease-out);

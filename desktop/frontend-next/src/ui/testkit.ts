@@ -37,3 +37,23 @@ globalThis.matchMedia ??= ((query: string) =>
 // error the file still passes with, which is exactly how a real one would go
 // unnoticed later.
 Element.prototype.scrollIntoView ??= function scrollIntoView() {};
+
+// jsdom has no viewport, so it has no intersections to report. The transcript
+// mounts a block when one is near, and without this it asks an observer that
+// does not exist. Reporting everything as near is the right answer here: these
+// guards are about what a block does once it is on screen, and which blocks
+// are on screen is what the browser guards measure.
+class StubIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = "";
+  readonly thresholds: readonly number[] = [];
+  readonly scrollMargin = "";
+  constructor(private readonly fn: IntersectionObserverCallback) {}
+  observe(el: Element) {
+    this.fn([{ isIntersecting: true, target: el } as IntersectionObserverEntry], this);
+  }
+  unobserve() {}
+  disconnect() {}
+  takeRecords(): IntersectionObserverEntry[] { return []; }
+}
+globalThis.IntersectionObserver ??= StubIntersectionObserver;
