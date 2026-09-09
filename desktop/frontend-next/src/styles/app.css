@@ -3140,6 +3140,27 @@
   .prefs-col { animation: navin .14s var(--ease-out) both }
   @keyframes navin { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
   .grp:last-child { margin-bottom: 0 }
+
+  /* 折叠起来的是三个完整的设置块，不是一段补充说明，所以摘要按设置行的重量画，
+     不是按脚注。收起时右边那句由 .ds 说清楚里面有没有被改过的值 —— 藏起一个
+     已经生效的设置，就是让这一页和窗口本身的样子对不上。 */
+  .advset { margin-bottom: 30px }
+  .advset > summary {
+    display: flex; align-items: center; gap: 10px; padding: 11px 0; cursor: pointer;
+    border-top: 1px solid var(--hair); color: var(--muted); list-style: none;
+  }
+  .advset > summary::-webkit-details-marker { display: none }
+  .advset > summary::after {
+    content: "▾"; margin-left: auto; flex: none; font-size: 10px; color: var(--ghost);
+    transition: transform .16s var(--ease-out);
+  }
+  .advset[open] > summary::after { transform: rotate(180deg) }
+  .advset > summary:hover { color: var(--text) }
+  .advset > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs) }
+  .advset > summary .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+  .advset > summary .lb { font: var(--w-reg) 12.5px var(--ui); color: inherit }
+  .advset > summary .ds { font: var(--w-reg) 11px var(--ui); color: var(--faint) }
+  .advset[open] > summary { margin-bottom: 26px }
   .grp-hd { display: flex; align-items: baseline; gap: 12px }
   /* An overline, not a headline: the rows under it carry the weight, and a page
      of 14.5px titles reads as a stack of documents rather than one list. 10px

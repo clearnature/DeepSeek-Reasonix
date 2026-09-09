@@ -318,6 +318,11 @@ export const EN: Record<string, string> = {
   "界面显示语言。模型回复所用的语言与此设置无关，将跟随你发送消息时使用的语言。": "The language of the interface. It does not affect the language the model replies in, which follows the language you write in.",
   "改语言要重开窗口才生效": "Changing the language reloads the window",
 
+  // ── 高级外观 ─────────────────────────────────────────────────────
+  "高级外观": "Advanced appearance",
+  "已改：{list}": "Changed: {list}",
+  "字体、文字粗细、文字对比度": "Fonts, text weight, text contrast",
+
   // ── 明暗与配色 ───────────────────────────────────────────────────
   "明暗": "Light and dark",
   "浅色": "Light",

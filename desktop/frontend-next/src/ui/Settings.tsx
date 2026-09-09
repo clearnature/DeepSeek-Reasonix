@@ -304,13 +304,25 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
   useEffect(() => {
     if (!landed) return;
     const el = root.current?.querySelector<HTMLElement>(`#set-${CSS.escape(landed)}`);
-    el?.scrollIntoView({ block: "start", behavior: "smooth" });
+    // 折叠起来的块在 DOM 里，但不在屏幕上 —— 滚过去会停在一片空白上。要开哪一
+    // 个由结构回答：不需要再维护一张「哪些设置是高级」的表，也不需要把落点穿到
+    // 每个页面里去。
+    for (let d = el?.closest("details"); d; d = d.parentElement?.closest("details") ?? null) d.open = true;
+    const aim = () => el?.scrollIntoView({ block: "start", behavior: "smooth" });
+    aim();
+    // The page is still growing under the scroll: theme packs and the font list
+    // arrive late and push the anchor below a target already locked in. A jump
+    // owns its landing until it lapses, so re-aim for as long as it is owed.
+    const grew = new ResizeObserver(aim);
+    const col = root.current?.querySelector(".prefs-col");
+    if (col) grew.observe(col);
     // 「就是这里」是一次导航反馈，不是这个设置变了 —— 所以它只是元素上短暂的
     // 一个标记，不进 React 状态，也不用往每个块穿一个纯表现的 prop。
     el?.setAttribute("data-landed", "");
     const done = setTimeout(() => setLanded(""), 900);
     return () => {
       clearTimeout(done);
+      grew.disconnect();
       el?.removeAttribute("data-landed");
     };
   }, [landed, at]);

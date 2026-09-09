@@ -212,71 +212,63 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
     [look, onLook],
   );
   const langNow = localStorage.getItem(LANG_KEY) ?? look.language ?? "";
+  // Read here rather than inside the summary: these are the same three values
+  // the folded blocks render, and a second reading of them is a second answer.
+  const changed = [
+    look.fontUi || look.fontMono ? t("字体") : "",
+    weight ? t("文字粗细") : "",
+    contrast ? t("文字对比度") : "",
+  ].filter(Boolean);
 
   return (
     <>
-      <section className="grp" id="set-language" data-setting="language">
+      <section className="grp" id="set-mode" data-setting="mode">
         <div className="grp-hd">
-          <h2>{t("语言")}</h2>
+          <h2>{t("明暗")}</h2>
         </div>
-        <p className="hint">
-          {t("界面显示语言。模型回复所用的语言与此设置无关，将跟随你发送消息时使用的语言。")}
-        </p>
+        <p className="hint">{t("跟随系统时会随系统主题切换；手动选择后将保持固定。")}</p>
         <div className="grp-items">
-          <div className="seg" data-text role="group" aria-label={t("语言")}>
-            {LANGS.map(([id, name]) => (
-              <button key={id} data-action="appearance.language" data-value={id} aria-pressed={langNow === id} onClick={() => setLang(id)}>
+          <div className="seg" data-text role="group" aria-label={t("明暗")}>
+            {SCHEMES.map(([id, name]) => (
+              <button key={id} data-action="appearance.scheme" data-value={id} aria-pressed={theme === id} onClick={() => onTheme(id)}>
                 {t(name)}
               </button>
             ))}
           </div>
-          <p className="note">{t("改语言要重开窗口才生效")}</p>
         </div>
-        <ApplyNote id="language" />
+        <ApplyNote id="mode" />
       </section>
 
-      {tray && (
-        <section className="grp" id="set-window" data-setting="window">
-          <div className="grp-hd">
-            <h2>{t("窗口")}</h2>
+      <section className="grp" id="set-scheme" data-setting="scheme">
+        <div className="grp-hd">
+          <h2>{t("配色")}</h2>
+          <span className="now">{packs.length ? t("{n} 个已装", { n: packs.length }) : ""}</span>
+        </div>
+        <p className="hint">{t("配色包安装在记忆目录的 themes/ 下，每个目录包含一个 theme.json。配色包会应用表面色、强调色、圆角和字体；状态色（成功/警告/失败）不受影响。")}</p>
+        <div className="grp-items">
+          <div className="palettes" role="group" aria-label={t("配色")}>
+            <Swatch name={t("默认")} on={!custom} onPick={() => pick("")} />
+            {packs.map((p) => (
+              <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
+            ))}
           </div>
-          <p className="hint">
-            {t("关闭窗口后需通过托盘图标重新打开主界面，下方选项依赖该图标。")}
-          </p>
-          <div className="grp-items">
-            <div className="lrow">
-              <span className="tx">
-                <span className="lb">{t("在托盘显示图标")}</span>
-                <span className="ds">
-                  {tray.icon === tray.live
-                    ? t("在跑、还是在等你批准，扫一眼图标就知道")
-                    : tray.icon
-                      ? t("下次启动时出现")
-                      : t("下次启动时不再出现，这次还在")}
+          {/* A pack loads with its good tokens and says which ones it lost. The
+              author is the only one who can fix that, and they will not read a
+              log — so it is here, next to the thing that looks wrong. */}
+          {packs.filter((p) => p.warnings?.length).map((p) => (
+            <div className="find" data-lvl="warn" key={p.id}>
+              <span className="t">{p.name} 有几项没生效</span>
+              {p.warnings?.map((w) => (
+                <span className="why" key={w}>
+                  {w}
                 </span>
-              </span>
-              <Switch data-action="tray.icon" on={tray.icon} label={t("在托盘显示图标")} onClick={() => flipTray({ icon: !tray.icon })} />
+              ))}
             </div>
-            {/* The second switch only means anything while there is an icon,
-                so it is drawn as a branch of the first rather than as a rule
-                you have to discover by watching it grey out. */}
-            <div className="lrow subrow" data-off={tray.icon && tray.live ? undefined : ""}>
-              <span className="tx">
-                <span className="lb">{t("关掉窗口后继续在托盘里跑")}</span>
-                <span className="ds">{t("关闭窗口不会中断会话和后台任务；从托盘菜单退出才会完全关闭程序")}</span>
-              </span>
-              <Switch
-                data-action="tray.close-to-tray"
-                on={tray.closeToTray}
-                busy={!tray.icon || !tray.live}
-                label={t("关掉窗口后继续在托盘里跑")}
-                onClick={() => flipTray({ closeToTray: !tray.closeToTray })}
-              />
-            </div>
-          </div>
-          <ApplyNote id="window" />
-        </section>
-      )}
+          ))}
+          {packs.length === 0 && <p className="note">{t("尚未安装配色包。将包含 theme.json 的目录放入 themes/ 后即会显示在此处。")}</p>}
+        </div>
+        <ApplyNote id="scheme" />
+      </section>
 
       <section className="grp" id="set-size" data-setting="size">
         <div className="grp-hd">
@@ -322,32 +314,6 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
           </div>
         </div>
         <ApplyNote id="size" />
-      </section>
-
-      <section className="grp" id="set-font" data-setting="font">
-        <div className="grp-hd">
-          <h2>{t("字体")}</h2>
-        </div>
-        <p className="hint">{t("可直接输入字体名称，或选择本机已安装的字体。下方文本会实时预览所选字体；若字体不可用，将自动使用默认字体。")}</p>
-        <div className="grp-items">
-          <FontPick
-            slot="ui"
-            label={t("界面")}
-            value={look.fontUi ?? ""}
-            options={uiFonts}
-            sample={t("字体预览 · 中文 Aa Bb 0123")}
-            onPick={(v) => set({ fontUi: v })}
-          />
-          <FontPick
-            slot="mono"
-            label={t("等宽")}
-            value={look.fontMono ?? ""}
-            options={monoFonts}
-            sample="func main() { fmt.Println(0O1lI) }"
-            onPick={(v) => set({ fontMono: v })}
-          />
-        </div>
-        <ApplyNote id="font" />
       </section>
 
       <section className="grp" id="set-wallpaper" data-setting="wallpaper">
@@ -484,87 +450,140 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <ApplyNote id="wallpaper" />
       </section>
 
-      <section className="grp" id="set-weight" data-setting="weight">
+      <section className="grp" id="set-language" data-setting="language">
         <div className="grp-hd">
-          <h2>{t("文字粗细")}</h2>
+          <h2>{t("语言")}</h2>
         </div>
-        <p className="hint">{t("调整文字的笔画粗细。中文笔画密集，在小字号下加粗有助于提升清晰度。")}</p>
+        <p className="hint">
+          {t("界面显示语言。模型回复所用的语言与此设置无关，将跟随你发送消息时使用的语言。")}
+        </p>
         <div className="grp-items">
-          <div className="seg" data-text role="group" aria-label={t("文字粗细")}>
-            {WEIGHTS.map(([id, name, why]) => (
-              <button key={id || "auto"} data-action="appearance.weight" data-value={id || "auto"} aria-pressed={weight === id} title={t(why)} onClick={() => onWeight(id)}>
+          <div className="seg" data-text role="group" aria-label={t("语言")}>
+            {LANGS.map(([id, name]) => (
+              <button key={id} data-action="appearance.language" data-value={id} aria-pressed={langNow === id} onClick={() => setLang(id)}>
                 {t(name)}
               </button>
             ))}
           </div>
+          <p className="note">{t("改语言要重开窗口才生效")}</p>
         </div>
-        <ApplyNote id="weight" />
+        <ApplyNote id="language" />
       </section>
 
-      <section className="grp" id="set-contrast" data-setting="contrast">
-        <div className="grp-hd">
-          <h2>{t("文字对比度")}</h2>
-        </div>
-        <p className="hint">{t("同时调整正文与次要文字的对比度。深色主题下若觉得刺眼，可调向「柔和」。")}</p>
-        <div className="grp-items">
-          <div className="seg" data-text role="group" aria-label={t("文字对比度")}>
-            {CONTRASTS.map(([id, name, why]) => (
-              <button key={id || "auto"} data-action="appearance.contrast" data-value={id || "auto"} aria-pressed={contrast === id} title={t(why)} onClick={() => onContrast(id)}>
-                {t(name)}
-              </button>
-            ))}
+      {tray && (
+        <section className="grp" id="set-window" data-setting="window">
+          <div className="grp-hd">
+            <h2>{t("窗口")}</h2>
           </div>
-        </div>
-        <ApplyNote id="contrast" />
-      </section>
-
-      <section className="grp" id="set-mode" data-setting="mode">
-        <div className="grp-hd">
-          <h2>{t("明暗")}</h2>
-        </div>
-        <p className="hint">{t("跟随系统时会随系统主题切换；手动选择后将保持固定。")}</p>
-        <div className="grp-items">
-          <div className="seg" data-text role="group" aria-label={t("明暗")}>
-            {SCHEMES.map(([id, name]) => (
-              <button key={id} data-action="appearance.scheme" data-value={id} aria-pressed={theme === id} onClick={() => onTheme(id)}>
-                {t(name)}
-              </button>
-            ))}
-          </div>
-        </div>
-        <ApplyNote id="mode" />
-      </section>
-
-      <section className="grp" id="set-scheme" data-setting="scheme">
-        <div className="grp-hd">
-          <h2>{t("配色")}</h2>
-          <span className="now">{packs.length ? t("{n} 个已装", { n: packs.length }) : ""}</span>
-        </div>
-        <p className="hint">{t("配色包安装在记忆目录的 themes/ 下，每个目录包含一个 theme.json。配色包会应用表面色、强调色、圆角和字体；状态色（成功/警告/失败）不受影响。")}</p>
-        <div className="grp-items">
-          <div className="palettes" role="group" aria-label={t("配色")}>
-            <Swatch name={t("默认")} on={!custom} onPick={() => pick("")} />
-            {packs.map((p) => (
-              <Swatch key={p.id} pack={p} theme={theme} name={p.name} on={!!p.active} onPick={() => pick(p.id)} />
-            ))}
-          </div>
-          {/* A pack loads with its good tokens and says which ones it lost. The
-              author is the only one who can fix that, and they will not read a
-              log — so it is here, next to the thing that looks wrong. */}
-          {packs.filter((p) => p.warnings?.length).map((p) => (
-            <div className="find" data-lvl="warn" key={p.id}>
-              <span className="t">{p.name} 有几项没生效</span>
-              {p.warnings?.map((w) => (
-                <span className="why" key={w}>
-                  {w}
+          <p className="hint">
+            {t("关闭窗口后需通过托盘图标重新打开主界面，下方选项依赖该图标。")}
+          </p>
+          <div className="grp-items">
+            <div className="lrow">
+              <span className="tx">
+                <span className="lb">{t("在托盘显示图标")}</span>
+                <span className="ds">
+                  {tray.icon === tray.live
+                    ? t("在跑、还是在等你批准，扫一眼图标就知道")
+                    : tray.icon
+                      ? t("下次启动时出现")
+                      : t("下次启动时不再出现，这次还在")}
                 </span>
+              </span>
+              <Switch data-action="tray.icon" on={tray.icon} label={t("在托盘显示图标")} onClick={() => flipTray({ icon: !tray.icon })} />
+            </div>
+            {/* The second switch only means anything while there is an icon,
+                so it is drawn as a branch of the first rather than as a rule
+                you have to discover by watching it grey out. */}
+            <div className="lrow subrow" data-off={tray.icon && tray.live ? undefined : ""}>
+              <span className="tx">
+                <span className="lb">{t("关掉窗口后继续在托盘里跑")}</span>
+                <span className="ds">{t("关闭窗口不会中断会话和后台任务；从托盘菜单退出才会完全关闭程序")}</span>
+              </span>
+              <Switch
+                data-action="tray.close-to-tray"
+                on={tray.closeToTray}
+                busy={!tray.icon || !tray.live}
+                label={t("关掉窗口后继续在托盘里跑")}
+                onClick={() => flipTray({ closeToTray: !tray.closeToTray })}
+              />
+            </div>
+          </div>
+          <ApplyNote id="window" />
+        </section>
+      )}
+
+      {/* What makes this page read as a console is that all of it arrives at
+          once, not that any one control is obscure. The summary says what is
+          folded and whether it has been changed — a disclosure hiding a value
+          somebody set is a screen disagreeing with the window itself. */}
+      <details className="advset">
+        <summary>
+          <span className="tx">
+            <span className="lb">{t("高级外观")}</span>
+            <span className="ds">{changed.length ? t("已改：{list}", { list: changed.join(" · ") }) : t("字体、文字粗细、文字对比度")}</span>
+          </span>
+        </summary>
+        <section className="grp" id="set-font" data-setting="font">
+          <div className="grp-hd">
+            <h2>{t("字体")}</h2>
+          </div>
+          <p className="hint">{t("可直接输入字体名称，或选择本机已安装的字体。下方文本会实时预览所选字体；若字体不可用，将自动使用默认字体。")}</p>
+          <div className="grp-items">
+            <FontPick
+              slot="ui"
+              label={t("界面")}
+              value={look.fontUi ?? ""}
+              options={uiFonts}
+              sample={t("字体预览 · 中文 Aa Bb 0123")}
+              onPick={(v) => set({ fontUi: v })}
+            />
+            <FontPick
+              slot="mono"
+              label={t("等宽")}
+              value={look.fontMono ?? ""}
+              options={monoFonts}
+              sample="func main() { fmt.Println(0O1lI) }"
+              onPick={(v) => set({ fontMono: v })}
+            />
+          </div>
+          <ApplyNote id="font" />
+        </section>
+
+        <section className="grp" id="set-weight" data-setting="weight">
+          <div className="grp-hd">
+            <h2>{t("文字粗细")}</h2>
+          </div>
+          <p className="hint">{t("调整文字的笔画粗细。中文笔画密集，在小字号下加粗有助于提升清晰度。")}</p>
+          <div className="grp-items">
+            <div className="seg" data-text role="group" aria-label={t("文字粗细")}>
+              {WEIGHTS.map(([id, name, why]) => (
+                <button key={id || "auto"} data-action="appearance.weight" data-value={id || "auto"} aria-pressed={weight === id} title={t(why)} onClick={() => onWeight(id)}>
+                  {t(name)}
+                </button>
               ))}
             </div>
-          ))}
-          {packs.length === 0 && <p className="note">{t("尚未安装配色包。将包含 theme.json 的目录放入 themes/ 后即会显示在此处。")}</p>}
-        </div>
-        <ApplyNote id="scheme" />
-      </section>
+          </div>
+          <ApplyNote id="weight" />
+        </section>
+
+        <section className="grp" id="set-contrast" data-setting="contrast">
+          <div className="grp-hd">
+            <h2>{t("文字对比度")}</h2>
+          </div>
+          <p className="hint">{t("同时调整正文与次要文字的对比度。深色主题下若觉得刺眼，可调向「柔和」。")}</p>
+          <div className="grp-items">
+            <div className="seg" data-text role="group" aria-label={t("文字对比度")}>
+              {CONTRASTS.map(([id, name, why]) => (
+                <button key={id || "auto"} data-action="appearance.contrast" data-value={id || "auto"} aria-pressed={contrast === id} title={t(why)} onClick={() => onContrast(id)}>
+                  {t(name)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ApplyNote id="contrast" />
+        </section>
+      </details>
     </>
   );
 }
