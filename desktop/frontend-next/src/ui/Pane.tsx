@@ -117,7 +117,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
       .history()
       .then((msgs) => {
         const restored = fromHistory(msgs);
-        dispatch({ kind: "__restore", items: restored.items, plan: restored.plan } as never);
+        dispatch({ kind: "__restore", ...restored });
       })
       .catch(() => {});
   }, [port]);
@@ -186,7 +186,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     port.history().then((msgs) => {
       if (!alive) return;
       const restored = fromHistory(msgs);
-      dispatch({ kind: "__restore", items: restored.items, plan: restored.plan } as never);
+      dispatch({ kind: "__restore", ...restored });
     });
     port.status().then((st) => {
       if (!alive) return;
@@ -239,7 +239,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     // wait behind the numbers over it.
     port.history().then((msgs) => {
       const r = fromHistory(msgs);
-      dispatch({ kind: "__restore", items: r.items, plan: r.plan } as never);
+      dispatch({ kind: "__restore", ...r });
     });
     port.status().then((st) => {
       applyStatus(st);
@@ -277,7 +277,7 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // `s.revision` is the narrower truth. Same for the rail's two panels below.
   /* eslint-disable react-hooks/exhaustive-deps */
   const paired = useMemo(() => pairCheckpoints(s.items, checkpoints), [s.revision, checkpoints]);
-  const rail = useMemo(() => railOf(s.items), [s.revision]);
+  const rail = useMemo(() => railOf(s.items, s.executions), [s.revision, s.executions]);
   const counts = useMemo(() => {
     let steps = 0;
     let steer = 0;

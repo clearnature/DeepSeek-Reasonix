@@ -1,4 +1,5 @@
 import type { Receipt, Tool, WireEvent } from "../port/wire";
+import { noteTool, type Executions } from "./executions";
 import { estimateTokens, sample } from "../port/tokens";
 import type { HistoryMessage } from "../port/port";
 import { plural, t } from "../i18n";
@@ -13,11 +14,13 @@ import { promptOpen, prompted, sealByReceipt } from "./prompts";
 import { nameTurnStart } from "./turn_start";
 import { appendText, foldMessage, sealSay } from "./say";
 import { nextId } from "./ids";
+import { dropTool, foldLastRead, foldTool, mergeReads } from "./fold";
 export { quoteAmount };
 export { showsReceipt };
 
 export const initialState: SessionState = {
   error: "",
+  executions: {},
   terminal: null,
   runtime: [],
   items: [],
@@ -88,47 +91,6 @@ function sealTurn(items: Item[], err?: string): Item[] {
   return [...sealed, { t: "notice" as const, id: nextId(), level: "error", text: err }];
 }
 
-// The wire omits `partial: false`, so spreading a full dispatch over the
-// streaming placeholder would leave its flag standing and every dispatched call
-// would read as one that never started. Merging through here is what lets
-// sealTurn tell the two apart.
-const merge = (prev: Tool, next: Tool): Tool => ({ ...prev, ...next, partial: next.partial ?? false });
-
-function foldTool(items: Item[], tool: Tool, running: boolean): Item[] {
-  // A subagent's calls carry parentId; they belong inside the task that spawned
-  // them, not as siblings in the main flow.
-  if (tool.parentId) {
-    const at = items.findIndex((i) => i.t === "tool" && i.tool.id === tool.parentId);
-    if (at >= 0) {
-      const parent = items[at] as Extract<Item, { t: "tool" }>;
-      const kids = parent.children.slice();
-      const k = kids.findIndex((c) => c.id === tool.id);
-      if (k >= 0) kids[k] = merge(kids[k], tool);
-      else kids.push({ ...tool, partial: tool.partial ?? false });
-      const next = items.slice();
-      next[at] = { ...parent, children: kids };
-      return next;
-    }
-  }
-  const key = tool.id;
-  if (key) {
-    const at = items.findIndex((i) => i.t === "tool" && i.tool.id === key);
-    if (at >= 0) {
-      const prev = items[at] as Extract<Item, { t: "tool" }>;
-      const next = items.slice();
-      next[at] = { ...prev, tool: merge(prev.tool, tool), running };
-      return next;
-    }
-  }
-  return [...items, { t: "tool", id: nextId(), tool: { ...tool, partial: tool.partial ?? false }, running, children: [] }];
-}
-
-// dropTool removes the dispatch row a specialised card replaces, so the same
-// call is not shown twice once its result arrives.
-function dropTool(items: Item[], id?: string): Item[] {
-  if (!id) return items;
-  return items.filter((i) => !(i.t === "tool" && i.tool.id === id));
-}
 
 // The card reads the call's own arguments: they carry what was saved and how it
 // will be recalled, which the tool's textual receipt does not.
@@ -151,47 +113,6 @@ function parseRemembered(tool: Tool): RememberedFact | null {
   }
 }
 
-// read_file is the most-called tool by a wide margin — 96 calls across a sample
-// of recent sessions, against 47 for bash. One card each is the noise the spec
-// collapses into a single manifest. Merging happens here rather than at render
-// time so each card keeps a stable identity and stays memoised.
-// The spec's manifest is one step for a whole run of lookups, not for reads
-// alone: its own fixture folds grep and glob rows in beside the files. A group
-// still has to be anchored by a read — a lone grep is better served by its own
-// excerpt list than by a row that says only how many times it matched.
-const LOOKUP = new Set(["read_file", "grep", "glob", "ls"]);
-
-const lookup = (i: Item | undefined) =>
-  i?.t === "tool" && !i.running && LOOKUP.has(i.tool.name) && i.children.length === 0;
-
-const toolOf = (i: Item) => (i as Extract<Item, { t: "tool" }>).tool;
-
-// foldLastRead folds the item just appended into the one before it, in place,
-// and says whether it did. Rebuilding a whole transcript calls it once per item,
-// so it must not copy the list it is folding.
-function foldLastRead(items: Item[]): boolean {
-  const n = items.length;
-  const last = items[n - 1];
-  if (!lookup(last)) return false;
-  const tool = toolOf(last);
-  const prev = items[n - 2];
-  if (prev?.t === "reads") {
-    items[n - 2] = { ...prev, tools: [...prev.tools, tool] };
-    items.length = n - 1;
-    return true;
-  }
-  if (lookup(prev) && (tool.name === "read_file" || toolOf(prev).name === "read_file")) {
-    items[n - 2] = { t: "reads", id: prev.id, tools: [toolOf(prev), tool] };
-    items.length = n - 1;
-    return true;
-  }
-  return false;
-}
-
-function mergeReads(items: Item[]): Item[] {
-  const next = items.slice();
-  return foldLastRead(next) ? next : items;
-}
 
 // The kernel's contract for a retry: the indicator is transient, and the next
 // stream event clears it. These kinds say nothing about the connection and
@@ -252,7 +173,7 @@ function entering(prev: SessionState, next: SessionState, ev: SessionEvent): Par
 // message, a decision you just made, an error with no event behind it.
 export type SessionEvent =
   | WireEvent
-  | { kind: "__restore"; items: Item[]; plan: PlanStep[] }
+  | { kind: "__restore"; items: Item[]; plan: PlanStep[]; executions: Executions }
   | { kind: "__totals"; hit: number; miss: number; cost?: number }
   | { kind: "__error"; text: string }
   | { kind: "__user"; text: string; pending: boolean; id?: string }
@@ -347,7 +268,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
   // run stopped, waiting on an answer only this window can give. Overwriting it
   // left the session reading 等你决定 with nothing on screen to decide.
   if (ev.kind === "__restore") {
-    return { ...s, items: [...ev.items, ...s.items.filter(promptOpen)], plan: ev.plan };
+    return { ...s, executions: ev.executions, items: [...ev.items, ...s.items.filter(promptOpen)], plan: ev.plan };
   }
   // The session's own running totals, read back from the kernel rather than
   // restarted here: a count that begins at zero makes the next request the whole
@@ -395,19 +316,24 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
 
     case "tool_dispatch":
       return ev.tool
-        ? { ...s, doing: ev.tool.name, items: foldTool(s.items, ev.tool, true) }
+        ? { ...s, doing: ev.tool.name, executions: noteTool(s.executions, ev.tool, false), items: foldTool(s.items, ev.tool, true) }
         : s;
 
     case "tool_progress":
-      return ev.tool ? { ...s, items: foldTool(s.items, ev.tool, true) } : s;
+      return ev.tool
+        ? { ...s, executions: noteTool(s.executions, ev.tool, false), items: foldTool(s.items, ev.tool, true) }
+        : s;
 
     case "tool_result": {
       if (!ev.tool) return s;
       // A failed remember is an ordinary failed tool call; only a save that
       // actually landed is worth its own card.
       const fact = ev.tool.name === "remember" && !ev.tool.err ? parseRemembered(ev.tool) : null;
+      // The execution is recorded before either arm: one of them deletes the
+      // card, and a card being replaced is not the call not having run.
+      const executions = noteTool(s.executions, ev.tool, true);
       if (fact) {
-        return { ...s, items: [...dropTool(s.items, ev.tool.id), { t: "remember", id: nextId(), m: fact }] };
+        return { ...s, executions, items: [...dropTool(s.items, ev.tool.id), { t: "remember", id: nextId(), m: fact }] };
       }
       // A delegate keeps its own todo list, and it is not the plan the user is
       // watching. Without the parentId guard the rail flips to the subagent's
@@ -415,7 +341,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       // line one turns into somebody else's first step.
       const own = ev.tool.name === "todo_write" && !ev.tool.parentId;
       const plan = (own && parsePlan(ev.tool)) || s.plan;
-      return { ...s, plan, items: mergeReads(foldTool(s.items, ev.tool, false)) };
+      return { ...s, plan, executions, items: mergeReads(foldTool(s.items, ev.tool, false)) };
     }
 
     case "usage": {
@@ -710,9 +636,13 @@ function splitProviderSearch(content: string): { text: string; search?: boolean 
 // A reload has no event stream to replay, so the transcript is rebuilt from the
 // provider conversation. Control-plane turns (system, and the language preamble
 // the kernel prepends to each user message) are not part of what was said.
-export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; plan: PlanStep[] } {
+export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; plan: PlanStep[]; executions: Executions } {
   const out: Item[] = [];
   const calls = new Map<string, number>();
+  // What /history can say about a call: that it ran, and under what name. It
+  // carries no error field, so a rebuilt execution has no outcome — which is
+  // the honest answer, not the answer "succeeded".
+  const executions: Executions = {};
   let plan: PlanStep[] = [];
   for (const m of msgs) {
     if (m.role === "system") continue;
@@ -760,7 +690,10 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; plan: Plan
           const p = parsePlan({ name: c.name, args: c.arguments, readOnly: true });
           if (p) plan = p;
         }
-        if (c.id) calls.set(c.id, out.length);
+        if (c.id) {
+          calls.set(c.id, out.length);
+          executions[c.id] = { name: c.name };
+        }
         out.push({
           t: "tool",
           id: nextId(),
@@ -788,5 +721,5 @@ export function fromHistory(msgs: HistoryMessage[]): { items: Item[]; plan: Plan
     merged.push(it);
     foldLastRead(merged);
   }
-  return { items: merged, plan };
+  return { items: merged, plan, executions };
 }

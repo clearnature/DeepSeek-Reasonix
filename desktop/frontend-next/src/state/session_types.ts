@@ -2,6 +2,7 @@
 // rows the transcript draws and the state one turn hands the next.
 import type { Ask, Approval, Compaction, ExtensionSurface, Guardian, Receipt, Tool } from "../port/wire";
 import type { Sample } from "../port/tokens";
+import type { Executions } from "./executions";
 
 export type Item =
   // itemId names the durable queue entry while pending, which is what a
@@ -117,6 +118,10 @@ export type TurnTerminal =
 
 export interface SessionState {
   error: string;
+  // What the tool calls of this session did, keyed by wire id. Held apart from
+  // items because the transcript folds, nests and replaces the cards drawing
+  // them, and none of that is a change to what ran.
+  executions: Executions;
   // How this turn ended, cleared when the next one starts.
   terminal: TurnTerminal;
   // Notices about the machine running this conversation rather than about the

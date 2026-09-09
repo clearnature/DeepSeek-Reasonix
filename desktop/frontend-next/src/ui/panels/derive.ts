@@ -3,6 +3,7 @@ import { categoryOf } from "../icons";
 import { agentsOf, isDelegation } from "../delegation";
 import { argOf, shortArgs } from "../args";
 import type { Task } from "./Agents";
+import type { Executions } from "../../state/executions";
 
 // One row per file, not per call. Editing the same file four times is one
 // pending change with four edits' worth of lines in it; a row per call turned
@@ -27,11 +28,27 @@ export interface Rail {
   stats: Stats;
 }
 
-/** One walk for everything the rail reads. It was three — one per panel that
- *  wanted a number — and a walk apiece is a walk apiece over a transcript that
- *  only grows, repeated on every revision while an answer streams. */
-export function railOf(items: Item[]): Rail {
-  const stats: Stats = { tools: 0, external: 0, failed: 0, waiting: 0 };
+/** The three facts a tool call leaves behind, counted off the executions the
+ *  session recorded rather than off the cards drawing them. Identity is the
+ *  state's; which of them count as reaching outside is decided here, where the
+ *  categories the rest of the interface uses already live. */
+export function toolFacts(execs: Executions): Omit<Stats, "waiting"> {
+  let tools = 0, external = 0, failed = 0;
+  for (const id in execs) {
+    const e = execs[id];
+    tools++;
+    if (e.failed) failed++;
+    const cat = categoryOf(e.name);
+    if (cat === "net" || cat === "mcp") external++;
+  }
+  return { tools, external, failed };
+}
+
+/** One walk for everything else the rail reads. It was three — one per panel
+ *  that wanted a number — and a walk apiece is a walk apiece over a transcript
+ *  that only grows, repeated on every revision while an answer streams. */
+export function railOf(items: Item[], execs: Executions): Rail {
+  const stats: Stats = { ...toolFacts(execs), waiting: 0 };
   const tasks: Task[] = [];
   const by = new Map<string, Change>();
   const take = (path: string) => {
@@ -51,12 +68,6 @@ export function railOf(items: Item[]): Rail {
     }
     if (i.t !== "tool") continue;
     const call = i.tool;
-    stats.tools++;
-    // use_capability is the proxy most tools are reached through, so its own
-    // name says nothing about who answered. Count the resolved target.
-    const cat = categoryOf(call.resolvedName || call.name);
-    if (cat === "net" || cat === "mcp") stats.external++;
-    if (call.err) stats.failed++;
     // A profile is the kernel's mark that the work left this context; matching
     // the tool name instead misses every delegation reached through a proxy.
     if (isDelegation(call)) tasks.push(i);

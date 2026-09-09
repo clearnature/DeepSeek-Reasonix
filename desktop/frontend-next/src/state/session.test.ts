@@ -359,7 +359,7 @@ describe("a question the run is still blocked on", () => {
     }) as SessionEvent;
   const approving = (id: string): SessionEvent =>
     ({ kind: "approval_request", approval: { id, tool: "write_file", subject: "src/main.rs" } }) as SessionEvent;
-  const rebuild = (items: Item[] = []): SessionEvent => ({ kind: "__restore", items, plan: [] }) as SessionEvent;
+  const rebuild = (items: Item[] = []): SessionEvent => ({ kind: "__restore", items, plan: [], executions: {} }) as SessionEvent;
   const asks = (s: SessionState) => s.items.filter((i): i is Extract<Item, { t: "ask" }> => i.t === "ask");
   const said = (text: string): Item => ({ t: "say", id: "h1", text, reasoning: undefined, done: true }) as Item;
 

@@ -50,7 +50,7 @@ describe("throughput is an observation of what arrived", () => {
   it("re-asking the formula with no new tokens yields a descending series", () => {
     let win: Sample[] = [];
     for (const t of [0, 200, 400, 600, 800]) win = sample(win, 40, t);
-    const asked = [];
+    const asked: number[] = [];
     for (let now = 1000; now < 1000 + WINDOW_MS; now += 250) {
       asked.push(Math.round(tokensPerSecond(win, now)));
     }

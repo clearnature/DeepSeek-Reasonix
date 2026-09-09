@@ -27,7 +27,7 @@ describe("which cards owe an entrance", () => {
     const cold = run(live, { kind: "__restore", items: [
       { t: "user", id: "h1", text: "a" },
       { t: "say", id: "h2", text: "b", done: true },
-    ], plan: [] } as SessionEvent);
+    ], plan: [], executions: {} } as SessionEvent);
     expect(cold.items.length).toBe(2);
     expect(cold.entranceOwed).toEqual([]);
   });
@@ -80,13 +80,13 @@ describe("which cards owe an entrance", () => {
     s = run(s, { kind: "__restore", items: [
       { t: "user", id: "h9", text: "other" },
       { t: "say", id: "h10", text: "answer", done: true },
-    ], plan: [] } as SessionEvent);
+    ], plan: [], executions: {} } as SessionEvent);
     expect(s.entranceOwed).toEqual([]);
   });
 
   // And a fact arriving after that restore is still a new fact.
   it("still lets the next real arrival in", () => {
-    let s = run(initialState, { kind: "__restore", items: [{ t: "user", id: "h1", text: "a" }], plan: [] } as SessionEvent);
+    let s = run(initialState, { kind: "__restore", items: [{ t: "user", id: "h1", text: "a" }], plan: [], executions: {} } as SessionEvent);
     s = run(s, { kind: "__user", text: "now", pending: false });
     expect(s.entranceOwed.length).toBe(1);
   });
