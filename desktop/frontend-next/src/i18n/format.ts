@@ -65,6 +65,19 @@ export function bytes(n: number): string {
 export const pct = (ratio: number, digits = 0) =>
   nf({ style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(ratio);
 
+// An amount smaller than half the last place a fixed precision can show rounds
+// to the same string a true zero prints. A turn that cost $0.0029 then reads as
+// one that cost nothing, which is the one thing a cost figure must not say.
+// Ordinary amounts keep ordinary currency precision; only the ones that would
+// vanish are given the significant digits it takes to stay non-zero.
+const vanishes = (amount: number, digits: number) =>
+  amount !== 0 && Math.abs(amount) < 0.5 * 10 ** -digits;
+
+const scale = (amount: number, digits: number): Intl.NumberFormatOptions =>
+  vanishes(amount, digits)
+    ? { maximumSignificantDigits: 2 }
+    : { minimumFractionDigits: digits, maximumFractionDigits: digits };
+
 /** money formats an amount in its own currency. The ISO code is what the kernel
  *  sends and what Intl needs: it is the difference between ¥ and CN¥ in an
  *  English window, and a symbol glued to the front cannot make that distinction.
@@ -73,17 +86,12 @@ export function money(amount: number, code: string, digits = 2): string {
   const iso = code.trim().toUpperCase();
   if (/^[A-Z]{3}$/.test(iso)) {
     try {
-      return nf({
-        style: "currency",
-        currency: iso,
-        minimumFractionDigits: digits,
-        maximumFractionDigits: digits,
-      }).format(amount);
+      return nf({ style: "currency", currency: iso, ...scale(amount, digits) }).format(amount);
     } catch {
       // An ISO-shaped code this runtime does not know.
     }
   }
-  return `${code}${decimals(amount, digits)}`;
+  return `${code}${nf(scale(amount, digits)).format(amount)}`;
 }
 
 // Plural categories are the language's, not a one-vs-many guess: English needs

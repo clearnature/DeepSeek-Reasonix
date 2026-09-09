@@ -106,6 +106,43 @@ describe("money", () => {
   it("still renders a legacy symbol", () => {
     expect(money(5, "¥")).toBe("¥5.00");
   });
+
+  // The contract, and the defect behind it: 45 real quotes from a sampled
+  // session were complete and non-zero — $0.000206, $0.00291 — and every one of
+  // them printed as US$0.00 under a fixed two places. A turn that cost money
+  // read as a turn that cost nothing.
+  it("never prints a known amount as the string a true zero prints", () => {
+    const zero = money(0, "USD");
+    for (const amount of [1e-6, 0.000206, 0.00291, 0.0049, 0.005, 0.01, 0.018644, 1, 12.28]) {
+      expect(money(amount, "USD"), `${amount} is not zero`).not.toBe(zero);
+    }
+    expect(money(0, "USD")).toBe(zero);
+  });
+
+  it("holds that for the fallback path too, where Intl does not know the code", () => {
+    const zero = money(0, "¥");
+    for (const amount of [0.000206, 0.00291, 0.0049]) {
+      expect(money(amount, "¥")).not.toBe(zero);
+    }
+  });
+
+  // Ordinary amounts keep ordinary currency precision: paying for the small end
+  // with six places on every figure would be a different kind of noise.
+  it("leaves an ordinary amount at its currency's own precision", () => {
+    expect(inEnglish(() => money(12.28, "USD"))).toBe("$12.28");
+    expect(inEnglish(() => money(1234.5, "USD"))).toBe("$1,234.50");
+    expect(inEnglish(() => money(0.02, "USD"))).toBe("$0.02");
+  });
+
+  // Only below the point where the fixed precision would swallow it.
+  it("widens exactly where the figure would otherwise vanish", () => {
+    expect(inEnglish(() => money(0.005, "USD"))).toBe("$0.01");
+    expect(inEnglish(() => money(0.0049, "USD"))).toBe("$0.0049");
+  });
+
+  it("keeps a true zero reading as zero", () => {
+    expect(inEnglish(() => money(0, "USD"))).toBe("$0.00");
+  });
 });
 
 describe("category", () => {
