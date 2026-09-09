@@ -437,6 +437,11 @@
   .mode .ic { display: grid; place-items: center; width: 12px; height: 12px; flex: none }
   .mode .ic svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round }
   /* 关着时清单是灰的轮廓，开的瞬间沿着笔画描一遍 —— pathLength 归一，四段各画各的不会跳 */
+  /* Off is the state every turn starts in, so it is drawn as text rather than
+     as another chip on the shelf. It keeps its border on hover: a control that
+     only exists once you are already touching it is the one nobody finds. */
+  .mode.tog:not([aria-pressed="true"]) { border-color: transparent; color: var(--faint) }
+  .mode.tog:not([aria-pressed="true"]):hover { border-color: var(--border); color: var(--text) }
   .mode.tog .ic path { opacity: .4; transition: opacity .2s }
   .mode.tog[aria-pressed="true"] .ic path { opacity: 1; animation: plandraw .5s var(--ease-out) }
   @keyframes plandraw {

@@ -4,7 +4,7 @@ import { reason } from "../i18n/kernel";
 import type { AgentPort, ApprovalMode, Preset, SessionStatus } from "../port/port";
 import { useDismiss } from "./dismiss";
 import { Seg } from "./Seg";
-import { policySummary } from "./policyview";
+import { deviates, policySummary } from "./policyview";
 
 // 这一轮怎么跑，是三个变量共同回答的一个问题。它们原来分处窗口顶栏（执行方式）
 // 和输入框底栏（强度、批准），要知道下一轮会怎么执行得看两个地方。
@@ -65,24 +65,31 @@ export function Policy({ port, status, efforts, onChanged }: Props) {
   // that moved first would say the session is running under something the
   // kernel has not accepted — and may refuse.
   const sum = policySummary(status, efforts.length > 0);
+  // Baseline recedes all the way: a shelf spends its width on the turns where
+  // something is unusual, and there is nothing unusual to spend it on here.
+  if (!deviates(sum)) return null;
 
   return (
-    <div className="picker policy" ref={wrap}>
+    <>
+      <span className="sep" aria-hidden="true" />
+      <div className="picker policy" ref={wrap}>
       <button
         ref={btn}
         className="mode plain"
         data-action="chrome.policy"
         aria-expanded={open}
-        title={sum.ready ? sum.reading : t("这一轮怎么跑：执行方式、思考强度、工具权限")}
+        title={sum.ready ? sum.reading : ""}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="vl">
-          {!sum.ready ? sum.label : (
+          {sum.ready && (
             <>
               {[sum.preset, sum.effort].filter(Boolean).join(" · ")}
               {sum.approval && (
                 <>
-                  {" · "}
+                  {/* Only between two things. With preset and effort both at
+                      baseline the approval is the whole reading. */}
+                  {(sum.preset || sum.effort) && " · "}
                   {/* The one state allowed to break the quiet. Nothing else on
                       this shelf can be forgotten and still cost a workspace. */}
                   {/* Scoped names: a bare .risk in this stylesheet is already an MCP
@@ -133,6 +140,7 @@ export function Policy({ port, status, efforts, onChanged }: Props) {
           onClick={(v) => apply("approval", v, () => port.setApprovalMode(v as ApprovalMode))}
         />
       </div>
-    </div>
+      </div>
+    </>
   );
 }

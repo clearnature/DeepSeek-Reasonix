@@ -45,12 +45,12 @@ function draw(calls: Partial<AgentPort> = {}, status: SessionStatus = STATUS) {
 describe("the turn policy the composer owns", () => {
   it("says what is unusual about this turn before it is opened", () => {
     draw();
-    // What deviates, not the word "settings" and not the whole reading: the
-    // shelf has to answer "how will the next turn run" without being opened,
-    // and a shelf that recites the default forever has no attention left for
-    // the turn where something is actually different. medium is a rung nobody
-    // asked for by default, so it shows; ask is the baseline and does not.
-    expect(screen.getByRole("button", { expanded: false }).textContent).toBe("均衡 · Medium");
+    // What deviates, and only that: the shelf answers "how will the next turn
+    // run" without being opened, and one that recites the defaults forever has
+    // no attention left for the turn where something is actually different.
+    // medium is a rung nobody asked for by default, so it shows; balanced and
+    // ask are what a session already runs as, so they do not.
+    expect(screen.getByRole("button", { expanded: false }).textContent).toBe("Medium");
   });
 
   it("asks the kernel once, and does not move the selection on its own", async () => {
@@ -155,7 +155,10 @@ describe("the turn policy the composer owns", () => {
     render(
       <Policy
         port={{ setPreset: async () => {} } as unknown as AgentPort}
-        status={STATUS}
+        // A posture that deviates, so there is a control to open at all: with
+        // no rungs published the effort is baseline, and so is the rest of
+        // STATUS.
+        status={{ ...STATUS, preset: "delivery" } as SessionStatus}
         efforts={[]}
         onChanged={onChanged}
       />,

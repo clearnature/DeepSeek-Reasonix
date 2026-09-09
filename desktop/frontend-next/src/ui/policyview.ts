@@ -8,13 +8,20 @@ import type { ApprovalMode, SessionStatus } from "../port/port";
  *  carries no posture at all, so a screen cannot name one it has not been told.
  */
 export type PolicySummary =
-  | { ready: false; label: string }
-  | { ready: true; preset: string; effort?: string; approval?: string; danger?: true; reading: string };
+  | { ready: false }
+  | { ready: true; preset?: string; effort?: string; approval?: string; danger?: true; reading: string };
+
+/** Whether this turn departs from what a session runs as before anyone changes
+ *  anything. Nothing does: there is nothing for the shelf to say, and a control
+ *  reciting the defaults is what it says instead. */
+export const deviates = (s: PolicySummary): boolean =>
+  s.ready && !!(s.preset || s.effort || s.approval);
 
 // What a session runs as before anyone changes anything — read off the kernel,
 // not chosen here for being quiet. An unknown or retired preset normalises to
 // balanced and a missing approval mode answers ask, so a session reporting
 // these has not been configured rather than merely looking unconfigured.
+const BASELINE_PRESET = "balanced";
 const BASELINE_EFFORT = "auto";
 const BASELINE_APPROVAL: ApprovalMode = "ask";
 
@@ -43,7 +50,7 @@ export function policySummary(status: SessionStatus | null, hasEffort: boolean):
   // kernel usually answers would be the context gauge's defect again — a
   // plausible value standing in for a fact — and this fact is what the agent
   // may do to a workspace without asking.
-  if (!status) return { ready: false, label: t("策略") };
+  if (!status) return { ready: false };
 
   const mode = status.toolApprovalMode;
   // A rung the endpoint does not publish is not a rung this session is on: the
@@ -52,7 +59,7 @@ export function policySummary(status: SessionStatus | null, hasEffort: boolean):
   const effort = hasEffort && status.effort ? status.effort : BASELINE_EFFORT;
   return {
     ready: true,
-    preset: presetName(status.preset),
+    preset: status.preset === BASELINE_PRESET ? undefined : presetName(status.preset),
     effort: effort === BASELINE_EFFORT ? undefined : rung(effort),
     // ask is the only mode that changes nothing about what happens without
     // being asked. auto lets some calls through unasked, dontAsk refuses what

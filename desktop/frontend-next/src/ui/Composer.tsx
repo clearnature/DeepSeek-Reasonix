@@ -478,6 +478,9 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
             </>
           }
         />
+        {/* A status may recede to its baseline; the only way into a mode may
+            not. This is the only place plan mode is discoverable — Shift+Tab is
+            a shortcut, not a hint — so it stays, drawn quietly while it is off. */}
         <span className="sep" aria-hidden="true" />
         <button
           className="mode tog"
@@ -504,9 +507,8 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
         )}
         {/* 执行方式、思考强度、工具权限说的是同一件事：这一轮怎么跑。它们原来
             一个在窗口顶栏、两个在这里，要拼出下一轮会怎么执行得看两个地方。
-            模型和计划留在外面：一个是最常改也最认得出的选择，一个说的是这一轮
-            的意图，不是一项偏好。 */}
-        <span className="sep" aria-hidden="true" />
+            模型留在外面：它是最常改也最认得出的选择，而且没有一个「默认」可以
+            退回去 —— 每个值都是一次真实的选择。 */}
         <Policy port={port} status={status} efforts={efforts} onChanged={onChanged} />
         <span className="go">
           <button
