@@ -88,7 +88,7 @@ type ContextMaintenanceReceipt struct {
 	CoveredPrefixHash   string    `json:"covered_prefix_hash,omitempty"`
 	InputHash           string    `json:"input_hash,omitempty"`
 	OutputHash          string    `json:"output_hash,omitempty"`
-	InputTokens         int       `json:"input_tokens,omitempty"`
+	InputTokens         int       `json:"input_tokens,omitempty"` // context worked on, not what the work cost
 	ResultTokens        int       `json:"result_tokens,omitempty"`
 	SavedTokens         int       `json:"saved_tokens,omitempty"`
 	AffectedToolResults int       `json:"affected_tool_results,omitempty"`
@@ -100,6 +100,9 @@ type ContextMaintenanceReceipt struct {
 	TriggerTokens       int       `json:"trigger_tokens,omitempty"`
 	BlockedInputHash    string    `json:"blocked_input_hash,omitempty"`
 	CreatedAt           time.Time `json:"created_at,omitempty"`
+	// What this maintenance actually spent with the provider. Every summary
+	// call it made, including any whose answer it discarded.
+	SummaryUsage CompactionUsage `json:"summary_usage,omitzero"`
 }
 
 // CompactionOutcome reports whether compactToProjection installed a projection.
@@ -183,15 +186,18 @@ type CompactionTelemetry struct {
 	CoverageMissing  int  `json:"coverage_missing,omitempty"`
 	CoverageRepaired bool `json:"coverage_repaired,omitempty"`
 	// CoverageBackstopped: the host wrote the dropped facts in itself.
-	CoverageBackstopped bool   `json:"coverage_backstopped,omitempty"`
-	InputTokens         int    `json:"input_tokens"`
-	OutputTokens        int    `json:"output_tokens"`
-	CacheHitTokens      int    `json:"cache_hit_tokens"`
-	CacheMissTokens     int    `json:"cache_miss_tokens"`
-	CacheWriteTokens    int    `json:"cache_write_tokens"`
-	RequestCount        int    `json:"request_count"`
-	ProviderRequestID   string `json:"provider_request_id,omitempty"`
-	Error               string `json:"error,omitempty"`
+	CoverageBackstopped bool `json:"coverage_backstopped,omitempty"`
+	// SummaryUsage is the transaction's whole bill. The flat fields below are
+	// its input/output/cache halves, kept for the existing detail line.
+	SummaryUsage      CompactionUsage `json:"summary_usage,omitzero"`
+	InputTokens       int             `json:"input_tokens"`
+	OutputTokens      int             `json:"output_tokens"`
+	CacheHitTokens    int             `json:"cache_hit_tokens"`
+	CacheMissTokens   int             `json:"cache_miss_tokens"`
+	CacheWriteTokens  int             `json:"cache_write_tokens"`
+	RequestCount      int             `json:"request_count"`
+	ProviderRequestID string          `json:"provider_request_id,omitempty"`
+	Error             string          `json:"error,omitempty"`
 }
 
 // ContextStatePath returns the projection sidecar path for a session transcript.

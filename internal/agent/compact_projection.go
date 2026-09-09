@@ -165,6 +165,7 @@ func (a *Agent) compressVisibleRange(
 	preview string,
 	instructions string,
 ) (tool.CompressResult, error) {
+	ctx, spend := withCompactionSpend(ctx)
 	a.sess.compactionRunMu.Lock()
 	defer a.sess.compactionRunMu.Unlock()
 	if !a.explicitCompressionSnapshotCurrent(snap) {
@@ -195,7 +196,7 @@ func (a *Agent) compressVisibleRange(
 
 	res, err := a.foldToSummary(ctx, prepared.fold, prepared.instructions)
 	summary := res.Text
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res, spend.read())
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -235,6 +236,7 @@ func (a *Agent) compressVisibleRange(
 		transcriptVersion: snap.transcriptVersion, projectionVersion: snap.projectionVersion, generation: snap.generation,
 		activeTurn: a.activeTurnCreatedAt.Load(), trigger: trigger, summary: summary,
 		inputHash: inputHash, outputHash: outputHash, sourceTokens: result.SourceTokens, projectionTokens: projectionTokens,
+		summaryUsage: tele.SummaryUsage,
 	})
 	if err != nil {
 		if errors.Is(err, errCompressStaleContext) {
@@ -355,32 +357,28 @@ func buildVisibleCompressionProjection(visible []provider.Message, plan visibleC
 	return provider.ModelMessages(projection)
 }
 
-func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary) CompactionTelemetry {
-	tele := CompactionTelemetry{
+// spend is the transaction's bill, not the adopted call's usage: a repair that
+// improved nothing, failed, or was discarded was charged all the same, and the
+// answer that got kept is not the question "what did this cost" is asking.
+func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int, res foldSummary, spend CompactionUsage) CompactionTelemetry {
+	return CompactionTelemetry{
 		Trigger: trigger, CacheState: cacheState, Mode: res.Mode,
 		SourceTokens:        sourceTokens,
 		ProviderRequestID:   res.RequestID,
 		FoldTokens:          res.FoldTokens,
-		Spans:               max(1, res.Spans), // one summary request, plus a coverage repair when one ran
+		Spans:               spend.Calls,
 		CoverageRequired:    res.Coverage.Required(),
 		CoverageMissing:     res.Coverage.Missing(),
 		CoverageRepaired:    res.CoverageRepaired,
 		CoverageBackstopped: res.CoverageBackstopped,
+		SummaryUsage:        spend,
+		InputTokens:         spend.InputTokens,
+		OutputTokens:        spend.OutputTokens,
+		CacheHitTokens:      spend.CacheHitTokens,
+		CacheMissTokens:     spend.CacheMissTokens,
+		CacheWriteTokens:    spend.CacheWriteTokens,
+		RequestCount:        spend.RequestAttempts,
 	}
-	usage := res.Usage
-	if usage == nil {
-		return tele
-	}
-	tele.InputTokens = usage.PromptTokens
-	tele.OutputTokens = usage.CompletionTokens
-	tele.CacheHitTokens = usage.CacheHitTokens
-	tele.CacheMissTokens = usage.CacheMissTokens
-	tele.CacheWriteTokens = usage.CacheWriteTokens
-	tele.RequestCount = usage.RequestCount
-	if tele.RequestCount <= 0 {
-		tele.RequestCount = 1
-	}
-	return tele
 }
 
 // compact writes a context projection; trigger stays "auto"/"manual" for UI cards.
@@ -395,6 +393,7 @@ func (a *Agent) compact(ctx context.Context, trigger, instructions string, force
 // was foldable; callers at physical overflow must treat that as hard failure.
 // mustFree marks the fold the caller cannot proceed without.
 func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force, mustFree bool) (CompactionOutcome, CompactionNoopReason, error) {
+	ctx, _ = withCompactionSpend(ctx)
 	a.sess.compactionRunMu.Lock()
 	defer a.sess.compactionRunMu.Unlock()
 	activeTurn := a.activeTurnCreatedAt.Load()
@@ -496,7 +495,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		transcriptVersion: transcriptVersion, projectionVersion: startProjectionVersion,
 		generation: startGeneration, activeTurn: activeTurn, trigger: trigger,
 		summary: summary, inputHash: viewInputHash, outputHash: viewOutputHash,
-		sourceTokens: sourceTokens, projectionTokens: projTokens,
+		sourceTokens: sourceTokens, projectionTokens: projTokens, summaryUsage: tele.SummaryUsage,
 	})
 	if err != nil {
 		a.emitCompactionAborted(trigger)

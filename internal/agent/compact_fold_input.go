@@ -117,23 +117,24 @@ func (a *Agent) singleCallSummary(ctx context.Context, res foldSummary, fold []p
 // converts a summarizer failure into a mechanical one. The telemetry it returns
 // always reports the original failure, even when the fold recovered from it.
 func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool, fold []provider.Message, instructions string, sourceTokens int) (foldSummary, CompactionTelemetry, error) {
+	spend := compactionSpendFrom(ctx)
 	res, err := a.foldToSummary(ctx, fold, instructions)
 	if err == nil {
 		res, err = a.repairFoldCoverage(ctx, mustFree, fold, instructions, res)
 		if err == nil {
 			res = backstopFoldCoverage(res)
 		}
-		tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+		tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res, spend.read())
 		return res, tele, err
 	}
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res, spend.read())
 	cause := err.Error()
 	if res, err = a.degradeFoldSummary(res, mustFree, fold, err); err != nil {
 		tele.Error = cause
 		return res, tele, err
 	}
 	res = backstopFoldCoverage(res)
-	tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res)
+	tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res, spend.read())
 	tele.Error = cause
 	return res, tele, nil
 }
