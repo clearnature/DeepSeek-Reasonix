@@ -20,7 +20,7 @@ export function Runtime({ rate, done, stats, files }: Props) {
   const trail = useTrail(rate, !done);
 
   return (
-    <Grp id="runtime" name={t("运行详情")}>
+    <Grp id="runtime" name={t("运行指标")}>
       <Row
         k={t("吞吐（输出）")}
         v={

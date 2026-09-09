@@ -2279,6 +2279,20 @@
      内核那边它们是三个独立的 effect，所以各自等、各自被拒。槽本身用树里已有
      的 .seg —— 设置页画的就是这同样三个字段，两处不该长得不一样。 */
   .policy .vl { font-family: var(--ui); font-size: 11.5px; animation: polval .12s var(--ease-out) both }
+  /* 默认姿态退到背景之后，这颗按钮平时只念一个词。全放行是唯一一个「忘了自己
+     在这个姿态」要付代价的状态，所以它反过来 —— 只染这一段，不染整颗按钮：
+     整颗变红，安静下来的那些轮次就又开始有人盯着它了。 */
+  .policy .vl .polrisk { color: var(--err-ink); font-weight: var(--w-med) }
+  .policy .vl .polwarn { margin-right: 3px; font-style: normal }
+  /* 选中「全放行」时这一格自己带危险语义，跟设置页的同一组一致。用 :has() 读
+     选中态，Seg 这个基元就不必为一档专门长一个 prop。 */
+  .polmenu .seg:has(button[data-value="yolo"][aria-pressed="true"]) {
+    background: color-mix(in srgb, var(--err) 13%, var(--overlay));
+  }
+  .polmenu .seg button[data-value="yolo"][aria-pressed="true"] {
+    color: var(--err);
+    box-shadow: var(--lit), 0 0 0 1px color-mix(in srgb, var(--err) 42%, transparent);
+  }
   @keyframes polval { from { opacity: 0 } to { opacity: 1 } }
   /* 开合是一整块面板就地展开，比换地方的菜单短。右对齐：这颗按钮挨着发送，
      左对齐会把 300px 的面板推出窗口右缘。 */

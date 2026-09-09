@@ -114,6 +114,8 @@ export const EN: Record<string, string> = {
   "工具输出": "Tool output",
   "命令、读取、检索返回的内容": "What commands, reads and searches returned",
   "估算值，和触发压缩用的是同一把尺子": "An estimate, measured the same way compaction is triggered",
+  "策略": "Policy",
+  "自动批准": "Auto approve",
   "下次维护": "Next maintenance",
   "模型容量": "Model capacity",
   "接近维护点，模型已经被告知要收窄接下来的工作。":

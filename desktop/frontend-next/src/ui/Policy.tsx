@@ -4,6 +4,7 @@ import { reason } from "../i18n/kernel";
 import type { AgentPort, ApprovalMode, Preset, SessionStatus } from "../port/port";
 import { useDismiss } from "./dismiss";
 import { Seg } from "./Seg";
+import { policySummary } from "./policyview";
 
 // 这一轮怎么跑，是三个变量共同回答的一个问题。它们原来分处窗口顶栏（执行方式）
 // 和输入框底栏（强度、批准），要知道下一轮会怎么执行得看两个地方。
@@ -59,11 +60,11 @@ export function Policy({ port, status, efforts, onChanged }: Props) {
   const preset = status?.preset;
   const eff = status?.effort || "auto";
   const apv = status?.toolApprovalMode ?? "ask";
-  // 事实本身，不是「设置」。摘要念的是内核当前的三个值，档位一律用内核自己的
-  // 拼法 —— 给它另配一张显示名表，就是又一处能跟内核走散的措辞。
-  const summary = [t(PRESETS.find(([id]) => id === preset)?.[1] ?? "") || "—", eff, t(APPROVALS.find(([m]) => m === apv)?.[1] ?? "")]
-    .filter(Boolean)
-    .join(" · ");
+  // The shelf reads committed fact, never the answer being waited on: a field
+  // still in flight shows its pending state inside the open menu, and a summary
+  // that moved first would say the session is running under something the
+  // kernel has not accepted — and may refuse.
+  const sum = policySummary(status, efforts.length > 0);
 
   return (
     <div className="picker policy" ref={wrap}>
@@ -72,10 +73,30 @@ export function Policy({ port, status, efforts, onChanged }: Props) {
         className="mode plain"
         data-action="chrome.policy"
         aria-expanded={open}
-        title={t("这一轮怎么跑：执行方式、思考强度、工具权限")}
+        title={sum.ready ? sum.reading : t("这一轮怎么跑：执行方式、思考强度、工具权限")}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="vl">{summary}</span>
+        <span className="vl">
+          {!sum.ready ? sum.label : (
+            <>
+              {[sum.preset, sum.effort].filter(Boolean).join(" · ")}
+              {sum.approval && (
+                <>
+                  {" · "}
+                  {/* The one state allowed to break the quiet. Nothing else on
+                      this shelf can be forgotten and still cost a workspace. */}
+                  {/* Scoped names: a bare .risk in this stylesheet is already an MCP
+                      risk row, and inheriting its display:flex and margin doubled
+                      this pill's height in exactly the dangerous state. */}
+                  <span className={sum.danger ? "polrisk" : undefined}>
+                    {sum.danger && <i className="polwarn" aria-hidden>⚠</i>}
+                    {sum.approval}
+                  </span>
+                </>
+              )}
+            </>
+          )}
+        </span>
       </button>
       <div className="menu modemenu polmenu" role="group" aria-label={t("本轮执行策略")} hidden={!open}>
         <Seg

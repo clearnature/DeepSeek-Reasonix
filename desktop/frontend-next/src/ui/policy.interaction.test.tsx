@@ -43,11 +43,14 @@ function draw(calls: Partial<AgentPort> = {}, status: SessionStatus = STATUS) {
 }
 
 describe("the turn policy the composer owns", () => {
-  it("says what this turn will actually do before it is opened", () => {
+  it("says what is unusual about this turn before it is opened", () => {
     draw();
-    // The three current values, not the word "settings": what is on the shelf
-    // has to answer "how will the next turn run" without being opened.
-    expect(screen.getByRole("button", { expanded: false }).textContent).toBe("均衡 · medium · 询问");
+    // What deviates, not the word "settings" and not the whole reading: the
+    // shelf has to answer "how will the next turn run" without being opened,
+    // and a shelf that recites the default forever has no attention left for
+    // the turn where something is actually different. medium is a rung nobody
+    // asked for by default, so it shows; ask is the baseline and does not.
+    expect(screen.getByRole("button", { expanded: false }).textContent).toBe("均衡 · Medium");
   });
 
   it("asks the kernel once, and does not move the selection on its own", async () => {
