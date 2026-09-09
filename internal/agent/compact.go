@@ -706,7 +706,7 @@ func (a *Agent) summarizeOnce(ctx context.Context, fold []provider.Message, inst
 // renderTranscript is summarizer input: tool-call arguments are summarized so
 // a digest cannot reproduce a long one (#4317).
 func renderTranscript(msgs []provider.Message) string {
-	return renderTranscriptWith(msgs, summarizeToolArgs)
+	return renderTranscriptWith(msgs, summarizeToolArgs, modelVisibleBody)
 }
 
 // renderTranscriptVerbatim keeps the arguments. Recall exists to return what
@@ -718,10 +718,24 @@ func renderTranscriptVerbatim(msgs []provider.Message) string {
 			return "(no arguments)"
 		}
 		return args
-	})
+	}, fullToolBody)
 }
 
-func renderTranscriptWith(msgs []provider.Message, renderArgs func(string) string) string {
+// modelVisibleBody is the tool result the conversation actually carried. The
+// full output beside it is display-only state that ModelMessages and
+// ProjectionMessages both clear, and a summarizer call is a provider request.
+func modelVisibleBody(m provider.Message) string { return m.Content }
+
+// fullToolBody is what the call actually returned, for the one caller whose
+// answer is that and whose own budget bounds the size.
+func fullToolBody(m provider.Message) string {
+	if m.RawContent != "" {
+		return m.RawContent
+	}
+	return m.Content
+}
+
+func renderTranscriptWith(msgs []provider.Message, renderArgs func(string) string, toolBody func(provider.Message) string) string {
 	var b strings.Builder
 	for _, m := range msgs {
 		if m.LocalOnly {
@@ -739,11 +753,7 @@ func renderTranscriptWith(msgs []provider.Message, renderArgs func(string) strin
 			}
 			b.WriteString("\n")
 		case provider.RoleTool:
-			body := m.Content
-			if m.RawContent != "" {
-				body = m.RawContent
-			}
-			fmt.Fprintf(&b, "[tool %s result]\n%s\n\n", m.Name, body)
+			fmt.Fprintf(&b, "[tool %s result]\n%s\n\n", m.Name, toolBody(m))
 		case provider.RoleSystem:
 			fmt.Fprintf(&b, "[system]\n%s\n\n", m.Content)
 		}

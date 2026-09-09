@@ -179,8 +179,9 @@ func backstopFoldCoverage(res foldSummary) foldSummary {
 }
 
 // shortenFoldForSummary rewrites only summarizer input: long tool bodies become
-// deterministic head+tail sketches. Prefer RawContent when present so the
-// digest still sees the real tool outcome shape.
+// deterministic head+tail sketches. The body it sketches is the one the
+// conversation carried — a sketch of the local full copy would hand the digest
+// a tail the model was never given, and the digest becomes the memory of it.
 func (a *Agent) shortenFoldForSummary(fold []provider.Message) []provider.Message {
 	out := make([]provider.Message, len(fold))
 	copy(out, fold)
@@ -192,15 +193,11 @@ func (a *Agent) shortenFoldForSummary(fold []provider.Message) []provider.Messag
 		if a.keepPolicy&KeepErrors != 0 && isErrorMessage(m) {
 			continue
 		}
-		source := m.Content
-		if m.RawContent != "" {
-			source = m.RawContent
-		}
-		if len(source) < minPruneBytes {
+		if len(m.Content) < minPruneBytes {
 			continue
 		}
 		replacement := snipToolResult(provider.Message{
-			Role: m.Role, Name: m.Name, ToolCallID: m.ToolCallID, Content: source,
+			Role: m.Role, Name: m.Name, ToolCallID: m.ToolCallID, Content: m.Content,
 		}, "the canonical transcript", a.snipStrategyFor(m.Name))
 		if replacement == m.Content {
 			continue
