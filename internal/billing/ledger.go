@@ -91,7 +91,6 @@ func (l *Ledger) Add(q CostQuote, tokens UsageTokens, occurred time.Time) {
 		// those buckets so later same-currency calls are not lost.
 		if len(ent.Quote.OriginalTotals) > 0 {
 			ent.Quote.OriginalTotals = mergeOriginalTotals(ent.Quote.OriginalTotals, q)
-			ent.Quote.CostComplete = true
 			ent.Quote.DisplayComplete = false
 			ent.Quote.Complete = false
 			ent.Quote.DisplayStatus = DisplayStatusBucketed
@@ -101,7 +100,6 @@ func (l *Ledger) Add(q CostQuote, tokens UsageTokens, occurred time.Time) {
 			sum, err := AddMoney(ent.Quote.Original, q.Original)
 			if err != nil {
 				ent.Quote.OriginalTotals = mergeOriginalTotals([]Money{ent.Quote.Original}, q)
-				ent.Quote.CostComplete = true
 				ent.Quote.DisplayComplete = false
 				ent.Quote.Complete = false
 				ent.Quote.DisplayStatus = DisplayStatusBucketed
@@ -139,7 +137,8 @@ func (l *Ledger) Add(q CostQuote, tokens UsageTokens, occurred time.Time) {
 				ent.Quote.IncompleteReason = q.IncompleteReason
 			}
 		}
-		ent.Quote.CostComplete = ent.Quote.CostComplete && q.CostComplete
+		ent.Quote.Coverage = FoldCoverage(ent.Quote.Coverage, q.Coverage)
+		ent.Quote.CostComplete = ent.Quote.Coverage == CoverageComplete
 		if ent.Quote.DisplayStatus != DisplayStatusBucketed {
 			ent.Quote.DisplayStatus = q.DisplayStatus
 		}

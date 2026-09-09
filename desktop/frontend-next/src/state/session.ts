@@ -1,4 +1,4 @@
-import type { Receipt, Tool, WireEvent } from "../port/wire";
+import type { CostCoverage, Receipt, Tool, WireEvent } from "../port/wire";
 import { noteTool, type Executions } from "./executions";
 import { estimateTokens, sample } from "../port/tokens";
 import type { HistoryMessage } from "../port/port";
@@ -31,7 +31,7 @@ export const initialState: SessionState = {
   outWindow: [],
   metrics: { hit: 0, miss: 0, out: 0, bySource: {}, cost: 0, currency: "¥",
     prefixHash: "", prefixChanged: false, prefixReasons: [], bodyChanged: false, carriedMessages: 0, toolSchema: 0,
-    estimated: false, alt: null, turn: 0, rounds: [] },
+    estimated: false, coverage: "none", incompleteReason: "", alt: null, turn: 0, rounds: [] },
   waiting: {},
   running: false,
   doing: "空闲",
@@ -174,7 +174,7 @@ function entering(prev: SessionState, next: SessionState, ev: SessionEvent): Par
 export type SessionEvent =
   | WireEvent
   | { kind: "__restore"; items: Item[]; plan: PlanStep[]; executions: Executions }
-  | { kind: "__totals"; hit: number; miss: number; cost?: number }
+  | { kind: "__totals"; hit: number; miss: number; cost?: number; coverage?: CostCoverage; incompleteReason?: string }
   | { kind: "__error"; text: string }
   | { kind: "__user"; text: string; pending: boolean; id?: string }
   | { kind: "__unsent"; id: string }
@@ -277,7 +277,21 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
   // rather than with the transcript — the record is what the reader is waiting
   // for, and it must not wait behind a status read that goes to the network.
   if (ev.kind === "__totals") {
-    return { ...s, metrics: { ...s.metrics, hit: ev.hit, miss: ev.miss, cost: ev.cost ?? s.metrics.cost } };
+    // The kernel is the authority on how much of what it billed carries a
+    // price: it holds every round, while this side has folded none of them yet.
+    // A kernel that cannot say restores nothing rather than a guess — the live
+    // fold takes over from the next round, which is the only thing it saw.
+    return {
+      ...s,
+      metrics: {
+        ...s.metrics,
+        hit: ev.hit,
+        miss: ev.miss,
+        cost: ev.cost ?? s.metrics.cost,
+        coverage: ev.coverage ?? s.metrics.coverage,
+        incompleteReason: ev.coverage ? ev.incompleteReason ?? "" : s.metrics.incompleteReason,
+      },
+    };
   }
   // A wait only text or reasoning could end outlived every turn whose first
   // packet was a tool call: the retry line and its clock stayed up for the rest

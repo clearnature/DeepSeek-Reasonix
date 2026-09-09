@@ -56,3 +56,40 @@ func TestToWireUsageDualWritesCostQuoteAndLegacyAliases(t *testing.T) {
 		t.Fatalf("legacy cost missing: %s", raw)
 	}
 }
+
+// The coverage identity is only worth having if it reaches the page that reads
+// it, so this asserts the bytes rather than the struct the bytes came from.
+func TestToWireUsageCarriesCoverageToTheJSON(t *testing.T) {
+	usage := &provider.Usage{PromptTokens: 1000, CompletionTokens: 500, TotalTokens: 1500}
+	cases := []struct {
+		name    string
+		pricing *provider.Pricing
+		want    string
+	}{
+		{"a priced round", &provider.Pricing{Input: 1.5, Output: 4.5, Currency: "¥"}, billing.CoverageComplete},
+		{"a round with no price to quote", nil, billing.CoverageIncomplete},
+	}
+	for _, c := range cases {
+		e := event.Event{Kind: event.Usage, ModelRef: "m", Usage: usage, Pricing: c.pricing}
+		e.CostQuote = event.EnsureCostQuote(e, nil)
+		raw, err := json.Marshal(ToWire(e).Usage)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m struct {
+			CostQuote struct {
+				Coverage     string `json:"coverage"`
+				CostComplete bool   `json:"costComplete"`
+			} `json:"costQuote"`
+		}
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.CostQuote.Coverage != c.want {
+			t.Errorf("%s: coverage on the wire = %q, want %q (%s)", c.name, m.CostQuote.Coverage, c.want, raw)
+		}
+		if m.CostQuote.CostComplete != (c.want == billing.CoverageComplete) {
+			t.Errorf("%s: costComplete = %v against coverage %q", c.name, m.CostQuote.CostComplete, m.CostQuote.Coverage)
+		}
+	}
+}

@@ -147,11 +147,23 @@ export interface Money {
   currency: string;
 }
 
+// How much of the usage behind a quote carries a complete price fact. A single
+// call is only ever complete or incomplete; an aggregate has two more answers,
+// because it can price some of its calls and not others, and it can have billed
+// nothing at all. Kept apart from displayStatus, which is about whether the
+// requested currency could be shown, not about whether the cost is known.
+export type CostCoverage = "none" | "complete" | "partial" | "incomplete";
+
 export interface CostQuote {
   original: Money;
   selected?: Money;
   estimated: boolean;
   costComplete: boolean;
+  // Absent from a kernel older than the field — a remote workspace can be one.
+  coverage?: CostCoverage;
+  // Why the cost fact is short, kept as provenance. The state is read from
+  // coverage, never worked backwards out of this.
+  incompleteReason?: string;
 }
 
 export interface Usage {

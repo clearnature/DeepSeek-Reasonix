@@ -1,6 +1,6 @@
 // What a session is made of, apart from the reducer that maintains it: the
 // rows the transcript draws and the state one turn hands the next.
-import type { Ask, Approval, Compaction, ExtensionSurface, Guardian, Receipt, Tool } from "../port/wire";
+import type { Ask, Approval, Compaction, CostCoverage, ExtensionSurface, Guardian, Receipt, Tool } from "../port/wire";
 import type { Sample } from "../port/tokens";
 import type { Executions } from "./executions";
 
@@ -73,6 +73,13 @@ export interface Metrics {
   // The quote's own confidence. A number billed at a published price and one
   // estimated from a fallback table are different claims.
   estimated: boolean;
+  // How much of what this session billed carries a price fact. A session that
+  // has spent nothing yet and one whose rounds went unpriced both total zero,
+  // and the amount cannot tell them apart — only this can.
+  coverage: CostCoverage;
+  // Why a round fell short, carried for provenance. coverage is the state; this
+  // never stands in for it.
+  incompleteReason: string;
   // The converted amount, when the host quoted in a second currency. Kept
   // apart rather than summed: adding them would require inventing a rate.
   alt: { amount: number; currency: string } | null;

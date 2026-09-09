@@ -434,3 +434,34 @@ describe("a question the run is still blocked on", () => {
     expect((s.items[0] as Extract<Item, { t: "approval" }>).verdict).toBe("always");
   });
 });
+
+// A session's coverage is the kernel's answer, not this side's running guess:
+// the record is not replayed on restore, so the fold has folded nothing yet.
+describe("restoring what a session has been billed", () => {
+  const totals = (over: Partial<Extract<SessionEvent, { kind: "__totals" }>> = {}): SessionEvent =>
+    ({ kind: "__totals", hit: 10, miss: 5, cost: 0.02, ...over }) as SessionEvent;
+
+  it("takes the coverage the kernel holds every round for", () => {
+    const s = reduce(initialState, totals({ coverage: "partial", incompleteReason: "no_price" }));
+    expect(s.metrics.coverage).toBe("partial");
+    expect(s.metrics.incompleteReason).toBe("no_price");
+    expect(s.metrics.cost).toBe(0.02);
+  });
+
+  // Replaced rather than joined, for the same reason the totals are: the read
+  // belongs to whichever session this pane now holds.
+  it("replaces what a previously held session had folded", () => {
+    const held = reduce(initialState, totals({ coverage: "partial", incompleteReason: "no_price" }));
+    const switched = reduce(held, totals({ coverage: "complete" }));
+    expect(switched.metrics.coverage).toBe("complete");
+    expect(switched.metrics.incompleteReason, "the reason belonged to the other session").toBe("");
+  });
+
+  // A kernel older than the field restores nothing rather than a guess: the
+  // live fold takes over from the next round, which is all it can speak for.
+  it("restores no coverage from a kernel that cannot say", () => {
+    const s = reduce(initialState, totals({ coverage: undefined }));
+    expect(s.metrics.coverage).toBe("none");
+    expect(s.metrics.cost).toBe(0.02);
+  });
+});

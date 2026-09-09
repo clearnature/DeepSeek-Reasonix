@@ -223,7 +223,7 @@ func (c *Config) OfficialCatalogProvider(modelRef string) string {
 // QuoteForUsage builds a CostQuote from a provider price and usage tokens.
 func QuoteForUsage(price *provider.Pricing, usage *provider.Usage, display string, modelRef, usageSource, billingMode, catalogSource string) billing.CostQuote {
 	if price == nil || usage == nil {
-		return billing.CostQuote{Estimated: true, CostComplete: false, DisplayComplete: false, Complete: false, DisplayStatus: billing.DisplayStatusUnavailable, IncompleteReason: "missing_price_or_usage"}
+		return billing.CostQuote{Estimated: true, CostComplete: false, DisplayComplete: false, Complete: false, Coverage: billing.CoverageIncomplete, DisplayStatus: billing.DisplayStatusUnavailable, IncompleteReason: "missing_price_or_usage"}
 	}
 	card := billing.RateCard{
 		CacheHit: price.CacheHit,

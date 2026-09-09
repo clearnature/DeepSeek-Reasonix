@@ -75,6 +75,9 @@ type CostQuote struct {
 	// CostComplete means usage and the price-book amount are known. It does not
 	// imply that a requested display currency is available.
 	CostComplete bool `json:"costComplete"`
+	// Coverage is the same fact with the states a boolean cannot hold: an
+	// aggregate that priced only some of its calls, and one that billed nothing.
+	Coverage string `json:"coverage,omitempty"`
 	// DisplayComplete means a single selected amount satisfies the display
 	// request. Complete is retained as the old wire alias.
 	DisplayComplete bool   `json:"displayComplete"`
@@ -232,6 +235,7 @@ func newQuoteBuildState(in QuoteInput) *quoteBuildState {
 		BillingMode:        mode,
 		Estimated:          true,
 		CostComplete:       true,
+		Coverage:           CoverageComplete,
 		DisplayComplete:    true,
 		Complete:           true,
 		DisplayStatus:      DisplayStatusMatched,
@@ -373,6 +377,7 @@ func (s *quoteBuildState) selectDisplay() {
 
 func (s *quoteBuildState) markIncomplete(reason string) {
 	s.quote.CostComplete = false
+	s.quote.Coverage = CoverageIncomplete
 	s.quote.DisplayComplete = false
 	s.quote.Complete = false
 	s.quote.DisplayStatus = DisplayStatusUnavailable
@@ -455,22 +460,23 @@ func AggregateQuotes(quotes []CostQuote, display string) CostQuote {
 }
 
 type quoteAccumulator struct {
-	out               CostQuote
-	display           string
-	totals            map[string]Amount
-	originalCurrency  string
-	originalTotal     Amount
-	originalTotals    map[string]Amount
-	originalComplete  bool
-	costFactsComplete bool
-	displayComplete   bool
-	modes             map[string]struct{}
+	out              CostQuote
+	display          string
+	totals           map[string]Amount
+	originalCurrency string
+	originalTotal    Amount
+	originalTotals   map[string]Amount
+	originalComplete bool
+	coverage         string
+	displayComplete  bool
+	modes            map[string]struct{}
 }
 
 func emptyAggregate(display string) CostQuote {
 	out := CostQuote{
 		Original: MoneyOf(Zero, display), Valuations: map[string]Valuation{}, Estimated: true,
 		CostComplete: false, DisplayComplete: false, Complete: false,
+		Coverage:      CoverageNone,
 		DisplayStatus: DisplayStatusUnavailable, AggregateMode: AggregateModeSingleCurrency,
 		IncompleteReason: "no_usage",
 	}
@@ -481,18 +487,16 @@ func newQuoteAccumulator(display string) *quoteAccumulator {
 	return &quoteAccumulator{
 		out:     CostQuote{Valuations: map[string]Valuation{}, Estimated: true},
 		display: NormalizeCurrency(display), totals: map[string]Amount{}, originalTotals: map[string]Amount{},
-		originalComplete: true, costFactsComplete: true, displayComplete: true,
+		originalComplete: true, coverage: CoverageNone, displayComplete: true,
 		modes: map[string]struct{}{},
 	}
 }
 
 func (a *quoteAccumulator) add(quote CostQuote) {
 	quote = NormalizeQuote(quote)
-	if !quoteHasCompleteCostFact(quote) {
-		a.costFactsComplete = false
-		if a.out.IncompleteReason == "" {
-			a.out.IncompleteReason = quote.IncompleteReason
-		}
+	a.coverage = FoldCoverage(a.coverage, quote.Coverage)
+	if quote.Coverage != CoverageComplete && a.out.IncompleteReason == "" {
+		a.out.IncompleteReason = quote.IncompleteReason
 	}
 	a.out.LegacyEstimate = a.out.LegacyEstimate || quote.LegacyEstimate
 	if quote.BillingMode != "" {
@@ -559,8 +563,15 @@ func (a *quoteAccumulator) addValuation(code string, valuation Valuation) {
 	a.out.Valuations[code] = current
 }
 
+// costFactsComplete reads the accumulated coverage rather than tracking the
+// same fact a second time: two answers to one question drift.
+func (a *quoteAccumulator) costFactsComplete() bool {
+	return a.coverage == CoverageComplete
+}
+
 func (a *quoteAccumulator) finish() CostQuote {
-	a.out.CostComplete = a.costFactsComplete
+	a.out.Coverage = a.coverage
+	a.out.CostComplete = a.costFactsComplete()
 	if a.originalComplete && a.originalCurrency != "" {
 		a.out.Original = MoneyOf(a.originalTotal, a.originalCurrency)
 		a.syncOriginalValuation()
@@ -582,7 +593,7 @@ func (a *quoteAccumulator) finish() CostQuote {
 			a.out.BillingMode = mode
 		}
 	}
-	if a.display == "" && a.originalComplete && a.costFactsComplete {
+	if a.display == "" && a.originalComplete && a.costFactsComplete() {
 		selected := a.out.Original
 		a.out.Selected = &selected
 		a.out.DisplayComplete = true
@@ -592,7 +603,7 @@ func (a *quoteAccumulator) finish() CostQuote {
 		return a.out
 	}
 	valuation, found := a.out.Valuations[a.display]
-	if found && a.displayComplete && a.costFactsComplete {
+	if found && a.displayComplete && a.costFactsComplete() {
 		selected := valuation.Money
 		a.out.Selected = &selected
 		a.out.DisplayComplete = true
@@ -607,7 +618,7 @@ func (a *quoteAccumulator) finish() CostQuote {
 	}
 	a.out.DisplayComplete = false
 	a.out.Complete = false
-	if !a.costFactsComplete {
+	if !a.costFactsComplete() {
 		a.out.DisplayStatus = DisplayStatusUnavailable
 		a.out.IncompleteReason = firstNonEmpty(a.out.IncompleteReason, "incomplete_cost_fact")
 	} else if a.originalComplete && a.originalCurrency != "" {
@@ -653,6 +664,12 @@ func NormalizeQuote(q CostQuote) CostQuote {
 			q.AggregateMode = AggregateModeCurrencyBuckets
 		} else if q.Selected != nil {
 			q.AggregateMode = AggregateModeSingleCurrency
+		}
+	}
+	if !ValidCoverage(q.Coverage) {
+		q.Coverage = CoverageIncomplete
+		if quoteHasCompleteCostFact(q) {
+			q.Coverage = CoverageComplete
 		}
 	}
 	q.Complete = q.DisplayComplete

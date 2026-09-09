@@ -142,6 +142,7 @@ func EnsureCostQuote(e Event, ctx *QuoteContext) *billing.CostQuote {
 	if e.Pricing == nil {
 		q := billing.CostQuote{
 			Estimated: true, CostComplete: false, DisplayComplete: false, Complete: false,
+			Coverage:      billing.CoverageIncomplete,
 			DisplayStatus: billing.DisplayStatusUnavailable, IncompleteReason: "no_price",
 			ModelRef: e.ModelRef, UsageSource: e.UsageSource,
 		}

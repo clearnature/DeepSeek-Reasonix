@@ -191,7 +191,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     port.status().then((st) => {
       if (!alive) return;
       setStatus(st);
-      dispatch({ kind: "__totals", hit: st.cacheHit, miss: st.cacheMiss, cost: quoteAmount(st.sessionCostQuote) } as never);
+      dispatch({
+        kind: "__totals",
+        hit: st.cacheHit,
+        miss: st.cacheMiss,
+        cost: quoteAmount(st.sessionCostQuote),
+        coverage: st.sessionCostQuote?.coverage,
+        incompleteReason: st.sessionCostQuote?.incompleteReason,
+      } as never);
     });
     return () => {
       alive = false;
@@ -243,7 +250,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
     });
     port.status().then((st) => {
       applyStatus(st);
-      dispatch({ kind: "__totals", hit: st.cacheHit, miss: st.cacheMiss, cost: quoteAmount(st.sessionCostQuote) } as never);
+      dispatch({
+        kind: "__totals",
+        hit: st.cacheHit,
+        miss: st.cacheMiss,
+        cost: quoteAmount(st.sessionCostQuote),
+        coverage: st.sessionCostQuote?.coverage,
+        incompleteReason: st.sessionCostQuote?.incompleteReason,
+      } as never);
     });
     refreshWallet();
     onSessionChanged();

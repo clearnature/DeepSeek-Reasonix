@@ -1,5 +1,5 @@
 import type { Metrics } from "./session_types";
-import type { Usage } from "../port/wire";
+import type { CostCoverage, CostQuote, Usage } from "../port/wire";
 
 // What a billed round reports, read out of the quote rather than guessed.
 // These live apart from the reducer because they answer about money and token
@@ -38,6 +38,27 @@ export function altAmount(q?: {
   return Number.isFinite(amount) ? { amount, currency: q.original.currency } : null;
 }
 
+// foldCoverage joins two coverages into the coverage of both together: the join
+// over complete and incomplete, with none as the identity and partial as the
+// top. Order cannot reach the answer, so the same rounds billed in any sequence
+// fold to the same state, and a session that has priced everything so far can
+// never fold back to complete once an unpriced round joins it.
+export function foldCoverage(a: CostCoverage, b: CostCoverage): CostCoverage {
+  if (a === "none") return b;
+  if (b === "none") return a;
+  if (a === b) return a;
+  return "partial";
+}
+
+// What one round contributes. The kernel names it; a kernel that predates the
+// field leaves it out, and for a single round the boolean is the whole answer,
+// because one round is never partial and never none. A round that arrived with
+// no quote at all is a round whose price fact never came.
+export function quoteCoverage(q?: CostQuote): CostCoverage {
+  if (!q) return "incomplete";
+  return q.coverage ?? (q.costComplete ? "complete" : "incomplete");
+}
+
 // foldUsage folds one billed round into the session's running metrics. It lives
 // here, not in the reducer, because every line of it is about money, tokens and
 // what the round was sampled against.
@@ -45,6 +66,7 @@ export function foldUsage(m: Metrics, u: Usage): Metrics {
   const src = u.source || "executor";
   const spent = quoteAmount(u.costQuote) ?? u.cost ?? 0;
   const d = u.cacheDiagnostics;
+  const cov = quoteCoverage(u.costQuote);
   return {
     ...m,
     hit: m.hit + u.cacheHitTokens,
@@ -65,6 +87,10 @@ export function foldUsage(m: Metrics, u: Usage): Metrics {
     carriedMessages: d?.carriedMessages ?? m.carriedMessages,
     toolSchema: d?.toolSchemaTokens ?? m.toolSchema,
     estimated: u.costQuote?.estimated ?? u.estimated ?? m.estimated,
+    coverage: foldCoverage(m.coverage, cov),
+    // A round that priced cleanly explains nothing, so it leaves the standing
+    // reason alone: coverage stays short, and why it is short has to stay too.
+    incompleteReason: cov === "complete" ? m.incompleteReason : u.costQuote?.incompleteReason || m.incompleteReason,
     alt: altAmount(u.costQuote) ?? m.alt,
     turn: m.turn + spent,
     rounds: sampleRound(m.rounds, u.totalTokens),
