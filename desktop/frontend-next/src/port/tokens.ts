@@ -15,7 +15,7 @@ export interface Sample {
 
 // Long enough to smooth a bursty stream, short enough that the number falls to
 // zero while a tool runs instead of implying the model is still writing.
-const WINDOW_MS = 4000;
+export const WINDOW_MS = 4000;
 
 export function sample(win: Sample[], n: number, now: number): Sample[] {
   return [...win, { t: now, n }].filter((s) => now - s.t <= WINDOW_MS);

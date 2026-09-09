@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { WINDOW_MS, tokensPerSecond, type Sample } from "../port/tokens";
 
 // Usage lands once per model round, so a counter that only ever cuts to its new
 // value spends most of a turn looking frozen and then jumps. Easing the last
@@ -42,4 +43,23 @@ export function useTrail(value: number, on: boolean, span = 60): number[] {
     return () => clearInterval(id);
   }, [on, span]);
   return trail;
+}
+
+// A rate is an observation of what arrived, so only an arrival may make one.
+// Wall time gets one power over it and no other: to end it. Between arrivals
+// the last observation stands, and at the window's edge it goes to zero in a
+// single step rather than sliding there through readings nothing produced.
+export function useRate(win: Sample[], on: boolean): number {
+  const [rate, setRate] = useState(0);
+  useEffect(() => {
+    const last = on ? win[win.length - 1] : undefined;
+    if (!last) {
+      setRate(0);
+      return;
+    }
+    setRate(tokensPerSecond(win, Date.now()));
+    const id = setTimeout(() => setRate(0), Math.max(0, last.t + WINDOW_MS - Date.now()));
+    return () => clearTimeout(id);
+  }, [win, on]);
+  return rate;
 }

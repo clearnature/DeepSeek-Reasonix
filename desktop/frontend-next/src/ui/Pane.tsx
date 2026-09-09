@@ -27,7 +27,7 @@ import { railOf } from "./panels/derive";
 import { ABSENT, accountOf, type Wallet } from "./wallet";
 import { swapping } from "./swap";
 import { PaneNav, type PaneView } from "./PaneNav";
-import { tokensPerSecond } from "../port/tokens";
+import { useRate } from "./num";
 
 // PaneReport is what the window's own chrome needs from whichever pane has
 // focus: everything else about a session stays inside the pane that owns it.
@@ -94,7 +94,6 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const [mcp, setMcp] = useState<McpEntry[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [askFocus, setAskFocus] = useState(0);
-  const [tps, setTps] = useState(0);
   const [tree, setTree] = useState<WorkspaceChanges | null>(null);
   const [ctx, setCtx] = useState<ContextBreakdown | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
@@ -102,10 +101,9 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   const [slots, setSlots] = useState<Record<string, string>>({});
   const flow = useRef<HTMLDivElement>(null);
   const startedAt = useRef(0);
-  // Read by the 250ms tick without making it a dependency, so a delta arriving
-  // between ticks does not restart the interval.
-  const win = useRef(s.outWindow);
-  win.current = s.outWindow;
+  // Elapsed is a clock reading and belongs on the tick. Throughput is not: it
+  // follows the deltas themselves, and expires rather than being re-derived.
+  const tps = useRate(s.outWindow, s.running);
 
   const reloadMcp = useCallback(() => {
     void port.mcp().then((c) => setMcp(c.servers)).catch(() => setMcp([]));
@@ -337,13 +335,11 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   useEffect(() => {
     if (!s.running) {
       startedAt.current = 0;
-      setTps(0);
       return;
     }
     if (!startedAt.current) startedAt.current = Date.now();
     const t = setInterval(() => {
       setElapsed((Date.now() - startedAt.current) / 1000);
-      setTps(tokensPerSecond(win.current, Date.now()));
       refreshStatus();
     }, 250);
     return () => clearInterval(t);
