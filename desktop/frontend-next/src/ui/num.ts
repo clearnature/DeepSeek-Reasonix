@@ -1,33 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { WINDOW_MS, tokensPerSecond, type Sample } from "../port/tokens";
 
-// Usage lands once per model round, so a counter that only ever cuts to its new
-// value spends most of a turn looking frozen and then jumps. Easing the last
-// leg is what makes the number read as live without inventing data the kernel
-// never reported.
-
-const EASE = (t: number) => 1 - Math.pow(1 - t, 3);
-
-export function useTicker(value: number, ms = 520): number {
-  const [shown, setShown] = useState(value);
-  const from = useRef(value);
-  const raf = useRef(0);
-  useEffect(() => {
-    const start = performance.now();
-    const a = from.current;
-    if (a === value) return;
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / ms);
-      const at = a + (value - a) * EASE(t);
-      setShown(t === 1 ? value : at);
-      from.current = at;
-      if (t < 1) raf.current = requestAnimationFrame(step);
-    };
-    raf.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf.current);
-  }, [value, ms]);
-  return shown;
-}
+// Metric values are drawn as they arrived. Easing one from its old reading to
+// its new one puts numbers on screen that no request ever produced, and nothing
+// on screen says which of them were real — so what moves here is geometry and
+// emphasis, never a figure a reader would take for a measurement.
 
 // One sample a second while the turn runs, capped at `span`. A rate is the one
 // figure on the rail whose shape says more than its current value — whether it

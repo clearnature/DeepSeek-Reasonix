@@ -1,62 +1,48 @@
 import { t } from "../../i18n";
 import { pct, tokens } from "../../i18n/format";
 import type { Metrics } from "../../state/session";
-import { useTicker } from "../num";
 
-/** The one figure worth reading first: how much of the prompt the endpoint did
- *  not have to re-read. It leads the rail at full size because a session that
- *  stops hitting its prefix costs several times more per turn, and a number
- *  that size is noticed without being looked for. */
-export function Cache({ metrics, done }: { metrics: Metrics; done?: boolean }) {
+/** How much of the prompt the endpoint did not have to re-read.
+ *
+ *  The ratio is session-cumulative, which is the one shape that cannot do the
+ *  job the size of it used to claim: the longer a session runs, the less a
+ *  broken turn can move it, so a number that large was noticed for saying
+ *  nothing. It reads as a figure beside the block's name now. What actually
+ *  answers "why did this turn suddenly cost more" is the prefix having moved,
+ *  and that is what surfaces — only when it has. */
+export function Cache({ metrics }: { metrics: Metrics }) {
   const up = metrics.hit + metrics.miss;
-  const rate = up ? (metrics.hit / up) * 100 : 0;
-  const shown = useTicker(rate);
-  const hit = useTicker(metrics.hit);
-  const miss = useTicker(metrics.miss);
+  // Nothing has been asked yet, so there is nothing to report about it.
+  if (!up) return null;
+  const rate = (metrics.hit / up) * 100;
+  // Both are drawn from the kernel's own figures, with nothing between: these
+  // move once per request, and easing between two of them would put ratios on
+  // screen that no request ever produced.
+  const moved = metrics.prefixChanged;
+  const body = metrics.bodyChanged && !!metrics.carriedMessages;
 
   return (
     <div className="block" data-b="cache">
       <h3 className="lbl">
         {t("前缀缓存")}
-        <span className="c">{up ? t("本会话") : t("还没有请求")}</span>
+        <span className="c">{pct(rate / 100, 1)}</span>
       </h3>
-      <div className="big">
-        <span className="v" data-live={up ? "" : undefined} data-flash={done && up ? "" : undefined}>
-          {up ? pct(shown / 100, 1) : "—"}
-        </span>
-        <span className="k">{t("前缀命中")}</span>
-        {/* The two pills wrap as one group, so a narrow rail moves both below the
-            number instead of squeezing the caption between them. */}
-        {up > 0 && (
-          <span className="pills">
-            {/* 前缀没变是命中率能保住的前提；变了就说变在哪儿。 */}
-            <span
-              className="pill"
-              data-tone={metrics.prefixChanged ? "warn" : "ok"}
-              title={metrics.prefixReasons.join(" · ") || undefined}
-            >
-              {metrics.prefixChanged ? t("前缀变了") : t("前缀未变")}
-            </span>
-            {/* 前缀哈希看不见对话正文，所以"没变"单独一个说明不了未命中是谁的。 */}
-            {!!metrics.carriedMessages && (
-              <span
-                className="pill"
-                data-tone={metrics.bodyChanged ? "warn" : "ok"}
-                title={t("沿用的消息条数") + ": " + metrics.carriedMessages}
-              >
-                {metrics.bodyChanged ? t("正文变了") : t("正文未变")}
-              </span>
-            )}
-          </span>
-        )}
-      </div>
+      {/* The prefix moving is the fact worth interrupting for: it is what turns
+          a cheap turn into an expensive one, and the only one here a reader can
+          do anything about. Unchanged is the ordinary case and says nothing. */}
+      {(moved || body) && (
+        <p className="cachemoved" title={metrics.prefixReasons.join(" · ") || undefined}>
+          <i aria-hidden="true">⚠</i>
+          {moved ? t("前缀变了") : t("正文变了")}
+        </p>
+      )}
       <div className="bar">
-        <i className="c" style={{ flexGrow: Math.max(shown, 0.4) }} />
-        <i className="f" style={{ flexGrow: Math.max(100 - shown, 0.4) }} />
+        <i className="c" style={{ flexGrow: Math.max(rate, 0.4) }} />
+        <i className="f" style={{ flexGrow: Math.max(100 - rate, 0.4) }} />
       </div>
       <div className="nums">
-        <span>{t("命中")}<b>{tokens(Math.round(hit))}</b></span>
-        <span>{t("未命中")}<b>{tokens(Math.round(miss))}</b></span>
+        <span>{t("命中")}<b>{tokens(metrics.hit)}</b></span>
+        <span>{t("未命中")}<b>{tokens(metrics.miss)}</b></span>
         {!!metrics.toolSchema && <span>{t("工具 schema")}<b>{tokens(metrics.toolSchema)}</b></span>}
       </div>
       {!!metrics.prefixHash && (

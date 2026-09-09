@@ -2600,20 +2600,15 @@
   /* 名单跟在计数行后面，是同一组里的两档：数是结论，名单是它的明细 */
   .dgrp .agents { margin-top: 4px }
 
-  .big { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 7px 12px }
-  .big .v { font: var(--w-med) 21px/1 var(--mono); letter-spacing: var(--track-tight); color: var(--ghost); font-variant-numeric: tabular-nums; transition: color .3s }
-  .big .v[data-live] { color: var(--ok) }
-  /* 收工时这个数字亮一下 —— 全场唯一一次主动索取注意力 */
-  .big .v[data-flash] { animation: vflash 1.2s var(--ease-out) }
-  @keyframes vflash {
-    0%, 100% { text-shadow: none }
-    32% { text-shadow: 0 0 20px color-mix(in srgb, var(--ok) 62%, transparent) }
+  /* The prefix moving is the cache fact worth interrupting for. It is drawn as
+     a line rather than as a pill: a pill beside a number reads as a label for
+     it, and this is not a property of the ratio — it is why the ratio is about
+     to fall. */
+  .cachemoved {
+    display: flex; align-items: baseline; gap: 5px; margin: 8px 0 0;
+    font: var(--w-reg) 11px var(--ui); color: var(--warn-ink);
   }
-  /* The pills are rigid, so the caption was the row's only shrinkable item and
-     absorbed the whole overflow as one character per line. */
-  .big .k { font: var(--w-reg) 10.5px var(--mono); color: var(--faint); padding-bottom: 2px; line-height: 1.35; flex: none; white-space: nowrap }
-  .big .pills { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px }
-  .big .pills .pill { margin-left: 0 }
+  .cachemoved i { font-style: normal; font-size: 10px }
 
   .bar { display: flex; height: 3px; overflow: hidden; background: var(--hair); gap: 1px }
   .bar i { display: block; transition: flex-grow .6s var(--ease); position: relative }
@@ -2807,7 +2802,7 @@
     .pane[data-run="halt"] .compose::after { border-color: var(--accent) }
     .call, .nest, .ask, .hits > *, .steps > *, .term-l, .dl, .plan .s, .find,
     .ag, .file, .jump, .menu, .nest-ret, .hl .cost, .sym, .pip[data-settled],
-    .big .v[data-flash], .plan .s[data-done] .b,
+    .plan .s[data-done] .b,
     .rmark, .rmark path, .await i, .apv, .guard, .medit, .medit-r, .endbar,
     .rcpt[data-lvl="ok"], .rrow, .shot, .intake { animation: none !important }
     .pane[data-intake] .compose { transform: none !important }
@@ -5556,6 +5551,9 @@
   .ctxnote[data-lvl="warn"] { color: var(--warn-ink) }
   /* 分母是可改的，所以虚线一直在 —— hover 才显形的入口，读起来是"这里没东西"。 */
   .drow .v .ctxq { display: inline }
+  /* Each ceiling carries its own share, set apart from the figure it is a share
+     of: read together they would be one number, and these are two answers. */
+  .drow .v .ctxq em { font-style: normal; margin-left: 7px; color: var(--ghost) }
   .ctxden {
     padding: 0; border: 0; background: none; cursor: pointer;
     font: inherit; color: inherit; letter-spacing: inherit;
@@ -5630,7 +5628,6 @@
   .ctxlg .r b { margin-left: auto; font: var(--w-med) 11px var(--mono); color: var(--text) }
 
   /* 领栏的那一个数字比其它块大一截 —— 它是不看也会被看见的那个。 */
-  [data-b="cache"] .big .v { font-size: 28px }
 
   /* 成本先报数，再拆构成。一列小行表里的总额和它的分项长得一样，
      扫一眼读不出哪个是总数。 */

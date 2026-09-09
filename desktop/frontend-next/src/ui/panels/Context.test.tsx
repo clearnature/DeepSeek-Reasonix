@@ -12,7 +12,7 @@ const wide = (over: Partial<ContextBreakdown> = {}): ContextBreakdown => ({
   ...over,
 });
 
-const draw = (ctx: ContextBreakdown) => renderToStaticMarkup(<Context ctx={ctx} row={false} legend />);
+const draw = (ctx: ContextBreakdown) => renderToStaticMarkup(<Context ctx={ctx} legend />);
 
 // The bar's width is the whole claim: it is what a reader takes as "how far
 // along am I", and it was measured against the wrong number.
@@ -29,10 +29,11 @@ describe("the context gauge's denominator", () => {
     expect(width(draw(wide()))).toBeCloseTo(51.25, 1);
   });
 
-  it("says which two numbers the leading figure is", () => {
+  it("names the deadline and what share of it is gone", () => {
     const html = draw(wide());
     expect(html).toContain("下次维护");
-    expect(html).toContain("82k / 160k");
+    expect(html).toContain("160k");
+    expect(html).toContain("51%");
   });
 
   // Capacity does not disappear: it answers a different question — whether the
@@ -89,7 +90,9 @@ describe("when there is no fold point to count down to", () => {
   it("draws the window alone once the fold point is out of reach", () => {
     const html = draw(wide({ compact_at: 1_200_000 }));
     expect(html).not.toContain("下次维护");
-    expect(html).not.toContain("模型容量");
+    // The one ceiling left still says which one it is. What it must not do is
+    // call itself a deadline.
+    expect(html).toContain("模型容量");
     expect(width(html)).toBeCloseTo(8.2, 1);
   });
 
@@ -99,5 +102,30 @@ describe("when there is no fold point to count down to", () => {
     const html = draw(wide({ window: 0, compact_at: 0 }));
     expect(html).toContain("不会自动压缩");
     expect(html).not.toContain("ctxbar");
+  });
+});
+
+// One usage figure, two ceilings, each answering for itself. Merging them into
+// a single percentage of something unstated is the failure this guards: "6%"
+// alone cannot say whether it is 6% of the fold point or of the window.
+describe("usage is one number and the ceilings are two questions", () => {
+  const usage = (html: string) => [...html.matchAll(/82k/g)].length;
+
+  it("draws the usage figure once", () => {
+    expect(usage(draw(wide()))).toBe(1);
+  });
+
+  it("keeps both ceilings, each with its own denominator named", () => {
+    const html = draw(wide());
+    expect(html).toContain("下次维护");
+    expect(html).toContain("160k");
+    expect(html).toContain("模型容量");
+    expect(html).toContain("1.0M");
+  });
+
+  it("gives each ceiling its own share, not one shared percentage", () => {
+    const html = draw(wide());
+    expect(html).toContain("51%");   // of the fold point
+    expect(html).toContain("8%");    // of the window
   });
 });

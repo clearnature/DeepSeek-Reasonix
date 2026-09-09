@@ -70,9 +70,9 @@ interface Props extends Rail {
 // to skip six of; the order they speak in is the table above. The walk behind
 // all of it happens once, in the pane, and arrives here derived.
 //
-// There is no head card, and no panel here describes one any more. Context
-// still carries a row=true form for it that nothing passes. Whatever that was,
-// it is not on screen, so the figures here are the only ones there are.
+// There is no head card, and nothing here describes one any more: Context's
+// row=true form for it is gone with the rest. The figures here are the only
+// ones there are.
 export const Metrics = memo(function Metrics({
   port,
   metrics,
@@ -113,9 +113,9 @@ export const Metrics = memo(function Metrics({
   // again for whatever it reads on mount. Changing which posture the rail is
   // in is not a change to any panel's lifetime.
   const panel: Record<Section, ReactNode> = {
-    cache: <Cache key="cache" metrics={metrics} done={done} />,
+    cache: <Cache key="cache" metrics={metrics} />,
     cost: <Cost key="cost" metrics={metrics} wallet={wallet} account={account} onRefreshWallet={onRefreshWallet} />,
-    context: <Context key="context" ctx={ctx} row={false} legend port={port} onCtx={onCtx} />,
+    context: <Context key="context" ctx={ctx} legend port={port} onCtx={onCtx} />,
     agents: <Agents key="agents" tasks={tasks} />,
     runtime: <Runtime key="runtime" rate={rate} done={done} stats={stats} />,
     plan: <Plan key="plan" steps={plan} />,

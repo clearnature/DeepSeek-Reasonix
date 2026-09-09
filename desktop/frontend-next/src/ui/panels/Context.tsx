@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { t } from "../../i18n";
 import { reason } from "../../i18n/kernel";
-import { useTicker } from "../num";
 import type { AgentPort, ContextBreakdown } from "../../port/port";
 import { pct as percent, tokens } from "../../i18n/format";
 import { pinToViewport } from "../place";
@@ -49,16 +48,16 @@ function place(anchor: RefObject<HTMLElement | null>) {
  *  one enormous output — and those are fixed in completely different ways. The
  *  breakdown stays folded because it is a diagnosis, not a running number.
  *
- *  The denominator is the fold point, never the window. They are different
- *  numbers and only one of them is a deadline: the window says what the model
- *  could hold, and against a 1M window the default soft limit fires at 16% of
- *  it — a gauge drawn the other way reads nearly empty at the moment
- *  maintenance happens, and the reader concludes the host is malfunctioning.
- *  The window keeps a row of its own because it is still the number a relay
- *  gets wrong, and the only place it can be corrected. */
-export function Context({ ctx, row = true, legend = false, port, onCtx }: {
+ *  Usage is one number and it is drawn once. The two ceilings under it are two
+ *  questions, not two gauges: the fold point is a deadline — the bar is drawn
+ *  against it, because against a 1M window the default soft limit fires at 16%
+ *  of it and a gauge drawn the other way reads nearly empty at the moment
+ *  maintenance happens — while the window says what the model could hold at
+ *  all. Each names its own denominator, so neither becomes a percentage of
+ *  something unstated, and the window stays the number a relay gets wrong and
+ *  the only place it can be corrected. */
+export function Context({ ctx, legend = false, port, onCtx }: {
   ctx: ContextBreakdown | null;
-  row?: boolean;
   legend?: boolean;
   // Both are needed to offer the missing window: one to declare it, one to
   // carry the rebuilt gauge back. Without them the panel still says why it
@@ -69,7 +68,6 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
   // Every hook runs before the first return: ctx arrives one render after the
   // rail mounts, and a guard above them made that render ask for hooks the
   // previous one never did.
-  const used = useTicker(ctx?.used || 0);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const bar = useRef<HTMLDivElement>(null);
@@ -88,6 +86,10 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
   }, [open]);
 
   if (!ctx) return null;
+  // The kernel's figure, drawn as it arrived. It moves once per request, so
+  // easing between two of them would put readings on screen that no request
+  // ever produced.
+  const used = ctx.used || 0;
   const settable = port && onCtx;
   const field = settable && (
     <DeclareWindow port={port} onSet={onCtx} was={ctx.window} onDone={() => setEditing(false)} />
@@ -98,7 +100,7 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
   if (!ctx.window) {
     const missing = (
       <>
-        <Row k={t(row ? "上下文窗口" : "上下文构成")} v={tokens(Math.round(used))} />
+        <Row k={t("上下文")} v={tokens(Math.round(used))} />
         <p className="ctxnote">
           {t("没人说过这个来源的窗口有多大，所以画不出用了多少 —— 也不会自动压缩。中转站转发的是别人的模型，只有你知道它有多大。")}
         </p>
@@ -122,14 +124,11 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
   const shown = parts().map(([k, label, why]) => ({ k, label, why, n: ctx[k] || 0 })).filter((p) => p.n > 0);
   const sum = shown.reduce((a, p) => a + p.n, 0) || 1;
 
-  // One span, because .drow .v spaces its children: the two halves of
-  // "24.8k / 200k" are one figure, not two gauges.
   // A relay's window is one number somebody typed for every model it forwards,
   // so the denominator is a guess as often as a fact — and this is the only
   // place it is read.
   const windowFigure = (
     <span className="ctxq">
-      {tokens(Math.round(used))} /{" "}
       {settable ? (
         <button
           className="ctxden"
@@ -142,15 +141,18 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
       ) : (
         tokens(ctx.window)
       )}
+      <em>{percent(used / ctx.window)}</em>
     </span>
   );
 
   const body = (
     <>
-      <Row
-        k={folds ? t("下次维护") : t(row ? "上下文窗口" : "上下文构成")}
-        v={folds ? <span className="ctxq">{tokens(Math.round(used))} / {tokens(ctx.compact_at)}</span> : windowFigure}
-      />
+      {/* One usage figure. The two ceilings under it answer different questions
+          — when the host will tidy up, and when the model simply cannot hold
+          any more — so both keep a row, and each names its own denominator
+          rather than collapsing into one percentage of something unstated. */}
+      <Row k={t("上下文")} v={<span className="ctxq">{tokens(Math.round(used))}</span>} />
+      {!folds && <Row k={t("模型容量")} v={windowFigure} />}
       {!folds && editing && field}
       <div
         className="ctxbar"
@@ -179,6 +181,10 @@ export function Context({ ctx, row = true, legend = false, port, onCtx }: {
           simply too small" and it is where a wrong window is corrected. */}
       {folds && (
         <div className="ctxcap">
+          <Row
+            k={t("下次维护")}
+            v={<span className="ctxq">{tokens(ctx.compact_at)}<em>{percent(used / ctx.compact_at)}</em></span>}
+          />
           <Row k={t("模型容量")} v={windowFigure} />
           <div className="ctxcapbar" role="presentation">
             <i style={{ width: `${Math.min((used / ctx.window) * 100, 100)}%` }} />
