@@ -147,7 +147,6 @@ const STEPS = [
   ["turn-mid", `(()=>true)()`],
   ["turn-late", `(()=>true)()`],
   ["turn-end", `(()=>true)()`],
-  ["theme-toggle", `(()=>{const b=document.querySelector('.thbtn[aria-label="Theme"]');b&&b.click();return !!b})()`],
   ["account", `(()=>{const b=document.querySelector('.acct-btn');b&&b.click();return !!b})()`],
 ];
 const res = [], skipped = [];

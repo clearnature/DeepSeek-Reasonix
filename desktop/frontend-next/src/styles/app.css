@@ -480,11 +480,6 @@
   .thbtn { transition: background .14s, color .14s, transform .1s var(--ease-out) }
   .thbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   .thbtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round }
-  .thbtn .t-half { fill: currentColor; stroke: none }   /* 半明半暗＝跟随系统 */
-  .thbtn .t-light, .thbtn .t-dark { display: none }
-  .thbtn[data-th="light"] .t-auto, .thbtn[data-th="dark"] .t-auto { display: none }
-  .thbtn[data-th="light"] .t-light { display: inline }
-  .thbtn[data-th="dark"] .t-dark { display: inline; fill: currentColor }
 
   /* 分段控件只留给「三档之间没有优劣」的单选，比如执行设定 */
   /* 请求发出去了、内核还没回答：既不能装作已经切换，也不能一点反应都没有 */

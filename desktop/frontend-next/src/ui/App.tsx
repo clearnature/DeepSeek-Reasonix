@@ -553,8 +553,6 @@ export function App({ hub }: { hub: HubPort }) {
         title={report.title}
         steer={report.steer}
         run={report.run}
-        theme={theme}
-        onTheme={setTheme}
         onSettings={showPrefs}
         account={account}
         focus={focus}

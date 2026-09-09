@@ -4,17 +4,6 @@ import type { AccountState, AgentPort, SessionStatus, WorkspaceInfo } from "../p
 import { WindowControls, zoomOnTitleBar } from "./WindowControls";
 import { chord } from "./keys";
 
-// 「跟随系统」和它当前解析出来的那一档，在屏幕上是同一个样子。按固定顺序循环
-// 就意味着在浅色系统上，默认的 auto 往下一档走到 light —— 点下去一个像素都不
-// 动，读起来就是这个开关坏了。下一档改从系统当前是什么推：第一下必定换掉屏幕
-// 上的配色。只有走回 auto 那一下没有重绘，那是这三档自身的定义决定的，图标和
-// 标题仍然在说它变了。
-function nextTheme(theme: string): string {
-  const sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  const other = sys === "dark" ? "light" : "dark";
-  return theme === "auto" ? other : theme === other ? sys : "auto";
-}
-const THEME_LB: Record<string, string> = { auto: "跟随系统", light: "浅色", dark: "深色" };
 const RUN_LB: Record<string, string> = { running: "运行中", halt: "等你", done: "已完成", idle: "待命" };
 
 const base = (p: string) => p.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || p;
@@ -36,8 +25,6 @@ interface Props {
   // What the focused pane is doing, as the pane already reports it upward. The
   // chrome names it because that is the one line always on screen.
   run: string;
-  theme: string;
-  onTheme: (t: string) => void;
   // 临时观看状态，不是偏好：窗口决定它，这里只负责把开关画出来。
   focus: boolean;
   onFocus: () => void;
@@ -45,7 +32,7 @@ interface Props {
   account: AccountState | null;
 }
 
-export function Chrome({ port, status, title, steer, run, theme, onTheme, onSettings, account, host, focus, onFocus }: Props) {
+export function Chrome({ port, status, title, steer, run, onSettings, account, host, focus, onFocus }: Props) {
   const root = status?.workspaceRoot || status?.cwd || "";
   const project = root ? base(root) : "—";
   // Only for the "隔离" tag: the folder list and the switch itself moved to the
@@ -110,8 +97,8 @@ export function Chrome({ port, status, title, steer, run, theme, onTheme, onSett
             </svg>
           )}
         </button>
-        {/* Same class as the theme toggle on purpose: settings belongs in the
-            icon cluster's weight class, not competing with the preset control. */}
+        {/* The icon cluster's weight class, not the preset control's: what is
+            left up here is the window's, and the turn's policy is the shelf's. */}
         {/* 进出都是这一枚。专注不是模式切换到别处去了，是同一个会话把外围收起来
             —— 所以按钮留在原地，只换它说的话。 */}
         <button
@@ -138,24 +125,6 @@ export function Chrome({ port, status, title, steer, run, theme, onTheme, onSett
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M8 5.9a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2" />
             <path d="M12.7 9.8a1 1 0 0 0 .2 1.1l.04.04a1.2 1.2 0 1 1-1.7 1.7l-.04-.04a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9v.11a1.2 1.2 0 1 1-2.4 0v-.06a1 1 0 0 0-.65-.9 1 1 0 0 0-1.1.2l-.04.04a1.2 1.2 0 1 1-1.7-1.7l.04-.04a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6h-.11a1.2 1.2 0 0 1 0-2.4h.06a1 1 0 0 0 .9-.65 1 1 0 0 0-.2-1.1l-.04-.04a1.2 1.2 0 1 1 1.7-1.7l.04.04a1 1 0 0 0 1.1.2h.05a1 1 0 0 0 .6-.9v-.11a1.2 1.2 0 1 1 2.4 0v.06a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.04-.04a1.2 1.2 0 1 1 1.7 1.7l-.04.04a1 1 0 0 0-.2 1.1v.05a1 1 0 0 0 .9.6h.11a1.2 1.2 0 0 1 0 2.4h-.06a1 1 0 0 0-.9.6" />
-          </svg>
-        </button>
-        <button
-          className="thbtn"
-          data-action="chrome.theme"
-          data-th={theme}
-          aria-label={t("主题")}
-          title={t("主题：{name}", { name: t(THEME_LB[theme]) })}
-          onClick={() => onTheme(nextTheme(theme))}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path className="t-auto" d="M8 2.4a5.6 5.6 0 1 0 0 11.2 5.6 5.6 0 0 0 0-11.2" />
-            <path className="t-auto t-half" d="M8 2.4v11.2a5.6 5.6 0 0 0 0-11.2Z" />
-            <path
-              className="t-light"
-              d="M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6M8 1.6v1.5M8 12.9v1.5M2.4 8H3.9M12.1 8h1.5M4.1 4.1l1 1M10.9 10.9l1 1M11.9 4.1l-1 1M5.1 10.9l-1 1"
-            />
-            <path className="t-dark" d="M13 9.6A5.6 5.6 0 0 1 6.4 3a5.6 5.6 0 1 0 6.6 6.6Z" />
           </svg>
         </button>
         <WindowControls />

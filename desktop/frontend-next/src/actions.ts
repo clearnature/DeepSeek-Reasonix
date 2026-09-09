@@ -58,7 +58,6 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.policy", kind: "view", target: "none", proof: "interaction" },
   { id: "chrome.focus", kind: "view", target: "none", proof: "browser" },
   { id: "chrome.settings", kind: "navigation", target: "none", proof: "interaction" },
-  { id: "chrome.theme", kind: "view", target: "none", proof: "browser" },
   { id: "chrome.account", kind: "navigation", target: "none", proof: "interaction" },
 
   // ── The turn ─────────────────────────────────────────────────────────────
@@ -216,8 +215,8 @@ export const ACTIONS: UIAction[] = [
   { id: "appearance.reading-size", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.background", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "appearance.font", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
-  // Kept where the window keeps them, the way chrome.theme already is: these
-  // are this browser's, and no kernel state moves.
+  // Kept where the window keeps them: these are this browser's, and no kernel
+  // state moves.
   { id: "appearance.scheme", kind: "view", target: "none", proof: "browser" },
   { id: "appearance.weight", kind: "view", target: "none", proof: "browser" },
   { id: "appearance.contrast", kind: "view", target: "none", proof: "browser" },
