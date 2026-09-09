@@ -132,6 +132,29 @@ export const NAV: [string, [Section, string][]][] = [
  *  none            nothing here changes anything: the block only reports. */
 export type ApplySemantics = "immediate" | "runtime-rebuild" | "restart" | "none";
 
+/** Who owns what a block governs — the other half of the contract, and the one
+ *  the screen could not answer. "When does it take effect" was declared here
+ *  from the start; "does this follow the project, the model, or this machine"
+ *  was left to be guessed from which page a block happened to sit on.
+ *
+ *  Each value below came from reading the endpoint behind the control and the
+ *  authority it writes, never from the section. Information architecture is not
+ *  ownership: the model page holds one setting stored per provider entry, three
+ *  stored machine-wide, and one that is not stored at all.
+ *
+ *  This answers who a change reaches, not which file the bytes land in. Several
+ *  machine-wide values are read by the running session first; what makes them
+ *  machine-wide is that every later session reads them too.
+ *
+ *  session   only this conversation and its runtime; a new session starts over
+ *  model     follows the model or its configuration block
+ *  workspace follows the project directory
+ *  machine   every session on this computer, now and later
+ *  account   follows the signed-in identity
+ *  chosen    the block itself asks where to write, and the kernel takes that
+ *            answer as a parameter — see the note on the entries that use it */
+export type SettingScope = "session" | "model" | "workspace" | "machine" | "account" | "chosen";
+
 export interface SettingEntry {
   /** Which page it is on. */
   section: Section;
@@ -142,6 +165,10 @@ export interface SettingEntry {
    *  discoverability and nothing else: an alias never becomes the setting's
    *  name, its identity, or anything a judgement is made on. */
   keywords?: string[];
+  /** Never optional. A setting whose ownership nobody stated is one every
+   *  reader has to guess at, and the guess is the section it is filed under —
+   *  which is exactly what this replaces. */
+  scope: SettingScope;
   apply: ApplySemantics;
 }
 
@@ -149,50 +176,66 @@ export interface SettingEntry {
 // what it really renders — a block with no row here fails, and a row nothing
 // renders fails too.
 export const SETTINGS: SettingEntry[] = [
-  { section: "session", anchor: "preset", title: "执行设定", apply: "immediate", keywords: ["均衡", "交付", "完成判定"] },
-  { section: "session", anchor: "plan-mode", title: "计划模式", apply: "immediate", keywords: ["只读", "先规划"] },
-  { section: "session", anchor: "session-dir", title: "这个会话在哪写", apply: "none", keywords: ["工作目录", "路径"] },
+  // Runtime only, both of them: POST /preset and POST /plan reach the
+  // controller and write nothing, so a new session starts at the default. The
+  // two rows below them on the model and tools pages look identical on screen
+  // and do persist — which is the whole reason this column exists.
+  { section: "session", anchor: "preset", title: "执行设定", scope: "session", apply: "immediate", keywords: ["均衡", "交付", "完成判定"] },
+  { section: "session", anchor: "plan-mode", title: "计划模式", scope: "session", apply: "immediate", keywords: ["只读", "先规划"] },
+  { section: "session", anchor: "session-dir", title: "这个会话在哪写", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
-  { section: "model", anchor: "roles", title: "分工", apply: "runtime-rebuild", keywords: ["子代理", "规划", "执行", "审查"] },
-  { section: "model", anchor: "model", title: "模型", apply: "runtime-rebuild", keywords: ["切换", "端点"] },
-  { section: "model", anchor: "effort", title: "推理强度", apply: "runtime-rebuild", keywords: ["思考", "reasoning", "档位"] },
-  { section: "model", anchor: "context", title: "上下文维护", apply: "runtime-rebuild", keywords: ["上下文窗口", "压缩", "compaction"] },
+  { section: "model", anchor: "roles", title: "分工", scope: "machine", apply: "runtime-rebuild", keywords: ["子代理", "规划", "执行", "审查"] },
+  { section: "model", anchor: "model", title: "模型", scope: "machine", apply: "runtime-rebuild", keywords: ["切换", "端点"] },
+  // Written onto the provider entry, not the model row: SetProviderEffort keys
+  // by provider name, so every model reached through that source shares it.
+  { section: "model", anchor: "effort", title: "推理强度", scope: "model", apply: "runtime-rebuild", keywords: ["思考", "reasoning", "档位"] },
+  // Machine-wide despite sitting on the model page, and the clearest case for
+  // not reading scope off a section: the economic threshold is one
+  // [agent] key in the user config that every session on this computer reads.
+  { section: "model", anchor: "context", title: "上下文维护", scope: "machine", apply: "runtime-rebuild", keywords: ["上下文窗口", "压缩", "compaction"] },
   // Adding a source does not rebuild; changing which protocol a source is
   // reached through switches the model, and that does. The stronger of the two
   // is what the row promises, because the weaker one would be a promise this
   // block cannot keep.
-  { section: "model", anchor: "providers", title: "连接", apply: "runtime-rebuild", keywords: ["提供商", "api key", "密钥", "协议", "地址"] },
+  { section: "model", anchor: "providers", title: "连接", scope: "machine", apply: "runtime-rebuild", keywords: ["提供商", "api key", "密钥", "协议", "地址"] },
 
-  { section: "tools", anchor: "approval", title: "工具批准", apply: "immediate", keywords: ["权限", "yolo", "询问", "放行"] },
-  { section: "tools", anchor: "rules", title: "明确的规矩", apply: "runtime-rebuild", keywords: ["permissions", "允许", "拒绝", "配方"] },
-  { section: "tools", anchor: "sandbox", title: "沙箱", apply: "runtime-rebuild", keywords: ["隔离", "联网", "写权限", "ssh-agent"] },
-  { section: "tools", anchor: "shell", title: "命令交给谁执行", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
+  // Takes effect on this session at once and is also persisted as the default
+  // every later session starts from. Machine is the wider of the two answers
+  // and the one a reader cannot see from the screen.
+  { section: "tools", anchor: "approval", title: "工具批准", scope: "machine", apply: "immediate", keywords: ["权限", "yolo", "询问", "放行"] },
+  { section: "tools", anchor: "rules", title: "明确的规矩", scope: "machine", apply: "runtime-rebuild", keywords: ["permissions", "允许", "拒绝", "配方"] },
+  { section: "tools", anchor: "sandbox", title: "沙箱", scope: "machine", apply: "runtime-rebuild", keywords: ["隔离", "联网", "写权限", "ssh-agent"] },
+  { section: "tools", anchor: "shell", title: "命令交给谁执行", scope: "machine", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
 
-  { section: "hooks", anchor: "hooks", title: "自动化", apply: "immediate", keywords: ["钩子", "hook", "触发"] },
+  // The four blocks below carry a scope control of their own, and the kernel
+  // takes that choice as a parameter — hook.Scope, McpInstallScope, the skill
+  // activation scope, a memory's project/global flag. Naming one authority here
+  // would be wrong whenever the reader picks the other.
+  { section: "hooks", anchor: "hooks", title: "自动化", scope: "chosen", apply: "immediate", keywords: ["钩子", "hook", "触发"] },
 
-  { section: "ext", anchor: "ext-runtime", title: "运行时", apply: "immediate", keywords: ["扩展", "沙盒"] },
-  { section: "ext", anchor: "plugins", title: "插件包", apply: "immediate", keywords: ["安装", "市场"] },
-  { section: "ext", anchor: "mcp", title: "外部工具", apply: "immediate", keywords: ["mcp", "服务器", "连接外部"] },
-  { section: "ext", anchor: "skills", title: "技能", apply: "immediate", keywords: ["skill", "技能包"] },
+  { section: "ext", anchor: "ext-runtime", title: "运行时", scope: "session", apply: "immediate", keywords: ["扩展", "沙盒"] },
+  { section: "ext", anchor: "plugins", title: "插件包", scope: "machine", apply: "immediate", keywords: ["安装", "市场"] },
+  { section: "ext", anchor: "mcp", title: "外部工具", scope: "chosen", apply: "immediate", keywords: ["mcp", "服务器", "连接外部"] },
+  { section: "ext", anchor: "skills", title: "技能", scope: "chosen", apply: "immediate", keywords: ["skill", "技能包"] },
 
-  { section: "network", anchor: "network", title: "网络", apply: "immediate", keywords: ["代理", "proxy", "抓取", "超时"] },
-  { section: "remote", anchor: "remote", title: "远程", apply: "immediate", keywords: ["ssh", "机器", "远端工作区"] },
-  { section: "account", anchor: "account", title: "账号", apply: "immediate", keywords: ["登录", "社区"] },
-  { section: "versions", anchor: "versions", title: "版本", apply: "immediate", keywords: ["更新", "升级"] },
-  { section: "memory", anchor: "memory", title: "记忆", apply: "immediate", keywords: ["记住", "忘记", "事实"] },
-  { section: "usage", anchor: "usage", title: "用量与成本", apply: "none", keywords: ["token", "花费", "缓存命中"] },
-  { section: "storage", anchor: "storage", title: "存储", apply: "restart", keywords: ["搬家", "迁移", "磁盘", "位置"] },
-  { section: "advanced", anchor: "elsewhere", title: "还不在这一版里", apply: "none", keywords: ["配置文件"] },
+  { section: "network", anchor: "network", title: "网络", scope: "machine", apply: "immediate", keywords: ["代理", "proxy", "抓取", "超时"] },
+  { section: "remote", anchor: "remote", title: "远程", scope: "machine", apply: "immediate", keywords: ["ssh", "机器", "远端工作区"] },
+  { section: "account", anchor: "account", title: "账号", scope: "account", apply: "immediate", keywords: ["登录", "社区"] },
+  { section: "versions", anchor: "versions", title: "版本", scope: "machine", apply: "immediate", keywords: ["更新", "升级"] },
+  { section: "memory", anchor: "memory", title: "记忆", scope: "chosen", apply: "immediate", keywords: ["记住", "忘记", "事实"] },
+  { section: "usage", anchor: "usage", title: "用量与成本", scope: "machine", apply: "none", keywords: ["token", "花费", "缓存命中"] },
+  { section: "storage", anchor: "storage", title: "存储", scope: "machine", apply: "restart", keywords: ["搬家", "迁移", "磁盘", "位置"] },
+  { section: "advanced", anchor: "elsewhere", title: "还不在这一版里", scope: "machine", apply: "none", keywords: ["配置文件"] },
 
-  { section: "appearance", anchor: "language", title: "语言", apply: "restart", keywords: ["中文", "english", "界面语言"] },
-  { section: "appearance", anchor: "window", title: "窗口", apply: "immediate", keywords: ["托盘", "关闭行为"] },
-  { section: "appearance", anchor: "size", title: "大小", apply: "immediate", keywords: ["缩放", "字号"] },
-  { section: "appearance", anchor: "font", title: "字体", apply: "immediate", keywords: ["等宽", "mono"] },
-  { section: "appearance", anchor: "wallpaper", title: "壁纸", apply: "immediate", keywords: ["背景", "图片"] },
-  { section: "appearance", anchor: "weight", title: "文字粗细", apply: "immediate", keywords: ["加粗", "字重"] },
-  { section: "appearance", anchor: "contrast", title: "文字对比度", apply: "immediate", keywords: ["柔和", "对比"] },
-  { section: "appearance", anchor: "mode", title: "明暗", apply: "immediate", keywords: ["深色", "浅色", "跟随系统"] },
-  { section: "appearance", anchor: "scheme", title: "配色", apply: "immediate", keywords: ["主题", "theme", "色板"] },
+  { section: "appearance", anchor: "language", title: "语言", scope: "machine", apply: "restart", keywords: ["中文", "english", "界面语言"] },
+  { section: "appearance", anchor: "window", title: "窗口", scope: "machine", apply: "immediate", keywords: ["托盘", "关闭行为"] },
+  { section: "appearance", anchor: "size", title: "大小", scope: "machine", apply: "immediate", keywords: ["缩放", "字号"] },
+  { section: "appearance", anchor: "font", title: "字体", scope: "machine", apply: "immediate", keywords: ["等宽", "mono"] },
+  { section: "appearance", anchor: "wallpaper", title: "壁纸", scope: "machine", apply: "immediate", keywords: ["背景", "图片"] },
+  { section: "appearance", anchor: "weight", title: "文字粗细", scope: "machine", apply: "immediate", keywords: ["加粗", "字重"] },
+  { section: "appearance", anchor: "contrast", title: "文字对比度", scope: "machine", apply: "immediate", keywords: ["柔和", "对比"] },
+  { section: "appearance", anchor: "mode", title: "明暗", scope: "machine", apply: "immediate", keywords: ["深色", "浅色", "跟随系统"] },
+  { section: "appearance", anchor: "scheme", title: "配色", scope: "machine", apply: "immediate", keywords: ["主题", "theme", "色板"] },
 ];
 
 export const SETTING_AT = (anchor: string) => SETTINGS.find((s) => s.anchor === anchor);

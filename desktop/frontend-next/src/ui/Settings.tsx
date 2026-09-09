@@ -5,8 +5,8 @@ import { useRuntimeReload } from "./RuntimeReload";
 import type { AccountState, AgentPort, Appearance as Look, ApprovalMode, CapabilityScope, McpEntry, ModelEntry, PluginPackage, Preset, RoleAssignments, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV, SETTING_AT, SETTINGS } from "./prefsnav";
-import { Group } from "./Group";
+import { ICON, NAV, SETTINGS } from "./prefsnav";
+import { Group, SCOPE_SAID } from "./Group";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
 import { Remotes } from "./Remotes";
@@ -371,8 +371,16 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                 >
                   <span className="where">{t(SECTION_NAME[e.section] ?? e.section)}</span>
                   <span className="what">{t(e.title)}</span>
-                  {SETTING_AT(e.anchor)?.apply === "runtime-rebuild" && <span className="cost">{t("重建运行时")}</span>}
-                  {SETTING_AT(e.anchor)?.apply === "restart" && <span className="cost">{t("重启后生效")}</span>}
+                  {/* Search is where a setting is met with no page around it,
+                      so it is where ownership is worth most: "代理" turning up
+                      under 网络 says nothing about whether it is this project's
+                      proxy or this machine's. Same catalogue as the block. */}
+                  <span className="cost">
+                    {[
+                      t(SCOPE_SAID[e.scope]),
+                      e.apply === "runtime-rebuild" ? t("重建运行时") : e.apply === "restart" ? t("重启后生效") : "",
+                    ].filter(Boolean).join(" · ")}
+                  </span>
                 </button>
               ))
             )}

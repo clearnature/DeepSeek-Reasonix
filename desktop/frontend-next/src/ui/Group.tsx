@@ -1,5 +1,5 @@
 import { t } from "../i18n";
-import { SETTING_AT } from "./prefsnav";
+import { SETTING_AT, type SettingScope } from "./prefsnav";
 import type { ReactNode } from "react";
 
 // id is required, and that is the whole enforcement: a settings block cannot
@@ -28,17 +28,37 @@ export function Group({
   );
 }
 
-/** What it costs to change what is in this block. Separate from Group so a
- *  block that draws its own frame still cannot go without one — the appearance
- *  page builds its sections by hand, and the question is the same there. */
+/** Who a change reaches and when it is in force. Separate from Group so a block
+ *  that draws its own frame still cannot go without one — the appearance page
+ *  builds its sections by hand, and the questions are the same there.
+ *
+ *  Both halves come from the catalogue and neither is written at a call site:
+ *  one table answers for the block and for the search result that leads to it,
+ *  so the two can never disagree about what a setting owns. */
 export function ApplyNote({ id }: { id: string }) {
-  const apply = SETTING_AT(id)?.apply;
-  if (!apply || apply === "none") return null;
-  return <p className="apply" data-apply={apply}>{t(APPLY_SAID[apply])}</p>;
+  const entry = SETTING_AT(id);
+  if (!entry) return null;
+  const apply = entry.apply === "none" ? null : t(APPLY_SAID[entry.apply]);
+  // One text node: .apply is a flex row, and separate children would take the
+  // row's gap on both sides of the separator.
+  return (
+    <p className="apply" data-apply={entry.apply} data-scope={entry.scope}>
+      {[t(SCOPE_SAID[entry.scope]), apply].filter(Boolean).join(" · ")}
+    </p>
+  );
 }
 
-// 「已保存」和「生效」是两件事，重启那一档必须把它们分开说 —— 否则关掉设置的人
-// 不知道刚填的东西还在不在。
+/** Whose setting this is. A fact, at the weight of a fact — no accent, no chip:
+ *  ownership is not a warning, and thirty of them down a page must not read as
+ *  thirty alarms. */
+export const SCOPE_SAID: Record<SettingScope, string> = {
+  session: "当前会话",
+  model: "当前模型",
+  workspace: "当前工作区",
+  machine: "本机",
+  account: "账号",
+  chosen: "写在哪由你选",
+};
 
 // 「已保存」和「生效」是两件事，重启那一档必须把它们分开说 —— 否则关掉设置的人
 // 不知道刚填的东西还在不在。

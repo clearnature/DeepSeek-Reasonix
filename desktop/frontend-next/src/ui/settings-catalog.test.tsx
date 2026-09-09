@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "@babel/parser";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Group } from "./Group";
-import { SETTINGS } from "./prefsnav";
+import { SETTINGS, SETTING_AT, type SettingScope } from "./prefsnav";
 import { walk, type Node } from "./roots";
 
 // The settings screen has to answer two questions about itself: where a
@@ -92,6 +92,31 @@ describe("the settings catalogue", () => {
     // the effort ladder has a form for an endpoint that declares no levels —
     // so it is the table that has to be unique, not the render sites.
     expect(SETTINGS.length).toBe(new Set(SETTINGS.map((e) => e.anchor)).size);
+  });
+
+  // Sabotage A. scope is required in the type, so an entry without one cannot
+  // compile — but a type is not a gate a test can demonstrate, and a value
+  // outside the taxonomy would pass typecheck if the union ever widened.
+  it("gives every setting an ownership scope from the declared taxonomy", () => {
+    const known = new Set<SettingScope>(["session", "model", "workspace", "machine", "account", "chosen"]);
+    const bad = SETTINGS.filter((e) => !known.has(e.scope)).map((e) => `${e.anchor}: ${String(e.scope)}`);
+    expect(bad, "a scope outside the taxonomy is a scope nobody audited").toEqual([]);
+  });
+
+  // Sabotage B. Information architecture must not become authority. Every one
+  // of these pairs is a real finding from the audit, and each would be lost the
+  // moment scope were derived from the page a block is filed under.
+  it("does not let the section a block sits on decide who owns it", () => {
+    const bySection = new Map<string, Set<SettingScope>>();
+    for (const e of SETTINGS) bySection.set(e.section, (bySection.get(e.section) ?? new Set()).add(e.scope));
+    // The model page alone holds three different owners: one per-provider
+    // value, three machine-wide ones, and nothing session-local.
+    expect(bySection.get("model")?.size, "the model page's scopes collapsed to one — was scope derived from the section?")
+      .toBeGreaterThan(1);
+    // And two pages that look alike disagree: preset is not persisted at all,
+    // approval is persisted machine-wide, and they render identically.
+    expect(SETTING_AT("preset")?.scope).toBe("session");
+    expect(SETTING_AT("approval")?.scope).toBe("machine");
   });
 
   // Keywords buy a way in. They are not the setting's name, and nothing may
