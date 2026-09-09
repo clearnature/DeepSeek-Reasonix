@@ -6,7 +6,7 @@ import { Agents } from "./panels/Agents";
 import { Cache } from "./panels/Cache";
 import { Context } from "./panels/Context";
 import { Jobs } from "./panels/Jobs";
-import { Files, visible } from "./panels/Files";
+import { Files } from "./panels/Files";
 import { Mcp } from "./panels/Mcp";
 import { Extensions } from "./panels/Extensions";
 import { Runtime } from "./panels/Runtime";
@@ -70,8 +70,7 @@ interface Props extends Rail {
 // to skip six of; the order they speak in is the table above. The walk behind
 // all of it happens once, in the pane, and arrives here derived.
 //
-// There is no head card. Three comments in this rail still describe one —
-// "progress, duration, cost and context are the head card's" — and Context
+// There is no head card, and no panel here describes one any more. Context
 // still carries a row=true form for it that nothing passes. Whatever that was,
 // it is not on screen, so the figures here are the only ones there are.
 export const Metrics = memo(function Metrics({
@@ -118,7 +117,7 @@ export const Metrics = memo(function Metrics({
     cost: <Cost key="cost" metrics={metrics} wallet={wallet} account={account} onRefreshWallet={onRefreshWallet} />,
     context: <Context key="context" ctx={ctx} row={false} legend port={port} onCtx={onCtx} />,
     agents: <Agents key="agents" tasks={tasks} />,
-    runtime: <Runtime key="runtime" rate={rate} done={done} stats={stats} files={visible(changes, tree).length} />,
+    runtime: <Runtime key="runtime" rate={rate} done={done} stats={stats} />,
     plan: <Plan key="plan" steps={plan} />,
     files: (
       <Files key="files" changes={changes} yolo={yolo} tree={tree} open={openPath}

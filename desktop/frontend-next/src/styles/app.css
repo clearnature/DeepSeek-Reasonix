@@ -2562,6 +2562,12 @@
   .drow[data-tone="err"] .v { color: var(--err-ink) }
   .drow[data-tone="warn"] .v { color: var(--warn-ink) }
   .drow[data-tone="accent"] .v { color: var(--accent-ink) }
+  /* 待确认 is the only row on this rail a reader can act on right now, so it
+     does not share the grammar of the counts beside it: the label carries the
+     colour too, because what matters is that something is waiting rather than
+     how many things are. */
+  .drow[data-tone="act"] .k { color: var(--accent-ink) }
+  .drow[data-tone="act"] .v { color: var(--accent-ink); font-weight: var(--w-med) }
 
   /* 钱包是账户的数，上面那些是这一趟的 —— 同一张卡里，一条线把两种量分开。 */
   .wallet { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--hair) }

@@ -22,7 +22,8 @@ function draw(at: "working" | "review", over: Record<string, unknown> = {}, port
   const props = {
     port: port ?? (new MockPort() as unknown as AgentPort),
     metrics: METRICS,
-    tasks: [], changes: [], stats: { tools: 3, external: 1, failed: 0, waiting: 0 },
+    tasks: [], changes: [{ path: "src/a.ts", added: 4, removed: 1, edits: 1 }],
+    stats: { tools: 3, external: 1, failed: 0, waiting: 0 },
     jobs: [JOB], mcp: [], rate: 12, done: at === "review", posture: at,
     plan: [{ text: "step one", done: false }],
     wallet: { kind: "absent" } as never, account: "", onRefreshWallet: () => {},
@@ -73,15 +74,18 @@ describe("what the inspector puts first", () => {
   // Presence is still each panel's own contract: composing an order must not
   // conjure a block to fill a slot in it.
   it("draws no block for a panel with nothing to say", () => {
-    const at = draw("review", { jobs: [], plan: [] }).order();
+    const at = draw("review", { jobs: [], plan: [], changes: [] }).order();
     expect(at).not.toContain("plan");
-    // Jobs is the deliberate other case and stays: it reports zero on purpose,
-    // so that the rail's order does not move under the reader every time the
-    // last background task finishes. Whether a panel speaks when it is empty
-    // is its own contract either way, and composing an order does not get to
-    // overrule it in either direction.
-    expect(at).toContain("jobs");
-    expect(at).toContain("files");
+    // The same rule reached the file block last: review posture puts it first,
+    // so an unchanged tree led the rail with a sentence about nothing.
+    expect(at).not.toContain("files");
+    // Jobs used to be the deliberate other case, reporting zero so the order
+    // would not move when the last task finished. A block whose whole content
+    // is "there are none" is what the salience pass took out, so it is now on
+    // the same contract as the rest. What composing an order still may not do
+    // is conjure one, or drop a block that does have something.
+    expect(at).not.toContain("jobs");
+    expect(at).toContain("cost");
   });
 
   // The one that matters most: changing posture is not a change to any

@@ -11,9 +11,11 @@ export function Jobs({ jobs }: { jobs: JobEntry[] }) {
     return () => clearInterval(t);
   }, [jobs]);
 
-  // Empty is a state, not an absence. 子代理 next door reports 0 rather than
-  // vanishing, and a block that disappears makes the rail's order move under
-  // the reader every time the last job finishes.
+  // "No background jobs" is a sentence about nothing, and it held a block on
+  // every rail that was fine. The order it sits in is fixed per posture, so a
+  // block coming and going moves only what is below it — cheaper than a
+  // standing row a reader has learned to skip.
+  if (jobs.length === 0) return null;
 
   return (
     <div className="block" data-b="jobs">
@@ -21,7 +23,6 @@ export function Jobs({ jobs }: { jobs: JobEntry[] }) {
         {t("后台任务")}<span className="c">{jobs.length}</span>
       </div>
       <div className="jobs">
-        {jobs.length === 0 && <span className="empty">{t("没有在跑的后台任务")}</span>}
         {jobs.map((j) => {
           const running = j.status === "running";
           return (

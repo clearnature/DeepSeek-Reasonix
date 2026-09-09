@@ -57,6 +57,10 @@ interface Props {
 
 export function Files({ changes, yolo, tree, open, onOpen }: Props) {
   const files = visible(changes, tree);
+  // Nothing here outlives an unchanged tree: the count is zero and the list is
+  // the sentence "尚无改动". A block whose whole content is that it has none is
+  // the same standing zero the rest of this rail stopped drawing.
+  if (files.length === 0) return null;
   // The tail is the recent end: early files in a long run have been looked at
   // already, and the ones still moving are the ones worth a row.
   const shown = files.length > SHOWN ? files.slice(-SHOWN) : files;
@@ -71,7 +75,6 @@ export function Files({ changes, yolo, tree, open, onOpen }: Props) {
         </span>
       </div>
       <div className="files">
-        {files.length === 0 && <span className="empty">{t("尚无改动")}</span>}
         {shown.length < files.length && (
           <span className="empty">{t("更早的 {n} 个未列出", { n: files.length - shown.length })}</span>
         )}
