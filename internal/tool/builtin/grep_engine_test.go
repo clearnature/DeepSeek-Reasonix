@@ -104,8 +104,9 @@ func TestGrepRipgrepEngine(t *testing.T) {
 		t.Fatalf("ripgrep output = %q, want path:line:text with the match", out)
 	}
 
-	if out := runTool(t, g, map[string]any{"pattern": "zzz_absent_token", "path": dir}); out != "(no matches)" {
-		t.Fatalf("no-match search = %q, want (no matches)", out)
+	wantAbsent := "(no matches); the ignored paths were searched too, so this is absent rather than filtered"
+	if out := runTool(t, g, map[string]any{"pattern": "zzz_absent_token", "path": dir}); out != wantAbsent {
+		t.Fatalf("no-match search = %q, want %q", out, wantAbsent)
 	}
 
 	if _, err := g.Execute(context.Background(), argsJSON(t, map[string]any{"pattern": "(unclosed", "path": dir})); err == nil {

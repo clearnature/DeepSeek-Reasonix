@@ -165,7 +165,7 @@ func (g grepTool) Execute(ctx context.Context, args json.RawMessage) (string, er
 	}
 
 	if g.rg != "" {
-		out, wrapped, err := g.runRipgrep(ctx, p.Pattern, p.Path, p.Glob, to, rp)
+		out, wrapped, err := g.runRipgrep(ctx, p.Pattern, p.Path, p.Glob, info.IsDir(), to, rp)
 		if len(g.forbidRoots) == 0 || wrapped {
 			return out, err
 		}
@@ -326,15 +326,15 @@ func (g grepTool) nativePass(ctx context.Context, pattern, path, glob string, in
 // runRipgrep searches the tracked tree, and only when that finds nothing goes
 // on to the paths the ignore rules exclude. Not a wider default: that pass
 // walks the build output, so it is paid only where the cheap answer was empty.
-func (g grepTool) runRipgrep(ctx context.Context, pattern, path, glob string, to time.Duration, rp ResolvedPath) (string, bool, error) {
-	out, truncated, wrapped, err := g.ripgrepPass(ctx, pattern, path, glob, rp, false)
+func (g grepTool) runRipgrep(ctx context.Context, pattern, path, glob string, directory bool, to time.Duration, rp ResolvedPath) (string, bool, error) {
+	out, truncated, wrapped, err := g.ripgrepPass(ctx, pattern, path, glob, directory, rp, false)
 	if err != nil || (len(g.forbidRoots) > 0 && !wrapped) {
 		return "", wrapped, err
 	}
 	if len(out) > 0 || ctx.Err() != nil {
 		return formatGrep(ctx, out, truncated, to, grepScopeTracked), wrapped, nil
 	}
-	wide, wideTruncated, _, wideErr := g.ripgrepPass(ctx, pattern, path, glob, rp, true)
+	wide, wideTruncated, _, wideErr := g.ripgrepPass(ctx, pattern, path, glob, directory, rp, true)
 	if wideErr != nil || len(wide) == 0 {
 		return formatGrep(ctx, nil, false, to, grepScopeNeither), wrapped, nil
 	}
@@ -345,7 +345,7 @@ func (g grepTool) runRipgrep(ctx context.Context, pattern, path, glob string, to
 // honors .gitignore. Output is streamed and capped at grepMaxMatches so a flood
 // of hits cannot blow up memory, and the subprocess is wrapped in the OS
 // sandbox so forbid-read directories are invisible to it.
-func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, rp ResolvedPath, wide bool) ([]string, bool, bool, error) {
+func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, directory bool, rp ResolvedPath, wide bool) ([]string, bool, bool, error) {
 	// Build the ripgrep argv and wrap it in the OS sandbox so forbid-read
 	// directories are invisible to the ripgrep subprocess.
 	args := []string{
@@ -396,6 +396,11 @@ func (g grepTool) ripgrepPass(ctx context.Context, pattern, path, glob string, r
 	}
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	// Ripgrep anchors slash-containing globs to its process directory on Windows.
+	// Search from the requested root so both engines keep the same glob contract.
+	if directory {
+		cmd.Dir = path
+	}
 	cmd.Env = applyEnvOverrides(secrets.ProcessEnv(), prepared.EnvOverrides)
 	proc.HideWindow(cmd)
 	stdout, err := cmd.StdoutPipe()
