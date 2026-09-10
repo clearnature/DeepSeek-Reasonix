@@ -105,12 +105,15 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
   const [caret, setCaret] = useState(0);
   const [shots, setShots] = useState<Chip[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const submittingRef = useRef(false);
+  const stoppingRef = useRef(false);
   const picker = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const box = useRef<HTMLTextAreaElement>(null);
   const guide = useId();
+  const completionId = useId();
   // Set only when a completion moved the caret: the browser puts it at the end
   // of a programmatic value, which is wrong for anything accepted mid-line.
   const pending = useRef<number | null>(null);
@@ -140,7 +143,13 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
     if (focus) box.current?.focus();
   }, [focus]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
+    if (running) return;
+    stoppingRef.current = false;
+    setStopping(false);
+  }, [running]);
+
+  const sizeBox = useCallback(() => {
     const el = box.current;
     if (!el) return;
     if (pending.current !== null) {
@@ -155,8 +164,27 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
     // type. One line is the least it can ever legitimately be.
     const line = parseFloat(getComputedStyle(el).lineHeight) || 22;
     el.style.height = "auto";
-    el.style.height = `${Math.max(line, el.scrollHeight)}px`;
+    // A placeholder is not content. On first paint the sidebars may still own
+    // most of a narrow viewport, and its wrapped scrollHeight must not become
+    // the empty editor's remembered height.
+    el.style.height = `${text ? Math.max(line, el.scrollHeight) : line}px`;
   }, [text]);
+
+  useLayoutEffect(sizeBox, [sizeBox]);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = el.getBoundingClientRect().width;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = entry?.contentRect.width ?? width;
+      if (Math.abs(next - width) < 0.5) return;
+      width = next;
+      sizeBox();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sizeBox]);
 
   // Attachments ride into the turn as path references, exactly as they do from
   // the CLI — the host saved the bytes, the turn parser resolves the token. A
@@ -316,7 +344,8 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
   const hasDraft = text.trim().length > 0 || shots.some((c) => c.k === "paste" || c.state === "ready");
   const lines = countLines(text);
   const showCount = text.length >= 240 || lines > 3;
-  const sendDisabled = submitting || adding || failed || !hasDraft;
+  const sendDisabled = submitting || stopping || adding || failed || !hasDraft;
+  const warnPictures = status?.vision === false && shots.some((c) => c.k === "attachment" && c.state === "ready" && isPicture(c));
 
   return (
     // display:contents, so the box looks exactly as it did and the drop layer
@@ -324,6 +353,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
     <div className="dropzone" ref={dropzone}>
       {menu.open && (
         <CompletionMenu
+          id={completionId}
           items={menu.completion.items}
           active={menu.active}
           kind={menu.completion.kind}
@@ -406,16 +436,16 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
               </button>
             </li>
           ))}
-          {/* The kernel keeps the image either way, but a text-only model never
-              sees it — say so here rather than letting the paste vanish. */}
-          {status?.vision === false && shots.some((c) => c.k === "attachment" && c.state === "ready" && isPicture(c)) && (
-            <li className="warn">
-              {status?.visionDeclared === false
-                ? t("没人说过这个模型读不读图 · 先按不读处理；在「连接」里勾上它就直接发")
-                : t("当前模型不读图 · 图片将按看图模型设置处理")}
-            </li>
-          )}
         </ul>
+      )}
+      {/* A warning cannot be the last horizontally scrolling attachment: that
+          is exactly where it disappears when there are enough files to matter. */}
+      {warnPictures && (
+        <p className="shotwarn" role="status">
+          {status?.visionDeclared === false
+            ? t("没人说过这个模型读不读图 · 先按不读处理；在「连接」里勾上它就直接发")
+            : t("当前模型不读图 · 图片将按看图模型设置处理")}
+        </p>
       )}
       {/* The prompt glyph sits beside the box rather than in it, so it cannot be
           dragged into a selection of what was typed. */}
@@ -436,10 +466,11 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
           aria-busy={submitting}
           readOnly={submitting}
           aria-expanded={menu.open}
-          aria-controls="slashmenu"
+          aria-controls={menu.open ? completionId : undefined}
           aria-autocomplete="list"
-          aria-activedescendant={menu.open ? `slash-${menu.active}` : undefined}
+          aria-activedescendant={menu.open ? `${completionId}-${menu.active}` : undefined}
           onChange={(e) => type(e.target.value, e.target.selectionStart)}
+          onBlur={() => menu.dismiss()}
           // Arrow keys and clicks move the caret without changing the text, and
           // the caret is what decides which token the menu is completing.
           onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
@@ -515,7 +546,9 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
           <span><kbd>@</kbd>{t("引用文件")}</span>
         </span>
         <span className="composehint" aria-live="polite">
-          {submitting
+          {stopping
+            ? t("正在停止…")
+            : submitting
             ? t("正在发送…")
             : adding
               ? t("正在添加附件…")
@@ -612,17 +645,26 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
             <button
               className="btn stop"
               data-action="session.stop"
-              data-pending={busy["cancel"] ? "" : undefined}
-              disabled={busy["cancel"]}
-              aria-busy={busy["cancel"]}
-              onClick={() => change("cancel", () => port.cancel())}
+              data-pending={stopping ? "" : undefined}
+              disabled={stopping}
+              aria-busy={stopping}
+              onClick={() => {
+                if (stoppingRef.current) return;
+                stoppingRef.current = true;
+                setStopping(true);
+                void port.cancel().catch((e: unknown) => {
+                  stoppingRef.current = false;
+                  setStopping(false);
+                  onError(e);
+                });
+              }}
             >
               <span className="ic" aria-hidden="true">
                 <svg viewBox="0 0 16 16">
                   <rect x="4.8" y="4.8" width="6.4" height="6.4" rx="1.3" />
                 </svg>
               </span>
-              <span>{t(busy["cancel"] ? "正在停止…" : "停下")}</span>
+              <span>{t(stopping ? "正在停止…" : "停下")}</span>
             </button>
           )}
           <button

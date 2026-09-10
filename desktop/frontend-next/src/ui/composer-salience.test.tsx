@@ -24,12 +24,13 @@ function draw(st: SessionStatus | null = status()) {
 }
 
 describe("what the composer shows when nothing is unusual", () => {
-  // The defect: four controls on every turn, three of them reciting a value the
-  // session already had before anyone touched it.
-  it("shows no default-state noise", () => {
+  // The baseline keeps one quiet door into the per-turn controls without
+  // reciting three values the session already had before anyone touched it.
+  it("keeps policy discoverable without default-state noise", () => {
     const { container } = draw();
-    expect(container.querySelector(".policy")).toBeNull();
-    expect(container.textContent).not.toMatch(/均衡|询问/);
+    expect(container.querySelector(".policy[data-quiet]")).toBeTruthy();
+    expect(container.querySelector('[data-action="chrome.policy"]')?.getAttribute("aria-label")).toBe("本轮执行策略");
+    expect(container.querySelector('[data-action="chrome.policy"]')?.textContent).not.toMatch(/均衡|询问/);
   });
 
   // A status may recede to its baseline. The only way into a mode may not: the
@@ -50,12 +51,11 @@ describe("what the composer shows when nothing is unusual", () => {
     await waitFor(() => expect(container.querySelector('[data-action="model.select"]')).toBeTruthy());
   });
 
-  // Vacuously true if the selector is wrong, so the deviating case has to show
-  // the same query counting one more. The policy control brings its own
-  // separator and takes it away again; the plan toggle's stays either way.
-  it("takes its separator with it when it recedes", () => {
+  // Model and turn policy are one semantic boundary, regardless of whether a
+  // policy value is unusual enough to spell out.
+  it("keeps one separator between model and turn controls", () => {
     expect(draw().seps()).toBe(1);
-    expect(draw(status({ preset: "delivery" as Preset })).seps()).toBe(2);
+    expect(draw(status({ preset: "delivery" as Preset })).seps()).toBe(1);
   });
 });
 

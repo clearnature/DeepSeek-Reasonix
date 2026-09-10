@@ -57,6 +57,8 @@ export function Policy({ port, status, efforts, onChanged }: Props) {
       .finally(() => setAsking((a) => ({ ...a, [field]: "" })));
   };
 
+  if (!status) return null;
+
   const preset = status?.preset;
   const eff = status?.effort || "auto";
   const apv = status?.toolApprovalMode ?? "ask";
@@ -65,45 +67,53 @@ export function Policy({ port, status, efforts, onChanged }: Props) {
   // that moved first would say the session is running under something the
   // kernel has not accepted — and may refuse.
   const sum = policySummary(status, efforts.length > 0);
-  // Baseline recedes all the way: a shelf spends its width on the turns where
-  // something is unusual, and there is nothing unusual to spend it on here.
-  if (!deviates(sum)) return null;
+  const quiet = !deviates(sum);
 
   return (
-    <>
-      <span className="sep" aria-hidden="true" />
-      <div className="picker policy" ref={wrap}>
+    <div className="picker policy" ref={wrap} data-quiet={quiet ? "" : undefined}>
       <button
         ref={btn}
         className="mode plain"
         data-action="chrome.policy"
         aria-expanded={open}
+        aria-label={quiet ? t("本轮执行策略") : undefined}
         title={sum.ready ? sum.reading : ""}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="vl">
-          {sum.ready && (
-            <>
-              {[sum.preset, sum.effort].filter(Boolean).join(" · ")}
-              {sum.approval && (
-                <>
-                  {/* Only between two things. With preset and effort both at
-                      baseline the approval is the whole reading. */}
-                  {(sum.preset || sum.effort) && " · "}
-                  {/* The one state allowed to break the quiet. Nothing else on
-                      this shelf can be forgotten and still cost a workspace. */}
-                  {/* Scoped names: a bare .risk in this stylesheet is already an MCP
-                      risk row, and inheriting its display:flex and margin doubled
-                      this pill's height in exactly the dangerous state. */}
-                  <span className={sum.danger ? "polrisk" : undefined}>
-                    {sum.danger && <i className="polwarn" aria-hidden>⚠</i>}
-                    {sum.approval}
-                  </span>
-                </>
-              )}
-            </>
-          )}
-        </span>
+        {quiet ? (
+          <>
+            <span className="ic" aria-hidden="true">
+              <svg viewBox="0 0 16 16">
+                <path d="M2.5 4.2h4M9.5 4.2h4M6.5 2.7v3M2.5 11.8h7M12.5 11.8h1M10.5 10.3v3" />
+              </svg>
+            </span>
+            <span className="lb">{t("执行")}</span>
+          </>
+        ) : (
+          <span className="vl">
+            {sum.ready && (
+              <>
+                {[sum.preset, sum.effort].filter(Boolean).join(" · ")}
+                {sum.approval && (
+                  <>
+                    {/* Only between two things. With preset and effort both at
+                        baseline the approval is the whole reading. */}
+                    {(sum.preset || sum.effort) && " · "}
+                    {/* The one state allowed to break the quiet. Nothing else on
+                        this shelf can be forgotten and still cost a workspace. */}
+                    {/* Scoped names: a bare .risk in this stylesheet is already an MCP
+                        risk row, and inheriting its display:flex and margin doubled
+                        this pill's height in exactly the dangerous state. */}
+                    <span className={sum.danger ? "polrisk" : undefined}>
+                      {sum.danger && <i className="polwarn" aria-hidden>⚠</i>}
+                      {sum.approval}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
+          </span>
+        )}
       </button>
       <div className="menu modemenu polmenu" role="group" aria-label={t("本轮执行策略")} hidden={!open}>
         <Seg
@@ -140,7 +150,6 @@ export function Policy({ port, status, efforts, onChanged }: Props) {
           onClick={(v) => apply("approval", v, () => port.setApprovalMode(v as ApprovalMode))}
         />
       </div>
-      </div>
-    </>
+    </div>
   );
 }

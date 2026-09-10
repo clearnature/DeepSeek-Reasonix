@@ -42,7 +42,7 @@ function draw(
       onError={vi.fn()}
     />,
   );
-  const box = screen.getByRole("combobox", { name: "任务输入" }) as HTMLTextAreaElement;
+  const box = view.container.querySelector('textarea[aria-label="任务输入"]') as HTMLTextAreaElement;
   return { ...view, port, onSubmit, box };
 }
 
@@ -113,6 +113,50 @@ describe("composer run controls", () => {
     fireEvent.keyDown(box, { key: "Tab", shiftKey: true });
     expect(plan).not.toHaveBeenCalled();
   });
+
+  it("keeps stop pending until the live turn actually ends", async () => {
+    const port = new MockPort();
+    const cancel = vi.spyOn(port, "cancel").mockResolvedValue();
+    const props = {
+      port: port as unknown as AgentPort,
+      status: status(),
+      focus: 0,
+      onSubmit: vi.fn(async () => true),
+      onChanged: vi.fn(),
+      onError: vi.fn(),
+    };
+    const view = render(<Composer {...props} running />);
+    fireEvent.click(screen.getByRole("button", { name: "停下" }));
+    const pending = await screen.findByRole("button", { name: "正在停止…" });
+    expect((pending as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(pending);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole("button", { name: "插话" }) as HTMLButtonElement).disabled).toBe(true);
+    view.rerender(<Composer {...props} running={false} />);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "正在停止…" })).toBeNull());
+  });
+});
+
+describe("composer menus", () => {
+  it("dismisses completion when focus moves to a toolbar control", async () => {
+    const { box } = draw();
+    fireEvent.change(box, { target: { value: "@", selectionStart: 1 } });
+    expect(await screen.findByRole("listbox", { name: "补全" })).toBeTruthy();
+    fireEvent.blur(box);
+    await waitFor(() => expect(screen.queryByRole("listbox", { name: "补全" })).toBeNull());
+  });
+
+  it("gives each composer its own completion ownership ids", async () => {
+    const first = draw();
+    const second = draw();
+    fireEvent.change(first.box, { target: { value: "/", selectionStart: 1 } });
+    fireEvent.change(second.box, { target: { value: "/", selectionStart: 1 } });
+    await waitFor(() => expect(screen.getAllByRole("listbox", { name: "补全" })).toHaveLength(2));
+    const ids = screen.getAllByRole("listbox", { name: "补全" }).map((node) => node.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(first.box.getAttribute("aria-controls")).toBe(ids[0]);
+    expect(second.box.getAttribute("aria-controls")).toBe(ids[1]);
+  });
 });
 
 describe("composer attachments", () => {
@@ -132,6 +176,17 @@ describe("composer attachments", () => {
     expect(await screen.findByRole("button", { name: "添加失败 · 重试" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "移除 bad.txt" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps image routing guidance outside the horizontal attachment rail", async () => {
+    const port = new MockPort();
+    vi.spyOn(port, "attach").mockResolvedValue({ path: ".reasonix/attachments/shot.png", ref: "@shot.png", image: true });
+    const { container } = draw({ port, st: status({ vision: false, visionDeclared: false }) });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["png"], "shot.png", { type: "image/png" })] } });
+    const warning = await screen.findByRole("status");
+    expect(warning.className).toBe("shotwarn");
+    expect(warning.closest(".shots")).toBeNull();
   });
 });
 

@@ -18,6 +18,7 @@ export const EN_COMPOSER: Record<string, string> = {
     "Describe a task and press Enter…　/ for commands and skills, @ to reference files",
   "知道了": "Got it",
   "本轮执行策略": "How this turn runs",
+  "执行": "Run",
   "这一轮怎么跑：执行方式、思考强度、工具权限": "How this turn runs: execution, effort, tool permissions",
   "执行方式": "Execution",
   "思考强度": "Effort",

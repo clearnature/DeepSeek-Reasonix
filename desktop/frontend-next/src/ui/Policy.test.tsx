@@ -33,11 +33,10 @@ function draw(over: {
 }
 
 describe("what the closed control says", () => {
-  // The whole control, separator included, is what a baseline turn gets back.
-  it("is not on the shelf at all for a session nobody has configured", () => {
+  it("keeps a quiet way into policy for a baseline session", () => {
     const { container } = draw();
-    expect(container.querySelector(".policy")).toBeNull();
-    expect(container.textContent).toBe("");
+    expect(container.querySelector(".policy[data-quiet]")).toBeTruthy();
+    expect(container.querySelector(".policy > button")?.textContent).toBe("执行");
   });
 
   it("carries the whole reading on hover, so nothing is actually lost", () => {
@@ -106,10 +105,12 @@ describe("the shelf reads committed fact, never the answer being waited on", () 
 
 describe("a model that publishes no rungs", () => {
   // That the open menu draws no ladder is policy.interaction's; what is this
-  // file's is the other half — a shelf claiming a control the menu will not
-  // draw, from a rung left over in a status nobody cleared.
-  it("claims no rung on the shelf either, which leaves nothing to draw", () => {
+  // file's is the other half — a stale rung may not leak onto the shelf, while
+  // preset and permissions remain reachable.
+  it("claims no stale rung but keeps the other policy fields reachable", () => {
     const { container } = draw({ status: status("balanced", "high", "ask"), efforts: [] });
-    expect(container.querySelector(".policy")).toBeNull();
+    expect(container.querySelector(".policy[data-quiet]")).toBeTruthy();
+    expect(container.querySelector(".policy .vl")).toBeNull();
+    expect(container.querySelector(".policy > button")?.getAttribute("title")).toBe("均衡 · 询问");
   });
 });

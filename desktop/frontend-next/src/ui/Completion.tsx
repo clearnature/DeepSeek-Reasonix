@@ -138,6 +138,7 @@ function split(label: string, query: string): [string, string, string] {
 }
 
 interface Props {
+  id: string;
   items: CompletionItem[];
   active: number;
   kind: string;
@@ -147,7 +148,7 @@ interface Props {
   onHover: (i: number) => void;
 }
 
-export function CompletionMenu({ items, active, kind, query, kb, onPick, onHover }: Props) {
+export function CompletionMenu({ id, items, active, kind, query, kb, onPick, onHover }: Props) {
   const on = useRef<HTMLButtonElement>(null);
 
   // Arrow keys walk past the eight rows that fit; the list has to follow, or
@@ -166,7 +167,7 @@ export function CompletionMenu({ items, active, kind, query, kb, onPick, onHover
     <div className="menu slashmenu" key={kind}>
       <div
         className="mlist"
-        id="slashmenu"
+        id={id}
         role="listbox"
         aria-label={t("补全")}
         data-kb={kb ? "" : undefined}
@@ -176,7 +177,7 @@ export function CompletionMenu({ items, active, kind, query, kb, onPick, onHover
           return (
             <button
               key={(it.kind ?? "") + ":" + it.insert}
-              id={`slash-${i}`}
+              id={`${id}-${i}`}
               ref={i === active ? on : undefined}
               className="mi"
               role="option"

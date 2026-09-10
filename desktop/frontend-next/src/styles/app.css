@@ -2145,7 +2145,9 @@
   }
   .shot .x:hover { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent) }
   .shot button:focus-visible, .intake:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
-  .shots .warn { font: var(--w-reg) 11px var(--ui); color: var(--accent-ink) }
+  .shotwarn {
+    margin: -2px 2px 8px; font: var(--w-reg) 11px/1.5 var(--ui); color: var(--accent-ink);
+  }
 
   /* 左 18、右让开轨道那一条：活动流、运行条、输入框共用中栏这一个宽度，右缘
      因此仍然是同一条线 —— 只是这条线现在落在轨道的左边，而不是它的下面。 */
@@ -2189,6 +2191,16 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, .13),
                 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent),
                 0 14px 34px -22px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  /* During a live turn blue already means "the model is working". Focus can
+     still lift the card, but it must not add a second, contradictory status. */
+  .pane[data-run="running"] .compose:focus-within {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .13),
+                0 0 0 3px color-mix(in srgb, var(--net) 10%, transparent),
+                0 14px 34px -22px color-mix(in srgb, var(--net) 42%, transparent);
+  }
+  .pane[data-run="running"] .compose:focus-within::after {
+    border-color: color-mix(in srgb, var(--net) 55%, var(--border));
   }
 
   /* 跑起来时一道光沿边框走。用 offset-path 沿路径匀速，而不是 conic-gradient
@@ -2280,6 +2292,8 @@
   .compose .row .go { margin-left: auto }
   .turntools { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap }
   .turntools > .picker:first-of-type { min-width: 0 }
+  .turntools > .picker:first-of-type > .mode { max-width: 100%; min-width: 0 }
+  .turntools > .picker:first-of-type .nm { flex: 1; min-width: 0 }
   .go { display: inline-flex; align-items: center; gap: 7px; flex: none }
   /* 一排东西同时出现是一堵墙，依次出现是一句话。只在挂载时走一次。
      z-index 不是装饰：带 fill 的动画让这些子元素各自成层，弹出的菜单于是被
@@ -2305,6 +2319,11 @@
      内核那边它们是三个独立的 effect，所以各自等、各自被拒。槽本身用树里已有
      的 .seg —— 设置页画的就是这同样三个字段，两处不该长得不一样。 */
   .policy .vl { font-family: var(--ui); font-size: 11.5px; animation: polval .12s var(--ease-out) both }
+  /* The baseline still needs a door back in. Draw it at the same quiet weight
+     as plan-off; the actual values only take width when one of them changed. */
+  .policy[data-quiet] .mode { border-color: transparent; color: var(--faint) }
+  .policy[data-quiet] .mode:hover,
+  .policy[data-quiet] .mode[aria-expanded="true"] { border-color: var(--border); color: var(--text) }
   /* 默认姿态退到背景之后，这颗按钮平时只念一个词。全放行是唯一一个「忘了自己
      在这个姿态」要付代价的状态，所以它反过来 —— 只染这一段，不染整颗按钮：
      整颗变红，安静下来的那些轮次就又开始有人盯着它了。 */
@@ -2353,6 +2372,9 @@
   .btn.stop .ic { display: grid; width: 13px; height: 13px; flex: none }
   .btn.stop .ic > svg { fill: currentColor; stroke: none }
   .btn.stop:hover { border-color: var(--err); color: var(--err) }
+  /* With no draft there is nothing to steer. Keeping a disabled primary beside
+     stop makes the live state look like two competing actions. */
+  .pane[data-run="running"] .btn.send:disabled { display: none }
 
   /* 建议是「可点的一句话」，不是开关 —— 所以不给它边框，别跟左边那排混 */
   .sug {
@@ -2888,6 +2910,7 @@
      输入框最近的先让 —— 右栏在这一档已经横在流下面，它也是其中一份。 */
   [data-fold~="short"] .compose { --aux-budget: min(calc(26vh / var(--zoom, 1)), 190px) }
   [data-fold~="short"] .compose textarea { max-height: min(calc(var(--read, 13.5px) * 9.6), calc(24vh / var(--zoom, 1))) }
+  [data-fold~="short"] .slashmenu { max-height: min(calc(38vh / var(--zoom, 1)), 220px) }
   [data-fold~="short"][data-fold~="side"] .side { max-height: calc(26vh / var(--zoom, 1)) }
   /* 运行头收成一行：说明和时间戳是第二眼才读的，标题和状态记号不是。同一套规则
      两个来源 —— 窗口矮，或者人要求专注。两套 header 会漂，一套不会。 */
@@ -2897,14 +2920,20 @@
   [data-fold~="short"] .runhead .tile, [data-focus="true"] .runhead .tile { min-width: 62px; padding: 4px 9px 5px }
   [data-fold~="short"] .runhead .tile dd, [data-focus="true"] .runhead .tile dd { font-size: 12.5px }
 
-  [data-fold~="scene"] .composeguide { flex-wrap: wrap; gap-block: 5px }
-  [data-fold~="scene"] .composehint { order: 2; width: 100%; margin-left: 0 }
-  [data-fold~="scene"] .fcount { margin-left: auto }
-  [data-fold~="scene"] .compose .row { align-items: stretch }
-  [data-fold~="scene"] .turntools { flex-basis: 100%; flex-wrap: nowrap }
-  [data-fold~="scene"] .turntools > .picker:first-of-type { flex: 1 }
-  [data-fold~="scene"] .turntools .mode .nm { max-width: 100% }
-  [data-fold~="scene"] .compose .row .go { width: 100%; justify-content: flex-end; margin-left: 0 }
+  /* Scene folding is about the whole app; the composer should only stack when
+     its own column is actually narrow. At 640px the old global flag left an
+     otherwise empty second toolbar row. */
+  .pane { container: conversation / inline-size }
+  @container conversation (max-width: 460px) {
+    .composeguide { flex-wrap: wrap; gap-block: 5px }
+    .composehint { order: 2; width: 100%; margin-left: 0 }
+    .fcount { margin-left: auto }
+    .compose .row { align-items: stretch }
+    .turntools { flex-basis: 100%; flex-wrap: nowrap }
+    .turntools > .picker:first-of-type { flex: 1 }
+    .turntools .mode .nm { max-width: 100% }
+    .compose .row .go { width: 100%; justify-content: flex-end; margin-left: 0 }
+  }
 
   /* ── 首次引导：一屏，一件事 ──────────────────────────────────────── */
   /* 连接卡片长在开场场景里，不另起一屏：介绍语收在上方仍然在场。所以这里

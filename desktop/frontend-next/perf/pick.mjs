@@ -24,7 +24,7 @@ await page.waitForSelector(".app", { timeout: 20000 });
 
 const read = () =>
   page.evaluate(() => {
-    const list = document.querySelector("#slashmenu");
+    const list = document.querySelector(".slashmenu [role=listbox]");
     if (!list) return null;
     const panel = list.closest(".slashmenu");
     // 十六进制来自令牌,color() 来自 color-mix,rgb() 来自其它一切。
@@ -42,6 +42,7 @@ const read = () =>
     const st = getComputedStyle(panel);
     const floor = lum(rgb(st.backgroundColor));
     return {
+      listId: list.id,
       kb: list.hasAttribute("data-kb"),
       caret: document.querySelector('[role="combobox"]').getAttribute("aria-activedescendant"),
       // .mi:hover 画的就是这个令牌,所以读它等于读悬停态。
@@ -59,7 +60,7 @@ const read = () =>
   });
 
 const park = async (i) => {
-  const b = await page.locator("#slashmenu button.mi").nth(i).boundingBox();
+  const b = await page.locator(".slashmenu button.mi").nth(i).boundingBox();
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
   await page.waitForTimeout(80);
 };
@@ -74,7 +75,7 @@ async function suite(tag, token, park1, park2) {
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Backspace");
   await page.type(BOX, token, { delay: 20 });
-  await page.waitForSelector("#slashmenu button.mi", { timeout: 5000 });
+  await page.waitForSelector(".slashmenu button.mi", { timeout: 5000 });
   await page.waitForTimeout(150);
 
   let s = await read();
@@ -87,7 +88,7 @@ async function suite(tag, token, park1, park2) {
 
   await key("ArrowDown");
   s = await read();
-  check(`${tag} 方向键把选中挪走了`, s.rows.findIndex((r) => r.on) === 1 && s.caret === "slash-1");
+  check(`${tag} 方向键把选中挪走了`, s.rows.findIndex((r) => r.on) === 1 && s.caret === `${s.listId}-1`);
 
   // 指针停在别的行上,手再回到键盘 —— 这里曾经同时亮两行,
   // 而且更重的那一行是指针底下那一行,不是回车会拿走的那一行。
