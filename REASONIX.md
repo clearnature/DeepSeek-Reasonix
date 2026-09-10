@@ -149,6 +149,14 @@ Before importing a new internal package from a non-test file, verify the target 
 
 Use `go test ./path/to/target/` to detect cycles **before** pushing. A `[setup failed]` message means a cycle exists.
 
+## 合并纪律补充（v1.38.3 教训，2026-09-10）
+
+- **基线锚 tag OID，不锚分支名**：合并前确认 `MERGE_HEAD` 是目标 tag 的 OID。上游主干会前移（v1.38.3 之后 main-v2 已删 Wails 切 Electron），锚 `origin/main-v2` 会把不想要的迁移带进来。
+- **文本无冲突 ≠ 语义无冲突**：`git merge-tree` 的冲突清单**不是**风险全集——最致命的 `config`↔`provider/responses` import cycle（上游给 config 加空白导入 + 本地 responses 反向依赖）不在冲突文件里。合并后必须立即 `go build ./...` + `go test ./...`。
+- **`splitActive` 分支删不得**：`planFoldRegion` 的 `splitActive`（= `mustFree`，`trigger==overflow || est >= hard`）允许折入 active turn；删掉会让长 active turn 下无可折叠区域 → `CompactionNoop` → 压缩永不发动。B2 约束的是**常规 pressure 折叠**（那一路仍是 `start = active` 位置固定）。
+- **桌面预算按 dev 增量校准**：合并后 `wails build` 会因 `check-bundle-budget.mjs` 失败（上游 budgets 不含 dev 前端增量），按实测取下一个十分位并把实测值写进注释。
+- **本地零丢失检查法**：除 11 项冻结哨兵外，做一次**符号级全量对比**（提取 `HEAD` 每个 `.go` 的顶层 `func/type/const/var` 与工作区比对）——本次结论 0 缺失。脚本与哨兵命令见 `docs/merge/20260910-v1383-merge-record.md` §5.1。
+
 ## PR hygiene
 
 - **One force-push per round of review feedback.** Multiple force-pushes destroy review history and confuse reviewers.
