@@ -19,6 +19,7 @@ import (
 
 	"reasonix/internal/netclient"
 	"reasonix/internal/provider"
+	provideropenai "reasonix/internal/provider/openai"
 )
 
 const (
@@ -141,10 +142,12 @@ func New(cfg Config) provider.Provider {
 		sessionCache = *cfg.SessionCache
 	}
 	vision, _ := cfg.Extra["vision"].(bool)
-	// DeepSeek's official Responses endpoint is currently text-only. Keep this
-	// provider-boundary guard so stale config or extension metadata cannot emit
-	// unsupported input_image items.
-	vision = vision && vendor != "deepseek"
+	// DeepSeek serves text-only and image-taking models on the same endpoint.
+	// Keep the boundary model-scoped so stale metadata cannot send input_image
+	// parts to ordinary Flash, while the documented Vision model can use them.
+	if vendor == "deepseek" {
+		vision = vision && provideropenai.DeepSeekTakesImages(cfg.Model)
+	}
 	httpClient := &http.Client{Timeout: 300 * time.Second}
 	if built, err := netclient.NewHTTPClient(cfg.Proxy, netclient.TransportOptions{
 		DialTimeout: 30 * time.Second, KeepAlive: 30 * time.Second,

@@ -65,7 +65,7 @@ export class MockProvider extends MockBoundary {
   async checkProvider(name: string): Promise<ProviderCheck> {
     if (name === "mimo") return { ok: false, error: "401 unauthorized: key 过期了" };
     const models = name.startsWith("myrelay") ? relayCatalog() : ["gpt-4o", "claude-sonnet-4"];
-    return { ok: true, kind: "openai", models, ambiguous: true };
+    return { ok: true, kind: "openai", models, vision: models.filter((m) => m === "gpt-4o"), ambiguous: true };
   }
 
   async saveProvider(): Promise<void> {}

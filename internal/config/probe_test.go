@@ -167,6 +167,14 @@ func TestProbeReadsCapabilitiesFromTheSameRegistries(t *testing.T) {
 	}
 }
 
+func TestProbeUsesDeepSeekOfficialVisionCatalog(t *testing.T) {
+	models := []string{"deepseek-v4-flash", DeepSeekVisionModel, "deepseek-v5-vision"}
+	got := describe("https://api.deepseek.com", shape{kind: "openai"}, models)
+	if !slices.Equal(got.Vision, []string{DeepSeekVisionModel}) {
+		t.Fatalf("vision = %v, want only the vendor-declared model", got.Vision)
+	}
+}
+
 // A China-only endpoint reached through a foreign exit fails the same way a
 // wrong address does (#2803). Retrying without the proxy is what turns "your
 // endpoint is wrong" into a provider that works with no_proxy set.

@@ -7,8 +7,9 @@ import (
 
 // An installed user's model list is frozen in their config file, so a model the
 // vendor added afterwards reaches them only if something puts it there. The
-// bound on that is the same one every catalog migration takes: touch the entry
-// that still carries what we shipped, and nothing else.
+// bound on that is the same one every catalog migration takes: extend the entry
+// that still carries what we shipped, and otherwise only label a model already
+// present by its exact vendor-documented ID.
 func TestDeepSeekVisionCatalogOnlyTouchesTheShippedList(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -36,6 +37,16 @@ func TestDeepSeekVisionCatalogOnlyTouchesTheShippedList(t *testing.T) {
 			models: []string{"deepseek-v4-pro"},
 		},
 		{
+			name: "a probed vision-only list is recognised without another checkbox",
+			entry: ProviderEntry{
+				Name: "deepseek-vision", Kind: "responses", BaseURL: "https://api.deepseek.com",
+				Models: []string{DeepSeekVisionModel},
+			},
+			want:   true,
+			models: []string{DeepSeekVisionModel},
+			vision: []string{DeepSeekVisionModel},
+		},
+		{
 			name: "a vision choice already made is not overwritten",
 			entry: ProviderEntry{
 				Name: "deepseek", Kind: "openai", BaseURL: "https://api.deepseek.com",
@@ -46,12 +57,14 @@ func TestDeepSeekVisionCatalogOnlyTouchesTheShippedList(t *testing.T) {
 			vision: []string{"deepseek-v4-pro"},
 		},
 		{
-			name: "responses serves one model and not this one",
+			name: "responses accepts the same vision model",
 			entry: ProviderEntry{
 				Name: "deepseek", Kind: "responses", BaseURL: "https://api.deepseek.com",
 				Models: []string{"deepseek-v4-flash", "deepseek-v4-pro"},
 			},
-			models: []string{"deepseek-v4-flash", "deepseek-v4-pro"},
+			want:   true,
+			models: []string{"deepseek-v4-flash", "deepseek-v4-pro", DeepSeekVisionModel},
+			vision: []string{DeepSeekVisionModel},
 		},
 		{
 			name: "a relay serving the same names is not this endpoint",

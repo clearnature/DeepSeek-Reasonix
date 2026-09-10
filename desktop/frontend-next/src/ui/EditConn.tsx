@@ -31,6 +31,7 @@ function EditConn({
   const [models, setModels] = useState<string[]>(entry.models);
   const [picked, setPicked] = useState<string[]>(entry.models);
   const [vision, setVision] = useState<string[]>(entry.visionModels ?? []);
+  const [visionSettable, setVisionSettable] = useState<string[] | undefined>(entry.visionSettable);
   const [def, setDef] = useState(entry.default || entry.models[0] || "");
   const [err, setErr] = useState("");
   const [more, setMore] = useState(false);
@@ -48,7 +49,7 @@ function EditConn({
   // serves an image-taking model beside text-only ones — so an older kernel that
   // only sends the connection-wide boolean still gets the old answer.
   const visionLocked = (m: string) =>
-    entry.visionSettable ? !entry.visionSettable.includes(m) : entry.canSetVision === false;
+    visionSettable ? !visionSettable.includes(m) : entry.canSetVision === false;
 
   // A name the endpoint never reported. It lands ticked because typing it out
   // is already the answer to "do you want this one", and at the head of the
@@ -67,11 +68,15 @@ function EditConn({
     setBusy(`edit:${entry.name}`);
     setErr("");
     try {
-      const found = apiKey.trim()
-        ? (await port.probeProvider(baseUrl.trim(), apiKey.trim())).models
-        : (await port.checkProvider(entry.name)).models ?? [];
+      const refreshed = apiKey.trim()
+        ? await port.probeProvider(baseUrl.trim(), apiKey.trim())
+        : await port.checkProvider(entry.name);
+      const found = refreshed.models ?? [];
       if (found.length === 0) throw new Error("这个端点没报出任何聊天模型");
+      const readers = refreshed.vision ?? [];
       setModels([...new Set([...found, ...picked])]);
+      setVision((current) => [...new Set([...current, ...readers])]);
+      setVisionSettable((current) => current ? [...new Set([...current, ...readers])] : current);
     } catch (e) {
       setErr(reason(e));
     } finally {

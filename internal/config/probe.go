@@ -187,13 +187,25 @@ func describe(baseURL string, s shape, chat []string) Probe {
 		AuthHeader: s.authHeader,
 		Models:     chat,
 		Default:    chat[0],
-		Vision:     InferVisionModels(chat),
+		Vision:     inferVisionModelsForEndpoint(baseURL, s.kind, chat),
 	}
 	entry := &ProviderEntry{Kind: s.kind, BaseURL: baseURL, AuthHeader: s.authHeader, Model: p.Default}
 	if capability := EffortCapabilityForEntry(entry); capability.Supported {
 		p.Efforts, p.Effort = capability.Levels, capability.Default
 	}
 	return p
+}
+
+func inferVisionModelsForEndpoint(baseURL, kind string, models []string) []string {
+	inferred := InferVisionModels(models)
+	out := make([]string, 0, len(inferred))
+	for _, model := range inferred {
+		entry := &ProviderEntry{Kind: kind, BaseURL: baseURL, Model: model}
+		if CanConfigureVision(entry) {
+			out = append(out, model)
+		}
+	}
+	return out
 }
 
 func chatModelsOf(models []string) []string {

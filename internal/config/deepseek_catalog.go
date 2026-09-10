@@ -94,12 +94,16 @@ func applyDeepSeekVisionCatalog(p *ProviderEntry) bool {
 	if p == nil || officialProviderHost(p.BaseURL) != "api.deepseek.com" {
 		return false
 	}
-	// Responses serves one model; the vision model is not on that wire.
-	if strings.EqualFold(strings.TrimSpace(p.Kind), "responses") {
-		return false
+	changed := false
+	// Studio may learn the model from a live probe or the user may type its
+	// documented ID into a curated list. In either case the official catalog is
+	// enough to mark a listed model without requiring a second manual checkbox.
+	if p.HasModel(DeepSeekVisionModel) && len(p.VisionModels) == 0 {
+		p.VisionModels = []string{DeepSeekVisionModel}
+		changed = true
 	}
 	if !stringSlicesEqual(p.ModelList(), legacyDeepSeekV4Models) {
-		return false
+		return changed
 	}
 	p.Models = append(append([]string(nil), legacyDeepSeekV4Models...), DeepSeekVisionModel)
 	// Listed but unticked is the worst of both: the model is the one thing on

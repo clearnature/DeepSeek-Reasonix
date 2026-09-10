@@ -20,6 +20,7 @@ type providerCheck struct {
 	// other, so a Responses source answering the OpenAI listing is not a change.
 	Matches   bool     `json:"matches"`
 	Models    []string `json:"models,omitempty"`
+	Vision    []string `json:"vision,omitempty"`
 	Ambiguous bool     `json:"ambiguous,omitempty"`
 	NoProxy   bool     `json:"noProxy,omitempty"`
 	// Error carries the endpoint's own words. "401" and "no chat models" send
@@ -80,6 +81,7 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 		Kind:      got.Kind,
 		Matches:   config.ProtocolAnswerMatches(entry.Kind, got.Kind),
 		Models:    nonNilStrings(got.Models),
+		Vision:    nonNilStrings(got.Vision),
 		Ambiguous: got.Ambiguous,
 		NoProxy:   got.NoProxy,
 	})

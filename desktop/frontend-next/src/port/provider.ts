@@ -88,6 +88,9 @@ export interface ProviderCheck {
   // Responses source answers the OpenAI listing, so equality is the wrong test.
   matches?: boolean;
   models?: string[];
+  // Re-probing is also capability discovery: a vendor may add a multimodal
+  // model to an endpoint whose stored model list predates it.
+  vision?: string[];
   ambiguous?: boolean;
   noProxy?: boolean;
   error?: string;

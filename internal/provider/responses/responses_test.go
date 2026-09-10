@@ -968,28 +968,31 @@ func TestMessagesToInputEmbedsImagesAsInputImageParts(t *testing.T) {
 	}
 }
 
-func TestOfficialDeepSeekResponsesIgnoresVisionMetadata(t *testing.T) {
-	c := New(Config{
-		Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash",
-		Extra: map[string]any{"vision": true},
-	}).(*client)
-	if c.vision {
-		t.Fatal("official DeepSeek Responses endpoint must ignore vision metadata")
+func TestOfficialDeepSeekResponsesVisionIsModelScoped(t *testing.T) {
+	makeClient := func(model string) *client {
+		return New(Config{
+			Name: "deepseek", BaseURL: "https://api.deepseek.com", Model: model,
+			Extra: map[string]any{"vision": true},
+		}).(*client)
 	}
-	body, _, _ := c.buildRequestBody(provider.Request{Messages: []provider.Message{{
+	plain := makeClient("deepseek-v4-flash")
+	if plain.vision {
+		t.Fatal("ordinary DeepSeek Flash must stay text-only despite stale vision metadata")
+	}
+	vision := makeClient("deepseek-v4-flash-vision-exp")
+	if !vision.vision {
+		t.Fatal("the documented DeepSeek Vision model must accept Responses input_image parts")
+	}
+	body, _, _ := vision.buildRequestBody(provider.Request{Messages: []provider.Message{{
 		Role: provider.RoleUser, Content: "what is this",
 		Images: []string{"data:image/png;base64,AAAA"},
 	}}})
-	items := body["input"].([]map[string]any)
-	if got, ok := items[0]["content"].(string); !ok || got != "what is this" {
-		t.Fatalf("official DeepSeek content = %#v, want plain text", items[0]["content"])
-	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal request body: %v", err)
 	}
-	if bytes.Contains(encoded, []byte("input_image")) || bytes.Contains(encoded, []byte("base64,AAAA")) {
-		t.Fatalf("official DeepSeek Responses request leaked image payload: %s", encoded)
+	if !bytes.Contains(encoded, []byte("input_image")) || !bytes.Contains(encoded, []byte("base64,AAAA")) {
+		t.Fatalf("DeepSeek Vision Responses request omitted the image payload: %s", encoded)
 	}
 }
 
