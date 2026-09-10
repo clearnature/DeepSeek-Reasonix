@@ -40,10 +40,11 @@ const OWNED_ELSEWHERE = new Map(Object.entries({
   "raf-batch.test.ts": "test:stream",
   "stream-delta-batch.test.ts": "test:stream",
   "use-controller-stream-progress.test.ts": "test:stream",
-  "transcript-virtuoso-index.test.ts": "test:transcript",
-  "transcript-live-turn-stability.test.tsx": "test:transcript",
-  "transcript-scroll-release.test.ts": "test:transcript",
-  "transcript-virtualization.test.tsx": "test:transcript",
+  "transcript-kernel.test.ts": "test:transcript",
+  "transcript-kernel-races.test.ts": "test:transcript",
+  "transcript-timeline.test.ts": "test:transcript",
+  "transcript-viewport.test.tsx": "test:transcript",
+  "transcript-question-jump.test.ts": "test:transcript",
   "nested-scroll-handoff.test.ts": "test:transcript",
   "creation-transcript-scrollbar.test.ts": "test:transcript",
   "markdown-table-virtual.test.tsx": "test:transcript",
@@ -79,8 +80,10 @@ for (const [name, owner] of OWNED_ELSEWHERE) {
   }
 }
 
-// Every suite runs with the css-stub loader (see the spawn below): component
-// modules may statically import CSS at any depth, so the loader is unconditional.
+// CSS is a browser asset, not executable Node code. All discovered component
+// graphs share this loader contract, including transitive imports after region
+// extraction. CSS/layout correctness remains owned by syntax and browser gates.
+const assetArgs = ["--import", pathToFileURL(resolve(SCRIPTS_DIR, "css-stub-register.mjs")).href];
 
 const suites = files.filter((name) => !OWNED_ELSEWHERE.has(name));
 console.log(`run-tests: ${suites.length} discovered suites (${OWNED_ELSEWHERE.size} owned by dedicated scripts)`);
@@ -93,12 +96,7 @@ for (const name of suites) {
   // Node's built-in navigator.language follows the machine's ICU locale, and
   // suites assert English UI strings.
   const env = { ...process.env, LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" };
-  // css-stub loads for every suite: component modules may statically import
-  // CSS at any depth (ManagementPageShell.css, heartbeat.css, …) and the
-  // loader is trivial, so a per-suite whitelist only chases failures one at a
-  // time. The --import flag needs an absolute file URL.
-  const extraArgs = ["--import", pathToFileURL(resolve(SCRIPTS_DIR, "css-stub-register.mjs")).href];
-  const result = spawnSync(process.execPath, [tsxCli, ...extraArgs, path], { stdio: "inherit", env });
+  const result = spawnSync(process.execPath, [tsxCli, ...assetArgs, path], { stdio: "inherit", env });
   if (result.error) console.error(`run-tests: spawn failed for ${path}: ${result.error.message}`);
   if (result.status !== 0) {
     if (!keepGoing) {

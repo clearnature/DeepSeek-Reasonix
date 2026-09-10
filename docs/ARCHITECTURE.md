@@ -95,6 +95,26 @@ internal/
 ├── shellparse/  shellsafe/  shellrun/              # (演化) shell 命令解析/安全化/执行
 ├── lsp/  diff/  fileref/  fileutil/  gitcmd/       # (演化) 代码理解与文件/git 操作
 ├── i18n/  outputstyle/  textutil/  nilutil/        # (演化) 本地化、输出渲染与通用工具
+├── projectiondb/       # (演化) disposable SQLite 投影的生命周期（catalog 族共用）
+├── sessioncatalog/     # (演化) 会话的可丢弃 SQLite 投影（列表/搜索）
+├── historycatalog/     # (演化) 已保存 transcript 的 FTS 投影
+├── taskcatalog/  usagecatalog/        # (演化) 跨项目任务/用量的可丢弃聚合投影
+├── sessioncontext/     # (演化) provider-visible、host-authored 的会话上下文快照
+├── sessioninbox/       # (演化) 会话级指令队列（durable）
+├── turnevent/          # (演化) 会话本地生命周期账本（turn 信封）
+├── trajectory/         # (演化) 运行期 typed event stream → JSONL
+├── topicstate/         # (演化) Desktop topic 元数据（SQLite 权威存储）
+├── runtimepolicy/      # (演化) 执行前/后的单调守卫引擎
+├── readcoord/          # (演化) 读取交付账本：读覆盖是否满足写前提
+├── completion/         # (演化) host 侧补全报告装配
+├── agentpreset/        # (演化) 会话角色词表（preset）
+├── extensioncontract/  # (演化) 扩展能力身份的叶子类型
+├── plancontract/       # (演化) 结构化计划记录（plan proposal）
+├── taskcontract/       # (演化) host 事实契约：义务与验收
+├── appidentity/  pathidentity/        # (演化) 应用/路径身份判定（跨平台）
+├── imageinput/         # (演化) 图片理解服务（vision 输入）
+├── mcpinteraction/     # (演化) MCP server 发起的 elicitation 请求
+├── websearch/          # (演化) 独立 native 搜索客户端工具
 └── 其余：ablation/ autoresearch/ boundedllm/ capdiag/ desktoplauncher/ doctor/ environment/
          evidence/ frontmatter/ goaleval/ installlayout/ installsource/ instruction/ jobs/
          mcpdiag/ mcplaunch/ mcpregistry/ migration/ netclient/ notify/ planmode/

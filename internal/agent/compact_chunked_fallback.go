@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"reasonix/internal/provider"
@@ -22,12 +21,11 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 	var res foldSummary
 	var tele CompactionTelemetry
 	var chunkedReason error
-	preflight := a.validateSafeSummaryRequest(fold, instructions)
+	preflight := a.validateSafeSummaryRequest(fold, instructions, false)
 	if preflight == nil {
 		var err error
 		res, tele, err = a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
-		var ctxLimit *provider.ContextLimitError
-		if err == nil || (!errors.Is(err, errSummaryOutputTruncated) && !errors.Is(err, ErrCompactionRequired) && !errors.As(err, &ctxLimit)) {
+		if err == nil || !chunkedFallbackApplies(err, inputMode) {
 			return res, tele, err
 		}
 		chunkedReason = err
@@ -59,4 +57,14 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 		return chunked, tele, chunkedErr
 	}
 	return chunked, a.telemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked, nil, chunkedInput), nil
+}
+
+// chunkedFallbackApplies reports a size failure the fragment path can fix. A
+// provider overflow qualifies only once the transcript form has failed too;
+// before that a re-planned replay is one request instead of many.
+func chunkedFallbackApplies(err error, inputMode string) bool {
+	if provider.AsContextLimitError(err) != nil {
+		return inputMode == SummaryInputSlim
+	}
+	return summarySizeFailure(err)
 }

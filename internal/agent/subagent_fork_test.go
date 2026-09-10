@@ -64,6 +64,14 @@ func TestCaptureForkPrefixByteIdentical(t *testing.T) {
 	if len(got) != len(want) {
 		t.Fatalf("prefix length = %d, want %d\ngot:  %s\nwant: %s", len(got), len(want), marshalMessages(t, got), marshalMessages(t, want))
 	}
+	// schema-2 stamps every committed message with a durable id. The fork
+	// prefix must reuse the parent's ids verbatim: a freshly minted id would
+	// change bytes the provider already cached.
+	if sent := parent.Session().Snapshot(); len(sent) >= len(want) {
+		for i := range want {
+			want[i].ID = sent[i].ID
+		}
+	}
 	if got := marshalMessages(t, got); got != marshalMessages(t, want) {
 		t.Fatalf("prefix bytes differ from parent-sent bytes\n got: %s\nwant: %s", got, marshalMessages(t, want))
 	}

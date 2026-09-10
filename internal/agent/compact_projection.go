@@ -436,7 +436,7 @@ func (a *Agent) summarizeFold(ctx context.Context, trigger string, prefix, fold 
 	return a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
 }
 
-func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instructions string, force, mustFree, allowChunked bool) (CompactionOutcome, error) {
+func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instructions string, req foldRequest) (CompactionOutcome, error) {
 	activeTurn := a.activeTurnCreatedAt.Load()
 	canonical, transcriptVersion := a.sess.conversation.snapshotMessagesVersion()
 	a.sess.compactionMu.Lock()
@@ -446,13 +446,13 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	a.sess.compactionMu.Unlock()
 	msgs, onProjection := a.visibleInputForFold(stateSnapshot, canonical, transcriptVersion)
 	viewInputHash := providerVisibleFingerprint(modelInputMessages(msgs))
-	head, start, ok := a.planFoldRegion(msgs, force)
+	head, start, ok := a.planFoldRegion(msgs, req.force, req.mustFree)
 	if !ok {
 		return CompactionNoop, nil
 	}
 	latestContext := latestSessionContextIndex(msgs)
 	_, preliminaryFold, _ := a.partitionFoldForProjectionAt(msgs[head:start], head, latestContext)
-	if len(preliminaryFold) == 0 || (!force && !foldEconomics(preliminaryFold)) {
+	if len(preliminaryFold) == 0 || (!req.force && !foldEconomics(preliminaryFold)) {
 		return CompactionNoop, nil
 	}
 	fixedPrefixTokens := a.estimatedVisibleRequestTokens(msgs[:head])
@@ -472,7 +472,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	// Cap every automatic summary input (#9572), including pressure folds after
 	// projection invalidation. mustFree also covers the over-ceiling manual rescue
 	// merged in #9474; ordinary manual compaction keeps its requested range.
-	if mustFree || trigger != CompactionTriggerManual {
+	if req.mustFree || trigger != CompactionTriggerManual {
 		start = a.maximumSafeSummaryPrefixEnd(msgs, head, start, instructions)
 		if start <= head {
 			a.emitCompactionAborted(trigger)
@@ -498,20 +498,16 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, nil
 	}
-	if mustFree || trigger != CompactionTriggerManual {
-		if err := a.validateSafeSummaryRequest(fold, instructions); err != nil {
+	if req.mustFree || trigger != CompactionTriggerManual {
+		if err := a.validateSafeSummaryRequest(fold, instructions, req.slim); err != nil {
 			a.emitCompactionAborted(trigger)
 			return CompactionNoop, err
 		}
 	}
 
 	sourceTokens := a.estimatedVisibleRequestTokens(msgs)
-	inputMode := SummaryInputCachePrefix
-	if regionHadPinnedRevision {
-		inputMode = SummaryInputNonPrefix
-	} else if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
-		inputMode = SummaryInputExtensionRewritten
-	}
+	inputMode := summaryInputModeFor(req, regionHadPinnedRevision,
+		providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash)
 	summaryPrefix, foldExtra, foldAnchors := a.summaryFoldPlan(msgs, head, start)
 	if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
 		// An extension rewrote the fold: the rewritten bytes must be sent and
@@ -524,7 +520,7 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	if foldAnchors != "" {
 		instructions += foldAnchors
 	}
-	res, tele, err := a.summarizeFold(ctx, trigger, summaryPrefix, foldExtra, instructions, sourceTokens, inputMode, allowChunked)
+	res, tele, err := a.summarizeFold(ctx, trigger, summaryPrefix, foldExtra, instructions, sourceTokens, inputMode, req.allowChunked)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
@@ -647,7 +643,9 @@ func (a *Agent) acceptCheckpointCandidate(trigger string, sourceTokens, candidat
 }
 
 // planFoldRegion returns [head:start] to fold; force shrinks the recent tail.
-func (a *Agent) planFoldRegion(msgs []provider.Message, force bool) (head, start int, ok bool) {
+// splitActive lets an overflow rescue fold the active turn's older completed
+// rounds as well; otherwise the active turn stays verbatim.
+func (a *Agent) planFoldRegion(msgs []provider.Message, force, splitActive bool) (head, start int, ok bool) {
 	head, start, ok = a.planCompaction(msgs, minCompactMessages, force)
 	if !ok {
 		head, start, ok = a.planCompaction(msgs, 1, force)
@@ -656,75 +654,13 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force bool) (head, start
 		return head, start, false
 	}
 	if active := a.activeTurnStart(msgs); active >= head && active < start {
-		start = active
-	}
-	return head, start, start > head
-}
-
-// maximumSafeSummaryPrefixEnd returns the largest balanced contiguous prefix
-// whose exact summary request leaves the collector's minimum output budget.
-// The remaining middle and tail stay verbatim in the projection.
-func (a *Agent) maximumSafeSummaryPrefixEnd(msgs []provider.Message, head, end int, instructions string) int {
-	if head < 0 || end <= head || end > len(msgs) {
-		return end
-	}
-	maxPromptTokens, enforce := a.safeSummaryPromptTokenLimit()
-	if !enforce {
-		return end
-	}
-	if maxPromptTokens <= 0 {
-		return head
-	}
-	fits := func(candidate int) bool {
-		fold, _ := withoutPinnedContextRevisions(msgs[head:candidate])
-		request := a.summaryRequest(msgs[:head], fold, instructions)
-		return a.estimatedRequestTokens(request) <= maxPromptTokens
-	}
-	if fits(end) {
-		return end
-	}
-
-	low, high, best := head+1, end-1, head
-	for low <= high {
-		mid := low + (high-low)/2
-		if fits(mid) {
-			best = mid
-			low = mid + 1
+		if splitActive { // an over-window rescue may fold into the active turn
+			start = activeTurnFoldBoundary(msgs, active, start)
 		} else {
-			high = mid - 1
+			start = active
 		}
 	}
-	// A tail beginning with a tool result would split it from the assistant
-	// tool-call message. Move the fold boundary back across the whole result
-	// group; the assistant call and all of its results then remain together.
-	for best > head && best < len(msgs) && msgs[best].Role == provider.RoleTool {
-		best--
-	}
-	return best
-}
-
-// safeSummaryPromptTokenLimit is shared by prefix planning and the final
-// post-extension guard. Unknown gateways conservatively honor the configured
-// or learned window; explicitly independent providers retain the full fold.
-func (a *Agent) safeSummaryPromptTokenLimit() (int, bool) {
-	window := a.effectiveContextWindow()
-	if window <= 0 || contextBudgetPolicyOf(a.svc.prov).WindowMode == provider.ContextWindowIndependent {
-		return 0, false
-	}
-	return window - a.summaryOutputBudgetForWindow() - protocolReserveTokens, true
-}
-
-func (a *Agent) validateSafeSummaryRequest(fold []provider.Message, instructions string) error {
-	maxPromptTokens, enforce := a.safeSummaryPromptTokenLimit()
-	if !enforce {
-		return nil
-	}
-	requestTokens := a.estimatedRequestTokens(a.summaryRequest(nil, fold, instructions))
-	if maxPromptTokens <= 0 || requestTokens > maxPromptTokens {
-		return fmt.Errorf("%w: prepared summary request (%d tokens) exceeds safe prompt budget (%d)",
-			errCheckpointRejected, requestTokens, maxPromptTokens)
-	}
-	return nil
+	return head, start, start > head
 }
 
 // summaryFoldPlan selects the cache-aligned summary request shape for the

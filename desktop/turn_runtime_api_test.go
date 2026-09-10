@@ -56,9 +56,6 @@ func TestTurnRuntimeAPIRoutesStopAnswerAndReplayByExactTurn(t *testing.T) {
 		t.Fatal("turn runner did not start")
 	}
 
-	if err := app.InterruptTurnForTab(tab.ID, "turn_stale"); err == nil {
-		t.Fatal("stale turn id cancelled the active turn")
-	}
 	if err := app.AnswerPromptForTab(tab.ID, "turn_stale", "prompt-1", nil); err == nil {
 		t.Fatal("stale turn id answered an active turn prompt")
 	}
@@ -131,6 +128,30 @@ func TestStartTurnForTabAcceptsCompactWithoutTurnID(t *testing.T) {
 	}
 }
 
+// A Stop button rendered for an earlier turn must still stop the turn that is
+// running now; only an idle tab is reported back, with a stable code.
+func TestInterruptTurnForTabStopsActiveWorkDespiteStaleTurnID(t *testing.T) {
+	terminal := make(chan event.Event, 1)
+	sink.SetBotSink(event.FuncSink(func(e event.Event) {
+		if e.Kind == event.TurnDone {
+			terminal <- e
+	}))
+	if err := app.InterruptTurnForTab(tab.ID, "turn_none"); !errors.Is(err, errTurnNotRunning) {
+		t.Fatalf("idle stop = %v, want %v", err, errTurnNotRunning)
+	if err := app.InterruptTurnForTab(tab.ID, "turn_none"); err == nil || err.Error() != "reasonix_error:turn_not_running" {
+		t.Fatalf("idle stop wire error = %v, want stable reasonix_error code", err)
+	if _, err := app.StartTurnForTab(tab.ID, "hold this turn", "submission-1"); err != nil {
+		t.Fatalf("StartTurnForTab: %v", err)
+	select {
+	case <-runner.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("turn runner did not start")
+	if err := app.InterruptTurnForTab(tab.ID, "turn_stale"); err != nil {
+		t.Fatalf("stale-id stop = %v, want the active turn interrupted", err)
+	case done := <-terminal:
+		if done.Status != event.TurnInterrupted {
+			t.Fatalf("terminal status = %q, want interrupted", done.Status)
+		t.Fatal("turn did not reach terminal state after stale-id stop")
 func TestStartTurnForTabReturnsManagementDispositionWithoutTurnID(t *testing.T) {
 	dir := t.TempDir()
 	sink := &tabEventSink{tabID: "tab", ctx: context.Background()}

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"reasonix/internal/config"
+	"reasonix/internal/store"
 )
 
 // KnowledgeEntry is the persisted result of a server-side web_search turn.
@@ -133,7 +133,7 @@ func KnowledgeCacheDir() (string, error) { return knowledgeDir() }
 
 // knowledgeDir is the per-user cache root for web_search knowledge entries.
 func knowledgeDir() (string, error) {
-	root := config.CacheDir()
+	root := store.UserCacheDir()
 	if knowledgeDirOverride != "" {
 		root = knowledgeDirOverride
 	}

@@ -18,7 +18,7 @@ import (
 var topLevelToolGolden = []string{
 	"ask", "bash", "bash_output", "complete_step", "compress", "edit_file",
 	"kill_shell", "read_file", "todo_write", "update_goal", "use_capability",
-	"wait", "write_file",
+	"view_image", "wait", "write_file",
 }
 
 // TestTopLevelToolSurfaceGolden locks the top-level surface against silent

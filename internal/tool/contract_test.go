@@ -75,6 +75,7 @@ var acceptsDefaultSnip = map[string]bool{
 	"update_goal":           true,
 	"wait":                  true,
 	"write_file":            true,
+	"view_image":            true, // short metadata only; image bytes travel outside text snipping
 }
 
 func TestEveryBuiltinDeclaresSnipStance(t *testing.T) {
