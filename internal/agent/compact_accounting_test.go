@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -89,9 +90,26 @@ func foldWithSpend(t *testing.T, replies []scriptedReply) (CompactionTelemetry, 
 	return tele, sink, err
 }
 
-// A transaction's bill is every call it made, not the usage of the answer it
-// decided to keep. Each case bills its two calls differently so a total that
-// silently describes only one of them cannot pass.
+// callsInOneTransaction drives n summarizer calls inside a single transaction.
+// No production path bills a fold twice any more, and the accounting still has
+// to add them up: whatever brings a second call back must land in one bill.
+func callsInOneTransaction(t *testing.T, replies []scriptedReply) (CompactionUsage, *recordSink) {
+	t.Helper()
+	sink := &recordSink{}
+	a := New(&scriptedSummarizer{replies: replies}, coverageRegistry(), &Session{},
+		Options{ContextWindow: 200000}, sink)
+	ctx, spend := withCompactionSpend(context.Background())
+	for range replies {
+		if _, err := a.foldToSummary(ctx, coverageRegion(), ""); err != nil && !strings.Contains(err.Error(), "stream broke") {
+			t.Fatalf("foldToSummary: %v", err)
+		}
+	}
+	return spend.read(), sink
+}
+
+// A transaction's bill is every call it made, whatever became of the answers.
+// Each case bills its calls differently so a total that silently describes one
+// of them cannot pass.
 func TestCompactionAccountsForEverySummaryCall(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -101,12 +119,12 @@ func TestCompactionAccountsForEverySummaryCall(t *testing.T) {
 		wantOutput int
 	}{
 		{
-			name:      "one call, nothing to repair",
+			name:      "a single call",
 			replies:   []scriptedReply{{text: digestComplete, usage: billed(1000, 100)}},
 			wantCalls: 1, wantInput: 1000, wantOutput: 100,
 		},
 		{
-			name: "the repair improved the digest and was adopted",
+			name: "a second call whose answer is kept",
 			replies: []scriptedReply{
 				{text: digestMissesOne, usage: billed(1000, 100)},
 				{text: digestComplete, usage: billed(1200, 120)},
@@ -114,7 +132,7 @@ func TestCompactionAccountsForEverySummaryCall(t *testing.T) {
 			wantCalls: 2, wantInput: 2200, wantOutput: 220,
 		},
 		{
-			name: "the repair answered but improved nothing",
+			name: "a second call whose answer changes nothing",
 			replies: []scriptedReply{
 				{text: digestMissesOne, usage: billed(1000, 100)},
 				{text: digestStillShort, usage: billed(1200, 120)},
@@ -122,7 +140,7 @@ func TestCompactionAccountsForEverySummaryCall(t *testing.T) {
 			wantCalls: 2, wantInput: 2200, wantOutput: 220,
 		},
 		{
-			name: "the repair billed and then failed",
+			name: "a second call that billed and then failed",
 			replies: []scriptedReply{
 				{text: digestMissesOne, usage: billed(1000, 100)},
 				{text: "partial", usage: billed(1200, 120), fail: errors.New("stream broke")},
@@ -132,11 +150,7 @@ func TestCompactionAccountsForEverySummaryCall(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			tele, sink, err := foldWithSpend(t, c.replies)
-			if err != nil {
-				t.Fatalf("foldOrDegrade: %v", err)
-			}
-			got := tele.SummaryUsage
+			got, sink := callsInOneTransaction(t, c.replies)
 			if got.Calls != c.wantCalls || got.InputTokens != c.wantInput || got.OutputTokens != c.wantOutput {
 				t.Errorf("transaction = %+v, want calls=%d input=%d output=%d",
 					got, c.wantCalls, c.wantInput, c.wantOutput)
@@ -187,9 +201,10 @@ func TestReceiptCarriesTheWholeTransactionBill(t *testing.T) {
 	sink := &recordSink{}
 	reg := tool.NewRegistry()
 	reg.Add(fakeTool{name: "write_file", writesPaths: true})
+	// One scripted reply: a fold that drops a change is completed by the host,
+	// so a second reply would mean a call nobody asked for.
 	prov := &scriptedSummarizer{replies: []scriptedReply{
 		{text: "## Files & code\n- internal/parser/lexer.go rewritten", usage: billed(9000, 400)},
-		{text: "## Files & code\n- internal/parser/lexer.go and internal/parser/reader.go rewritten", usage: billed(9500, 450)},
 	}}
 	a := New(prov, reg, sess, Options{ContextWindow: 60_000, CompactRatio: 0.5, RecentKeep: 2,
 		ArchiveDir: testenv.TempDir(t)}, sink)
@@ -201,8 +216,8 @@ func TestReceiptCarriesTheWholeTransactionBill(t *testing.T) {
 	if r == nil || r.Status != "applied" {
 		t.Fatalf("receipt = %+v, want an applied one", r)
 	}
-	if r.SummaryUsage.Calls != 2 {
-		t.Fatalf("receipt reports %d summary calls, want the repair counted too: %+v", r.SummaryUsage.Calls, r.SummaryUsage)
+	if r.SummaryUsage.Calls != 1 {
+		t.Fatalf("receipt reports %d summary calls, want one: %+v", r.SummaryUsage.Calls, r.SummaryUsage)
 	}
 	calls, input, output := ledgerTotal(sink)
 	if r.SummaryUsage.Calls != calls || r.SummaryUsage.InputTokens != input || r.SummaryUsage.OutputTokens != output {

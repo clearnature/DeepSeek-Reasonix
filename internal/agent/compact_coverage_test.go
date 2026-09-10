@@ -106,21 +106,6 @@ func TestCoverageIsSatisfiedByAnEmptyFold(t *testing.T) {
 	}
 }
 
-// The retry names the gap rather than restating the whole contract, so the
-// second call spends its output budget on what was actually dropped.
-func TestCoverageRetryInstructionNamesTheGap(t *testing.T) {
-	cov := measureFoldCoverage(coverageRegion(), coverageTools, "reader.go was touched")
-	instruction := coverageRetryInstruction(cov)
-	for _, want := range []string{"lexer.go", "go test"} {
-		if !strings.Contains(instruction, want) {
-			t.Errorf("retry instruction missing %q:\n%s", want, instruction)
-		}
-	}
-	if strings.Contains(instruction, "reader.go") {
-		t.Errorf("retry instruction re-asked for what the digest already carried:\n%s", instruction)
-	}
-}
-
 // The card that shows a fold's quality can only be as honest as the event
 // behind it. Coverage is measured during the fold and would read as a clean
 // zero at every frontend if it were not carried out with the result.

@@ -437,7 +437,6 @@ export const SCRIPT: Beat[] = [
         projectionTokens: 31_200,
         coverageRequired: 12,
         coverageMissing: 2,
-        coverageRepaired: true,
       },
     },
   },

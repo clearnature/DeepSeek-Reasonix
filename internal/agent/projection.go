@@ -227,11 +227,9 @@ type CompactionTelemetry struct {
 	UserTurnsKept    int    `json:"user_turns_kept"`
 	UserTurnsDropped int    `json:"user_turns_dropped"` // past the retention budget, now summary-only
 	// Fold coverage: the changes and failures the region produced, and how many
-	// the digest did not carry. Repaired marks a digest that needed a second
-	// summarizer call to reach this.
-	CoverageRequired int  `json:"coverage_required,omitempty"`
-	CoverageMissing  int  `json:"coverage_missing,omitempty"`
-	CoverageRepaired bool `json:"coverage_repaired,omitempty"`
+	// the digest did not carry.
+	CoverageRequired int `json:"coverage_required,omitempty"`
+	CoverageMissing  int `json:"coverage_missing,omitempty"`
 	// CoverageBackstopped: the host wrote the dropped facts in itself.
 	CoverageBackstopped bool `json:"coverage_backstopped,omitempty"`
 	// SummaryUsage is the transaction's whole bill. The flat fields below are

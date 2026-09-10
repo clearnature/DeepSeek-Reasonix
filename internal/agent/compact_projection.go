@@ -369,7 +369,6 @@ func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int
 		Spans:               spend.Calls,
 		CoverageRequired:    res.Coverage.Required(),
 		CoverageMissing:     res.Coverage.Missing(),
-		CoverageRepaired:    res.CoverageRepaired,
 		CoverageBackstopped: res.CoverageBackstopped,
 		SummaryUsage:        spend,
 		InputTokens:         spend.InputTokens,
@@ -514,7 +513,6 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		Trigger: trigger, Messages: len(fold), Summary: summary,
 		SourceTokens: sourceTokens, ProjectionTokens: projTokens,
 		CoverageRequired: tele.CoverageRequired, CoverageMissing: tele.CoverageMissing,
-		CoverageRepaired:    tele.CoverageRepaired,
 		CoverageBackstopped: tele.CoverageBackstopped,
 	}})
 	// Only once the checkpoint is committed: a rejected candidate folded nothing.

@@ -40,10 +40,10 @@ func TestCompactionCardShowsWhatTheDigestKept(t *testing.T) {
 	joined := strings.Join(compactionCardLines(event.Compaction{
 		Trigger: "auto", Messages: 12, Summary: "- brief",
 		SourceTokens: 128_000, ProjectionTokens: 31_200,
-		CoverageRequired: 12, CoverageMissing: 2, CoverageRepaired: true,
+		CoverageRequired: 12, CoverageMissing: 2, CoverageBackstopped: true,
 	}), "\n")
 
-	for _, want := range []string{"128.0K", "31.2K", "10/12", "repaired"} {
+	for _, want := range []string{"128.0K", "31.2K", "10/12", "host"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("quality line missing %q in:\n%s", want, joined)
 		}

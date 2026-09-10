@@ -172,7 +172,6 @@ var Chinese = Messages{
 	CompactionManual:  "手动",
 
 	CompactionChangesKept: "处改动已保留",
-	CompactionRepaired:    "已补救",
 	CompactionBackstopped: "由主机保留",
 
 	ReadinessContinuing: "这一轮还欠东西，继续把它做完",

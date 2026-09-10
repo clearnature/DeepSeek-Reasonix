@@ -33,10 +33,8 @@ type foldSummary struct {
 	Usage      *provider.Usage
 	FoldTokens int
 	Spans      int
-	// Coverage is what this digest kept of the facts its fold produced, and
-	// CoverageRepaired marks a digest that needed a second call to get there.
-	Coverage         foldCoverage
-	CoverageRepaired bool
+	// Coverage is what this digest kept of the facts its fold produced.
+	Coverage foldCoverage
 	// CoverageBackstopped marks a digest the host had to complete itself.
 	CoverageBackstopped bool
 }
@@ -120,8 +118,8 @@ func (a *Agent) foldOrDegrade(ctx context.Context, trigger string, mustFree bool
 	spend := compactionSpendFrom(ctx)
 	res, err := a.foldToSummary(ctx, fold, instructions)
 	if err == nil {
-		res, err = a.repairFoldCoverage(ctx, mustFree, fold, instructions, res)
-		if err == nil {
+		res.Coverage = measureFoldCoverage(fold, a.toolFactsFor, res.Text)
+		if err = rejectDigestThatCarriedNothing(res, mustFree); err == nil {
 			res = backstopFoldCoverage(res)
 		}
 		tele := compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, res, spend.read())
@@ -293,28 +291,14 @@ func (a *Agent) omitLowValueForSummary(fold []provider.Message, budget int) []pr
 	return append(out, tail...)
 }
 
-// repairFoldCoverage spends one more summarizer call when a digest forgot a
-// change. Repair, not rejection: refusing a partial digest leaves the prompt
-// uncompacted, so the next fold is larger and the pressure only ends at the
-// hard ceiling, where whatever it produces is forced through. Only a digest
-// carrying none of the fold's changes is refused.
-func (a *Agent) repairFoldCoverage(ctx context.Context, mustFree bool, fold []provider.Message, instructions string, res foldSummary) (foldSummary, error) {
-	cov := measureFoldCoverage(fold, a.toolFactsFor, res.Text)
-	res.Coverage = cov
-	if !cov.LostAChange() || mustFree {
-		return res, nil
+// rejectDigestThatCarriedNothing refuses a checkpoint whose digest named none
+// of the fold's changes. It judges the digest, not the completed text: the host
+// block restores the facts, but accepting a summary that carried none of them
+// because the host cleaned up would retire the one signal that says the
+// summarizer produced nothing usable. A fold that must free is never refused.
+func rejectDigestThatCarriedNothing(res foldSummary, mustFree bool) error {
+	if mustFree || !res.Coverage.LostEveryChange() {
+		return nil
 	}
-	retryInstructions := strings.TrimSpace(instructions + "\n" + coverageRetryInstruction(cov))
-	retry, err := a.foldToSummary(ctx, fold, retryInstructions)
-	if err == nil {
-		if retryCov := measureFoldCoverage(fold, a.toolFactsFor, retry.Text); len(retryCov.MissingMut) < len(cov.MissingMut) {
-			retry.Coverage, retry.CoverageRepaired = retryCov, true
-			retry.Spans = res.Spans + retry.Spans
-			res, cov = retry, retryCov
-		}
-	}
-	if cov.LostEveryChange() {
-		return res, rejectCheckpoint("the digest carried none of the fold's changes (%s)", cov.Reason())
-	}
-	return res, nil
+	return rejectCheckpoint("the digest carried none of the fold's changes (%s)", res.Coverage.Reason())
 }

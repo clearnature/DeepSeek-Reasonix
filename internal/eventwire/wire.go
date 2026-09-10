@@ -335,11 +335,10 @@ type Compaction struct {
 	Messages int    `json:"messages,omitempty"`
 	Summary  string `json:"summary,omitempty" externalizable:"true"`
 	// What the fold cost, and what the digest kept of it.
-	SourceTokens     int  `json:"sourceTokens,omitempty"`
-	ProjectionTokens int  `json:"projectionTokens,omitempty"`
-	CoverageRequired int  `json:"coverageRequired,omitempty"`
-	CoverageMissing  int  `json:"coverageMissing,omitempty"`
-	CoverageRepaired bool `json:"coverageRepaired,omitempty"`
+	SourceTokens     int `json:"sourceTokens,omitempty"`
+	ProjectionTokens int `json:"projectionTokens,omitempty"`
+	CoverageRequired int `json:"coverageRequired,omitempty"`
+	CoverageMissing  int `json:"coverageMissing,omitempty"`
 	// The host completed a digest the summarizer left incomplete.
 	CoverageBackstopped bool `json:"coverageBackstopped,omitempty"`
 }
@@ -350,7 +349,7 @@ func toWireCompaction(c event.Compaction) *Compaction {
 		Summary:      c.Summary,
 		SourceTokens: c.SourceTokens, ProjectionTokens: c.ProjectionTokens,
 		CoverageRequired: c.CoverageRequired, CoverageMissing: c.CoverageMissing,
-		CoverageRepaired: c.CoverageRepaired, CoverageBackstopped: c.CoverageBackstopped,
+		CoverageBackstopped: c.CoverageBackstopped,
 	}
 }
 

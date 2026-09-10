@@ -398,7 +398,6 @@ export interface Compaction {
   projectionTokens?: number;
   coverageRequired?: number;
   coverageMissing?: number;
-  coverageRepaired?: boolean;
   // The host wrote the dropped facts in itself, because the digest did not.
   coverageBackstopped?: boolean;
 }

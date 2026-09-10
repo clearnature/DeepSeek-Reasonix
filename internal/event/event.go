@@ -396,7 +396,6 @@ type Compaction struct {
 	ProjectionTokens    int
 	CoverageRequired    int  // changes and failures the folded region produced
 	CoverageMissing     int  // ...of those, how many the digest did not carry
-	CoverageRepaired    bool // a second summarizer call was needed to get there
 	CoverageBackstopped bool // the host wrote the dropped facts in itself
 }
 

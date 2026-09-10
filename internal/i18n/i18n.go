@@ -202,7 +202,6 @@ type Messages struct {
 	// quality line: how many of the fold's changes the digest carried, and
 	// whether it took a second summarizer call to get there.
 	CompactionChangesKept string
-	CompactionRepaired    string
 	CompactionBackstopped string
 
 	// shown when a turn ends owing requirements and the host runs them itself

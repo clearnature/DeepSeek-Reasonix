@@ -138,20 +138,6 @@ func commandSignature(command string) string {
 	return strings.Join(fields, " ")
 }
 
-// coverageRetryInstruction names what was dropped rather than restating the
-// whole contract, so the second attempt spends its budget on the gap.
-func coverageRetryInstruction(cov foldCoverage) string {
-	var b strings.Builder
-	b.WriteString("The previous digest of these messages dropped facts that must survive. Rewrite it, keeping everything it had right and additionally covering:\n")
-	for _, p := range cov.MissingMut {
-		b.WriteString("- the change made to " + p + ": what was changed and why\n")
-	}
-	for _, c := range cov.MissingFai {
-		b.WriteString("- the failure of `" + c + "`: what failed and how it was resolved, or that it was not\n")
-	}
-	return b.String()
-}
-
 // foldBackstopHeading opens the host's own record of what a digest dropped.
 const foldBackstopHeading = "## Host-retained fold facts"
 

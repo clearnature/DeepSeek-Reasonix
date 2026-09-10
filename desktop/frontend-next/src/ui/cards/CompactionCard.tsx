@@ -28,8 +28,7 @@ function Coverage({ c }: { c: Compaction }) {
           ) : (
             <>{tx("{kept}/{required} 处改动写进了简报", { kept: <b>{kept}</b>, required })}</>
           )}
-          {c.coverageRepaired && t("（补写过一次）")}
-          {!c.coverageRepaired && c.coverageBackstopped && t("（缺的由主机补上）")}
+          {c.coverageBackstopped && t("（缺的由主机补上）")}
         </span>
       </div>
       {missing > 0 && (

@@ -171,7 +171,6 @@ var English = Messages{
 	CompactionManual:  "manual",
 
 	CompactionChangesKept: "changes kept",
-	CompactionRepaired:    "repaired",
 	CompactionBackstopped: "kept by the host",
 
 	ReadinessContinuing: "finishing what this turn still owes",
