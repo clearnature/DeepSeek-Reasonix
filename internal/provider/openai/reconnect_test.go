@@ -75,6 +75,7 @@ func TestStreamSurfacesEarlyConnResetAsInterrupt(t *testing.T) {
 func TestStreamCancelDoesNotReconnect(t *testing.T) {
 	var reqs atomic.Int32
 	ready := make(chan struct{})
+	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		first := reqs.Add(1) == 1
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -83,9 +84,18 @@ func TestStreamCancelDoesNotReconnect(t *testing.T) {
 		if first {
 			close(ready)
 		}
-		<-r.Context().Done()
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
 	}))
-	defer srv.Close()
+	defer func() {
+		// The request context can outlive the stream channel on Windows. This
+		// test owns only the no-replay contract, so release its fixture handler
+		// before waiting for server shutdown.
+		close(release)
+		srv.Close()
+	}()
 
 	p, err := New(provider.Config{Name: "deepseek", BaseURL: srv.URL, Model: "deepseek-v4", APIKey: "k"})
 	if err != nil {
