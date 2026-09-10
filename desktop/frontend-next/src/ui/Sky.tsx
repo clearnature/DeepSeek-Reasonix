@@ -13,6 +13,7 @@ const PUFFS = 34;
 // viewport, so drawing it at window size would cost pixels nobody can see.
 const W = 400;
 const H = 225;
+const FRAME = 1000 / 30;
 
 interface Puff {
   x: number;
@@ -59,14 +60,20 @@ export function Sky() {
     const puffs = seed();
     const still = matchMedia("(prefers-reduced-motion: reduce)");
 
-    const paint = (move: boolean) => {
+    let hi = "206,224,255";
+    let lit = "216,166,88";
+    const readTheme = () => {
       const cs = getComputedStyle(document.documentElement);
-      const hi = rgb(cs.getPropertyValue("--cloud-hi"), "206,224,255");
-      const lit = rgb(cs.getPropertyValue("--cloud-gilt"), "216,166,88");
+      hi = rgb(cs.getPropertyValue("--cloud-hi"), hi);
+      lit = rgb(cs.getPropertyValue("--cloud-gilt"), lit);
+    };
+    readTheme();
+
+    const paint = (move: boolean, step = 1) => {
       ctx.clearRect(0, 0, W, H);
       for (const p of puffs) {
         if (move) {
-          p.x += p.v;
+          p.x += p.v * step;
           if (p.x - p.r > W + 100) p.x = -p.r - 100;
         }
         const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
@@ -79,17 +86,44 @@ export function Sky() {
       }
     };
 
-    if (still.matches) {
-      paint(false);
-      return;
-    }
     let raf = 0;
-    const tick = () => {
-      paint(true);
+    let last = 0;
+    const tick = (now: number) => {
+      raf = 0;
+      if (still.matches || document.hidden) return;
+      const elapsed = now - last;
+      if (elapsed >= FRAME) {
+        paint(true, Math.min(3, elapsed / (1000 / 60)));
+        last = now;
+      }
       raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const sync = () => {
+      if (still.matches || document.hidden) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        paint(false);
+        return;
+      }
+      if (!raf) {
+        last = performance.now();
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    const theme = new MutationObserver(() => {
+      readTheme();
+      if (still.matches || document.hidden) paint(false);
+    });
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "style"] });
+    still.addEventListener("change", sync);
+    document.addEventListener("visibilitychange", sync);
+    sync();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      still.removeEventListener("change", sync);
+      document.removeEventListener("visibilitychange", sync);
+      theme.disconnect();
+    };
   }, []);
 
   return (

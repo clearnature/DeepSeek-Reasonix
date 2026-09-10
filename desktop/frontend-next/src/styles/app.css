@@ -505,27 +505,12 @@
   }
   .pane[data-run="idle"] .rmark { opacity: .5 }
   .pane[data-run="running"] .rmark { color: var(--net) }
-  .pane[data-run="running"] .rmark path { animation: draw 2s linear infinite }
-  .pane[data-run="running"] .rmark path:nth-child(2) { animation-delay: .17s }
-  .pane[data-run="running"] .rmark path:nth-child(3) { animation-delay: .34s }
-  @keyframes draw {
-    0% { stroke-dashoffset: 100; opacity: 1 }
-    42% { stroke-dashoffset: 0; opacity: 1 }
-    72% { stroke-dashoffset: 0; opacity: 1 }
-    100% { stroke-dashoffset: -100; opacity: .2 }
-  }
+  .pane[data-run="running"] .rmark path { stroke-dashoffset: 0 }
   /* 停下就凝在原地不擦 —— 推理停在半途，本来就是这个意思 */
-  .pane[data-run="halt"] .rmark { color: var(--accent-ink); animation: breathe 1.8s ease-in-out infinite }
+  .pane[data-run="halt"] .rmark { color: var(--accent-ink) }
   @keyframes breathe { 0%, 100% { opacity: .45 } 50% { opacity: 1 } }
-  .pane[data-run="done"] .rmark { color: var(--ok); animation: donemark 1.2s var(--ease-out) 1 both }
-  @keyframes donemark {
-    0%   { filter: none }
-    26%  { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--ok) 88%, transparent)) }
-    100% { filter: none }
-  }
-  .pane[data-run="done"] .rmark path { animation: drawin .7s var(--ease-out) both }
-  .pane[data-run="done"] .rmark path:nth-child(2) { animation-delay: .1s }
-  .pane[data-run="done"] .rmark path:nth-child(3) { animation-delay: .2s }
+  /* Done is persisted state, not proof that completion happened on this mount. */
+  .pane[data-run="done"] .rmark { color: var(--ok) }
   @keyframes drawin { from { stroke-dashoffset: 100 } to { stroke-dashoffset: 0 } }
 
   /* Said and not yet read. What a person needs from this strip is the answer
@@ -851,7 +836,7 @@
   .ws[aria-selected="true"] .goal { color: var(--text) }
   .ws .pip { margin-top: 6px }
   .ws[data-s="awaiting"] .pip { background: var(--accent) }
-  .ws[data-s="running"] .pip { background: var(--net); animation: tick 1.6s ease-in-out infinite }
+  .ws[data-s="running"] .pip { background: var(--net) }
   .ws[data-s="done"] .pip { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ok) }
   .ws .meta { margin-top: 3px; padding-left: 13px; display: flex; gap: 8px; font: var(--w-reg) 10.5px var(--mono); color: var(--faint); white-space: nowrap; overflow: hidden }
   .ws[data-s="awaiting"] .meta .st { color: var(--accent-ink) }
@@ -1091,12 +1076,14 @@
      标记那 54px 宽的命中框把整条框盖住了，按下去根本到不了它。 */
   .srail-view {
     position: absolute; right: 3px; width: 9px; border-radius: var(--r-pill); min-height: 20px;
+    padding: 0; appearance: none;
     border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
     background: color-mix(in srgb, var(--text) 6%, transparent);
     opacity: .5; transition: opacity .2s, background-color .15s;
     pointer-events: auto; cursor: grab; touch-action: none;
   }
   .srail-view:active { cursor: grabbing }
+  .srail-view:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; opacity: 1 }
   .pane:hover .srail-view { opacity: 1; background: color-mix(in srgb, var(--text) 10%, transparent) }
   .srail-m {
     position: absolute; right: 15px; width: 39px; height: 18px; margin-top: -9px;
@@ -1128,12 +1115,14 @@
     margin-top: 5px; font: var(--w-reg) 13px/1.55 var(--ui); color: var(--text);
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
-  /* 跳过去之后眼睛还要再找一次，这一下省掉它 */
-  .call[data-hit] { animation: hitmark 1.1s var(--ease-out) }
+  /* 跳转只标出调用身份；长输出若整块闪烁，会把定位提示画成选中态。 */
+  .call[data-hit] > .c > .hl > :is(.nm, .arg) { animation: hitmark 1.1s var(--ease-out) }
+  .call[data-hit]:not([data-running]) > .g .sym { animation: hitglyph 1.1s var(--ease-out) }
   @keyframes hitmark {
-    0% { background: color-mix(in srgb, var(--accent) 20%, transparent) }
-    100% { background: transparent }
+    from { color: var(--accent-ink); text-shadow: 0 0 7px color-mix(in srgb, var(--accent) 44%, transparent) }
+    to { text-shadow: none }
   }
+  @keyframes hitglyph { from { filter: drop-shadow(0 0 5px var(--accent)) } to { filter: none } }
 
   /* 定位条是一整条 pointer-events:auto 的命中框，靠右排的控件（撤回入口就在
      那里）落进去就点不到。让内容退到它左边 —— 层级对抗只会换成轨道点不到。 */
@@ -1518,8 +1507,8 @@
   .call:not([data-k="me"], [data-k="say"], [data-k="ask"]) > .c > .hl { flex-wrap: nowrap }
 
   /* 份量不同，入场就不该相同：一行只淡入，一张卡带位移，一整块面板从上沿展开 */
-  .term-l, .dl, .plan .s { animation: line var(--m-line) both }
-  .hits > *, .steps > * { animation: card var(--m-card) both }
+  .enterbox[data-enter] :is(.term-l, .dl, .plan .s) { animation: line var(--m-line) both }
+  .enterbox[data-enter] :is(.hits > *, .steps > *) { animation: card var(--m-card) both }
 
   /* 动画说的是状态转变，从来不是元素活了多久。挂载不是原因：一条记录里的卡
      每次虚拟化把它那一块带回来都会重新挂载，跟着演一遍入场，等于说一小时前
@@ -1529,9 +1518,9 @@
   .enterbox[data-enter] > .call { animation: card var(--m-card) both }
   /* 子代理自己的步骤是在它跑的时候出现的 —— 那也是事实在到达，只不过发生在
      一张卡里面而不是旁边。 */
-  .nest-bd .call { animation: card var(--m-card) both }
+  .enterbox[data-enter] .nest-bd .call { animation: card var(--m-card) both }
 
-  .nest, .ask { animation: panel var(--m-panel) both }
+  .enterbox[data-enter] :is(.nest, .ask) { animation: panel var(--m-panel) both }
 
   @keyframes line { from { opacity: 0 } to { opacity: 1 } }
   @keyframes card { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
@@ -1544,7 +1533,7 @@
   /* 「正在读取…」→「读了 7 个文件」是这一步唯一的状态跃迁，别用 0ms 换掉它 */
   .hl { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; transition: opacity 90ms var(--ease-in) }
   .hl[data-swap] { opacity: 0 }
-  .hl .cost { animation: costin var(--t-card) var(--ease-out) both }
+  .enterbox[data-enter] .hl .cost { animation: costin var(--t-card) var(--ease-out) both }
   @keyframes costin { from { opacity: 0; transform: translateX(5px) } to { opacity: 1; transform: none } }
 
   /* 跑着的时候符号是灰的，落定才染上类别色 —— 颜色本身就是完成信号 */
@@ -1564,12 +1553,12 @@
   }
   .call[data-running] > .g .line {
     background: linear-gradient(to bottom,
-      color-mix(in srgb, var(--net) 65%, transparent) 0 26%, var(--hair) 26% 100%);
-    background-size: 100% 210%;
-    animation: linefeed 1.5s linear infinite;
+      color-mix(in srgb, var(--net) 65%, transparent) 0 42%, var(--hair) 42% 100%);
   }
-  @keyframes linefeed { from { background-position: 0 -105% } to { background-position: 0 105% } }
-  .call > .g .sym { transition: opacity var(--t-card) var(--ease-out) }
+  .call > .g .sym {
+    transition: opacity var(--t-card) var(--ease-out),
+                box-shadow var(--t-card) var(--ease-out);
+  }
   .call > .g .sym[data-done] { animation: symdone .34s var(--ease-out) }
   @keyframes symdone { 0% { transform: scale(1) } 38% { transform: scale(.86) } 100% { transform: scale(1) } }
   .hl .nm { font: var(--w-med) 12.5px var(--ui); color: var(--text) }
@@ -1597,16 +1586,11 @@
     background: color-mix(in srgb, var(--faint) 58%, transparent);
   }
 
-  /* 运行态在文字本身上扫一道微光,不在旁边加脉动的点 */
+  /* The symbol and composer already report live work; keeping the name still
+     makes the active tool readable instead of adding a third moving signal. */
   .shim {
-    background: linear-gradient(90deg, var(--faint) 42%, var(--text) 50%, var(--faint) 58%);
-    background-size: 220% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: shim 1.5s linear infinite;
+    color: var(--text);
   }
-  @keyframes shim { from { background-position: 220% 0 } to { background-position: 0 0 } }
 
   /* 折叠态的「此刻在干什么」——收起来不等于看不见 */
   .doing { font: var(--w-reg) 11px var(--mono); color: var(--faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
@@ -1751,7 +1735,8 @@
 
   /* review findings：严重度用左侧 2px 色条编码，不新增文字标签 */
   .finds { margin-top: 7px; display: flex; flex-direction: column; gap: 5px }
-  .find { padding: 6px 0 6px 10px; border-left: 2px solid var(--ghost); animation: card var(--t-card) var(--ease-out) both }
+  .find { padding: 6px 0 6px 10px; border-left: 2px solid var(--ghost) }
+  .enterbox[data-enter] .find { animation: card var(--t-card) var(--ease-out) both }
   .find[data-lvl="ok"] { border-left-color: var(--ok) }
   .find[data-lvl="warn"] { border-left-color: var(--warn) }
   .find[data-lvl="err"] { border-left-color: var(--err) }
@@ -1848,10 +1833,10 @@
   .nest-bd .call > .g .sym { width: 17px; height: 17px; margin-top: 6px; font-size: 9px }
   .nest-bd .call > .c { padding: 6px 0 6px }
   .nest-bd .hl .nm { font-size: 12px }
-  .nest-ret { margin: 0 11px 10px; padding: 6px 0 6px 11px; border-left: 1px solid var(--border); font-size: 12px; line-height: 1.6; color: var(--muted); animation: card var(--t-card) var(--ease-out) both }
-  /* 子代理交活：脉动停下、收一下、落成实心。inline style 起手，所以要 !important 压过去 */
-  .pip[data-settled] { animation: pipdone .38s var(--ease-out) !important; background: var(--ok) !important }
-  @keyframes pipdone { 0% { transform: scale(1.5); opacity: .45 } 55% { transform: scale(.74) } 100% { transform: scale(1); opacity: 1 } }
+  .nest-ret { margin: 0 11px 10px; padding: 6px 0 6px 11px; border-left: 1px solid var(--border); font-size: 12px; line-height: 1.6; color: var(--muted) }
+  .enterbox[data-enter] .nest-ret { animation: card var(--t-card) var(--ease-out) both }
+  /* Persisted completion is static; replaying it on mount would call old work new. */
+  .pip[data-settled] { background: var(--ok) !important }
   .nest-ret b { color: var(--text); font-weight: var(--w-med) }
   .nest-ret code { font: var(--w-reg) 11.5px var(--mono); color: var(--deleg) }
   .par { display: flex; align-items: center; gap: 8px; margin: 4px 0 1px; font: var(--w-med) 9.5px var(--mono); letter-spacing: var(--track-cap); text-transform: uppercase; color: var(--ghost) }
@@ -1880,7 +1865,8 @@
   /* multi_edit 是一次事务：所以它是一张卡，不是 N 个各自为政的 diff */
   .medit { margin-top: 7px; border: 1px solid var(--hair); border-radius: var(--r-sm); overflow: hidden }
   .medit-hd { padding: 6px 11px; background: var(--overlay); font: var(--w-reg) 11px var(--mono); color: var(--faint) }
-  .medit-r { display: flex; align-items: baseline; gap: 10px; padding: 6px 11px; font: var(--w-reg) 11.5px var(--mono); color: var(--muted); border-top: 1px solid var(--hair); animation: line var(--t-line) var(--ease-out) both }
+  .medit-r { display: flex; align-items: baseline; gap: 10px; padding: 6px 11px; font: var(--w-reg) 11.5px var(--mono); color: var(--muted); border-top: 1px solid var(--hair) }
+  .enterbox[data-enter] .medit-r { animation: line var(--t-line) var(--ease-out) both }
   .medit-r .p { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .medit-r .p .d { color: var(--ghost) }
   .medit-r .at { color: var(--ghost); font-size: 10.5px; white-space: nowrap }
@@ -1889,7 +1875,8 @@
 
   /* 复核结论是一句判词加一条批注，不是一张通知卡。色条与刻度帮助扫视，风险词
      则让状态不只依赖颜色。 */
-  .guard { margin-top: 7px; padding: 2px 0 2px 11px; border-left: 2px solid var(--ghost); animation: card var(--t-card) var(--ease-out) both }
+  .guard { margin-top: 7px; padding: 2px 0 2px 11px; border-left: 2px solid var(--ghost) }
+  .enterbox[data-enter] .guard { animation: card var(--t-card) var(--ease-out) both }
   .guard[data-risk="low"] { border-left-color: var(--ok) }
   .guard[data-risk="medium"] { border-left-color: var(--accent) }
   .guard[data-risk="high"] { border-left-color: var(--err) }
@@ -1935,8 +1922,8 @@
   }
   .apv {
     margin-top: 8px; overflow: hidden; background: none;
-    animation: panel var(--t-panel) var(--ease-out) both;
   }
+  .enterbox[data-enter] .apv { animation: panel var(--t-panel) var(--ease-out) both }
   .apv-hd {
     display: flex; align-items: baseline; gap: 9px; padding: 7px 12px;
     border-bottom: 1px solid var(--hair);
@@ -2225,6 +2212,11 @@
   /* 流光只表示「它在动」。停下就必须熄灭 —— 否则这个信号什么也没说。 */
   .pane[data-run="running"] .glowring { opacity: 1; --glow: var(--net) }
   .pane[data-run="halt"] .compose::after { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)) }
+  /* The decision card already owns this moment. Leaving the idle composer
+     orange as well creates two primaries; focus restores its normal ring. */
+  .pane[data-run="halt"]:has(.apv:not([data-sealed]), .ask) .compose:not(:focus-within)::after {
+    border-color: var(--border);
+  }
 
   .glowring i {
     position: absolute; width: 150px; height: 150px;
@@ -2399,9 +2391,34 @@
      四个互不相干的问题同屏，卡片正是把它们分开的东西。两种读法，两套版式。 */
   .tkv { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 28px; max-width: 1080px; margin: 0 auto; width: 100%; container-type: inline-size }
   .tkcard {
+    --tk-glow: var(--accent);
+    position: relative; isolation: isolate;
     display: flex; flex-direction: column; gap: 10px; padding: 15px 17px;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
-    animation: card var(--t-card) var(--ease-out) both;
+    box-shadow: var(--lit), 0 12px 30px -28px rgb(0 0 0 / .5);
+    transition: border-color var(--t-card) var(--ease-out),
+                box-shadow var(--t-card) var(--ease-out);
+  }
+  .tkcard::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    border-radius: inherit; opacity: 0;
+    background: radial-gradient(520px circle at 12% -24%,
+      color-mix(in srgb, var(--tk-glow) 12%, transparent), transparent 56%);
+    transition: opacity var(--t-card) var(--ease-out);
+  }
+  .tk-plan { --tk-glow: var(--net) }
+  .tk-traj { --tk-glow: var(--deleg) }
+  .tk-acts { --tk-glow: var(--accent) }
+  @media (hover: hover) {
+    .tkcard:hover {
+      border-color: color-mix(in srgb, var(--tk-glow) 28%, var(--border));
+      box-shadow: var(--lit), 0 18px 38px -28px color-mix(in srgb, var(--tk-glow) 34%, transparent);
+    }
+    .tkcard:hover::before { opacity: 1 }
+  }
+  .tkcard:focus-within {
+    border-color: color-mix(in srgb, var(--tk-glow) 38%, var(--border));
+    box-shadow: var(--lit), 0 0 0 3px color-mix(in srgb, var(--tk-glow) 8%, transparent);
   }
   .tk-h { display: flex; align-items: center; gap: 10px; font: var(--w-semi) 12px var(--ui); color: var(--text) }
   .tk-h .c { margin-left: auto; font: var(--w-med) 11.5px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums }
@@ -2417,7 +2434,7 @@
   .pill[data-tone="ok"] { color: var(--ok-ink) }
   .pill[data-tone="accent"] { background: var(--accent-wash); color: var(--accent-ink) }
   .pill[data-tone="warn"] { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn-ink) }
-  .pill[data-tone="net"] i { animation: tick 1.6s ease-in-out infinite }
+  .pill[data-tone="net"] i { box-shadow: 0 0 0 2px color-mix(in srgb, var(--net) 14%, transparent) }
 
   .tk-now h2 { margin: 0; font: var(--w-semi) 17px/1.45 var(--ui); color: var(--text); letter-spacing: var(--track-display) }
   .tk-now h2[data-empty] { font-size: 14px; color: var(--faint); font-weight: var(--w-med); letter-spacing: 0 }
@@ -2428,7 +2445,7 @@
   .tk-plan li {
     display: flex; align-items: baseline; gap: 11px; padding: 8px 2px;
     font: var(--w-reg) 12.5px/1.6 var(--ui); color: var(--muted);
-    border-bottom: 1px solid var(--hair); animation: line var(--m-line) both;
+    border-bottom: 1px solid var(--hair);
   }
   .tk-plan li:last-child { border-bottom: 0 }
   .tk-plan li .mk {
@@ -2453,7 +2470,9 @@
 
   .tk-rows { display: flex; flex-direction: column; gap: 1px }
   .tk-row { display: grid; grid-template-columns: 9px 62px minmax(0, 1fr); align-items: baseline; gap: 10px;
-    padding: 5px 2px; font: var(--w-reg) 12px/1.6 var(--ui); color: var(--muted) }
+    padding: 5px 7px; border-radius: var(--r-xs); font: var(--w-reg) 12px/1.6 var(--ui); color: var(--muted);
+    transition: background-color var(--t-line) var(--ease-out), color var(--t-line) var(--ease-out) }
+  @media (hover: hover) { .tk-row:hover { background: var(--overlay); color: var(--text) } }
   .tk-row .dot { width: 5px; height: 5px; margin-left: 2px; align-self: center; border-radius: var(--r-pill); background: var(--ghost) }
   .tk-row[data-c="write"] .dot { background: var(--accent) }
   .tk-row[data-c="net"] .dot { background: var(--net) }
@@ -2471,9 +2490,10 @@
     transition: padding-left var(--t-line) var(--ease), background var(--t-line) var(--ease);
   }
   .tk-acts button:last-child { border-bottom: 1px solid var(--hair) }
-  .tk-acts button::after { content: "›"; position: absolute; right: 7px; top: 50%; translate: 0 -50%; color: var(--ghost); font: var(--w-reg) 17px/1 var(--ui) }
+  .tk-acts button::after { content: "›"; position: absolute; right: 7px; top: 50%; translate: 0 -50%; color: var(--ghost); font: var(--w-reg) 17px/1 var(--ui); transition: transform var(--t-line) var(--ease-out), color var(--t-line) var(--ease-out) }
   .tk-acts button:hover { padding-left: 8px; background: var(--overlay) }
-  .tk-acts button:hover::after { color: var(--text) }
+  .tk-acts button:hover::after { color: var(--text); transform: translateX(3px) }
+  .tk-acts button:active { background: color-mix(in srgb, var(--tk-glow) 9%, var(--overlay)) }
   .tk-acts button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
   .tk-acts button .n { font: var(--w-med) 12px var(--ui); color: var(--text) }
   .tk-acts button .d { font: var(--w-reg) 11px var(--ui); color: var(--ghost) }
@@ -2525,7 +2545,7 @@
   }
   .runpill i { width: 5px; height: 5px; border-radius: var(--r-pill); background: currentColor }
   .runpill[data-run="running"] { background: var(--net-wash); color: var(--net) }
-  .runpill[data-run="running"] i { animation: tick 1.6s ease-in-out infinite }
+  .runpill[data-run="running"] i { box-shadow: 0 0 0 2px color-mix(in srgb, var(--net) 14%, transparent) }
   .runpill[data-run="halt"] { background: var(--accent-wash); color: var(--accent-ink) }
   .runpill[data-run="done"] { color: var(--ok-ink) }
 
@@ -2737,8 +2757,6 @@
     transition: background-size .34s var(--ease-out);
   }
   .plan .s[data-done] .t .ln, .steps .s[data-done] .t .ln { background-size: 100% 1px }
-  .plan .s[data-done] .b, .steps .s[data-done] .b { animation: pop .3s var(--ease-out) }
-  @keyframes pop { 0% { transform: scale(.4); opacity: .2 } 60% { transform: scale(1.14) } 100% { transform: scale(1) } }
   .plan .s[data-now] { color: var(--text) }
   .plan .s[data-now] .b { color: var(--net) }
   .plan .s[data-now] .t { font-weight: var(--w-med) }
@@ -2885,6 +2903,9 @@
     /* 扫过去的那道光停下来就看不见了，换成一整条静止的线，「在生效」这句话还在 */
     .compose .row:has([data-pending])::after { animation: none; background: var(--net); opacity: .5 }
     .scroll { scroll-behavior: auto }
+    .tk-acts button:hover::after, .btn:active, .navbtn:active,
+    .tab:active, .copy:active, .sug:active,
+    .act:active, .chip:active, .scope button:active { transform: none !important }
     * { transition-duration: .01ms !important }
   }
 
@@ -2903,6 +2924,21 @@
   [data-fold~="side"] .side { border-top: 0 }
   [data-fold~="side"] .flow { padding-inline: 14px }
   [data-fold~="side"] .compose { width: calc(100% - 28px) }
+  /* When both side columns have yielded, the transcript rail must yield too.
+     Its ticks and viewport still remain separate hit areas inside this lane. */
+  [data-fold~="rail"][data-fold~="side"] .pane { --srail-w: 24px }
+  [data-fold~="rail"][data-fold~="side"] .srail-view { right: 1px; width: 8px }
+  [data-fold~="rail"][data-fold~="side"] .srail-m { right: 9px; width: 15px }
+  [data-fold~="rail"][data-fold~="side"] .srail-m > i { max-width: 14px !important }
+  [data-fold~="rail"][data-fold~="side"] .srail-peek {
+    right: 26px; width: min(280px, calc(100vw - 54px));
+  }
+  [data-fold~="rail"][data-fold~="side"] .chrome .crumb > .crumb-proj {
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  [data-fold~="rail"][data-fold~="side"] .chrome .crumb > b {
+    flex: 0 1 auto; min-width: 4em; max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   [data-fold~="side"] .chrome .goal,
   [data-fold~="side"] .chrome .crumb .sep:last-of-type { display: none }
   [data-fold~="side"] .side { border-left: 0; border-top: 1px solid var(--border); max-height: calc(40vh / var(--zoom, 1)) }
@@ -3046,11 +3082,14 @@
        document against the next one — the whole window dipping and coming back
        is the flinch you see when settings closes, not the sheet leaving. */
     :root { view-transition-name: none }
-    .prefs { view-transition-name: prefs; animation: none }
-    .prefs-sheet { animation: none }
-    [data-vt="prefs"]::view-transition-new(prefs) { animation: prefsin var(--t-card) var(--ease-out) both }
-    [data-vt="prefs"]::view-transition-old(prefs) { animation: prefsout .24s var(--ease-in) both }
+    .prefs { view-transition-name: prefsveil; animation: none }
+    .prefs-sheet { view-transition-name: prefssheet; animation: none }
+    [data-vt="prefs"]::view-transition-new(prefsveil) { animation: prefsin .18s var(--ease-out) both }
+    [data-vt="prefs"]::view-transition-old(prefsveil) { animation: prefsout .16s var(--ease-in) both }
+    [data-vt="prefs"]::view-transition-new(prefssheet) { animation: sheetin .28s var(--ease-spring) both }
+    [data-vt="prefs"]::view-transition-old(prefssheet) { animation: sheetout .16s var(--ease-in) both }
     @keyframes prefsout { to { opacity: 0 } }
+    @keyframes sheetout { to { opacity: 0; transform: translateY(6px) scale(.992) } }
   }
 
   /* 看一处改动：和设置同一套 —— 一层压暗+糊开的背板，上面一块浮起来的面。
@@ -3258,10 +3297,21 @@
     margin-bottom: 16px; padding: 19px 20px 17px; outline: 3px solid transparent; outline-offset: 2px;
     border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface);
     box-shadow: 0 1px 0 rgb(0 0 0 / .025);
+    transition: border-color var(--t-card) var(--ease-out),
+                box-shadow var(--t-card) var(--ease-out),
+                background-color var(--t-card) var(--ease-out);
   }
   .prefs-col { animation: navin .14s var(--ease-out) both }
   @keyframes navin { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
   .grp:last-child { margin-bottom: 0 }
+  @media (hover: hover) {
+    .grp:hover { border-color: color-mix(in srgb, var(--accent) 20%, var(--border)) }
+  }
+  .grp:focus-within {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 7%, transparent),
+                0 14px 34px -30px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
 
   /* 折叠起来的是三个完整的设置块，不是一段补充说明，所以摘要按设置行的重量画，
      不是按脚注。收起时右边那句由 .ds 说清楚里面有没有被改过的值 —— 藏起一个
@@ -3269,6 +3319,7 @@
   .advset {
     margin-bottom: 16px; padding: 0 20px;
     border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface);
+    transition: border-color var(--t-card) var(--ease-out), box-shadow var(--t-card) var(--ease-out);
   }
   .advset > summary {
     display: flex; align-items: center; gap: 10px; padding: 16px 0; cursor: pointer;
@@ -3281,6 +3332,13 @@
   }
   .advset[open] > summary::after { transform: rotate(180deg) }
   .advset > summary:hover { color: var(--text) }
+  @media (hover: hover) {
+    .advset:hover { border-color: color-mix(in srgb, var(--accent) 20%, var(--border)) }
+  }
+  .advset:focus-within {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 7%, transparent);
+  }
   .advset > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs) }
   .advset > summary .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
   .advset > summary .lb { font: var(--w-reg) 12.5px var(--ui); color: inherit }
@@ -4941,6 +4999,9 @@
     display: flex; flex-direction: column;
   }
   .pane[data-off] { visibility: hidden; pointer-events: none }
+  .pane[data-off] .call[data-running] > .g .sym,
+  .pane[data-off] .glowring i,
+  .pane[data-off] :is(.await i, .caret) { animation-play-state: paused !important }
   /* Only the current pane is named, so the name is globally unique: handing it
      from the old pane to the new one lets the browser read switching sessions as
      one action rather than two unrelated replacements. A named element is lifted
@@ -4985,7 +5046,7 @@
   .ptab-host::before { content: "◦"; margin-right: 2px; opacity: .7 }
   .ptab .pip { flex: none; background: var(--ghost) }
   /* 后台那个也在跑，页签上得看得出来 */
-  .ptab[data-run="running"] .pip { background: var(--net); animation: tick 1.6s ease-in-out infinite }
+  .ptab[data-run="running"] .pip { background: var(--net) }
   .ptab[data-run="halt"] .pip { background: var(--accent) }
   .ptab[data-run="done"] .pip { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ok) }
   .ptab-x {
@@ -5118,7 +5179,7 @@
   .sessrow[data-live] .pip { opacity: 1; background: var(--net) }
   /* 蓝点说的是「这条会话有活着的运行时」，不等于它此刻在推理。心跳只给真正在
      跑的那一条 —— 全局的运行状态在 .app 上，当前那条会话是 data-on。 */
-  .app[data-run="running"] .sessrow[data-on][data-live] .pip { animation: tick 1.6s ease-in-out infinite }
+  .app[data-run="running"] .sessrow[data-on][data-live] .pip { box-shadow: 0 0 0 2px color-mix(in srgb, var(--net) 14%, transparent) }
   .app[data-run="halt"] .sessrow[data-on] .pip { background: var(--accent); opacity: 1 }
   .sesstitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .sessmeta { flex: none; font: var(--w-reg) 10px var(--mono); color: var(--ghost) }
@@ -5454,7 +5515,7 @@
   .rmt[data-state="connected"] .rmtpip, .rmtrow[data-state="connected"] .rmtpip { background: var(--net) }
   .rmt[data-state="connecting"] .rmtpip, .rmtrow[data-state="connecting"] .rmtpip,
   .rmt[data-state="reconnecting"] .rmtpip, .rmtrow[data-state="reconnecting"] .rmtpip {
-    background: var(--accent); animation: tick 1.6s ease-in-out infinite;
+    background: var(--accent);
   }
   .rmt[data-state="degraded"] .rmtpip, .rmtrow[data-state="degraded"] .rmtpip { background: var(--warn) }
   .rmt[data-state="stopped"] .rmtpip, .rmtrow[data-state="stopped"] .rmtpip { background: var(--err) }
@@ -5489,7 +5550,7 @@
   .rmtsteps li[data-at="now"] { color: var(--text) }
   .rmtsteps .mk { flex: none; width: 10px; text-align: center; font: var(--w-reg) 9px/1 var(--mono) }
   .rmtsteps li[data-at="done"] .mk { color: var(--ok) }
-  .rmtsteps li[data-at="now"] .mk { color: var(--accent-ink); animation: tick 1.6s ease-in-out infinite }
+  .rmtsteps li[data-at="now"] .mk { color: var(--accent-ink) }
   .rmtsteps .lb { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .rmtsteps .dt { flex: none; font: var(--w-reg) 10px var(--mono); color: var(--faint) }
 
@@ -5958,6 +6019,15 @@
 .utile .m { margin-top: 4px; color: var(--muted); font: var(--w-reg) 11px var(--ui) }
 
 .ucard { padding: 16px 18px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md) }
+.uhero, .utile, .ucard, .storage .item {
+  transition: border-color var(--t-card) var(--ease-out), box-shadow var(--t-card) var(--ease-out);
+}
+@media (hover: hover) {
+  .uhero:hover, .utile:hover, .ucard:hover, .storage .item:hover {
+    border-color: color-mix(in srgb, var(--net) 22%, var(--border));
+    box-shadow: var(--lit), 0 16px 34px -30px color-mix(in srgb, var(--net) 30%, transparent);
+  }
+}
 .ucard-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px }
 .ucard-h h3 { margin: 0; font: var(--w-med) 13px var(--ui) }
 .ucard-h .hint { color: var(--muted); font: var(--w-reg) 11.5px var(--ui) }
@@ -6023,6 +6093,17 @@
 .dif-act.ghost:hover { color: var(--text) }
 .dif-act[disabled] { opacity: .5; cursor: default }
 .dif-act:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
+
+/* A press is the same physical event everywhere. Full-width choices keep their
+   geometry and answer with colour; compact controls move by one physical pixel. */
+:is(.navbtn, .tab, .copy, .sug, .act, .chip, .pickup, .pickgo, .tk-lk):active:not(:disabled) {
+  transform: translateY(1px) scale(.985);
+  transition-duration: .06s;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.navbtn, .tab, .copy, .sug, .act, .chip, .pickup, .pickgo, .tk-lk):active:not(:disabled),
+  .tk-acts button:hover::after { transform: none !important }
+}
 .dif-ask {
   display: flex; flex-direction: column; gap: 7px;
   padding: 9px 11px; border-bottom: 1px solid var(--hair); background: var(--overlay);
@@ -6046,4 +6127,15 @@
   .compose .row { --m-step: 30ms }
   .fan { --m-step: 40ms }
   .mgrp { --m-step: 50ms }
+}
+
+/* This is the last motion rule on purpose: new components inherit the user's
+   request instead of relying on a selector allowlist that inevitably ages. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-delay: 0s !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
 }

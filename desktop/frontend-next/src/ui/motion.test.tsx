@@ -106,8 +106,39 @@ describe("mount is not a cause", () => {
     expect(entrances(".grp"), "every block flies in on a section change, and nothing happened").toEqual([]);
   });
 
+  it("does not replay an old card's inner pieces when virtualization remounts it", () => {
+    for (const selector of [
+      ".nest-bd .call", ".nest", ".ask", ".find", ".nest-ret",
+      ".medit-r", ".guard", ".apv", ".hl .cost", ".pip[data-settled]",
+      ".pane[data-run=\"done\"] .rmark", ".pane[data-run=\"done\"] .rmark path",
+    ]) {
+      expect(entrances(selector), `${selector} moves merely because an old card mounted`).toEqual([]);
+    }
+  });
+
+  it("moves inner results only while their live card owns an entrance", () => {
+    for (const selector of [
+      ".enterbox[data-enter] .nest-bd .call",
+      ".enterbox[data-enter] .find",
+      ".enterbox[data-enter] .nest-ret",
+      ".enterbox[data-enter] .medit-r",
+      ".enterbox[data-enter] .guard",
+      ".enterbox[data-enter] .apv",
+      ".enterbox[data-enter] .hl .cost",
+    ]) {
+      expect(entrances(selector).length, `${selector} lost its live entrance`).toBe(1);
+    }
+  });
+
   it("still animates the one that really did just arrive", () => {
     expect(entrances(".enterbox[data-enter] > .call").length).toBe(1);
     expect(entrances(".prefs-col").length).toBe(1);
+  });
+});
+
+describe("navigation focus", () => {
+  it("marks a tool's identity without repainting its full output card", () => {
+    expect(css).not.toMatch(/\.call\[data-hit\]\s*\{\s*animation:/);
+    expect(css).toMatch(/\.call\[data-hit\].*\.hl\s*>\s*:is\(\.nm, \.arg\)\s*\{\s*animation:/);
   });
 });

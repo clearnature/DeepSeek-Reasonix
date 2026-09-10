@@ -317,7 +317,8 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
     // 个由结构回答：不需要再维护一张「哪些设置是高级」的表，也不需要把落点穿到
     // 每个页面里去。
     for (let d = el?.closest("details"); d; d = d.parentElement?.closest("details") ?? null) d.open = true;
-    const aim = () => el?.scrollIntoView({ block: "start", behavior: "smooth" });
+    const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    const aim = () => el?.scrollIntoView({ block: "start", behavior });
     aim();
     // The page is still growing under the scroll: theme packs and the font list
     // arrive late and push the anchor below a target already locked in. A jump

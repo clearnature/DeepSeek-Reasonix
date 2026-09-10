@@ -18,14 +18,14 @@ export function useRevealed(text: string, streaming?: boolean): string {
   useEffect(() => {
     // A settled message, a reload or a new turn has no backlog to pace: whatever
     // is there is already final.
-    if (!streaming) {
+    if (!streaming || matchMedia("(prefers-reduced-motion: reduce)").matches) {
       at.current = want.current;
       setShown(want.current);
       return;
     }
+    if (at.current >= want.current) return;
     let raf = 0;
     const step = () => {
-      raf = requestAnimationFrame(step);
       const target = want.current;
       // Replaced rather than appended (session switch, history restore).
       if (target < at.current) {
@@ -36,10 +36,11 @@ export function useRevealed(text: string, streaming?: boolean): string {
       if (at.current >= target) return;
       at.current = Math.min(target, at.current + Math.max(1, Math.ceil((target - at.current) / DRAIN)));
       setShown(at.current);
+      if (at.current < target) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [streaming]);
+  }, [streaming, text.length]);
 
   return streaming ? text.slice(0, shown) : text;
 }

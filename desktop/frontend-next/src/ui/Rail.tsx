@@ -202,6 +202,7 @@ export function Rail({ marks, total, scroll, flow, onJump, onGrab, bound }: Prop
 
   if (marks.length === 0) return null;
   const shown = at >= 0 ? marks[at] : null;
+  const viewPercent = Math.round((view.top / Math.max(1, geom.current.rail - view.height)) * 100);
 
   return (
     <div className="railhost" ref={host} aria-hidden={undefined}>
@@ -216,7 +217,35 @@ export function Rail({ marks, total, scroll, flow, onJump, onGrab, bound }: Prop
           if (i >= 0) onJump(marks[i]);
         }}
       >
-        <i className="srail-view" style={{ top: view.top, height: view.height }} onPointerDown={drag} />
+        <button
+          type="button"
+          className="srail-view"
+          data-action-pointerdown="transcript.scroll"
+          data-action-keydown="transcript.scroll"
+          style={{ top: view.top, height: view.height }}
+          role="scrollbar"
+          aria-label={t("你说过的话")}
+          aria-controls="flowScroll"
+          aria-orientation="vertical"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.min(100, Math.max(0, viewPercent))}
+          onPointerDown={drag}
+          onKeyDown={(e) => {
+            const root = scroll.current;
+            if (!root) return;
+            const page = Math.max(40, root.clientHeight * .82);
+            if (e.key === "ArrowUp") root.scrollTop -= 40;
+            else if (e.key === "ArrowDown") root.scrollTop += 40;
+            else if (e.key === "PageUp") root.scrollTop -= page;
+            else if (e.key === "PageDown") root.scrollTop += page;
+            else if (e.key === "Home") root.scrollTop = 0;
+            else if (e.key === "End") root.scrollTop = root.scrollHeight;
+            else return;
+            e.preventDefault();
+            onGrab();
+          }}
+        />
         {marks.map((m, i) => (
           <button
             key={m.id}
