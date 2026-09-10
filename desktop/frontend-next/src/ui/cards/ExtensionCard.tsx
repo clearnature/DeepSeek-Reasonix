@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ExtensionView } from "./ExtensionView";
 import type { ExtensionSurface, ExtensionFormField } from "../../port/wire";
-import { Markdown } from "../Markdown";
+import { LazyMarkdown } from "../LazyMarkdown";
 import { Sym } from "../Sym";
 
 interface Props {
@@ -88,7 +88,7 @@ export function ExtensionCard({ ext, onInvoke, onSubmit }: Props) {
           {ext.card && (
             <div className="extcard">
               {ext.card.markdown ? (
-                <Markdown text={ext.card.markdown} />
+                <LazyMarkdown text={ext.card.markdown} />
               ) : (
                 ext.card.text && <div className="exttext">{ext.card.text}</div>
               )}

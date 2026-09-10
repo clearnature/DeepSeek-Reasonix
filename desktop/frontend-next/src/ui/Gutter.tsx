@@ -16,8 +16,8 @@ export interface Span {
 
 // 拖出来的宽度是读者对自己这块屏幕的判断，不是布局的默认值 —— 所以它归本地
 // 存，不进内核配置：换台机器、换块屏幕，判断本来就不同。
-export const RAIL: Span = { min: 168, max: 420, def: 214, key: "rx-rail-w", css: "--rail-open", col: "--rail-w" };
-export const SIDE: Span = { min: 232, max: 520, def: 296, key: "rx-side-w", css: "--side-open", col: "--side-w" };
+export const RAIL: Span = { min: 176, max: 440, def: 236, key: "rx-rail-w", css: "--rail-open", col: "--rail-w" };
+export const SIDE: Span = { min: 244, max: 540, def: 316, key: "rx-side-w", css: "--side-open", col: "--side-w" };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 

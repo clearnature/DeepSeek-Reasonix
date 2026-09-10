@@ -2,7 +2,6 @@ import { memo, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import remarkGemoji from "remark-gemoji";
 import { remarkTrimAutolink } from "./autolink";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -24,7 +23,7 @@ const schema = {
   },
 };
 
-const REMARK = [remarkGfm, remarkMath, remarkGemoji, remarkTrimAutolink];
+const BASE_REMARK = [remarkGfm, remarkMath, remarkTrimAutolink];
 // Order is load-bearing: raw parses HTML into nodes, sanitize prunes them, and
 // katex renders afterwards so its generated markup is not pruned in turn.
 const BASE_REHYPE = [rehypeRaw, [rehypeSanitize, schema]];
@@ -33,6 +32,7 @@ const BASE_REHYPE = [rehypeRaw, [rehypeSanitize, schema]];
 // produce a formula, so it is fetched the first time one appears. No lookbehind
 // — older WebKit treats it as a syntax error and takes the whole page down.
 const MATH = /\$\$[\s\S]+?\$\$|\$[^\n$]+\$/;
+const GEMOJI = /:[a-zA-Z0-9_+-]+:/;
 
 // Models reach for LaTeX's own delimiters as readily as for dollars, and
 // remark-math reads only dollars. Rewriting them keeps one parser instead of
@@ -54,14 +54,16 @@ function normalizeMath(md: string) {
 
 type Plugin = unknown;
 let katex: Plugin | null = null;
-let loading: Promise<void> | null = null;
+let katexLoading: Promise<void> | null = null;
+let gemoji: Plugin | null = null;
+let gemojiLoading: Promise<void> | null = null;
 
 function useKatex(needed: boolean): Plugin | null {
   const [plugin, setPlugin] = useState<Plugin | null>(katex);
   useEffect(() => {
     if (!needed || katex) return;
     let alive = true;
-    loading ??= Promise.all([import("rehype-katex"), import("katex/dist/katex.min.css")]).then(
+    katexLoading ??= Promise.all([import("rehype-katex"), import("katex/dist/katex.min.css")]).then(
       ([mod]) => {
         // Red source text beats an exception: the message stays readable and
         // the render cannot take the window down with it.
@@ -69,7 +71,23 @@ function useKatex(needed: boolean): Plugin | null {
       },
     );
     // A failed chunk leaves the math as source text, which still reads.
-    void loading.then(() => alive && setPlugin(() => katex)).catch(() => {});
+    void katexLoading.then(() => alive && setPlugin(() => katex)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [needed]);
+  return plugin;
+}
+
+function useGemoji(needed: boolean): Plugin | null {
+  const [plugin, setPlugin] = useState<Plugin | null>(gemoji);
+  useEffect(() => {
+    if (!needed || gemoji) return;
+    let alive = true;
+    gemojiLoading ??= import("remark-gemoji").then((mod) => {
+      gemoji = mod.default;
+    });
+    void gemojiLoading.then(() => alive && setPlugin(() => gemoji)).catch(() => {});
     return () => {
       alive = false;
     };
@@ -115,12 +133,12 @@ function cutsOf(md: string): number[] {
   return cuts;
 }
 
-const Block = memo(function Block({ src, math, tail }: { src: string; math: Plugin | null; tail?: boolean }) {
+const Block = memo(function Block({ src, math, emoji, tail }: { src: string; math: Plugin | null; emoji: Plugin | null; tail?: boolean }) {
   // Inside the memo, so a settled block normalises once instead of per chunk.
   const body = normalizeMath(tail ? balanceFences(src) : src);
   return (
     <ReactMarkdown
-      remarkPlugins={REMARK}
+      remarkPlugins={(emoji ? [...BASE_REMARK, emoji] : BASE_REMARK) as never}
       rehypePlugins={(math ? [...BASE_REHYPE, math] : BASE_REHYPE) as never}
       components={{
         // Every link here comes from model output; a webview navigating away
@@ -146,6 +164,7 @@ const Block = memo(function Block({ src, math, tail }: { src: string; math: Plug
 export function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
   const shown = useRevealed(text, streaming);
   const math = useKatex(MATH.test(text));
+  const emoji = useGemoji(GEMOJI.test(text));
   // Only a streamed message is split. Once it settles it parses whole again, so
   // nothing left in the transcript stands as a pile of separate documents.
   const cuts = streaming ? cutsOf(shown) : [];
@@ -158,9 +177,9 @@ export function Markdown({ text, streaming }: { text: string; streaming?: boolea
   return (
     <div className="md">
       {parts.map((p, i) => (
-        <Block key={i} src={p} math={math} />
+        <Block key={i} src={p} math={math} emoji={emoji} />
       ))}
-      <Block src={shown.slice(at)} math={math} tail />
+      <Block src={shown.slice(at)} math={math} emoji={emoji} tail />
       {streaming && <span className="caret" />}
     </div>
   );

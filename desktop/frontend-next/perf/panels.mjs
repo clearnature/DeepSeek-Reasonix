@@ -5,8 +5,8 @@
 import { chromium } from "playwright";
 
 const PAGE = process.env.PERF_URL ?? "http://localhost:4399/perf.html";
-const RAIL = { def: 214, min: 168, max: 420 };
-const SIDE = { def: 296 };
+const RAIL = { def: 236, min: 176, max: 440 };
+const SIDE = { def: 316 };
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from "react";
 import { reason } from "../i18n/kernel";
 import { t } from "../i18n";
 import type { AccountState, AgentPort, Appearance as Look, ProviderSetup, ThemePack } from "../port/port";
@@ -21,9 +21,10 @@ import { Workspaces } from "./Workspaces";
 import { Sky } from "./Sky";
 import { useAddWorkspace } from "./addws";
 import { PaneTabs } from "./PaneTabs";
-import { Settings } from "./Settings";
 import { Onboarding } from "./Onboarding";
 import { Welcome } from "./Welcome";
+
+const Settings = lazy(async () => ({ default: (await import("./Settings")).Settings }));
 
 const NO_REPORT: PaneReport = { status: null, title: "", steer: 0, run: "idle", live: false, cost: "" };
 
@@ -726,27 +727,29 @@ export function App({ hub }: { hub: HubPort }) {
       </div>
 
       {settings && activePort && (
-        <Settings
-          hub={hub}
-          onError={fail}
-          port={activePort}
-          status={report.status}
-          theme={theme}
-          onTheme={setTheme}
-          contrast={contrast}
-          weight={weight}
-          onWeight={setWeight}
-          look={look}
-          onLook={onLook}
-          onContrast={setContrast}
-          onClose={hidePrefs}
-          onChanged={onSettingsChanged}
-          reloadThemes={reloadThemes}
-          at={typeof settings === "string" ? settings : undefined}
-          account={account}
-          accountUnread={accountUnread}
-          reloadAccount={reloadAccount}
-        />
+        <Suspense fallback={<div className="prefs" aria-busy="true" />}>
+          <Settings
+            hub={hub}
+            onError={fail}
+            port={activePort}
+            status={report.status}
+            theme={theme}
+            onTheme={setTheme}
+            contrast={contrast}
+            weight={weight}
+            onWeight={setWeight}
+            look={look}
+            onLook={onLook}
+            onContrast={setContrast}
+            onClose={hidePrefs}
+            onChanged={onSettingsChanged}
+            reloadThemes={reloadThemes}
+            at={typeof settings === "string" ? settings : undefined}
+            account={account}
+            accountUnread={accountUnread}
+            reloadAccount={reloadAccount}
+          />
+        </Suspense>
       )}
     </div>
   );

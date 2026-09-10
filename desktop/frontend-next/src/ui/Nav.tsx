@@ -42,13 +42,13 @@ export function Nav({ at, onGo, onHome }: Props) {
       key={key}
       className="navbtn"
       aria-label={t(label)}
-      title={t(label)}
       aria-current={(sec ?? null) === at ? "page" : undefined}
       onClick={() => (sec === null ? onHome() : onGo(sec || undefined))}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <path d={ICON[key]} />
       </svg>
+      <span className="navhint" role="tooltip">{t(label)}</span>
     </button>
   );
   return (

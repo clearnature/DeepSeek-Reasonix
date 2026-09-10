@@ -3,7 +3,7 @@ import { t } from "../../i18n";
 import { count, decimals } from "../../i18n/format";
 import { Sym } from "../Sym";
 import type { Item } from "../../state/session";
-import { Markdown } from "../Markdown";
+import { LazyMarkdown } from "../LazyMarkdown";
 import { Boundary } from "../Boundary";
 import { CopyButton } from "../CopyButton";
 import { useRevealed } from "../reveal";
@@ -51,7 +51,7 @@ export function SayCard({ item }: { item: Extract<Item, { t: "say" }> }) {
           {item.text && (
             <div className="txt">
               <Boundary fallback={<div className="md">{item.text}</div>}>
-                <Markdown text={item.text} streaming={!item.done} />
+                <LazyMarkdown text={item.text} streaming={!item.done} />
               </Boundary>
             </div>
           )}

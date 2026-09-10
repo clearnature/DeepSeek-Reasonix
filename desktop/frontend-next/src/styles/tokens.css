@@ -39,8 +39,8 @@
   font-display: swap;
 }
 
-@property --rail-w { syntax: "<length>"; inherits: true; initial-value: 214px }
-@property --side-w { syntax: "<length>"; inherits: true; initial-value: 296px }
+@property --rail-w { syntax: "<length>"; inherits: true; initial-value: 236px }
+@property --side-w { syntax: "<length>"; inherits: true; initial-value: 316px }
 /* Registered so a bad write falls back to 16:10 rather than making aspect-ratio
    invalid, which would collapse every box using it to zero height. */
 @property --win-ar { syntax: "<number>"; inherits: true; initial-value: 1.6 }
@@ -51,21 +51,21 @@
        engines without it fall back to the jump. */
     interpolate-size: allow-keywords;
 
-    --rail-open: 214px; --side-open: 296px;
-    --page: oklch(94.8% .005 75); --surface: oklch(98.8% .003 75);
-    --raised: oklch(100% 0 75); --overlay: oklch(93.9% .006 75);
-    --border: oklch(89.9% .009 75); --hair: oklch(93.6% .006 75);
+    --rail-open: 236px; --side-open: 316px;
+    --page: oklch(95.8% .008 255); --surface: oklch(98.9% .004 255);
+    --raised: oklch(100% 0 255); --overlay: oklch(93.1% .012 255);
+    --border: oklch(87.6% .016 255); --hair: oklch(91.7% .011 255);
     /* 浮在内容之上的层用这一组，不用 --raised：深色下 raised 和它压着的东西
        几乎同亮，黑影落在近黑的底上又等于没画，菜单于是看着像透明的。抬面比
        底色亮一档、顶一条内高光、影子更深更散，三样一起才让它离开背景。 */
-    --float: oklch(100% 0 75); --float-hi: oklch(94.2% .006 75);
+    --float: oklch(100% 0 255); --float-hi: oklch(94.2% .010 255);
     --shadow-float:
       inset 0 1px 0 rgb(255 255 255 / .9),
       0 16px 40px -14px rgb(23 30 45 / .2),
       0 4px 12px -8px rgb(23 30 45 / .14);
-    --accent: #A6680C; --accent-fg: #FFF; --accent-wash: #FBF1DF;
-    --net: oklch(49.3% .155 267); --net-wash: oklch(94.4% .017 262);
-    --deleg: oklch(51.1% .086 211); --deleg-wash: oklch(94.6% .016 210);
+    --accent: #A76200; --accent-fg: #FFF; --accent-wash: #FFF2DC;
+    --net: oklch(50.8% .172 267); --net-wash: oklch(94.8% .026 264);
+    --deleg: oklch(50.4% .092 211); --deleg-wash: oklch(94.8% .020 210);
     --ok: oklch(51.9% .107 154); --err: oklch(54.2% .165 28);
     --warn: oklch(57.5% .118 45); --add: var(--ok); --del: var(--err);
     /* A hue used as a surface and as text on a tint of itself needs two values.
@@ -75,7 +75,7 @@
        In dark they coincide, because there the tint is darker than the hue
        rather than lighter. The base carries --accent-fg, so it is pinned from
        that side too: white on it sat at 4.4977, which is not 4.5. */
-    --accent-ink: #8C580A; --warn-ink: oklch(51% .120 45); --ok-ink: #286F44; --err-ink: #AF362E;
+    --accent-ink: #8B5100; --warn-ink: oklch(51% .120 45); --ok-ink: #286F44; --err-ink: #AF362E;
     /* Terminal output and diffs carry Chinese, and none of the monospaced faces
        above has a Chinese glyph — the character fell through to whatever the OS
        picked, which on Windows is a serif. Naming the shipped face makes that
@@ -135,12 +135,12 @@
     --track-tight: -.02em; --track-lead: .06em; --track-cap: .12em;
     /* 这一档此前是 1/2/3/4：几乎等于直角，而窗口里每一处容器都描了边，直角
        让它们读起来像表格的格子而不是可操作的面。整档抬高，比例不变。 */
-    --r-xs: 3px; --r-sm: 5px; --r-md: 7px; --r-lg: 10px; --r-pill: 999px;
+    --r-xs: 4px; --r-sm: 6px; --r-md: 9px; --r-lg: 12px; --r-pill: 999px;
 
     /* 对话正文的字号。单独立一个令牌，是因为「看不清」要调的是这一处，而
        不是整套界面 —— 整体缩放走 zoom，两件事各调各的。这里只是首帧兜底，
        实际默认在 look.ts 的 readDefault()。 */
-    --read: 13.5px;
+    --read: 14.5px;
 
     /* 正文仍封在 68ch，那是设计稿的排版决定。但外面这一列不该再收一次：900px 的
        上限在宽窗口下把整条流吊在中间，只有终端块看着铺满、其它都在很早换行，读
@@ -156,9 +156,9 @@
   @media (prefers-color-scheme: dark) {
     :root {
     --grain-a: .045;
-    --page: oklch(13.3% .004 75); --surface: oklch(17.7% .005 75);
-    --raised: oklch(22.1% .006 75); --overlay: oklch(26.8% .008 75);
-    --border: oklch(31.6% .010 75); --hair: oklch(23.8% .007 75);
+    --page: oklch(14.4% .015 255); --surface: oklch(18.1% .014 255);
+    --raised: oklch(22.3% .016 255); --overlay: oklch(26.8% .018 255);
+    --border: oklch(32.4% .020 255); --hair: oklch(24.2% .016 255);
     --accent: #DDA144; --accent-fg: #171104; --accent-wash: #201907;
     --net: oklch(68.5% .118 262); --net-wash: oklch(21% .028 262);
     --deleg: oklch(68.1% .105 210); --deleg-wash: oklch(21% .024 210);
@@ -166,7 +166,7 @@
     --warn: oklch(75% .135 48); --add: var(--ok); --del: var(--err);
     --accent-ink: var(--accent); --warn-ink: var(--warn);
     --ok-ink: var(--ok); --err-ink: var(--err);
-    --float: oklch(25.5% .008 75); --float-hi: oklch(31% .009 75);
+    --float: oklch(25.5% .018 255); --float-hi: oklch(31% .020 255);
     --shadow-float:
       inset 0 1px 0 rgb(255 255 255 / .06),
       0 0 0 1px rgb(0 0 0 / .55),
@@ -176,9 +176,9 @@
   }
   :root[data-theme="dark"] {
     --grain-a: .045;
-    --page: oklch(13.3% .004 75); --surface: oklch(17.7% .005 75);
-    --raised: oklch(22.1% .006 75); --overlay: oklch(26.8% .008 75);
-    --border: oklch(31.6% .010 75); --hair: oklch(23.8% .007 75);
+    --page: oklch(14.4% .015 255); --surface: oklch(18.1% .014 255);
+    --raised: oklch(22.3% .016 255); --overlay: oklch(26.8% .018 255);
+    --border: oklch(32.4% .020 255); --hair: oklch(24.2% .016 255);
     --accent: #DDA144; --accent-fg: #171104; --accent-wash: #201907;
     --net: oklch(68.5% .118 262); --net-wash: oklch(21% .028 262);
     --deleg: oklch(68.1% .105 210); --deleg-wash: oklch(21% .024 210);
@@ -186,7 +186,7 @@
     --warn: oklch(75% .135 48); --add: var(--ok); --del: var(--err);
     --accent-ink: var(--accent); --warn-ink: var(--warn);
     --ok-ink: var(--ok); --err-ink: var(--err);
-    --float: oklch(25.5% .008 75); --float-hi: oklch(31% .009 75);
+    --float: oklch(25.5% .018 255); --float-hi: oklch(31% .020 255);
     --shadow-float:
       inset 0 1px 0 rgb(255 255 255 / .06),
       0 0 0 1px rgb(0 0 0 / .55),
@@ -194,16 +194,16 @@
       0 6px 18px -10px rgb(0 0 0 / .62);
   }
   :root[data-theme="light"] {
-    --page: oklch(94.8% .005 75); --surface: oklch(98.8% .003 75);
-    --raised: oklch(100% 0 75); --overlay: oklch(93.9% .006 75);
-    --border: oklch(89.9% .009 75); --hair: oklch(93.6% .006 75);
-    --accent: #A6680C; --accent-fg: #FFF; --accent-wash: #FBF1DF;
-    --net: oklch(49.3% .155 267); --net-wash: oklch(94.4% .017 262);
-    --deleg: oklch(51.1% .086 211); --deleg-wash: oklch(94.6% .016 210);
+    --page: oklch(95.8% .008 255); --surface: oklch(98.9% .004 255);
+    --raised: oklch(100% 0 255); --overlay: oklch(93.1% .012 255);
+    --border: oklch(87.6% .016 255); --hair: oklch(91.7% .011 255);
+    --accent: #A76200; --accent-fg: #FFF; --accent-wash: #FFF2DC;
+    --net: oklch(50.8% .172 267); --net-wash: oklch(94.8% .026 264);
+    --deleg: oklch(50.4% .092 211); --deleg-wash: oklch(94.8% .020 210);
     --ok: oklch(51.9% .107 154); --err: oklch(54.2% .165 28);
     --warn: oklch(57.5% .118 45); --add: var(--ok); --del: var(--err);
-    --accent-ink: #8C580A; --warn-ink: oklch(51% .120 45); --ok-ink: #286F44; --err-ink: #AF362E;
-    --float: oklch(100% 0 75); --float-hi: oklch(94.2% .006 75);
+    --accent-ink: #8B5100; --warn-ink: oklch(51% .120 45); --ok-ink: #286F44; --err-ink: #AF362E;
+    --float: oklch(100% 0 255); --float-hi: oklch(94.2% .010 255);
     --shadow-float:
       inset 0 1px 0 rgb(255 255 255 / .9),
       0 16px 40px -14px rgb(23 30 45 / .2),
@@ -231,44 +231,44 @@
      默认档从那条线起算，另外两档递增；正文一端不动 —— 深底上接近纯白会起
      光晕，收窄跨度才是柔和的意思。 */
   :root, :root[data-contrast="soft"] {
-  --text: oklch(31.9% .011 75); --muted: oklch(42.5% .011 75); --faint: oklch(49.1% .012 75); --ghost: oklch(53% .015 75);
+  --text: oklch(30.5% .020 255); --muted: oklch(41% .018 255); --faint: oklch(47.5% .018 255); --ghost: oklch(51.5% .020 255);
   }
   :root[data-contrast="normal"] {
-  --text: oklch(29.5% .010 75); --muted: oklch(39% .010 75); --faint: oklch(45.5% .011 75); --ghost: oklch(52.2% .013 75);
+  --text: oklch(27.5% .019 255); --muted: oklch(37.5% .017 255); --faint: oklch(44% .017 255); --ghost: oklch(49.5% .019 255);
   }
   :root[data-contrast="strong"] {
-  --text: oklch(20.4% .009 75); --muted: oklch(34.6% .009 75); --faint: oklch(41.8% .010 75); --ghost: oklch(48.2% .012 75);
+  --text: oklch(20.4% .017 255); --muted: oklch(33.5% .016 255); --faint: oklch(40.5% .016 255); --ghost: oklch(46.5% .018 255);
   }
 
   @media (prefers-color-scheme: dark) {
     :root, :root[data-contrast="soft"] {
-    --text: oklch(85% .010 75); --muted: oklch(72.6% .010 75); --faint: oklch(65% .011 75); --ghost: oklch(60.5% .014 75);
+    --text: oklch(85% .012 255); --muted: oklch(72.6% .012 255); --faint: oklch(65% .013 255); --ghost: oklch(60.5% .016 255);
     }
     :root[data-contrast="normal"] {
-    --text: oklch(88.1% .010 75); --muted: oklch(76.7% .010 75); --faint: oklch(69.3% .011 75); --ghost: oklch(64.9% .014 75);
+    --text: oklch(88.1% .012 255); --muted: oklch(76.7% .012 255); --faint: oklch(69.3% .013 255); --ghost: oklch(64.9% .016 255);
     }
     :root[data-contrast="strong"] {
-    --text: oklch(93.4% .008 75); --muted: oklch(81.8% .009 75); --faint: oklch(73.6% .010 75); --ghost: oklch(69.1% .012 75);
+    --text: oklch(93.4% .010 255); --muted: oklch(81.8% .011 255); --faint: oklch(73.6% .012 255); --ghost: oklch(69.1% .014 255);
     }
   }
 
   :root[data-theme="dark"], :root[data-theme="dark"][data-contrast="soft"] {
-  --text: oklch(85% .010 75); --muted: oklch(72.6% .010 75); --faint: oklch(65% .011 75); --ghost: oklch(60.5% .014 75);
+  --text: oklch(85% .012 255); --muted: oklch(72.6% .012 255); --faint: oklch(65% .013 255); --ghost: oklch(60.5% .016 255);
   }
   :root[data-theme="dark"][data-contrast="normal"] {
-  --text: oklch(88.1% .010 75); --muted: oklch(76.7% .010 75); --faint: oklch(69.3% .011 75); --ghost: oklch(64.9% .014 75);
+  --text: oklch(88.1% .012 255); --muted: oklch(76.7% .012 255); --faint: oklch(69.3% .013 255); --ghost: oklch(64.9% .016 255);
   }
   :root[data-theme="dark"][data-contrast="strong"] {
-  --text: oklch(93.4% .008 75); --muted: oklch(81.8% .009 75); --faint: oklch(73.6% .010 75); --ghost: oklch(69.1% .012 75);
+  --text: oklch(93.4% .010 255); --muted: oklch(81.8% .011 255); --faint: oklch(73.6% .012 255); --ghost: oklch(69.1% .014 255);
   }
   :root[data-theme="light"], :root[data-theme="light"][data-contrast="soft"] {
-  --text: oklch(31.9% .011 75); --muted: oklch(42.5% .011 75); --faint: oklch(49.1% .012 75); --ghost: oklch(53% .015 75);
+  --text: oklch(30.5% .020 255); --muted: oklch(41% .018 255); --faint: oklch(47.5% .018 255); --ghost: oklch(51.5% .020 255);
   }
   :root[data-theme="light"][data-contrast="normal"] {
-  --text: oklch(29.5% .010 75); --muted: oklch(39% .010 75); --faint: oklch(45.5% .011 75); --ghost: oklch(52.2% .013 75);
+  --text: oklch(27.5% .019 255); --muted: oklch(37.5% .017 255); --faint: oklch(44% .017 255); --ghost: oklch(49.5% .019 255);
   }
   :root[data-theme="light"][data-contrast="strong"] {
-  --text: oklch(20.4% .009 75); --muted: oklch(34.6% .009 75); --faint: oklch(41.8% .010 75); --ghost: oklch(48.2% .012 75);
+  --text: oklch(20.4% .017 255); --muted: oklch(33.5% .016 255); --faint: oklch(40.5% .016 255); --ghost: oklch(46.5% .018 255);
   }
 
   /* 系统开了「增强对比度」而用户没自己选过档，就按它来。明暗要单独判：手动
@@ -276,17 +276,17 @@
      正文刷到深背景上。 */
   @media (prefers-contrast: more) {
     :root:not([data-contrast]) {
-    --text: oklch(20.4% .009 75); --muted: oklch(34.6% .009 75); --faint: oklch(41.8% .010 75); --ghost: oklch(48.2% .012 75);
+    --text: oklch(20.4% .017 255); --muted: oklch(33.5% .016 255); --faint: oklch(40.5% .016 255); --ghost: oklch(46.5% .018 255);
     }
     :root[data-theme="dark"]:not([data-contrast]) {
-    --text: oklch(93.4% .008 75); --muted: oklch(81.8% .009 75); --faint: oklch(73.6% .010 75); --ghost: oklch(69.1% .012 75);
+    --text: oklch(93.4% .010 255); --muted: oklch(81.8% .011 255); --faint: oklch(73.6% .012 255); --ghost: oklch(69.1% .014 255);
     }
   }
   @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
     :root:not([data-contrast]) {
-    --text: oklch(93.4% .008 75); --muted: oklch(81.8% .009 75); --faint: oklch(73.6% .010 75); --ghost: oklch(69.1% .012 75);
+    --text: oklch(93.4% .010 255); --muted: oklch(81.8% .011 255); --faint: oklch(73.6% .012 255); --ghost: oklch(69.1% .014 255);
     }
     :root[data-theme="light"]:not([data-contrast]) {
-    --text: oklch(20.4% .009 75); --muted: oklch(34.6% .009 75); --faint: oklch(41.8% .010 75); --ghost: oklch(48.2% .012 75);
+    --text: oklch(20.4% .017 255); --muted: oklch(33.5% .016 255); --faint: oklch(40.5% .016 255); --ghost: oklch(46.5% .018 255);
     }
   }
