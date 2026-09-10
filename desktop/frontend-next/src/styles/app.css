@@ -1672,15 +1672,16 @@
   /* 设计稿把正文封在 68ch 是排版上的道理，但一屏里只有它收着、终端块和卡片都
      铺满，读起来就是右边豁了一块。要么全收要么全铺，这里选全铺。 */
   .out .txt { font-size: var(--read); line-height: 1.72; color: var(--muted) }
-  /* 时间线上每张卡都是同一个形状，「我」原来只靠 20px 的反色符号区分 —— 一屏
-     十几张卡滚下来，自己说过的话就找不着了。给它一块实底和左轨，用中性的
-     --text 而不是色相：色相在这套系统里都已经派了语义（net/deleg/warn/err），
-     借一个就是撒谎。pre-wrap 是同一件事的另一半 —— 分行是你打字时的形状。 */
+  /* 自己交代的任务是每轮的锚点，用中性表面而不是借用已有状态色；pre-wrap
+     保留输入时的分行，让它仍像任务原文而不是系统生成的段落。 */
   .call[data-k="me"] .out .txt {
     color: var(--text); white-space: pre-wrap;
-    padding: 7px 11px; background: color-mix(in srgb, var(--text) 5%, transparent);
-    border-left: 2px solid var(--text); border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    padding: 10px 12px; background: var(--raised);
+    border: 1px solid var(--hair); border-radius: var(--r-md);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
   }
+  .out .txt { overflow-wrap: anywhere }
+  .out .txt pre, .out .txt .md-tw { overflow-wrap: normal }
 
   /* 正文底下的动作行。复制入口这个窗口原来一个都没有（只能走系统右键菜单），
      所以它常驻，不跟 .stepctl 一样 hover 才浮现 —— 找不到的入口等于没加。 */
@@ -1793,14 +1794,19 @@
   /* 合并后的读清单要能翻回正文，否则收起卡片等于把内容藏没了 */
   .peek button.row { width: 100%; padding: 0; border: 0; background: none; cursor: pointer; text-align: left }
   .peek button.row:hover, .peek button.row[data-on] { color: var(--text) }
+  .peek button.row[data-bad] { color: var(--warn-ink) }
+  .peek button.row[data-bad] .n { color: var(--err) }
   .peek button.row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs) }
 
   /* 一个输出预算,三种形态共用:裁到固定高度而不是塌成一行标签,内容始终可扫 */
   .out-clip { position: relative }
   .out-body {
-    max-height: var(--out-peek, 16rem); overflow: hidden;
+    max-height: var(--out-peek, 16rem); overflow: auto;
     transition: max-height var(--t-panel) var(--ease-out);
   }
+  /* The clipped viewport owns both axes. If the terminal owns horizontal
+     scrolling, its scrollbar sits after all its rows and is clipped away. */
+  .out-clip > .out-body > .term { width: max-content; min-width: 100%; overflow: visible; box-sizing: border-box }
   /* max-content rather than none: none is not a size, so interpolation has no far
      end. Equivalent here, and engines without interpolate-size still get "as tall
      as the content". */
@@ -1881,16 +1887,17 @@
   .medit-r .n { margin-left: auto; font-size: 11px; letter-spacing: var(--track-tight); flex: none; font-variant-numeric: tabular-nums }
   .medit-r .n .a { color: var(--add) } .medit-r .n .r { color: var(--del) }
 
-  /* 复核结论是一句判词加一条批注，不是一张通知卡。风险用刻度，不用大写英文标签
-     —— 跟 review findings 同一套语法：色条编码严重度，不额外加词。 */
+  /* 复核结论是一句判词加一条批注，不是一张通知卡。色条与刻度帮助扫视，风险词
+     则让状态不只依赖颜色。 */
   .guard { margin-top: 7px; padding: 2px 0 2px 11px; border-left: 2px solid var(--ghost); animation: card var(--t-card) var(--ease-out) both }
   .guard[data-risk="low"] { border-left-color: var(--ok) }
   .guard[data-risk="medium"] { border-left-color: var(--accent) }
   .guard[data-risk="high"] { border-left-color: var(--err) }
   .guard-hd { display: flex; align-items: baseline; gap: 8px }
   .guard-hd .verdict { font: var(--w-med) 12.5px var(--ui); color: var(--text); flex: none }
+  .guard-hd .risk { margin-left: auto; font: var(--w-med) 10px var(--ui); color: var(--faint); white-space: nowrap }
   .guard-hd .scope { font-size: 12px; color: var(--muted); min-width: 0 }
-  .guard-hd .gauge { margin-left: auto; display: flex; gap: 2px; flex: none; align-self: center }
+  .guard-hd .gauge { display: flex; gap: 2px; flex: none; align-self: center }
   .guard-hd .gauge i { width: 3px; height: 9px; border-radius: var(--r-xs); background: var(--hair) }
   .guard[data-risk="low"] .gauge i:nth-child(1) { background: var(--ok) }
   .guard[data-risk="medium"] .gauge i:nth-child(-n+2) { background: var(--accent) }
@@ -1921,15 +1928,13 @@
   /* 阻塞着的那一张抬出流外。琥珀在这套语言里只说「需要你介入」，而它原来只
      落在按钮上，卡片本身跟普通工具卡同权重。答复过就撤掉。 */
   .call[data-k="ask"] > .c:has(.apv:not([data-sealed])) {
-    margin: 3px -14px; padding: 13px 14px; border-radius: var(--r-lg);
+    margin: 3px -14px; padding: 13px 14px; border-left: 2px solid var(--warn);
+    border-radius: 0 var(--r-lg) var(--r-lg) 0;
     background: linear-gradient(102deg,
-      color-mix(in srgb, var(--accent) 10%, transparent),
-      color-mix(in srgb, var(--accent) 2.5%, transparent) 62%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+      color-mix(in srgb, var(--accent) 9%, transparent), transparent 72%);
   }
   .apv {
     margin-top: 8px; overflow: hidden; background: none;
-    border-left: 2px solid var(--warn);
     animation: panel var(--t-panel) var(--ease-out) both;
   }
   .apv-hd {
@@ -1948,7 +1953,7 @@
   .apv-ft .hint b { color: var(--faint); font-weight: var(--w-reg) }
   .apv-done { padding: 10px 12px; font-size: 12px; line-height: 1.65; color: var(--muted); border-top: 1px solid var(--hair) }
   .apv-done b { color: var(--text); font-weight: var(--w-med) }
-  .apv[data-sealed="no"] { border-color: color-mix(in srgb, var(--err) 42%, var(--border)) }
+  .apv[data-sealed="deny"] .apv-done b { color: var(--err) }
   .apv[data-sealed] .apv-hd { background: transparent }
 
   /* ── ask：agent 把选择权交回给你 ─────────────────────────────────── */
@@ -1960,10 +1965,12 @@
 
   .ask-tabs {
     display: flex; gap: 2px; padding: 8px 10px 0;
+    overflow-x: auto; overflow-y: hidden;
     background: var(--accent-wash);
     border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   }
   .ask-tab {
+    flex: none; white-space: nowrap;
     padding: 5px 11px 7px; border: 0; background: none; cursor: pointer;
     font: var(--w-med) 11.5px var(--ui); color: color-mix(in srgb, var(--accent) 62%, var(--muted));
     border-bottom: 2px solid transparent; margin-bottom: -1px;
@@ -2040,6 +2047,7 @@
     text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;
   }
   .ask-foot .dismiss:hover { color: var(--muted) }
+  .ask-foot .dismiss:disabled { opacity: .5; cursor: default }
   .ask-foot .dismiss:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs) }
 
   /* 已答状态：未选的淡下去，选中的留着 —— 一眼看出当时选了什么 */
@@ -2389,7 +2397,7 @@
   /* ── 任务看板 ─────────────────────────────────────────────────────── */
   /* 活动流刻意不是一叠卡片：一条流读的是先后。看板读的是「此刻站在哪」——
      四个互不相干的问题同屏，卡片正是把它们分开的东西。两种读法，两套版式。 */
-  .tkv { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 28px; max-width: 1080px; margin: 0 auto; width: 100% }
+  .tkv { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 28px; max-width: 1080px; margin: 0 auto; width: 100%; container-type: inline-size }
   .tkcard {
     display: flex; flex-direction: column; gap: 10px; padding: 15px 17px;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
@@ -2412,6 +2420,7 @@
   .pill[data-tone="net"] i { animation: tick 1.6s ease-in-out infinite }
 
   .tk-now h2 { margin: 0; font: var(--w-semi) 17px/1.45 var(--ui); color: var(--text); letter-spacing: var(--track-display) }
+  .tk-now h2[data-empty] { font-size: 14px; color: var(--faint); font-weight: var(--w-med); letter-spacing: 0 }
   .tk-now p { margin: 0; max-width: 68ch; font: var(--w-reg) 12.5px/1.75 var(--ui); color: var(--muted) }
   .tk-meta { display: flex; gap: 18px; font: var(--w-reg) 11px var(--mono); color: var(--ghost); font-variant-numeric: tabular-nums }
 
@@ -2435,7 +2444,7 @@
 
   /* 轨迹占两栏、操作占一栏：一条实时的流比三个按钮更该拿到宽度 */
   .tk-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start }
-  @media (max-width: 1080px) { .tk-cols { grid-template-columns: minmax(0, 1fr) } }
+  @container (max-width: 760px) { .tk-cols { grid-template-columns: minmax(0, 1fr) } }
 
   .tk-lk { margin-left: auto; border: 0; background: none; cursor: pointer; padding: 0;
     font: var(--w-reg) 11.5px var(--ui); color: var(--net) }
@@ -2456,13 +2465,16 @@
   .tk-row .tx .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--faint) }
 
   .tk-acts button {
-    display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;
-    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md);
-    background: var(--raised); cursor: pointer;
-    transition: border-color var(--t-line) var(--ease), background var(--t-line) var(--ease);
+    position: relative; display: flex; flex-direction: column; gap: 3px; text-align: left; width: 100%;
+    padding: 10px 28px 10px 4px; border: 0; border-top: 1px solid var(--hair); border-radius: 0;
+    background: transparent; cursor: pointer;
+    transition: padding-left var(--t-line) var(--ease), background var(--t-line) var(--ease);
   }
-  .tk-acts button:hover { border-color: var(--faint); background: var(--overlay) }
-  .tk-acts button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
+  .tk-acts button:last-child { border-bottom: 1px solid var(--hair) }
+  .tk-acts button::after { content: "›"; position: absolute; right: 7px; top: 50%; translate: 0 -50%; color: var(--ghost); font: var(--w-reg) 17px/1 var(--ui) }
+  .tk-acts button:hover { padding-left: 8px; background: var(--overlay) }
+  .tk-acts button:hover::after { color: var(--text) }
+  .tk-acts button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
   .tk-acts button .n { font: var(--w-med) 12px var(--ui); color: var(--text) }
   .tk-acts button .d { font: var(--w-reg) 11px var(--ui); color: var(--ghost) }
 
@@ -2933,6 +2945,13 @@
     .turntools > .picker:first-of-type { flex: 1 }
     .turntools .mode .nm { max-width: 100% }
     .compose .row .go { width: 100%; justify-content: flex-end; margin-left: 0 }
+    .call:not([data-k="me"], [data-k="say"], [data-k="ask"]) > .c > .hl { flex-wrap: wrap }
+    .call:not([data-k="me"], [data-k="say"], [data-k="ask"]) > .c > .hl .arg { order: 5; flex: 1 0 100% }
+    .call:not([data-k="me"], [data-k="say"], [data-k="ask"]) > .c > .hl .cost { margin-left: 0 }
+    .ask-foot { flex-direction: column; align-items: stretch; gap: 9px }
+    .ask-foot .dismiss { align-self: flex-end; margin-left: 0; white-space: nowrap }
+    .apv-ft .btn[data-primary] { flex: 1 0 100% }
+    .apv-ft .btn:not([data-primary]) { flex: 1 }
   }
 
   /* ── 首次引导：一屏，一件事 ──────────────────────────────────────── */
@@ -4418,9 +4437,9 @@
      标题说这是哪一组；短语说缺了什么，是句子；详情说关于哪个东西 —— 一条路径、
      一条命令，那是代码不是散文，所以等宽、单行、超出用省略号（完整内容在 title
      里）。一条 40 行的 heredoc 被当成段落铺开，是这张卡最难读的地方。 */
-  .rc { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 2px }
+  .rc { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 2px; padding-left: 42px }
   .rc-ok {
-    flex-direction: row; align-items: baseline; gap: 8px;
+    display: flex; flex-direction: row; align-items: baseline; gap: 8px;
     font: var(--w-reg) 11.5px/1.6 var(--ui); color: var(--ghost);
   }
   .rc-ok .rc-tick { color: var(--ok) }
@@ -4436,7 +4455,7 @@
   .rc-group[data-declared] .rc-hd { text-transform: none; letter-spacing: 0 }
   .rc-row { display: flex; align-items: baseline; gap: 9px; padding: 3px 0; min-width: 0 }
   .rc-row + .rc-row { border-top: 1px solid color-mix(in srgb, var(--hair) 55%, transparent) }
-  .rc-t { flex: none; font: var(--w-reg) 11.5px/1.6 var(--ui); color: var(--text) }
+  .rc-t { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; font: var(--w-reg) 11.5px/1.6 var(--ui); color: var(--text) }
   .rc-d {
     flex: 1; min-width: 0; font: var(--w-reg) 10.5px/1.6 var(--mono); color: var(--ghost);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -4665,9 +4684,10 @@
   .xv-kv { display: flex; align-items: baseline; gap: 9px; font: var(--w-reg) 11.5px var(--ui) }
   .xv-kv .k { flex: none; min-width: 84px; color: var(--faint) }
   .xv-kv .v { color: var(--text); font-family: var(--mono); overflow-wrap: anywhere }
-  .xv-meter { position: relative; height: 4px; border-radius: var(--r-pill); background: var(--overlay); overflow: hidden }
-  .xv-meter > i { display: block; height: 100%; background: var(--deleg); transition: width var(--t-card) var(--ease) }
-  .xv-meter .lb { position: absolute; right: 0; top: 6px; font: var(--w-reg) 10.5px var(--ui); color: var(--ghost) }
+  .xv-meter { position: relative; min-height: 4px; padding-top: 4px }
+  .xv-meter::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; border-radius: var(--r-pill); background: var(--overlay) }
+  .xv-meter > i { position: absolute; left: 0; top: 0; display: block; height: 4px; border-radius: var(--r-pill); background: var(--deleg); transition: width var(--t-card) var(--ease) }
+  .xv-meter .lb { display: block; margin-top: 5px; text-align: right; font: var(--w-reg) 10.5px var(--ui); color: var(--ghost) }
   .xv-hr { margin: 2px 0; border: 0; border-top: 1px solid var(--hair) }
   .xview .pip[data-tone="ok"] { background: var(--ok) }
   .xview .pip[data-tone="warn"] { background: var(--warn) }
@@ -5986,8 +6006,8 @@
   border-color: var(--focus); box-shadow: 0 0 0 2px color-mix(in oklab, var(--focus) 26%, transparent);
 }
 .memedit .when { max-width: 220px }
-.memedit .row, .peek .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
-.peek .row { margin-top: 8px }
+.memedit .row, .memedit .peek .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.memedit .peek .row { margin-top: 8px }
 .memedit .hint { color: var(--muted); font: var(--w-reg) 11px var(--ui) }
 
 /* ── diff：把这个文件还原回去 ───────────────────────────────────────

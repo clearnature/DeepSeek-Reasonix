@@ -50,11 +50,11 @@ function evidence(r: Receipt): string[] {
 function Verified({ r }: { r: Receipt }) {
   const parts = evidence(r);
   return (
-    <div className="rc rc-ok">
+    <>
       <span className="rc-tick">✓</span>
       <span className="rc-t">{t("没有未经验证的部分")}</span>
       {parts.length > 0 && <span className="rc-src">{parts.join(" · ")}</span>}
-    </div>
+    </>
   );
 }
 
@@ -63,13 +63,13 @@ export function ReceiptCard({ r }: { r: Receipt }) {
   const declared = [...(r.unverified ?? []), ...(r.risks ?? [])];
   const clean = gaps.length === 0;
 
-  if (clean && declared.length === 0) return <Verified r={r} />;
+  if (clean && declared.length === 0) return <div className="rc rc-ok"><Verified r={r} /></div>;
 
   const shown = gaps.slice(0, MAX_GAPS);
   const rest = gaps.length - shown.length;
   return (
     <div className="rc">
-      {clean && <Verified r={r} />}
+      {clean && <div className="rc-ok"><Verified r={r} /></div>}
       {gaps.length > 0 && (
         <section className="rc-group">
           <span className="rc-hd">{t("未验证")}</span>

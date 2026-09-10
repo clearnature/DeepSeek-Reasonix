@@ -6,7 +6,7 @@ import type { Item } from "../../state/session";
 
 interface Props {
   item: Extract<Item, { t: "ask" }>;
-  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => void;
+  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
 }
 
 export function AskCard({ item, onAnswer }: Props) {
@@ -17,6 +17,7 @@ export function AskCard({ item, onAnswer }: Props) {
   // the tool result untouched, so "其他" is a label like any other.
   const [other, setOther] = useState<string[]>(() => qs.map(() => ""));
   const [otherOn, setOtherOn] = useState<boolean[]>(() => qs.map(() => false));
+  const [submitting, setSubmitting] = useState(false);
   // Answered is read-only but still readable: the tabs keep working so you can
   // see what was chosen for each question, and the options stay on screen with
   // the unchosen ones dimmed by the sealed styling.
@@ -25,7 +26,7 @@ export function AskCard({ item, onAnswer }: Props) {
 
   const free = (i: number) => (otherOn[i] ? other[i].trim() : "");
   const selected = (i: number) => (free(i) ? [...picks[i], free(i)] : picks[i]);
-  const answered = (i: number) => selected(i).length > 0;
+  const answered = (i: number) => (sealed ? (chosen[i]?.length ?? 0) > 0 : selected(i).length > 0);
   const left = qs.reduce((n, _, i) => n + (answered(i) ? 0 : 1), 0);
   // A sealed card may have been answered by another client, so what counts as
   // free text is whatever came back that no option offered.
@@ -54,8 +55,15 @@ export function AskCard({ item, onAnswer }: Props) {
     if (on && !qs[qi].multi) setPicks((prev) => at(prev, qi, []));
   };
 
-  const send = (answers: string[][]) =>
-    onAnswer(item.id, item.ask.id, qs.map((q, i) => ({ questionId: q.id, selected: answers[i] })));
+  const send = async (answers: string[][]) => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await onAnswer(item.id, item.ask.id, qs.map((q, i) => ({ questionId: q.id, selected: answers[i] })));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="call" data-k="ask">
@@ -69,7 +77,7 @@ export function AskCard({ item, onAnswer }: Props) {
           <span className="arg">{qs.length} 个问题</span>
         </div>
         <div className="out">
-          <div className="ask" data-sealed={sealed ? "" : undefined}>
+          <div className="ask" data-sealed={sealed ? "" : undefined} aria-busy={submitting}>
             {qs.length > 1 && (
               <div className="ask-tabs" role="tablist">
                 {qs.map((q, i) => (
@@ -92,19 +100,20 @@ export function AskCard({ item, onAnswer }: Props) {
                 <div className="ask-q">{q.prompt}</div>
                 <div className="ask-hint">{t(q.multi ? "可多选" : "请选择一项")}</div>
                 <div className="opts">
-                  {q.options.map((o, j) => (
+                  {q.options.map((o) => (
                     <button
                       key={o.label}
                       className="opt"
                       data-multi={q.multi ? "" : undefined}
                       data-on={chosen[i]?.includes(o.label) ? "" : undefined}
+                      aria-pressed={chosen[i]?.includes(o.label) ?? false}
+                      disabled={sealed}
                       onClick={() => toggle(i, o.label)}
                     >
                       <span className="mark" />
                       <span className="txt">
                         <span className="lb">
                           {o.label}
-                          {j === 0 && !q.multi && <span className="rec">{t("推荐")}</span>}
                         </span>
                         {o.description && <span className="ds">{o.description}</span>}
                       </span>
@@ -114,6 +123,8 @@ export function AskCard({ item, onAnswer }: Props) {
                     className="opt opt-other"
                     data-multi={q.multi ? "" : undefined}
                     data-on={(sealed ? !!sealedFree(i) : otherOn[i]) ? "" : undefined}
+                    aria-pressed={sealed ? !!sealedFree(i) : otherOn[i]}
+                    disabled={sealed}
                     onClick={() => toggleOther(i)}
                   >
                     <span className="mark" />
@@ -134,24 +145,30 @@ export function AskCard({ item, onAnswer }: Props) {
             ))}
             {sealed && (
               <div className="ask-done">
-                {qs.map((q, i) => (
-                  <span key={q.id}>
-                    {i > 0 && "　·　"}
-                    <b>{q.header || t("问题 {n}", { n: i + 1 })}：</b>
-                    {chosen[i]?.length ? chosen[i].join("、") : t("未答")}
-                  </span>
-                ))}
+                {item.answeredElsewhere ? (
+                  <b>{t("已在其他窗口处理，请以最新运行状态为准。")}</b>
+                ) : (
+                  <>
+                    {qs.map((q, i) => (
+                      <span key={q.id}>
+                        {i > 0 && "　·　"}
+                        <b>{q.header || t("问题 {n}", { n: i + 1 })}：</b>
+                        {chosen[i]?.length ? chosen[i].join("、") : t("未答")}
+                      </span>
+                    ))}
+                  </>
+                )}
               </div>
             )}
             {!sealed && (
               <div className="ask-foot">
-                <button className="btn" data-primary data-action="ask.answer" data-value="chosen" disabled={left > 0} onClick={() => send(qs.map((_, i) => selected(i)))}>
-                  {left ? t("确认（还有 {n} 个没答）", { n: left }) : t("确认")}
+                <button className="btn" data-primary data-action="ask.answer" data-value="chosen" disabled={left > 0 || submitting} onClick={() => void send(qs.map((_, i) => selected(i)))}>
+                  {submitting ? t("正在提交…") : left ? t("确认（还有 {n} 个没答）", { n: left }) : t("确认")}
                 </button>
                 {/* An answer batch with nothing selected is the kernel's explicit
                     "don't decide for me" path: it ends the turn rather than
                     feeding a prose dismissal back to the model. */}
-                <button className="dismiss" data-action="ask.answer" data-value="none" onClick={() => send(qs.map(() => []))}>
+                <button className="dismiss" data-action="ask.answer" data-value="none" disabled={submitting} onClick={() => void send(qs.map(() => []))}>
                   {t("先不选择，直接回复")}
                 </button>
               </div>

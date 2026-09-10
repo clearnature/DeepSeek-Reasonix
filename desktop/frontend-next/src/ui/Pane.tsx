@@ -477,9 +477,14 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // Transcript rows are memoised on their item; a callback rebuilt every render
   // would defeat that on the two cards that take one.
   const onApprove = useCallback(
-    (itemId: string, id: string, v: ApprovalVerdict) => {
-      dispatch({ kind: "__decided", id: itemId, verdict: v } as never);
-      port.approve(id, v).then(refreshStatus).catch(fail);
+    async (itemId: string, id: string, v: ApprovalVerdict) => {
+      try {
+        await port.approve(id, v);
+        dispatch({ kind: "__decided", id: itemId, verdict: v } as never);
+        refreshStatus();
+      } catch (e) {
+        fail(e);
+      }
     },
     [port, refreshStatus, fail],
   );
@@ -492,16 +497,21 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   // why the chat TUI clears it here too. Studio never did, so approving a plan
   // executed it and then planned the next turn all over again.
   const onPlan = useCallback(
-    (itemId: string, id: string, action: PlanAction) => {
-      dispatch({ kind: "__decided", id: itemId, verdict: action } as never);
+    async (itemId: string, id: string, action: PlanAction) => {
       // The three outcomes are three kernel transitions, so they go back whole
       // rather than as an allow/deny pair. The kernel moves the lifecycle
       // itself — setting plan mode from here would race its own transition — and
       // a stale decision is ordinary concurrency: say so, then re-read the
       // projection instead of binding this answer to whatever is open now.
-      port.planDecision(id, action).catch(fail).then(refreshStatus);
-      // Revising is done by talking, so put the cursor where the talking happens.
-      if (action === "revise") setAskFocus((n) => n + 1);
+      try {
+        await port.planDecision(id, action);
+        dispatch({ kind: "__decided", id: itemId, verdict: action } as never);
+        refreshStatus();
+        // Revising is done by talking, so put the cursor where the talking happens.
+        if (action === "revise") setAskFocus((n) => n + 1);
+      } catch (e) {
+        fail(e);
+      }
     },
     [port, refreshStatus, fail],
   );
@@ -537,9 +547,13 @@ function PaneView({ port, rt, title, active, visible, sideHost, side, onFocus, o
   );
 
   const onAnswer = useCallback(
-    (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => {
-      dispatch({ kind: "__decided", id: itemId, answers: answers.map((a) => a.selected) } as never);
-      void port.answer(id, answers).catch(fail);
+    async (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => {
+      try {
+        await port.answer(id, answers);
+        dispatch({ kind: "__decided", id: itemId, answers: answers.map((a) => a.selected) } as never);
+      } catch (e) {
+        fail(e);
+      }
     },
     [port, fail],
   );

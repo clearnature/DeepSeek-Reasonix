@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { count, decimals } from "../../i18n/format";
 import { Sym } from "../Sym";
@@ -21,7 +21,12 @@ function thoughtLabel(item: Extract<Item, { t: "say" }>) {
 }
 
 export function SayCard({ item }: { item: Extract<Item, { t: "say" }> }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(!item.done);
+  const wasDone = useRef(item.done);
+  useEffect(() => {
+    if (!wasDone.current && item.done) setOpen(false);
+    wasDone.current = item.done;
+  }, [item.done]);
   // Thinking is the longest-running stream of the turn — 10s of it before the
   // first answer token, measured — so it gets the same paced reveal the answer
   // does rather than tracking the wire's bursts.
@@ -34,11 +39,11 @@ export function SayCard({ item }: { item: Extract<Item, { t: "say" }> }) {
       </div>
       <div className="c">
         <div className="hl">
-          <span className="nm">Agent</span>
+          <span className="nm">{t("助手")}</span>
         </div>
         <div className="out">
           {item.reasoning && (
-            <details className="think" open={open && !item.done} onToggle={(e) => setOpen(e.currentTarget.open)}>
+            <details className="think" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
               <summary>
                 <span className="fold">{item.done ? thoughtLabel(item) : t("思考中…")}</span>
               </summary>

@@ -28,7 +28,7 @@ export type Item =
   | { t: "reads"; id: string; tools: Tool[] }
   | { t: "guardian"; id: string; g: Guardian }
   | { t: "approval"; id: string; a: Approval; verdict?: string }
-  | { t: "ask"; id: string; ask: Ask; answered?: string[][] }
+  | { t: "ask"; id: string; ask: Ask; answered?: string[][]; answeredElsewhere?: boolean }
   | { t: "compaction"; id: string; c: Compaction; done: boolean }
   | { t: "remember"; id: string; m: RememberedFact; forgotten?: boolean }
   | { t: "receipt"; id: string; r: Receipt }

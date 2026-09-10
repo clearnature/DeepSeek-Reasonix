@@ -46,7 +46,7 @@ export function sealByReceipt(s: SessionState, r: DecisionReceipt): SessionState
   if (at < 0) return s; // already sealed here, or never on this screen
   const items = s.items.slice();
   const it = items[at];
-  if (it.t === "ask") items[at] = { ...it, answered: [] };
+  if (it.t === "ask") items[at] = { ...it, answered: [], answeredElsewhere: true };
   else if (it.t === "approval") items[at] = { ...it, verdict: verdictOf(r.outcome) };
   else return s;
   return { ...s, items };
@@ -73,6 +73,6 @@ function verdictOf(outcome: string): string {
     case "recovery_continue_task":
       return "always";
     default:
-      return "once";
+      return "unknown";
   }
 }

@@ -33,9 +33,9 @@ interface Props {
   // node you clicked. The nonce, not the id, is what makes asking twice land
   // twice; null while nothing has been asked for.
   focus: { call: string; n: number } | null;
-  onApprove: (itemId: string, id: string, v: ApprovalVerdict) => void;
-  onPlan: (itemId: string, id: string, action: PlanAction) => void;
-  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => void;
+  onApprove: (itemId: string, id: string, v: ApprovalVerdict) => Promise<void>;
+  onPlan: (itemId: string, id: string, action: PlanAction) => Promise<void>;
+  onAnswer: (itemId: string, id: string, answers: { questionId: string; selected: string[] }[]) => Promise<void>;
   onSuggest: (text: string) => void;
   onForget: (itemId: string, name: string) => void;
   // Takes a still-queued line back. Only rows the kernel has given an

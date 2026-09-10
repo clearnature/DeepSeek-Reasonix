@@ -425,6 +425,18 @@ describe("a question the run is still blocked on", () => {
     expect(sealed.verdict, "the outcome the kernel recorded, not a guess").toBe("deny");
   });
 
+  it("does not guess that a new receipt outcome was allowed", () => {
+    const s = run([approving("apv-1"), receipt("apv-1", "future_outcome")]);
+    expect((s.items[0] as Extract<Item, { t: "approval" }>).verdict).toBe("unknown");
+  });
+
+  it("does not present another window's answer as an unanswered question", () => {
+    const s = run([asking("ask-1"), receipt("ask-1", "answered")]);
+    const ask = s.items[0] as Extract<Item, { t: "ask" }>;
+    expect(ask.answeredElsewhere).toBe(true);
+    expect(ask.answered).toEqual([]);
+  });
+
   // The receipt for the click this window made arrives right behind it. It must
   // not reopen or relabel a card the user already watched settle.
   it("leaves a card this window already sealed alone", () => {

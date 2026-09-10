@@ -1,7 +1,10 @@
 import type { Guardian } from "../../port/wire";
 import { Sym } from "../Sym";
+import { t } from "../../i18n";
 
 export function GuardianCard({ g }: { g: Guardian }) {
+  const risk = g.risk_level ?? "unknown";
+  const riskLabel = risk === "low" ? t("低风险") : risk === "medium" ? t("中风险") : risk === "high" ? t("高风险") : t("风险未知");
   return (
     <div className="call">
       <div className="g">
@@ -15,10 +18,11 @@ export function GuardianCard({ g }: { g: Guardian }) {
           <span className="arg">{g.subject}</span>
         </div>
         <div className="out">
-          <div className="guard" data-risk={g.risk_level ?? "low"}>
+          <div className="guard" data-risk={risk}>
             <div className="guard-hd">
               <span className="verdict">{g.outcome}</span>
-              <span className="gauge" title={`风险 ${g.risk_level ?? ""}`}>
+              <span className="risk">{riskLabel}</span>
+              <span className="gauge" aria-label={riskLabel}>
                 <i />
                 <i />
                 <i />

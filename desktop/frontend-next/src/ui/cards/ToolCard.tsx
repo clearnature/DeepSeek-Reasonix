@@ -12,6 +12,7 @@ import { parsePlan } from "../../state/session";
 import { DiffView } from "./DiffView";
 import { Term, ToolOutput } from "./ToolOutput";
 import { ExtensionView } from "./ExtensionView";
+import { toolFailed, toolFailureLabel } from "./outcome";
 
 // The spec pops a symbol as it settles — colour arriving is the finish signal.
 // Only the transition may fire it: a restored transcript is all settled cards,
@@ -70,11 +71,10 @@ export function ToolCard({
   const arg = tool.name === "todo_write" ? "" : streaming ? `${tokens(tool.argChars!)} 字符` : shortArgs(tool.args ?? "");
   // A shell result carries its exit status separately from stdout, and stdout
   // alone cannot say whether the command worked.
-  const ex = tool.execution;
-  const bad = ex && ((ex.state && ex.state !== "completed") || (ex.exitCode ?? 0) !== 0);
+  const bad = toolFailed(tool);
   // The number is the actionable half; the state only says that something went
   // wrong, which the colour already says.
-  const badLabel = !ex ? "" : (ex.exitCode ?? 0) !== 0 ? `exit ${ex.exitCode}` : (ex.state ?? "");
+  const badLabel = toolFailureLabel(tool);
   // Which server answered belongs on the card, not in a panel: this is the
   // moment the user can judge whether an external service should have run.
   const from = mcpOrigin(shown);
@@ -104,7 +104,7 @@ export function ToolCard({
       data-running={running ? "" : undefined}
     >
       <div className="g">
-        <Sym glyph={glyphFor(shown)} done={settling.pop} />
+        <Sym glyph={glyphFor(shown)} done={settling.pop && !bad} />
         <span className="line" />
       </div>
       <div className="c">
@@ -189,6 +189,8 @@ export function ToolCard({
 function NestedCall({ tool }: { tool: Tool }) {
   const shown = tool.resolvedName || tool.name;
   const tag = tagFor(tool);
+  const bad = toolFailed(tool);
+  const clipped = (tool.output?.length ?? 0) > 400;
   return (
     <div className="call" data-call={tool.id || undefined} data-k={KINDED.has(categoryOf(shown)) ? categoryOf(shown) : undefined}>
       <div className="g">
@@ -200,13 +202,16 @@ function NestedCall({ tool }: { tool: Tool }) {
           <span className="nm" title={shown}>{labelFor(shown)}</span>
           {tag && <span className="tag" title={tagHint(tool)}>{tag}</span>}
           {tool.args && <span className="arg">{shortArgs(tool.args)}</span>}
+          {bad && <span className="fail">{toolFailureLabel(tool)}</span>}
           <Cost tools={[tool]} />
         </div>
         {tool.output && (
           <div className="out">
             <Term text={tool.output.slice(0, 400)} />
+            {clipped && <div className="bound">{t("仅显示前 400 个字符")}</div>}
           </div>
         )}
+        {tool.err && <div className="out"><div className="txt bad">{tool.err}</div></div>}
       </div>
     </div>
   );
