@@ -10,6 +10,9 @@ const StreamInterruptUpstreamError = "upstream_error"
 type StreamPayloadError struct {
 	Provider string
 	Message  string
+	Code     string
+	Type     string
+	Param    string
 }
 
 func (e *StreamPayloadError) Error() string {

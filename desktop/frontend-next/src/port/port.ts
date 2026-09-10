@@ -36,7 +36,8 @@ import type { ExecutionGraphRead, TrajectoryRead, WireEvent } from "./wire";
 import type { PluginExport, PluginInstallRequest, PluginPackage, PluginPlan } from "./plugin";
 import type { Appearance, ThemePack } from "./look";
 import type { ConfigProblem, ConfigRepair, PermissionLists, PermissionRules, SandboxSettings } from "./boundary";
-import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderProbe, ProviderSetup } from "./provider";
+import type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
+export type { Protocol, ProviderCheck, ProviderDraft, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe, ProviderSetup } from "./provider";
 import type { StoragePlan, StorageState } from "./storage";
 
 export type * from "./plugin";
@@ -241,6 +242,7 @@ export interface AgentPort {
   // Re-probes what is already saved, so "is the key still good, and is this
   // still the protocol we recorded" is one button rather than a re-add.
   checkProvider(name: string): Promise<ProviderCheck>;
+  checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   saveProvider(draft: ProviderDraft): Promise<void>;
   // Changes only the fields the form owns. Saving a whole entry instead would
   // drop the per-model prices and effort lists it cannot show.
@@ -418,4 +420,3 @@ export interface AgentPort {
   saveCompaction(softLimitTokens: number): Promise<CompactionSettings>;
   setGoal(text: string): Promise<void>;
 }
-

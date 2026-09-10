@@ -43,7 +43,7 @@ await page.waitForTimeout(500);
 await page.evaluate(() => document.getElementById("prefs-model")?.click());
 await page.waitForTimeout(600);
 
-// relay.example.com 是固件里那个网关级的来源，重新问一次才拿到全量列表。
+// relay.example.com 是固件里那个网关级的来源，刷新后才拿到全量列表。
 await page.evaluate(() => {
   const row = [...document.querySelectorAll(".vrow")].find((r) => r.textContent.includes("relay.example.com"));
   const edit = [...(row?.querySelectorAll("button") ?? [])].find((b) => b.textContent.trim() === "编辑");
@@ -52,8 +52,7 @@ await page.evaluate(() => {
 });
 if (!(await appear(PANEL, 5000, "连接的编辑面板"))) await giveUp();
 await page.evaluate(() => {
-  [...document.querySelectorAll(".addp[data-edit] button")]
-    .find((b) => b.textContent.trim() === "重新问一次有哪些模型")?.click();
+  document.querySelector('.addp[data-edit] [data-action="provider.probe"]')?.click();
 });
 await page.waitForTimeout(900);
 
@@ -73,7 +72,8 @@ const read = () =>
       more: (box.querySelector(".mmore")?.textContent ?? "").trim(),
       names: rows.map((r) => r.querySelector(".nm").textContent),
       newRow: (box.querySelector(".mnew .lb")?.textContent ?? "").trim(),
-      label: (box.querySelector(".mlb")?.textContent ?? "").trim(),
+      label: (box.querySelector(".mlhead .count")?.textContent ?? "").trim(),
+      overflows: box.scrollWidth > box.clientWidth + 1,
       // 整块编辑面板的高度。没有上限时一百多行会把保存按钮顶到几屏以外，
       // 而保存正是这一屏要做的事。
       panel: Math.round(box.getBoundingClientRect().height),
@@ -96,6 +96,7 @@ check("一行一个 DOM 节点的列表有上限", s.rows < all, `列出 ${s.row
 check("砍掉的说出来，不是悄悄少", s.more !== "" && s.more.includes(String(all - s.rows)), s.more);
 check("列表自己滚，不撑开面板", s.scrolls && s.height <= 320, `${s.height}px`);
 check("整块面板还在一屏之内", s.panel < 900, `${s.panel}px`);
+check("操作与长模型名不产生横向滚动", !s.overflows, s.overflows ? "发生横向滚动" : "");
 check("勾上的排在前面", s.lastOn < s.firstOff, `最后一个勾在 ${s.lastOn}，第一个没勾在 ${s.firstOff}`);
 
 s = await type("omni");

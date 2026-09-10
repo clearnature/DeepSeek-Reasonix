@@ -125,6 +125,22 @@ func TestSendWithRetryFailsFastOnClientErrors(t *testing.T) {
 	}
 }
 
+func TestSendWithRetryHonorsPerRequestRetryLimit(t *testing.T) {
+	calls := 0
+	cl := &http.Client{Transport: rtFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return statusResp(http.StatusTooManyRequests, nil), nil
+	})}
+	ctx := WithRetryLimit(context.Background(), 0)
+	_, err := SendWithRetry(ctx, cl, SendOptions{Provider: "p"}, newDummyReq)
+	if err == nil {
+		t.Fatal("a rate-limited request reported success")
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want one diagnostic attempt", calls)
+	}
+}
+
 func TestSendWithRetryPreservesProviderTraceID(t *testing.T) {
 	cl := &http.Client{Transport: rtFunc(func(r *http.Request) (*http.Response, error) {
 		return statusResp(422, map[string]string{"trace_id": "minimax-trace-123"}), nil

@@ -1,10 +1,16 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"reasonix/internal/config"
+	"reasonix/internal/provider"
 )
 
 // The endpoint in the fixture does not exist, so the probe fails — and that
@@ -61,5 +67,152 @@ func TestCheckProviderWaitsOnTheGrant(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("POST /providers/check without the grant = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestCheckProviderModelAcceptsAnUnlistedExactIDWithoutSavingIt(t *testing.T) {
+	var wireModel string
+	var wireMaxTokens int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			Model     string `json:"model"`
+			MaxTokens int    `json:"max_tokens"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			return
+		}
+		wireModel, wireMaxTokens = body.Model, body.MaxTokens
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"O\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer upstream.Close()
+
+	s := newProviderEditServer(t)
+	edit := config.LoadForEdit(config.UserConfigPath())
+	entry, ok := edit.Provider("existing")
+	if !ok {
+		t.Fatal("fixture provider is missing")
+	}
+	entry.BaseURL = upstream.URL + "/v1"
+	if err := edit.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	resp := postProvider(t, srv.URL, "/providers/check/model", `{"name":"existing","model":"Hidden-Preview/Exact-ID"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := readAllString(resp)
+		t.Fatalf("POST /providers/check/model = %d: %s", resp.StatusCode, b)
+	}
+	var got providerModelCheck
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "available" || got.Reason != "" || got.Model != "Hidden-Preview/Exact-ID" {
+		t.Fatalf("check = %+v, want the exact model reported available", got)
+	}
+	if wireModel != "Hidden-Preview/Exact-ID" || wireMaxTokens != 1 {
+		t.Fatalf("wire model/max_tokens = %q/%d, want exact ID and one token", wireModel, wireMaxTokens)
+	}
+	saved := config.LoadForEdit(config.UserConfigPath())
+	savedEntry, _ := saved.Provider("existing")
+	if savedEntry.HasModel("Hidden-Preview/Exact-ID") {
+		t.Fatal("an availability check added the model to persisted config")
+	}
+}
+
+func TestCheckProviderModelUsesUnsavedEndpointAndKeyOnlyForTheProbe(t *testing.T) {
+	authed := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authed = r.Header.Get("Authorization") == "Bearer one-time-key"
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"O\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer upstream.Close()
+
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	body := fmt.Sprintf(`{"name":"not-saved","model":"private-model","baseUrl":%q,"apiKey":"one-time-key","kind":"openai"}`, upstream.URL+"/v1")
+	resp := postProvider(t, srv.URL, "/providers/check/model", body)
+	defer resp.Body.Close()
+	var got providerModelCheck
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "available" || !authed {
+		t.Fatalf("check = %+v, authenticated = %v", got, authed)
+	}
+	if _, ok := config.LoadForEdit(config.UserConfigPath()).Provider("not-saved"); ok {
+		t.Fatal("an inline probe persisted its temporary provider")
+	}
+}
+
+func TestCheckProviderModelRateLimitIsOneRedactedAttempt(t *testing.T) {
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		http.Error(w, `{"error":{"message":"one-time-key is limited"}}`, http.StatusTooManyRequests)
+	}))
+	defer upstream.Close()
+
+	s := newProviderEditServer(t)
+	s.AllowProviderEdit()
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	body := fmt.Sprintf(`{"name":"not-saved","model":"private-model","baseUrl":%q,"apiKey":"one-time-key"}`, upstream.URL+"/v1")
+	resp := postProvider(t, srv.URL, "/providers/check/model", body)
+	defer resp.Body.Close()
+	raw, err := readAllString(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("upstream calls = %d, want one explicit diagnostic attempt", calls)
+	}
+	if strings.Contains(raw, "one-time-key") {
+		t.Fatalf("provider response leaked the one-time credential: %s", raw)
+	}
+	var got providerModelCheck
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "unknown" || got.Reason != "rate_limited" || got.HTTPStatus != http.StatusTooManyRequests {
+		t.Fatalf("check = %+v, want a structured rate-limit finding", got)
+	}
+}
+
+func TestClassifyProviderModelCheckUsesTypedAndStructuredFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		status     string
+		reason     string
+		httpStatus int
+	}{
+		{"auth", &provider.AuthError{Status: http.StatusUnauthorized}, "unknown", "auth", http.StatusUnauthorized},
+		{"rate", &provider.APIError{Status: http.StatusTooManyRequests}, "unknown", "rate_limited", http.StatusTooManyRequests},
+		{"not found", &provider.APIError{Status: http.StatusNotFound, Body: `{"error":{"code":"model_not_found"}}`}, "unavailable", "not_found", http.StatusNotFound},
+		{"model rejected", &provider.APIError{Status: http.StatusUnprocessableEntity, Body: `{"error":{"type":"invalid_request_error","param":"model"}}`}, "unavailable", "rejected", http.StatusUnprocessableEntity},
+		{"generic rejection", &provider.APIError{Status: http.StatusBadRequest, Body: `{"error":{"message":"opaque"}}`}, "unknown", "rejected", http.StatusBadRequest},
+		{"stream rate", &provider.StreamPayloadError{Code: "rate_limit_exceeded"}, "unknown", "rate_limited", 0},
+		{"timeout", context.DeadlineExceeded, "unknown", "timeout", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, reason, httpStatus := classifyProviderModelCheck(tt.err)
+			if status != tt.status || reason != tt.reason || httpStatus != tt.httpStatus {
+				t.Fatalf("classify = %q/%q/%d, want %q/%q/%d", status, reason, httpStatus, tt.status, tt.reason, tt.httpStatus)
+			}
+		})
 	}
 }

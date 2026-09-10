@@ -3727,29 +3727,67 @@
   .vway .seg button .perk { margin-left: 6px; padding: 0 5px; border-radius: var(--r-pill);
     background: var(--net-wash); color: var(--net); font: var(--w-reg) 9.5px var(--ui) }
 
-  /* 编辑一个来源：模型一行一个，选用 / 读图 / 默认三件事各自是独立的开关。
-     「读图」必须能手动改 —— 名字猜不出来的中转站，探测也给不出答案。 */
+  /* 模型目录和可调用性是两件事，标题与证据行把它们留在同一处比较。 */
   .addp[data-edit] { border-top: 0; border-left: 2px solid var(--border); padding-left: 12px; margin: 4px 0 10px }
   .mlist { margin-top: 12px; display: flex; flex-direction: column }
-  .mlist .mlb { margin-bottom: 6px; font: var(--w-reg) 10.5px var(--ui); color: var(--faint) }
-  .mline { display: flex; align-items: center; gap: 10px; padding: 6px 2px; border-top: 1px solid var(--hair) }
+  .mlhead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px }
+  .mlhead .ttl { font: var(--w-med) 12px var(--ui); color: var(--text) }
+  .mlhead .count { font: var(--w-reg) 10.5px var(--ui); color: var(--faint) }
+  .mlhead .mrefresh {
+    margin-left: auto; padding: 3px 7px; border: 0; border-radius: var(--r-xs);
+    background: transparent; color: var(--muted); font: var(--w-reg) 10.5px var(--ui); cursor: pointer;
+  }
+  .mlhead .mrefresh:hover { background: var(--hover); color: var(--text) }
+  .mlhead .mrefresh:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
+  .mlhead .mrefresh:disabled { opacity: .45; cursor: default }
+  .mguide, .mdiff { margin: 0 0 8px; font: var(--w-reg) 10.5px/1.55 var(--ui); color: var(--faint) }
+  .mdiff { padding: 5px 8px; border-left: 2px solid var(--net); background: var(--net-wash); color: var(--muted) }
+  .mline {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center;
+    gap: 8px; min-height: 42px; padding: 5px 2px; border-top: 1px solid var(--hair);
+  }
   .mline:last-child { border-bottom: 1px solid var(--hair) }
   .mline[data-off] .nm { color: var(--ghost) }
-  .mline .nm { flex: 1; min-width: 0; font: var(--w-reg) 12px var(--mono); color: var(--text); overflow-wrap: anywhere }
-  .mline .tick { flex: none; width: 14px; height: 14px; padding: 0; display: grid; place-items: center;
-    border: 1.5px solid var(--ghost); border-radius: var(--r-xs); background: transparent; cursor: pointer }
-  .mline .tick[aria-checked="true"] { border-color: var(--accent); background: var(--accent) }
-  .mline .tick i { width: 7px; height: 7px; border-radius: var(--r-xs); background: var(--accent-fg);
-    opacity: 0; transition: opacity var(--t-line) var(--ease-out) }
-  .mline .tick[aria-checked="true"] i { opacity: 1 }
+  .mline .mid { min-width: 0; display: flex; flex-direction: column; gap: 2px }
+  .mline .nm { min-width: 0; font: var(--w-reg) 12px var(--mono); color: var(--text); overflow-wrap: anywhere }
+  .mline .tick {
+    width: 28px; height: 28px; padding: 0; display: grid; place-items: center;
+    border: 0; border-radius: var(--r-xs); background: transparent; cursor: pointer;
+  }
+  .mline .tick i {
+    width: 14px; height: 14px; display: grid; place-items: center; border: 1.5px solid var(--ghost);
+    border-radius: var(--r-xs); background: transparent; transition: border-color var(--t-line) var(--ease-out), background var(--t-line) var(--ease-out);
+  }
+  .mline .tick i::after {
+    content: ""; width: 6px; height: 3px; border-left: 1.5px solid var(--accent-fg);
+    border-bottom: 1.5px solid var(--accent-fg); opacity: 0; transform: translateY(-1px) rotate(-45deg);
+  }
+  .mline .tick[aria-checked="true"] i { border-color: var(--accent); background: var(--accent) }
+  .mline .tick[aria-checked="true"] i::after { opacity: 1 }
+  .mline .tick:focus-visible { outline: 2px solid var(--focus); outline-offset: 0 }
+  .mevidence { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--faint); font: var(--w-reg) 10px var(--ui) }
+  .mevidence > i { width: 5px; height: 5px; margin-left: 2px; border-radius: 50%; background: var(--ghost) }
+  .mevidence > i[data-state="available"] { background: var(--ok) }
+  .mevidence > i[data-state="unavailable"] { background: var(--err) }
+  .mevidence > i[data-state="checking"] { background: var(--net) }
+  .mops { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px }
+  .mline .mverify {
+    min-height: 26px; padding: 2px 6px; border: 0; border-radius: var(--r-xs);
+    background: transparent; color: var(--muted); font: var(--w-reg) 10px var(--ui); cursor: pointer;
+  }
+  .mline .mverify:hover { background: var(--hover); color: var(--text) }
+  .mline .mverify:disabled { opacity: .38; cursor: default }
   .mline .vtag, .mline .dtag {
-    flex: none; padding: 2px 8px; border: 1px solid var(--hair); border-radius: var(--r-pill);
+    flex: none; min-height: 26px; padding: 2px 8px; border: 1px solid var(--hair); border-radius: var(--r-pill);
     background: var(--surface); color: var(--ghost); font: var(--w-reg) 10px var(--ui); cursor: pointer;
   }
   .mline .vtag[aria-pressed="true"] { color: var(--deleg); background: var(--deleg-wash);
     border-color: color-mix(in srgb, var(--deleg) 32%, transparent) }
   .mline .dtag[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent-wash);
     border-color: color-mix(in srgb, var(--accent) 32%, transparent) }
+  .mline .mverify:focus-visible, .mline .vtag:focus-visible, .mline .dtag:focus-visible {
+    outline: 2px solid var(--focus); outline-offset: 1px;
+  }
   .mline .vtag:disabled, .mline .dtag:disabled { opacity: .35; cursor: default }
   /* 探测答出来的能力,不是一个开关 —— 添加来源时读图是既成事实。 */
   .mline .vtag[data-flat] { color: var(--deleg); background: var(--deleg-wash); border-color: transparent; cursor: default }

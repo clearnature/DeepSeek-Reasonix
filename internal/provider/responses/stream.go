@@ -118,7 +118,7 @@ func (t *turn) applyContent(ctx context.Context, event sseEvent, key string) boo
 // event: it carries its code and message directly and ends the turn.
 func (t *turn) streamError(ctx context.Context, event sseEvent) bool {
 	t.terminal, t.failed = true, true
-	err := error(fmt.Errorf("responses: %s", cmp.Or(strings.TrimSpace(event.Message), "stream error")))
+	err := error(&provider.StreamPayloadError{Provider: t.c.name, Message: cmp.Or(strings.TrimSpace(event.Message), "stream error"), Code: event.Code})
 	if authErr := authErrorFromResponse(t.c, &sseError{Message: event.Message, Code: event.Code}); authErr != nil {
 		err = authErr
 	}
@@ -264,7 +264,7 @@ func failureError(c *client, responseError *sseError) error {
 	if authErr := authErrorFromResponse(c, responseError); authErr != nil {
 		return authErr
 	}
-	return fmt.Errorf("responses: %s", responseError.Message)
+	return &provider.StreamPayloadError{Provider: c.name, Message: responseError.Message, Code: responseError.Code}
 }
 
 // reportUsage forwards the turn's accounting. An all-zero usage object still

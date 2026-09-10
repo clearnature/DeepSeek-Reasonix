@@ -56,6 +56,8 @@ export const EN_SETTINGS: Record<string, string> = {
   "连接": "Connections",
   "模型的来源。添加时只需填写地址和 key；协议、模型列表和图片支持会自动向端点探测，探测不到的才需要手动填写。":
     "Where models come from. Adding one asks only for an address and a key; the protocol, the model list and image support are probed from the endpoint, and you fill in only what cannot be detected.",
+  "从端点读取模型目录；未列出的模型也可以按原始 ID 添加并单独验证。图片输入单独配置，并以不发送为安全默认。":
+    "Reads the model catalog from the endpoint; unlisted models can still be added by exact ID and verified individually. Image input is configured separately and defaults safely to off.",
 
   // ── 设置：工具与权限 ─────────────────────────────────────────────
   "工具批准": "Tool approvals",

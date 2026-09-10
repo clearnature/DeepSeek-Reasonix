@@ -96,6 +96,34 @@ export interface ProviderCheck {
   error?: string;
 }
 
+export type ProviderModelCheckStatus = "available" | "unavailable" | "unknown";
+export type ProviderModelCheckReason =
+  | "auth"
+  | "not_found"
+  | "rate_limited"
+  | "rejected"
+  | "network"
+  | "timeout";
+
+// A deliberate, billable check of one exact model id. Listing and calling are
+// separate facts: private models often accept requests without appearing in a catalog.
+export interface ProviderModelCheck {
+  model: string;
+  status: ProviderModelCheckStatus;
+  reason?: ProviderModelCheckReason;
+  httpStatus?: number;
+}
+
+export interface ProviderModelCheckRequest {
+  name?: string;
+  model: string;
+  baseUrl?: string;
+  apiKey?: string;
+  kind?: string;
+  authHeader?: boolean;
+  noProxy?: boolean;
+}
+
 // Changing a source that already exists: everything else on the entry stays.
 export interface ProviderEdit {
   name: string;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useEscape } from "./dismiss";
 import { t } from "../i18n";
-import type { Protocol, ProviderCheck, ProviderEdit, ProviderEntry, ProviderProbe } from "../port/port";
+import type { Protocol, ProviderCheck, ProviderEdit, ProviderEntry, ProviderModelCheck, ProviderModelCheckRequest, ProviderProbe } from "../port/port";
 import { AddProvider } from "./AddProvider";
 import { EditConn } from "./EditConn";
 import { KIND_LABEL, accountKey, accountLabel, disambiguate, hostOf } from "./vendors";
@@ -24,6 +24,7 @@ export type Port = {
   }): Promise<void>;
   removeProvider(name: string): Promise<void>;
   checkProvider(name: string): Promise<ProviderCheck>;
+  checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck>;
   editProvider(edit: ProviderEdit): Promise<void>;
   setProviderWebSearch(name: string, on: boolean): Promise<void>;
   setProviderThinking(name: string, on: boolean): Promise<void>;
@@ -273,6 +274,7 @@ function Conn({
       {editing && (
         <EditConn
           entry={entry}
+          initialCheck={found?.ok ? found : undefined}
           port={port}
           busy={busy}
           setBusy={setBusy}
@@ -309,4 +311,3 @@ function Conn({
     </>
   );
 }
-

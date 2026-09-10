@@ -3,10 +3,16 @@ package serve
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"strings"
 
+	"reasonix/internal/boot"
 	"reasonix/internal/config"
+	"reasonix/internal/netclient"
+	"reasonix/internal/provider"
 )
 
 // providerCheck is what re-probing a saved provider found. Kind is the protocol
@@ -35,6 +41,7 @@ type providerCheck struct {
 // Flipping kind alone would aim one contract at the other's address.
 func (s *Server) registerProviderCheckRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /providers/check", s.checkProvider)
+	mux.HandleFunc("POST /providers/check/model", s.checkProviderModel)
 }
 
 // checkProvider re-runs the add-a-source probe against what is already saved, so
@@ -85,4 +92,208 @@ func (s *Server) checkProvider(w http.ResponseWriter, r *http.Request) {
 		Ambiguous: got.Ambiguous,
 		NoProxy:   got.NoProxy,
 	})
+}
+
+type providerModelCheckRequest struct {
+	Name       string `json:"name"`
+	Model      string `json:"model"`
+	BaseURL    string `json:"baseUrl"`
+	APIKey     string `json:"apiKey"`
+	Kind       string `json:"kind"`
+	AuthHeader *bool  `json:"authHeader"`
+	NoProxy    *bool  `json:"noProxy"`
+}
+
+type providerModelCheck struct {
+	Model      string `json:"model"`
+	Status     string `json:"status"`
+	Reason     string `json:"reason,omitempty"`
+	HTTPStatus int    `json:"httpStatus,omitempty"`
+}
+
+// checkProviderModel spends one bounded completion only after the settings UI
+// asks for it. A model need not appear in the saved or remote catalog: the
+// exact caller-supplied ID is put on the wire and nothing is persisted.
+func (s *Server) checkProviderModel(w http.ResponseWriter, r *http.Request) {
+	if !s.grants.providerEdit {
+		refuse(w, http.StatusForbidden, "provider.editing_disabled", "provider editing is not enabled on this server", nil)
+		return
+	}
+	var body providerModelCheckRequest
+	if !decodeProviderBody(w, r, &body) {
+		return
+	}
+	model := strings.TrimSpace(body.Model)
+	if model == "" {
+		refuse(w, http.StatusBadRequest, "provider.no_models_picked", "a model ID is required", nil)
+		return
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	entry, found := cfg.Provider(strings.TrimSpace(body.Name))
+	if !found && strings.TrimSpace(body.BaseURL) == "" {
+		notFound(w, "provider", body.Name)
+		return
+	}
+	if !found {
+		entry = &config.ProviderEntry{Name: "probe", Kind: "openai"}
+	}
+	candidate := *entry
+	if value := strings.TrimSpace(body.BaseURL); value != "" {
+		candidate.BaseURL = value
+	}
+	if value := strings.ToLower(strings.TrimSpace(body.Kind)); value != "" {
+		if !config.SupportedProviderKind(value) {
+			refuse(w, http.StatusBadRequest, "provider.kind_unsupported", "unsupported provider kind", map[string]any{"kind": value})
+			return
+		}
+		candidate.Kind = value
+	}
+	if body.AuthHeader != nil {
+		candidate.AuthHeader = *body.AuthHeader
+	}
+	if body.NoProxy != nil {
+		candidate.NoProxy = *body.NoProxy
+	}
+	candidate.Model = model
+	if key := strings.TrimSpace(body.APIKey); key != "" {
+		candidate = candidate.WithAPIKeyForProbe(key)
+	}
+
+	proxy := cfg.NetworkProxySpec()
+	if candidate.NoProxy && proxy.Mode != netclient.ModeCustom {
+		proxy = netclient.ProxySpec{Mode: netclient.ModeOff}
+	}
+	modelProvider, err := boot.NewProviderWithProxy(&candidate, proxy)
+	if err != nil {
+		writeJSON(w, providerModelCheck{Model: model, Status: "unknown", Reason: "rejected"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(provider.WithRetryLimit(r.Context(), 0), providerProbeTimeout)
+	defer cancel()
+	err = runProviderModelCheck(ctx, modelProvider)
+	status, reason, httpStatus := classifyProviderModelCheck(err)
+	writeJSON(w, providerModelCheck{Model: model, Status: status, Reason: reason, HTTPStatus: httpStatus})
+}
+
+func runProviderModelCheck(ctx context.Context, modelProvider provider.Provider) error {
+	stream, err := modelProvider.Stream(ctx, provider.Request{
+		Messages:  []provider.Message{{Role: provider.RoleUser, Content: "OK"}},
+		MaxTokens: 1,
+	})
+	if err != nil {
+		return err
+	}
+	proved := false
+	for chunk := range stream {
+		if chunk.Type == provider.ChunkError {
+			return chunk.Err
+		}
+		if chunk.Type == provider.ChunkDone || chunk.Type == provider.ChunkUsage ||
+			(chunk.Type == provider.ChunkText && chunk.Text != "") ||
+			(chunk.Type == provider.ChunkReasoning && chunk.Text != "") || chunk.ToolCall != nil {
+			proved = true
+		}
+	}
+	if proved {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("provider model check ended without a protocol result")
+}
+
+func classifyProviderModelCheck(err error) (status, reason string, httpStatus int) {
+	if err == nil {
+		return "available", "", 0
+	}
+	var auth *provider.AuthError
+	if errors.As(err, &auth) {
+		return "unknown", "auth", auth.Status
+	}
+	var apiErr *provider.APIError
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.Status == http.StatusTooManyRequests:
+			return "unknown", "rate_limited", apiErr.Status
+		case apiErr.Status == http.StatusRequestTimeout || apiErr.Status == http.StatusGatewayTimeout:
+			return "unknown", "timeout", apiErr.Status
+		case modelErrorIdentity(apiErr.Body) == "not_found":
+			return "unavailable", "not_found", apiErr.Status
+		case modelErrorIdentity(apiErr.Body) == "rejected":
+			return "unavailable", "rejected", apiErr.Status
+		case apiErr.Status >= 500:
+			return "unknown", "network", apiErr.Status
+		default:
+			return "unknown", "rejected", apiErr.Status
+		}
+	}
+	var streamErr *provider.StreamPayloadError
+	if errors.As(err, &streamErr) {
+		switch modelIdentity(streamErr.Code, streamErr.Type, streamErr.Param) {
+		case "not_found":
+			return "unavailable", "not_found", 0
+		case "rejected":
+			return "unavailable", "rejected", 0
+		}
+		if rateLimitIdentity(streamErr.Code, streamErr.Type) {
+			return "unknown", "rate_limited", 0
+		}
+		return "unknown", "rejected", 0
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return "unknown", "timeout", 0
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) || provider.IsStreamInterrupted(err) {
+		return "unknown", "network", 0
+	}
+	return "unknown", "rejected", 0
+}
+
+func modelErrorIdentity(body string) string {
+	var envelope struct {
+		Code  string `json:"code"`
+		Type  string `json:"type"`
+		Param string `json:"param"`
+		Error struct {
+			Code  string `json:"code"`
+			Type  string `json:"type"`
+			Param string `json:"param"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(body), &envelope) != nil {
+		return ""
+	}
+	code, typ, param := envelope.Error.Code, envelope.Error.Type, envelope.Error.Param
+	if code == "" && typ == "" && param == "" {
+		code, typ, param = envelope.Code, envelope.Type, envelope.Param
+	}
+	return modelIdentity(code, typ, param)
+}
+
+func modelIdentity(code, typ, param string) string {
+	code = strings.ToLower(strings.TrimSpace(code))
+	typ = strings.ToLower(strings.TrimSpace(typ))
+	param = strings.ToLower(strings.TrimSpace(param))
+	if code == "model_not_found" || code == "model_not_found_error" || code == "unknown_model" || typ == "model_not_found" {
+		return "not_found"
+	}
+	if param == "model" {
+		return "rejected"
+	}
+	if typ == "not_found_error" {
+		return "not_found"
+	}
+	return ""
+}
+
+func rateLimitIdentity(code, typ string) bool {
+	code = strings.ToLower(strings.TrimSpace(code))
+	typ = strings.ToLower(strings.TrimSpace(typ))
+	return code == "rate_limit_exceeded" || code == "rate_limit_error" || typ == "rate_limit_error"
 }

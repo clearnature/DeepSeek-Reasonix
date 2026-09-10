@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { t } from "../i18n";
-import type { ProviderEntry } from "../port/port";
-import { ModelChoice } from "./ModelChoice";
+import type { ProviderCheck, ProviderEntry } from "../port/port";
+import { clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
 import type { Port } from "./Providers";
 import { reason } from "../i18n/kernel";
 
@@ -17,21 +17,27 @@ const THINKING: [string, string][] = [
   ["none", "不发思考参数"],
 ];
 
-// Editing a saved connection. Headers and the extra body are typed as text and
-// parsed here, because what a relay needs is not a shape this side can know.
-export // Editing a saved source. Only what this form owns is sent: the entry keeps its
-// prices, effort vocabularies and everything else the panel cannot show.
-function EditConn({
-  entry, port, busy, setBusy, onDone,
+// Only what this form owns is sent: the entry keeps its prices, effort
+// vocabularies and everything else the panel cannot show.
+export function EditConn({
+  entry, initialCheck, port, busy, setBusy, onDone,
 }: {
-  entry: ProviderEntry; port: Port; busy: string; setBusy: (b: string) => void; onDone: () => void;
+  entry: ProviderEntry; initialCheck?: ProviderCheck; port: Port;
+  busy: string; setBusy: (b: string) => void; onDone: () => void;
 }) {
+  const seededModels = [...new Set([...entry.models, ...(initialCheck?.models ?? [])])];
+  const seededVision = [...new Set([...(entry.visionModels ?? []), ...(initialCheck?.vision ?? [])])];
   const [baseUrl, setBaseUrl] = useState(entry.baseUrl);
   const [apiKey, setApiKey] = useState("");
-  const [models, setModels] = useState<string[]>(entry.models);
+  const [models, setModels] = useState<string[]>(seededModels);
   const [picked, setPicked] = useState<string[]>(entry.models);
-  const [vision, setVision] = useState<string[]>(entry.visionModels ?? []);
-  const [visionSettable, setVisionSettable] = useState<string[] | undefined>(entry.visionSettable);
+  const [vision, setVision] = useState<string[]>(seededVision);
+  const [visionSettable, setVisionSettable] = useState<string[] | undefined>(
+    entry.visionSettable ? [...new Set([...entry.visionSettable, ...(initialCheck?.vision ?? [])])] : undefined,
+  );
+  const [facts, setFacts] = useState<Record<string, ModelFact>>(() => modelFacts(entry.models, initialCheck));
+  const [diff, setDiff] = useState(() => initialCheck?.ok ? catalogDiff(entry.models, initialCheck.models ?? []) : null);
+  const [checkingModel, setCheckingModel] = useState("");
   const [def, setDef] = useState(entry.default || entry.models[0] || "");
   const [err, setErr] = useState("");
   const [more, setMore] = useState(false);
@@ -40,6 +46,7 @@ function EditConn({
   const [heads, setHeads] = useState(headerLines(entry.headers));
   const [extra, setExtra] = useState(entry.extraBody ? JSON.stringify(entry.extraBody, null, 2) : "");
   const saving = busy === `edit:${entry.name}`;
+  const refreshing = busy === `refresh:${entry.name}`;
   const extraBad = extra.trim() !== "" && parseExtraBody(extra) === null;
 
   const toggle = (list: string[], set: (v: string[]) => void, m: string) =>
@@ -57,6 +64,7 @@ function EditConn({
   const addModel = (m: string) => {
     setModels((cur) => (cur.includes(m) ? cur : [m, ...cur]));
     setPicked((cur) => (cur.includes(m) ? cur : [...cur, m]));
+    setFacts((cur) => ({ ...cur, [m]: { origin: "manual" } }));
   };
 
   // Re-asking the endpoint is how a source that gained models catches up; the
@@ -65,7 +73,7 @@ function EditConn({
   // through the saved source. Sending the empty field instead probes as a
   // provider with no credential at all, which fails before it reaches the host.
   const refetch = async () => {
-    setBusy(`edit:${entry.name}`);
+    setBusy(`refresh:${entry.name}`);
     setErr("");
     try {
       const refreshed = apiKey.trim()
@@ -74,13 +82,50 @@ function EditConn({
       const found = refreshed.models ?? [];
       if (found.length === 0) throw new Error("这个端点没报出任何聊天模型");
       const readers = refreshed.vision ?? [];
-      setModels([...new Set([...found, ...picked])]);
+      setModels((current) => {
+        setDiff(catalogDiff(current, found));
+        setFacts((factsNow) => refreshedFacts(current, found, factsNow));
+        return [...new Set([...found, ...current])];
+      });
       setVision((current) => [...new Set([...current, ...readers])]);
       setVisionSettable((current) => current ? [...new Set([...current, ...readers])] : current);
     } catch (e) {
       setErr(reason(e));
     } finally {
       setBusy("");
+    }
+  };
+
+  const checkModel = async (model: string) => {
+    if (checkingModel || busy) return;
+    setCheckingModel(model);
+    setFacts((current) => ({
+      ...current,
+      [model]: { ...(current[model] ?? { origin: "configured" }), checking: true },
+    }));
+    try {
+      const got = await port.checkProviderModel({
+        name: entry.name,
+        model,
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+        kind: entry.kind,
+      });
+      setFacts((current) => ({
+        ...current,
+        [model]: { ...(current[model] ?? { origin: "configured" }), status: got.status, reason: got.reason },
+      }));
+    } catch {
+      setFacts((current) => ({
+        ...current,
+        [model]: { ...(current[model] ?? { origin: "configured" }), status: "unknown", reason: "network" },
+      }));
+    } finally {
+      setCheckingModel("");
+      setFacts((current) => ({
+        ...current,
+        [model]: { ...(current[model] ?? { origin: "configured" }), checking: false },
+      }));
     }
   };
 
@@ -113,26 +158,48 @@ function EditConn({
       <div className="fields">
         <label className="grow full">
           <span>{t("接口地址")}</span>
-          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} spellCheck={false} />
+          <input value={baseUrl} onChange={(e) => {
+            setBaseUrl(e.target.value);
+            setFacts(clearModelCheckFacts);
+          }} disabled={busy !== "" || checkingModel !== ""} spellCheck={false} />
         </label>
         <label className="grow full">
           <span>{t("API Key（留空就不动它）")}</span>
           <input type="password" value={apiKey} placeholder="········"
-            onChange={(e) => setApiKey(e.target.value)} spellCheck={false} />
+            onChange={(e) => {
+              setApiKey(e.target.value);
+              setFacts(clearModelCheckFacts);
+            }} disabled={busy !== "" || checkingModel !== ""} spellCheck={false} />
         </label>
       </div>
 
       <div className="mlist">
-        <span className="mlb">
-          {t("模型 · 已启用 {on}/{all}", { on: picked.length, all: models.length })}{" · "}
-          {t(entry.canSetVision === false ? "这个端点不接受图片输入，勾了也不会生效" : "勾「读图」的才会收到图片")}
-        </span>
+        <div className="mlhead">
+          <span className="ttl">{t("模型")}</span>
+          <span className="count">{t("已启用 {on}/{all}", { on: picked.length, all: models.length })}</span>
+          <button className="mrefresh" data-action="provider.probe" onClick={refetch} disabled={busy !== "" || checkingModel !== ""}
+            title={t("重新向该端点获取模型列表，适用于端点新增或下架模型之后")}>
+            {t(refreshing ? "正在刷新…" : "刷新模型目录")}
+          </button>
+        </div>
+        <p className="mguide">
+          {t("目录只用于发现，不是白名单。未列出的模型会按原始 ID 保存；验证会发送一次最小请求，可能产生少量 Token 费用。")}
+        </p>
+        {diff && (diff.added > 0 || diff.missing > 0) && (
+          <p className="mdiff" role="status">
+            {diff.added > 0 && t("发现 {n} 个新模型。", { n: diff.added })}
+            {diff.missing > 0 && t("有 {n} 个已配置模型本次未返回，已为你保留。", { n: diff.missing })}
+          </p>
+        )}
         <ModelChoice
           models={models}
           picked={picked}
           vision={vision}
           def={def}
+          facts={facts}
           visionLocked={visionLocked}
+          onCheck={checkModel}
+          checkDisabled={busy !== "" || checkingModel !== ""}
           onToggle={(m) => toggle(picked, setPicked, m)}
           onVision={(m) => toggle(vision, setVision, m)}
           onDefault={setDef}
@@ -211,17 +278,43 @@ function EditConn({
       )}
 
       <div className="acts">
-        <button className="act" data-action="provider.save" data-primary onClick={save} disabled={busy !== "" || picked.length === 0 || extraBad}>
+        <button className="act" data-action="provider.save" data-primary onClick={save} disabled={busy !== "" || checkingModel !== "" || picked.length === 0 || extraBad}>
           {t(saving ? "保存中…" : "保存")}
         </button>
-        <button className="act" data-action="provider.probe" onClick={refetch} disabled={busy !== ""}
-          title={t("重新向该端点获取模型列表，适用于端点新增或下架模型之后")}>
-          {t("重新问一次有哪些模型")}
-        </button>
-        <button className="act" onClick={onDone} disabled={busy !== ""}>{t("取消")}</button>
+        <button className="act" onClick={onDone} disabled={busy !== "" || checkingModel !== ""}>{t("取消")}</button>
       </div>
     </div>
   );
+}
+
+function modelFacts(configured: string[], check?: ProviderCheck): Record<string, ModelFact> {
+  const found = new Set(check?.ok ? check.models ?? [] : []);
+  const out: Record<string, ModelFact> = {};
+  for (const model of configured) out[model] = { origin: check?.ok ? (found.has(model) ? "endpoint" : "missing") : "configured" };
+  for (const model of found) if (!out[model]) out[model] = { origin: "endpoint" };
+  return out;
+}
+
+function refreshedFacts(models: string[], found: string[], current: Record<string, ModelFact>): Record<string, ModelFact> {
+  const listed = new Set(found);
+  const out = { ...current };
+  for (const model of [...new Set([...found, ...models])]) {
+    const previous = current[model];
+    out[model] = {
+      ...previous,
+      origin: listed.has(model) ? "endpoint" : previous?.origin === "manual" ? "manual" : "missing",
+    };
+  }
+  return out;
+}
+
+function catalogDiff(before: string[], found: string[]) {
+  const had = new Set(before);
+  const now = new Set(found);
+  return {
+    added: found.filter((model) => !had.has(model)).length,
+    missing: before.filter((model) => !now.has(model)).length,
+  };
 }
 
 // The three compatibility fields move between a config object and the text the
@@ -244,9 +337,6 @@ function parseHeaders(text: string): Record<string, string> {
   }
   return out;
 }
-
-// null means "typed but not valid JSON yet", which is different from an empty
-// object — the save button reads the difference rather than sending garbage.
 
 // null means "typed but not valid JSON yet", which is different from an empty
 // object — the save button reads the difference rather than sending garbage.

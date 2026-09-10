@@ -669,11 +669,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			// reclassify a complete response as interrupted.
 			goto finalize
 		case "error":
-			msg := "stream error"
-			if ev.Error != nil && ev.Error.Message != "" {
-				msg = ev.Error.Message
-			}
-			send(provider.Chunk{Type: provider.ChunkError, Err: fmt.Errorf("%s: %s", c.name, msg)})
+			send(provider.Chunk{Type: provider.ChunkError, Err: anthropicStreamError(c.name, ev.Error)})
 			return
 		}
 	}
@@ -866,11 +862,8 @@ type streamEvent struct {
 		StopReason       string          `json:"stop_reason"`  // message_delta
 		WebSearchResults json.RawMessage `json:"results"`      // web_search_tool_result_delta
 	} `json:"delta"`
-	Usage *wireUsage `json:"usage"` // message_delta (cumulative output_tokens)
-	Error *struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"error"`
+	Usage *wireUsage       `json:"usage"` // message_delta (cumulative output_tokens)
+	Error *streamWireError `json:"error"`
 }
 
 type wireUsage struct {

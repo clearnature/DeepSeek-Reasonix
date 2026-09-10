@@ -1,4 +1,12 @@
-import type { Protocol, ProviderCheck, ProviderEdit, ProviderEntry, ProviderProbe } from "./port";
+import type {
+  Protocol,
+  ProviderCheck,
+  ProviderEdit,
+  ProviderEntry,
+  ProviderModelCheck,
+  ProviderModelCheckRequest,
+  ProviderProbe,
+} from "./port";
 import { MockBoundary } from "./mock_boundary";
 
 // The sources half of the fixture. Chained on for the reason the others are:
@@ -64,8 +72,19 @@ export class MockProvider extends MockBoundary {
   // case the model list's search and its row cap exist for.
   async checkProvider(name: string): Promise<ProviderCheck> {
     if (name === "mimo") return { ok: false, error: "401 unauthorized: key 过期了" };
-    const models = name.startsWith("myrelay") ? relayCatalog() : ["gpt-4o", "claude-sonnet-4"];
-    return { ok: true, kind: "openai", models, vision: models.filter((m) => m === "gpt-4o"), ambiguous: true };
+    const models = name.startsWith("myrelay")
+      ? relayCatalog()
+      : ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"];
+    const vision = models.filter((m) => m === "gpt-4o" || m === "deepseek-v4-flash-vision-exp");
+    return { ok: true, kind: "openai", models, vision, ambiguous: true };
+  }
+
+  async checkProviderModel(request: ProviderModelCheckRequest): Promise<ProviderModelCheck> {
+    await new Promise((resolve) => setTimeout(resolve, 280));
+    if (request.model.includes("missing")) {
+      return { model: request.model, status: "unavailable", reason: "not_found" };
+    }
+    return { model: request.model, status: "available" };
   }
 
   async saveProvider(): Promise<void> {}

@@ -81,6 +81,8 @@ type retryNotifyKey struct{}
 
 type requestAttemptCounterKey struct{}
 
+type retryLimitKey struct{}
+
 type requestAttemptCounter struct {
 	count atomic.Int64
 }
@@ -97,6 +99,24 @@ func WithRetryNotify(ctx context.Context, fn RetryNotify) context.Context {
 func retryNotifyFromContext(ctx context.Context) RetryNotify {
 	fn, _ := ctx.Value(retryNotifyKey{}).(RetryNotify)
 	return fn
+}
+
+// WithRetryLimit caps connection/header retries for a single logical request.
+// A zero limit makes an explicit diagnostic perform exactly one HTTP attempt.
+func WithRetryLimit(ctx context.Context, retries int) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, retryLimitKey{}, max(0, min(retries, MaxRetries)))
+}
+
+func retryLimitFromContext(ctx context.Context) int {
+	if ctx != nil {
+		if retries, ok := ctx.Value(retryLimitKey{}).(int); ok {
+			return retries
+		}
+	}
+	return MaxRetries
 }
 
 // WithRequestAttemptCounter returns a context that counts every HTTP request
@@ -299,15 +319,16 @@ func readErrorBody(resp *http.Response) []byte {
 // failures are not retried (the model has already emitted tokens).
 func SendWithRetry(ctx context.Context, httpClient *http.Client, opts SendOptions, newReq func(context.Context) (*http.Request, error)) (*http.Response, error) {
 	notify := retryNotifyFromContext(ctx)
+	retryLimit := retryLimitFromContext(ctx)
 	var lastErr error
 	var retryAfter time.Duration
 	authRetries := 0
 
-	for attempt := 0; attempt <= MaxRetries; attempt++ {
+	for attempt := 0; attempt <= retryLimit; attempt++ {
 		if attempt > 0 {
 			delay := backoffDelay(attempt, retryAfter)
 			if notify != nil {
-				notify(RetryInfo{Attempt: attempt, Max: MaxRetries, Delay: delay, Err: lastErr})
+				notify(RetryInfo{Attempt: attempt, Max: retryLimit, Delay: delay, Err: lastErr})
 			}
 			select {
 			case <-ctx.Done():

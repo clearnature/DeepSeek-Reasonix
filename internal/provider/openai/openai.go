@@ -935,7 +935,7 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 			return emitted, provider.StreamDecodeError(c.name, data, err)
 		}
 		if sr.Error != nil {
-			return emitted, &provider.StreamPayloadError{Provider: c.name, Message: sr.Error.Message}
+			return emitted, &provider.StreamPayloadError{Provider: c.name, Message: sr.Error.Message, Code: sr.Error.Code, Type: sr.Error.Type, Param: sr.Error.Param}
 		}
 		if len(sr.Choices) > 0 && sr.Choices[0].FinishReason != nil && *sr.Choices[0].FinishReason != "" {
 			lastFinishReason = *sr.Choices[0].FinishReason
@@ -1290,10 +1290,8 @@ type streamResponse struct {
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
-	Usage *wireUsage `json:"usage"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error"`
+	Usage *wireUsage       `json:"usage"`
+	Error *streamWireError `json:"error"`
 }
 
 // wireUsage covers DeepSeek's top-level cache fields, OpenAI/MiMo's nested

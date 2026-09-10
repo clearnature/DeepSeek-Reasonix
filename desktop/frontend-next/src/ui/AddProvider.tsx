@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import type { Protocol, ProviderEntry, ProviderProbe } from "../port/port";
-import { ModelChoice } from "./ModelChoice";
+import { clearModelCheckFacts, ModelChoice, type ModelFact } from "./ModelChoice";
 import { KIND_LABEL, hostOf, nameFrom, vendorLabel } from "./vendors";
 import type { Port } from "./Providers";
 import { reason } from "../i18n/kernel";
@@ -37,6 +37,8 @@ export function AddProvider({
   // What the probe reported, plus anything typed in. Kept apart from `probe` so
   // an added name survives without pretending the endpoint reported it.
   const [models, setModels] = useState<string[]>([]);
+  const [facts, setFacts] = useState<Record<string, ModelFact>>({});
+  const [checkingModel, setCheckingModel] = useState("");
 
   // A source already at this host changes what a blank key means: another door
   // onto that account rather than an account with no credential.
@@ -51,6 +53,7 @@ export function AddProvider({
       setKind(got.kind);
       setModels(got.models);
       setPicked(got.models.slice(0, 8));
+      setFacts(Object.fromEntries(got.models.map((model) => [model, { origin: "endpoint" }])));
       setName(uniqueName(nameFrom(baseUrl), taken));
     } catch (e) {
       setProbe(null);
@@ -91,6 +94,41 @@ export function AddProvider({
   const addModel = (m: string) => {
     setModels((cur) => (cur.includes(m) ? cur : [m, ...cur]));
     setPicked((cur) => (cur.includes(m) ? cur : [...cur, m]));
+    setFacts((cur) => ({ ...cur, [m]: { origin: "manual" } }));
+  };
+
+  const checkModel = async (model: string) => {
+    if (!probe || checkingModel || busy) return;
+    setCheckingModel(model);
+    setFacts((current) => ({
+      ...current,
+      [model]: { ...(current[model] ?? { origin: "manual" }), checking: true },
+    }));
+    try {
+      const got = await port.checkProviderModel({
+        model,
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+        kind,
+        authHeader: probe.authHeader,
+        noProxy: probe.noProxy,
+      });
+      setFacts((current) => ({
+        ...current,
+        [model]: { ...(current[model] ?? { origin: "manual" }), status: got.status, reason: got.reason },
+      }));
+    } catch {
+      setFacts((current) => ({
+        ...current,
+        [model]: { ...(current[model] ?? { origin: "manual" }), status: "unknown", reason: "network" },
+      }));
+    } finally {
+      setCheckingModel("");
+      setFacts((current) => ({
+        ...current,
+        [model]: { ...(current[model] ?? { origin: "manual" }), checking: false },
+      }));
+    }
   };
 
   return (
@@ -101,14 +139,21 @@ export function AddProvider({
           <input
             value={baseUrl}
             placeholder="https://api.moonshot.cn/v1"
-            onChange={(e) => setBaseUrl(e.target.value)}
+            onChange={(e) => {
+              setBaseUrl(e.target.value);
+              setFacts(clearModelCheckFacts);
+            }}
+            disabled={busy || checkingModel !== ""}
             spellCheck={false}
           />
         </label>
         <label className="grow full">
           <span>API Key{t(sibling ? "（留空就用现有那个来源的 key）" : "")}</span>
           <input type="password" value={apiKey} placeholder={sibling ? "········" : ""}
-            onChange={(e) => setApiKey(e.target.value)} spellCheck={false} />
+            onChange={(e) => {
+              setApiKey(e.target.value);
+              setFacts(clearModelCheckFacts);
+            }} disabled={busy || checkingModel !== ""} spellCheck={false} />
         </label>
         {sibling && (
           <p className="acct-note">
@@ -119,10 +164,10 @@ export function AddProvider({
       </div>
 
       <div className="acts">
-        <button className="act" data-action="provider.probe" data-primary onClick={connect} disabled={busy || baseUrl.trim() === ""}>
+        <button className="act" data-action="provider.probe" data-primary onClick={connect} disabled={busy || checkingModel !== "" || baseUrl.trim() === ""}>
           {t(busy && !probe ? "连接中…" : "连一下试试")}
         </button>
-        <button className="act" onClick={onCancel} disabled={busy}>
+        <button className="act" onClick={onCancel} disabled={busy || checkingModel !== ""}>
           {t("取消")}
         </button>
       </div>
@@ -146,7 +191,10 @@ export function AddProvider({
             </label>
             <label className="grow">
               <span>{t("接入方式")}</span>
-              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+              <select value={kind} onChange={(e) => {
+                setKind(e.target.value);
+                setFacts(clearModelCheckFacts);
+              }} disabled={busy || checkingModel !== ""}>
                 {choices.map((k) => (
                   <option key={k} value={k}>{t(KIND_LABEL[k] ?? k)}</option>
                 ))}
@@ -170,20 +218,27 @@ export function AddProvider({
           )}
 
           <div className="mlist">
-            <span className="mlb">
-              {t("模型 · 已启用 {on}/{all}", { on: picked.length, all: models.length })}
-            </span>
+            <div className="mlhead">
+              <span className="ttl">{t("模型")}</span>
+              <span className="count">{t("已启用 {on}/{all}", { on: picked.length, all: models.length })}</span>
+            </div>
+            <p className="mguide">
+              {t("目录只用于发现，不是白名单。未列出的模型会按原始 ID 保存；验证会发送一次最小请求，可能产生少量 Token 费用。")}
+            </p>
             <ModelChoice
               models={models}
               picked={picked}
               vision={probe.vision}
+              facts={facts}
+              onCheck={checkModel}
+              checkDisabled={busy || checkingModel !== ""}
               onToggle={toggle}
               onAdd={addModel}
             />
           </div>
 
           <div className="acts">
-            <button className="act" data-action="provider.add" data-primary onClick={save} disabled={busy || picked.length === 0 || name.trim() === ""}>
+            <button className="act" data-action="provider.add" data-primary onClick={save} disabled={busy || checkingModel !== "" || picked.length === 0 || name.trim() === ""}>
               {t(busy ? "保存中…" : "添加")}
             </button>
           </div>
@@ -194,8 +249,6 @@ export function AddProvider({
 }
 
 // A second provider from the same vendor must not overwrite the first.
-
-// A second provider from the same vendor must not overwrite the first.
 function uniqueName(base: string, taken: string[]): string {
   if (!taken.includes(base)) return base;
   for (let i = 2; i < 100; i++) {
@@ -203,7 +256,3 @@ function uniqueName(base: string, taken: string[]): string {
   }
   return base;
 }
-
-// The three compatibility fields move between a config object and the text the
-// user types. Headers are one "name: value" per line because that is how the
-// gateway's own documentation writes them.

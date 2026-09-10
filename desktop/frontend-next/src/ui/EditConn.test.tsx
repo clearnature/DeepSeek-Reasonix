@@ -35,16 +35,75 @@ it("keeps vision capability discovered while refreshing a saved source", async (
   };
 
   render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
-  await userEvent.click(screen.getByRole("button", { name: "重新问一次有哪些模型" }));
+  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
 
   const modelName = await screen.findByText(visionModel);
   const row = modelName.closest(".mline") as HTMLElement;
   await userEvent.click(within(row).getByRole("checkbox"));
-  const vision = within(row).getByRole("button", { name: "读图" });
+  const vision = within(row).getByRole("button", { name: `${visionModel} 的图片输入` });
   expect((vision as HTMLButtonElement).disabled).toBe(false);
   expect(vision.getAttribute("aria-pressed")).toBe("true");
 
   await userEvent.click(screen.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(editProvider).toHaveBeenCalled());
   expect(editProvider).toHaveBeenCalledWith(expect.objectContaining({ vision: [visionModel] }));
+});
+
+it("keeps an exact unlisted model id and verifies it independently of the catalog", async () => {
+  const hidden = "deepseek-preview-private-202609";
+  const editProvider = vi.fn(async () => {});
+  const checkProviderModel = vi.fn(async () => ({ model: hidden, status: "available" as const }));
+  const port = { editProvider, checkProviderModel } as unknown as Port;
+  const entry: ProviderEntry = {
+    name: "deepseek",
+    kind: "openai",
+    baseUrl: "https://api.deepseek.com",
+    models: ["deepseek-chat"],
+    default: "deepseek-chat",
+    hasKey: true,
+    inUse: false,
+    preset: true,
+    canSetVision: false,
+  };
+
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索或添加模型" }), `${hidden}{enter}`);
+
+  const row = screen.getByText(hidden).closest(".mline") as HTMLElement;
+  expect(within(row).getByText("手动添加")).toBeTruthy();
+  expect(within(row).getByText("待验证")).toBeTruthy();
+  await userEvent.click(within(row).getByRole("button", { name: `验证模型 ${hidden}` }));
+
+  await waitFor(() => expect(within(row).getByText("已验证可用")).toBeTruthy());
+  expect(checkProviderModel).toHaveBeenCalledWith(expect.objectContaining({ model: hidden }));
+
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(editProvider).toHaveBeenCalled());
+  expect(editProvider).toHaveBeenCalledWith(expect.objectContaining({
+    models: expect.arrayContaining(["deepseek-chat", hidden]),
+  }));
+});
+
+it("preserves configured models that a refreshed catalog no longer returns", async () => {
+  const port = {
+    checkProvider: vi.fn(async () => ({ ok: true, models: ["deepseek-new"], vision: [] })),
+  } as unknown as Port;
+  const entry: ProviderEntry = {
+    name: "deepseek",
+    kind: "openai",
+    baseUrl: "https://api.deepseek.com",
+    models: ["deepseek-hidden"],
+    default: "deepseek-hidden",
+    hasKey: true,
+    inUse: false,
+    preset: true,
+  };
+
+  render(<EditConn entry={entry} port={port} busy="" setBusy={() => {}} onDone={() => {}} />);
+  await userEvent.click(screen.getByRole("button", { name: "刷新模型目录" }));
+
+  expect(await screen.findByText("deepseek-new")).toBeTruthy();
+  const preserved = screen.getByText("deepseek-hidden").closest(".mline") as HTMLElement;
+  expect(within(preserved).getByText("本次未返回")).toBeTruthy();
+  expect(document.querySelector(".mdiff")?.textContent).toContain("有 1 个已配置模型本次未返回，已为你保留。");
 });

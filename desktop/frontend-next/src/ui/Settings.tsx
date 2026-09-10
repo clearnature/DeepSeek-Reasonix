@@ -556,7 +556,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               </Group>
               <Group id="providers"
                 title={t("连接")}
-                hint={t("模型的来源。添加时只需填写地址和 key；协议、模型列表和图片支持会自动向端点探测，探测不到的才需要手动填写。")}
+                hint={t("从端点读取模型目录；未列出的模型也可以按原始 ID 添加并单独验证。图片输入单独配置，并以不发送为安全默认。")}
               >
                 <Providers port={port} onChanged={loadModels} onFailed={setFailed} protocol={protocol}
                   activeKindFor={(a) => kindFor(a.key)}

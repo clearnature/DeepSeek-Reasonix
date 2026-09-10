@@ -82,7 +82,7 @@ func TestProviderEditIsRefusedUntilTheHostGrantsIt(t *testing.T) {
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
-	for _, path := range []string{"/providers", "/providers/probe", "/providers/remove"} {
+	for _, path := range []string{"/providers", "/providers/probe", "/providers/check/model", "/providers/remove"} {
 		resp := postProvider(t, srv.URL, path, `{}`)
 		if resp.StatusCode != http.StatusForbidden {
 			t.Errorf("POST %s = %d, want 403 before the host grants provider editing", path, resp.StatusCode)
