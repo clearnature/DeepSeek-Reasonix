@@ -14,12 +14,14 @@ import { EN_SETTINGS } from "./en_settings";
 import { EN_METRICS } from "./en_metrics";
 import { EN_STORAGE } from "./en_storage";
 import { EN_USAGE } from "./en_usage";
+import { EN_COMPOSER } from "./en_composer";
 
 export const EN: Record<string, string> = {
   ...EN_SETTINGS,
   ...EN_METRICS,
   ...EN_STORAGE,
   ...EN_USAGE,
+  ...EN_COMPOSER,
   ...EN_KERNEL,
   ...EN_REMOTE,
   ...EN_WINDOW,
@@ -201,51 +203,6 @@ export const EN: Record<string, string> = {
   "将先关闭 {n} 个面板；不会删除任何文件": "Closes {n} panes first; no files are deleted",
   "将先关闭 {n} 个面板，其中 {live} 个仍在运行；不会删除任何文件":
     "Closes {n} panes first, {live} of them mid-turn; no files are deleted",
-
-  // ── 输入区 ───────────────────────────────────────────────────────
-  "↓ 回到最新": "↓ Back to latest",
-  "停下": "Stop",
-  "发送": "Send",
-  "描述一个任务，回车发送…　/ 调用命令与技能，@ 引用文件": "Describe a task and press Enter…　/ for commands and skills, @ to reference files",
-  "知道了": "Got it",
-  // 输入框：这一轮怎么跑
-  "本轮执行策略": "How this turn runs",
-  "这一轮怎么跑：执行方式、思考强度、工具权限": "How this turn runs: execution, effort, tool permissions",
-  "执行方式": "Execution",
-  "思考强度": "Effort",
-  "工具权限": "Tool permissions",
-  // 输入框：拖进来与粘贴
-  "松手 → 附上 {n} 张图": "Release to attach {n} images",
-  "松手 → 附上 {a} 张图，引用 {r} 个文件": "Release to attach {a} images and reference {r} files",
-  "松手 → 引用 {name}": "Release to reference {name}",
-  "松手 → 引用 {n} 个文件": "Release to reference {n} files",
-  "松手 → 引用 1 个文件": "Release to reference 1 file",
-  "松手 → 插入到光标处": "Release to insert at the caret",
-  "工作区外的文件引用不到 · 这里放不下": "A file outside the workspace cannot be referenced — this drop has nowhere to go",
-  "图片": "image",
-  "文件": "file",
-  "粘贴的文本": "pasted text",
-  "{n} 行 · 展开到输入框": "{n} lines · put it back in the box",
-  "移除这张图":"Remove this image",
-  "添加图片": "Add an image",
-  "添加图片　也可直接拖入或粘贴": "Add an image　or drop or paste one in",
-  "当前模型不支持读图 · 将交由支持读图的子代理处理": "This model does not read images · a subagent that does will take it",
-  "该模型是否支持读图未声明 · 暂按不支持处理；在「连接」中勾选后即可直接发送":
-    "Nobody has said whether this model reads images · treated as no for now; tick it under Connection to send them straight through",
-  "每次执行操作前请求确认。": "Asks before every action.",
-  "自动": "Auto",
-  "低风险操作自动放行，写入操作仍需确认。": "Low-risk steps proceed; writes still ask.",
-  "不询问": "Do not ask",
-  "不显示审批请求；需要批准的操作一律不执行。": "No approval prompts; anything needing approval is not done.",
-  "全部放行": "Allow all",
-  "不再请求确认，仅在完全信任当前工作区时使用。": "No more questions. Only for a workspace you fully trust.",
-  "均衡": "Balanced",
-  "交付": "Delivery",
-  "执行设定": "Execution",
-  "插话待送达": "Queued",
-  "登录": "Sign in",
-  "登录（社区与崩溃跟进，不影响使用）": "Sign in (community and crash follow-up; not required to use it)",
-  "账号：{name}": "Account: {name}",
 
   // ── 待发队列 ─────────────────────────────────────────────────────
   "待送达": "Pending",

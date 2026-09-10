@@ -18,7 +18,7 @@ const KIND: Record<string, string> = {
 };
 
 const HINT: Record<string, string> = {
-  ref: "↑↓ 选择 · Tab 补全或进入目录 · 回车发送 · Esc 关闭",
+  ref: "Tab 补全或进入目录 · ↑↓ 后回车确认 · Esc 关闭",
   slash: "↑↓ 选择 · Tab 或回车补全 · Esc 关闭",
   "slash-arg": "↑↓ 选择 · Tab 或回车补全 · Esc 关闭",
 };

@@ -419,6 +419,10 @@
   /* 菜单开着的时候按钮得留在按下态 —— 不然点开一个菜单，源头看着像没被点中 */
   .mode[aria-expanded="true"] { color: var(--text); border-color: var(--faint); background: var(--overlay) }
   .mode .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ok); transition: background .2s }
+  .mode .modelmark {
+    width: 7px; height: 7px; flex: none; border: 1px solid var(--faint); border-radius: 2px;
+    transform: rotate(45deg); background: color-mix(in srgb, var(--faint) 10%, transparent);
+  }
   .mode.plain { padding-inline: 9px 10px; gap: 5px; font-weight: var(--w-reg) }
   .mode .nm { overflow: hidden; text-overflow: ellipsis; max-width: 22ch }
   /* The value is what this pill says, not a second plate stuck onto it: weight
@@ -2096,12 +2100,18 @@
   /* 附件是「这一轮要带上的东西」，所以它贴在输入框上沿，不在别处。
      连着贴两张截图，只有文件名不一样 —— 而那正是卡片唯一要说清的事，
      所以缩略图不是装饰。 */
-  .shots { list-style: none; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 0 2px 8px }
+  .shots {
+    list-style: none; margin: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 7px;
+    padding: 0 2px 8px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin;
+  }
   .shot {
-    display: inline-flex; align-items: center; gap: 8px; padding: 4px 4px 4px 5px;
+    display: inline-flex; align-items: center; gap: 8px; flex: none; max-width: min(310px, 78vw);
+    padding: 4px 4px 4px 5px;
     border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised);
     animation: shotin .1s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms);
   }
+  .shot[data-state="adding"] { border-style: dashed; color: var(--faint) }
+  .shot[data-state="failed"] { border-color: color-mix(in srgb, var(--err) 42%, var(--border)) }
   @keyframes shotin { from { opacity: 0; transform: scale(.94) } to { opacity: 1; transform: none } }
   .shot .thumb {
     width: 30px; height: 30px; flex: none; border-radius: var(--r-lg); background: var(--overlay);
@@ -2115,6 +2125,7 @@
   .shot .meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-right: 2px }
   .shot .nm { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--w-reg) 11.5px var(--mono); color: var(--text) }
   .shot .sz { font: var(--w-reg) 10px var(--mono); color: var(--ghost) }
+  .shot .sz.live { color: var(--net) }
   /* 收起来的粘贴要能原样放回去 —— 自动改掉用户手打的内容，代价比帮的忙大 */
   .shot .undo {
     align-self: flex-start; border: 0; background: none; padding: 0; cursor: pointer;
@@ -2122,6 +2133,11 @@
     text-decoration-style: dotted; text-underline-offset: 2px;
   }
   .shot .undo:hover { color: var(--accent-ink) }
+  .shot .retry {
+    align-self: flex-start; border: 0; background: none; padding: 0; cursor: pointer;
+    color: var(--err-ink); font: var(--w-med) 10px var(--ui);
+  }
+  .shot .retry:hover { text-decoration: underline; text-underline-offset: 2px }
   .shot .x {
     width: 22px; height: 22px; flex: none; border: 0; border-radius: var(--r-sm); cursor: pointer;
     background: transparent; color: var(--ghost); font: var(--w-reg) 13px/1 var(--mono);
@@ -2215,22 +2231,19 @@
 
   /* 你打的字和它回的字是同一场对话，字号就该是同一个。写死 13px 的时候，
      正文调到「更大」之后转录变大、输入区没动，看着就像被压扁了。上限跟着
-     行数走而不是一个固定像素数 —— 五行，无论这五行是多大的字。 */
+     行数走而不是一个固定像素数，长任务也受窗口可用高度约束。 */
   /* 长手写，不用 font 简写：简写里放 var() 在 WKWebView 上会让整条声明作废，
      输入框就掉回 UA 默认的等宽字体，宽高全算错 —— 空着也能顶出两条滚动条。
-     每个属性各写各的，坏一个也只坏一个。上限按行数走（1.6 × 5 行）。 */
+     每个属性各写各的，坏一个也只坏一个。上限按行数和窗口高度取较小值。 */
   .compose textarea {
     width: 100%; border: 0; background: transparent; color: var(--text);
     font-family: var(--ui); font-size: var(--read, 13.5px); font-weight: var(--w-reg); line-height: 1.6;
     resize: none; outline: none; padding: 0;
-    max-height: calc(var(--read, 13.5px) * 8);
+    max-height: min(calc(var(--read, 13.5px) * 14.4), calc(32vh / var(--zoom, 1)));
     overflow-x: hidden; overflow-y: auto;
   }
   .compose textarea::placeholder { color: var(--ghost) }
-  /* Glyph, box, count. Three columns so the text keeps starting at one place
-     however many lines it grows to, and so neither marginal thing can be
-     dragged into a selection of what was typed. */
-  .fmain { display: grid; grid-template-columns: 13px minmax(0, 1fr) auto; gap: 0 9px; align-items: start }
+  .fmain { display: grid; grid-template-columns: 13px minmax(0, 1fr); gap: 0 9px; align-items: start }
   .prompt {
     justify-self: center; line-height: 1.6; color: var(--ghost);
     font: var(--w-semi) 14px var(--mono);
@@ -2238,13 +2251,22 @@
     transition: color .2s var(--ease), transform .2s var(--ease-out);
   }
   .compose:focus-within .prompt { color: var(--accent-ink); transform: translateX(2px) }
-  /* Only ever asked about while typing, so it is not there the rest of the time. */
-  .fcount {
-    align-self: end; padding-bottom: 2px; color: var(--ghost);
-    font: var(--w-reg) 10px var(--mono); font-variant-numeric: tabular-nums;
-    opacity: 0; transition: opacity .2s var(--ease);
+  .composeguide {
+    display: flex; align-items: center; gap: 6px 14px; min-height: 18px; margin: 7px 1px 0 22px;
+    color: var(--ghost); font: var(--w-reg) 10.5px var(--ui); -webkit-user-select: none; user-select: none;
   }
-  .compose:focus-within .fcount { opacity: 1 }
+  .composecaps { display: inline-flex; align-items: center; gap: 12px }
+  .composecaps > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap }
+  .composecaps kbd {
+    min-width: 17px; padding: 1px 4px; border: 1px solid var(--hair); border-radius: var(--r-xs);
+    background: var(--overlay); color: var(--muted); font: var(--w-med) 10px/1.35 var(--mono); text-align: center;
+  }
+  .composehint { margin-left: auto; white-space: nowrap }
+  .compose:focus-within .composecaps, .compose:focus-within .composehint { color: var(--faint) }
+  .fcount {
+    flex: none; white-space: nowrap; padding-left: 10px; border-left: 1px solid var(--hair);
+    color: var(--faint); font: var(--w-reg) 10px var(--mono); font-variant-numeric: tabular-nums;
+  }
   /* 这一排是控件不是文字：能被拖选的标签会在按下拖出一点点时选中一片蓝，
      而这里唯一值得复制的是你打的字和上面的正文。 */
   /* The controls are a shelf under the box, not a line of content inside it.
@@ -2256,6 +2278,9 @@
     border-top: 1px solid var(--hair); border-radius: 0 0 var(--r-md) var(--r-md);
     -webkit-user-select: none; user-select: none }
   .compose .row .go { margin-left: auto }
+  .turntools { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap }
+  .turntools > .picker:first-of-type { min-width: 0 }
+  .go { display: inline-flex; align-items: center; gap: 7px; flex: none }
   /* 一排东西同时出现是一堵墙，依次出现是一句话。只在挂载时走一次。
      z-index 不是装饰：带 fill 的动画让这些子元素各自成层，弹出的菜单于是被
      关在里面，输入框自己的描边（.compose::after）会横穿过菜单。 */
@@ -2309,7 +2334,6 @@
   /* 问出去了还没回话：不整组变灰，只在那一档下面压一条线。 */
   .seg button[data-asking] { color: var(--text); box-shadow: inset 0 -1.5px 0 var(--accent) }
   .seg button:disabled:not([data-asking]) { color: var(--ghost) }
-  /* 两个图标叠在同一格里交叉旋入，按钮不跳宽 */
   .btn.send { display: inline-flex; align-items: center; gap: 6px; position: relative; overflow: hidden }
   /* One sweep across the primary button on hover. It is the end of a sentence,
      and the only control in the row that should feel like one. */
@@ -2318,21 +2342,17 @@
     background: linear-gradient(105deg, transparent 34%, rgb(255 255 255 / .36) 50%, transparent 66%);
     background-size: 250% 100%; background-position: 200% 0;
   }
-  .btn.send:hover::before { animation: sendsheen .7s var(--ease-out) }
+  .btn.send:not(:disabled):hover::before { animation: sendsheen .7s var(--ease-out) }
   @keyframes sendsheen { from { opacity: 1; background-position: 200% 0 } to { opacity: 1; background-position: -60% 0 } }
-  /* Stopping is not a flourish. */
-  .pane[data-run="running"] .btn.send::before { display: none }
   .btn.send .ic { display: grid; width: 13px; height: 13px; flex: none }
-  .btn.send .ic > svg {
-    grid-area: 1 / 1; width: 13px; height: 13px; fill: none; stroke: currentColor;
+  .btn.send .ic > svg, .btn.stop .ic > svg {
+    width: 13px; height: 13px; fill: none; stroke: currentColor;
     stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
-    transition: opacity .18s var(--ease-out), transform .24s var(--ease-out);
   }
-  .btn.send .i-stop { fill: currentColor; stroke: none; opacity: 0; transform: scale(.5) rotate(-30deg) }
-  .pane[data-run="running"] .btn.send .i-send { opacity: 0; transform: scale(.5) rotate(30deg) }
-  .pane[data-run="running"] .btn.send .i-stop { opacity: 1; transform: none }
-  .pane[data-run="running"] .btn.send[data-primary] { background: transparent; border-color: var(--faint); color: var(--text) }
-  .pane[data-run="running"] .btn.send[data-primary]:hover { border-color: var(--err); color: var(--err); filter: none }
+  .btn.stop { display: inline-flex; align-items: center; gap: 6px }
+  .btn.stop .ic { display: grid; width: 13px; height: 13px; flex: none }
+  .btn.stop .ic > svg { fill: currentColor; stroke: none }
+  .btn.stop:hover { border-color: var(--err); color: var(--err) }
 
   /* 建议是「可点的一句话」，不是开关 —— 所以不给它边框，别跟左边那排混 */
   .sug {
@@ -2867,6 +2887,7 @@
   /* 窗口矮下来时，按窗口比例分掉的那些高度加起来就是转录本身。让的顺序是离
      输入框最近的先让 —— 右栏在这一档已经横在流下面，它也是其中一份。 */
   [data-fold~="short"] .compose { --aux-budget: min(calc(26vh / var(--zoom, 1)), 190px) }
+  [data-fold~="short"] .compose textarea { max-height: min(calc(var(--read, 13.5px) * 9.6), calc(24vh / var(--zoom, 1))) }
   [data-fold~="short"][data-fold~="side"] .side { max-height: calc(26vh / var(--zoom, 1)) }
   /* 运行头收成一行：说明和时间戳是第二眼才读的，标题和状态记号不是。同一套规则
      两个来源 —— 窗口矮，或者人要求专注。两套 header 会漂，一套不会。 */
@@ -2875,6 +2896,15 @@
   [data-fold~="short"] .runhead .at, [data-focus="true"] .runhead .at { display: none }
   [data-fold~="short"] .runhead .tile, [data-focus="true"] .runhead .tile { min-width: 62px; padding: 4px 9px 5px }
   [data-fold~="short"] .runhead .tile dd, [data-focus="true"] .runhead .tile dd { font-size: 12.5px }
+
+  [data-fold~="scene"] .composeguide { flex-wrap: wrap; gap-block: 5px }
+  [data-fold~="scene"] .composehint { order: 2; width: 100%; margin-left: 0 }
+  [data-fold~="scene"] .fcount { margin-left: auto }
+  [data-fold~="scene"] .compose .row { align-items: stretch }
+  [data-fold~="scene"] .turntools { flex-basis: 100%; flex-wrap: nowrap }
+  [data-fold~="scene"] .turntools > .picker:first-of-type { flex: 1 }
+  [data-fold~="scene"] .turntools .mode .nm { max-width: 100% }
+  [data-fold~="scene"] .compose .row .go { width: 100%; justify-content: flex-end; margin-left: 0 }
 
   /* ── 首次引导：一屏，一件事 ──────────────────────────────────────── */
   /* 连接卡片长在开场场景里，不另起一屏：介绍语收在上方仍然在场。所以这里

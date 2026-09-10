@@ -61,8 +61,8 @@ export const ACTIONS: UIAction[] = [
   { id: "chrome.account", kind: "navigation", target: "none", proof: "interaction" },
 
   // ── The turn ─────────────────────────────────────────────────────────────
-  // Send and stop share one button and are not one action: what the host is
-  // asked to do differs, and so does what proves it happened.
+  // Send and stop remain two actions even when they sit together: during a
+  // live turn the first steers and the second cancels the current turn.
   { id: "session.send", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "session.stop", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "plan.mode", kind: "kernel-mutation", target: "none", proof: "interaction" },

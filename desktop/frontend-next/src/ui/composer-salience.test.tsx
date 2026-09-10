@@ -19,7 +19,7 @@ function draw(st: SessionStatus | null = status()) {
   );
   // The separators are the shelf's own, so counting them says whether anything
   // was left behind by a control that receded.
-  const seps = () => r.container.querySelectorAll(".row > .sep").length;
+  const seps = () => r.container.querySelectorAll(".turntools > .sep").length;
   return { ...r, seps };
 }
 
