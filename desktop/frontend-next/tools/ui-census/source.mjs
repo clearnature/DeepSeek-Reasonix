@@ -1,5 +1,5 @@
 // The tree this census reads, and which of it the product reaches.
-import { join, dirname, resolve as resolvePath } from "node:path";
+import { join, dirname, relative, resolve as resolvePath } from "node:path";
 import { parse } from "@babel/parser";
 // One authority for what a call is, shared with the repository's own gate.
 import { callMode, callSite, isCall } from "../../src/ui/roots.ts";
@@ -16,11 +16,12 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 // is UNRESOLVED with a reason, because "I could not tell" and "it does not
 // mutate" are different answers and only one of them is safe to act on.
 
+const projectPath = (path) => relative(process.cwd(), resolvePath(path)).replaceAll("\\", "/");
 const prod = (dir) =>
   readdirSync(dir).flatMap((n) => {
     const p = join(dir, n);
     if (statSync(p).isDirectory()) return prod(p);
-    return /\.tsx?$/.test(n) && !/\.test\./.test(n) ? [p] : [];
+    return /\.tsx?$/.test(n) && !/\.test\./.test(n) ? [projectPath(p)] : [];
   });
 const walk = (n, fn) => {
   if (!n || typeof n.type !== "string") return;
@@ -79,7 +80,7 @@ function resolveSpec(from, spec) {
   if (!spec.startsWith(".")) return null;
   const base = resolvePath(dirname(from), spec);
   for (const cand of [base + ".ts", base + ".tsx", join(base, "index.ts"), join(base, "index.tsx")]) {
-    if (existsSync(cand)) return cand.replace(process.cwd() + "/", "");
+    if (existsSync(cand)) return projectPath(cand);
   }
   return null;
 }
@@ -127,7 +128,7 @@ function reachableFrom(roots) {
   }
   return seen;
 }
-const PRODUCT_ROOTS = (process.env.CENSUS_ROOTS ?? "src/main.tsx").split(",");
+const PRODUCT_ROOTS = (process.env.CENSUS_ROOTS ?? "src/main.tsx").split(",").map((root) => projectPath(root.trim()));
 const productFiles = reachableFrom(PRODUCT_ROOTS);
 
 

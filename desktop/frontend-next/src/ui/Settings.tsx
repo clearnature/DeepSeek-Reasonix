@@ -39,6 +39,7 @@ import { Storage } from "./Storage";
 import { Appearance, SCHEMES } from "./Appearance";
 import { ScopeBar } from "./CapabilityScope";
 import { reason } from "../i18n/kernel";
+import { SettingsHeading } from "./SettingsHeading";
 
 const PRESETS: [Preset, string, string][] = [
   ["balanced", "均衡", "以模型判定任务完成为准，适用于日常任务"],
@@ -346,9 +347,9 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
       onMouseUp={(e) => { if (veiled.current && e.target === e.currentTarget) onClose(); }}
       data-action-mouseup="settings.close"
     >
-      <div className="prefs-sheet" role="dialog" aria-modal="true" aria-label={t("设置")}>
+      <div className="prefs-sheet" role="dialog" aria-modal="true" aria-labelledby="prefs-title">
       <div className="prefs-hd">
-        <h2>{t("设置")}</h2>
+        <h1 id="prefs-title">{t("设置")}</h1>
         {/* 原来这里挂着一句「改动立刻生效；需要重建运行时的……」。它对三档里的
             两档说了话，而且要读的人自己判断手上这一项属于哪一档 —— 那句话现在
             落在每一个设置块自己身上。 */}
@@ -451,16 +452,17 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           {/* Keyed on the section: replacing this column is the navigation,
               and it is the one thing here whose mount really is the cause. */}
           <div className="prefs-col" key={at}>
-            {/* Every refused write on every page lands in one state, so it is
-                said in one place. Copied onto the pages somebody remembered, it
-                was missing from the third that writes it: 创建隔离副本 was
-                refused by the kernel and the screen showed nothing at all. */}
-            {failed && (
-              <div className="find" data-lvl="warn" role="alert">
-                <span className="t">{t("操作未完成")}</span>
-                <span className="why">{failed}</span>
-              </div>
-            )}
+          <SettingsHeading section={at} value={nav[at]} danger={danger(at)} />
+          {/* Every refused write on every page lands in one state, so it is
+              said in one place. Copied onto the pages somebody remembered, it
+              was missing from the third that writes it: 创建隔离副本 was
+              refused by the kernel and the screen showed nothing at all. */}
+          {failed && (
+            <div className="find" data-lvl="warn" role="alert">
+              <span className="t">{t("操作未完成")}</span>
+              <span className="why">{failed}</span>
+            </div>
+          )}
           {at === "session" && (
             <>
               <Group id="preset" title={t("执行设定")} now={preset} hint={t("决定任务完成的判定标准。切换立即生效，不会重建运行时。")}>

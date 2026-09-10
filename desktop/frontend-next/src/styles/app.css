@@ -2939,7 +2939,7 @@
      能最小化、能关 —— 一个把窗口按钮扣在模态背后的设置页不是模态，是死锁。 */
   .prefs {
     position: fixed; inset: var(--chrome-h, 39px) 0 0; z-index: 50;
-    display: grid; place-items: center; padding: 24px; outline: none;
+    display: grid; place-items: center; padding: 28px; outline: none;
     /* Dims and softens, but stays thin: the sheet over it is glass, and what
        shows through glass has to be light rather than a paragraph — sharpen
        this and the transcript behind reads straight through the settings. */
@@ -2948,7 +2948,7 @@
     animation: prefsin var(--t-card) var(--ease-out) both;
   }
   .prefs-sheet {
-    width: min(1080px, 100%); height: min(760px, 100%);
+    width: min(1120px, 100%); height: min(800px, 100%);
     display: flex; flex-direction: column; overflow: hidden;
     border: 1px solid var(--border); border-radius: var(--r-lg);
     background: var(--float); box-shadow: var(--shadow-float);
@@ -3015,7 +3015,7 @@
 
   .prefs-hd {
     position: relative; flex: none;
-    display: flex; align-items: baseline; gap: 12px; padding: 13px 13px 13px 18px;
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px 14px 20px;
     border-bottom: 1px solid var(--hair); background: var(--surface);
   }
   /* 一道很淡的金线压在头栏底下：设置是这扇窗自己的东西，不是内容。 */
@@ -3024,12 +3024,12 @@
     background: linear-gradient(90deg, transparent 4%,
       color-mix(in srgb, var(--accent) 34%, transparent) 50%, transparent 96%);
   }
-  .prefs-hd h2 { margin: 0; flex: none; font: var(--w-semi) 14px var(--ui); color: var(--text); letter-spacing: .01em }
+  .prefs-hd h1 { margin: 0; flex: none; font: var(--w-semi) 15px var(--ui); color: var(--text); letter-spacing: .01em }
   /* 找设置的入口，就在标题旁边。原来这个位置挂的是一句对三档里的两档说话的
      总说明；那句话现在落在每个设置块自己身上（.apply）。 */
   .prefs-find {
-    flex: 1; min-width: 0; max-width: 300px; margin-left: auto;
-    padding: 5px 10px; border-radius: var(--r-pill);
+    flex: 1; min-width: 0; max-width: 340px; min-height: 32px; margin-left: auto;
+    padding: 7px 12px; border-radius: var(--r-pill);
     border: 1px solid var(--border); background: var(--overlay);
     font: var(--w-reg) 12px var(--ui); color: var(--text);
     transition: border-color .14s, background-color .14s;
@@ -3039,7 +3039,7 @@
 
   /* 结果压在头栏下面，设置本身不重画 —— 找东西不该把你正在看的那一页收走。 */
   .prefs-found {
-    position: absolute; z-index: 5; top: 100%; right: 13px; width: min(420px, calc(100% - 26px));
+    position: absolute; z-index: 5; top: 100%; right: 16px; width: min(460px, calc(100% - 32px));
     max-height: min(52vh, 420px); overflow-y: auto;
     display: flex; flex-direction: column; padding: 5px;
     border: 1px solid var(--border); border-radius: 0 0 var(--r-md) var(--r-md);
@@ -3060,7 +3060,8 @@
   /* 改一下这一项要付什么，是一条事实，不是一级警告：三档一个颜色，只比正文轻。
      真正该染色的是「任务运行中不能改」那种当下状态，不是这个。 */
   .apply {
-    margin: 9px 0 0; font: var(--w-reg) 10.5px var(--mono); color: var(--ghost);
+    margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--hair);
+    font: var(--w-reg) 10.5px var(--mono); color: var(--ghost);
     display: flex; align-items: center; gap: 5px;
   }
   .apply::before {
@@ -3072,8 +3073,8 @@
   /* 搜索落点：就是这里。导航反馈，不是这个设置变了 —— 所以它只闪一下就没。 */
   .grp[data-landed] { animation: landed .9s var(--ease-out) both }
   @keyframes landed {
-    0% { background: color-mix(in srgb, var(--accent) 13%, transparent) }
-    100% { background: transparent }
+    0% { outline-color: color-mix(in srgb, var(--accent) 66%, transparent) }
+    100% { outline-color: transparent }
   }
   .prefs-hd p {
     margin: 0; flex: 1; min-width: 0; font: var(--w-reg) 11.5px var(--ui); color: var(--faint);
@@ -3082,15 +3083,15 @@
   .prefs-hd .btn { flex: none; align-self: center }
   .prefs-hd .esc { margin-left: 5px; font: var(--w-reg) 10px var(--mono); color: var(--ghost) }
 
-  .prefs-body { flex: 1; display: grid; grid-template-columns: 208px minmax(0, 1fr); min-height: 0 }
+  .prefs-body { flex: 1; display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 0 }
   .prefs-nav {
-    display: grid; align-content: start; gap: 1px; padding: 9px 8px;
+    display: grid; align-content: start; gap: 2px; padding: 14px 10px;
     border-right: 1px solid var(--hair); overflow: auto; background: var(--surface);
   }
   /* Named .navsec, not .navgrp: the rail already owns that name for its columns
      of buttons, and an unscoped display:flex would land on these headings. */
   .prefs-nav .navsec {
-    padding: 13px 9px 4px; font: var(--w-semi) 9.5px var(--ui);
+    padding: 15px 10px 5px; font: var(--w-semi) 10px var(--ui);
     letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
   }
   .prefs-nav .navsec:first-child { padding-top: 2px }
@@ -3099,12 +3100,12 @@
   .prefs-nav button {
     position: relative; overflow: hidden;
     display: flex; align-items: center; gap: 9px;
-    text-align: left; padding: 6.5px 9px; border: 0; border-radius: var(--r-sm); cursor: pointer;
-    background: transparent; color: var(--muted); font: var(--w-reg) 12.5px var(--ui);
+    min-height: 34px; text-align: left; padding: 7px 10px; border: 0; border-radius: var(--r-sm); cursor: pointer;
+    background: transparent; color: var(--muted); font: var(--w-reg) 13px var(--ui);
     transition: background .14s, color .14s;
   }
   .prefs-nav button svg {
-    width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor;
+    width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
     stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round;
     color: var(--faint); transition: color .14s, transform .5s var(--ease-out);
   }
@@ -3137,16 +3138,49 @@
     .prefs-nav button::before, .prefs-nav button svg { transition: none }
   }
 
-  .prefs-main { overflow: auto; padding: 34px 44px 64px }
+  .prefs-main {
+    overflow: auto; padding: 30px 36px 64px;
+    background: color-mix(in srgb, var(--page) 54%, var(--float));
+  }
   /* 贴着目录往下读，不居中：只有左边一条栏时，居中会把内容悬成一座孤岛 */
-  .prefs-col { max-width: 660px }
-  /* 660 是给读的段落定的行宽。扩展页是表：名字、说明、触发方式、归属、开关
+  .prefs-col { max-width: 760px }
+  /* 760 是给读的段落定的行宽。扩展页是表：名字、说明、触发方式、归属、开关
      五列挤在同一个上限里会把说明截掉，所以只有这一页放宽。 */
   .prefs-main[data-sec="ext"] .prefs-col { max-width: 980px }
   /* 换一个分区是一次导航：换掉的是这一栏，不是下面每个设置块各自刚出现。原来
      每块各飞一次，四个块就是四次「新东西来了」，而什么都没发生 —— 你只是走到
      了另一页。 */
-  .grp { margin-bottom: 30px }
+  .prefs-intro {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px;
+    margin-bottom: 20px; padding: 0 2px 17px; border-bottom: 1px solid var(--hair);
+  }
+  .prefs-intro-mark {
+    display: grid; place-items: center; width: 34px; height: 34px;
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+    border-radius: var(--r-md); background: var(--accent-wash); color: var(--accent-ink);
+  }
+  .prefs-intro-mark svg {
+    width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.45;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .prefs-intro-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+  .prefs-intro-overline {
+    font: var(--w-semi) 9.5px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
+  }
+  .prefs-intro h2 { margin: 0; font: var(--w-semi) 19px/1.25 var(--ui); color: var(--text); letter-spacing: -.01em }
+  .prefs-intro-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 0 }
+  .prefs-intro-meta strong {
+    max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font: var(--w-med) 11.5px var(--mono); color: var(--muted);
+  }
+  .prefs-intro-meta > span { font: var(--w-reg) 10.5px var(--ui); color: var(--ghost) }
+  .prefs-intro-meta[data-danger] strong { color: var(--err) }
+
+  .grp {
+    margin-bottom: 16px; padding: 19px 20px 17px; outline: 3px solid transparent; outline-offset: 2px;
+    border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface);
+    box-shadow: 0 1px 0 rgb(0 0 0 / .025);
+  }
   .prefs-col { animation: navin .14s var(--ease-out) both }
   @keyframes navin { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
   .grp:last-child { margin-bottom: 0 }
@@ -3154,10 +3188,13 @@
   /* 折叠起来的是三个完整的设置块，不是一段补充说明，所以摘要按设置行的重量画，
      不是按脚注。收起时右边那句由 .ds 说清楚里面有没有被改过的值 —— 藏起一个
      已经生效的设置，就是让这一页和窗口本身的样子对不上。 */
-  .advset { margin-bottom: 30px }
+  .advset {
+    margin-bottom: 16px; padding: 0 20px;
+    border: 1px solid var(--hair); border-radius: var(--r-md); background: var(--surface);
+  }
   .advset > summary {
-    display: flex; align-items: center; gap: 10px; padding: 11px 0; cursor: pointer;
-    border-top: 1px solid var(--hair); color: var(--muted); list-style: none;
+    display: flex; align-items: center; gap: 10px; padding: 16px 0; cursor: pointer;
+    color: var(--muted); list-style: none;
   }
   .advset > summary::-webkit-details-marker { display: none }
   .advset > summary::after {
@@ -3170,29 +3207,73 @@
   .advset > summary .tx { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
   .advset > summary .lb { font: var(--w-reg) 12.5px var(--ui); color: inherit }
   .advset > summary .ds { font: var(--w-reg) 11px var(--ui); color: var(--faint) }
-  .advset[open] > summary { margin-bottom: 26px }
-  .grp-hd { display: flex; align-items: baseline; gap: 12px }
-  /* An overline, not a headline: the rows under it carry the weight, and a page
-     of 14.5px titles reads as a stack of documents rather than one list. 10px
-     rather than the 9.5 this is drawn at elsewhere — CJK has no small caps to
-     fall back on, so the tracking is doing all of the work. */
-  .grp h2 {
-    margin: 0; font: var(--w-semi) 10px var(--ui); color: var(--faint);
-    letter-spacing: .14em; text-transform: uppercase;
+  .advset[open] > summary { margin-bottom: 0; border-bottom: 1px solid var(--hair) }
+  .advset > .grp {
+    margin: 0; padding: 18px 0; border: 0; border-bottom: 1px solid var(--hair);
+    border-radius: 0; background: transparent; box-shadow: none;
   }
-  .grp .now { margin-left: auto; flex: none; font: var(--w-reg) 11px var(--mono); color: var(--faint) }
+  .advset > .grp:last-child { border-bottom: 0 }
+  .grp-hd { display: flex; align-items: baseline; gap: 12px }
+  /* The page heading says where you are; these headings stay strong enough to
+     scan the individual decisions without competing with it. */
+  .grp > .grp-hd h3 { margin: 0; font: var(--w-semi) 14px/1.35 var(--ui); color: var(--text); letter-spacing: -.005em }
+  .grp .now {
+    margin-left: auto; flex: none; padding: 2px 7px; border-radius: var(--r-pill);
+    background: var(--overlay); font: var(--w-reg) 10.5px var(--mono); color: var(--faint);
+  }
   .grp-hd .act { margin-left: 12px; align-self: center }
   .grp-hd .now + .act { margin-left: 0 }
   .grp-hd > .act:first-of-type:not(.now + .act) { margin-left: auto }
-  .grp .hint { margin: 6px 0 0; font: var(--w-reg) 11.5px/1.7 var(--ui); color: var(--faint); max-width: 64ch }
-  .grp-items { margin-top: 14px; display: flex; flex-direction: column }
-  .grp .note { margin: 11px 0 0; font: var(--w-reg) 11px/1.7 var(--ui); color: var(--faint); max-width: 60ch }
+  .grp .hint { margin: 6px 0 0; font: var(--w-reg) 12px/1.65 var(--ui); color: var(--muted); max-width: 66ch }
+  .grp-items { margin-top: 15px; display: flex; flex-direction: column }
+  .grp .note { margin: 11px 0 0; font: var(--w-reg) 11.5px/1.65 var(--ui); color: var(--faint); max-width: 62ch }
   /* A command named in a note is set in the interface's own mono. A bare
      <code> inherits the browser's default family — Courier here — and reads as
      a different typeface from every other command this screen prints. */
-  .grp .note code { font: var(--w-reg) 11px var(--mono); color: var(--muted) }
+  .grp .note code { font: var(--w-reg) 11.5px var(--mono); color: var(--muted) }
   .grp .empty { padding: 14px 12px; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair);
     font: var(--w-reg) 11.5px var(--ui); color: var(--faint) }
+
+  @media (max-width: 760px) {
+    .prefs { padding: 12px }
+    .prefs-sheet { height: 100%; border-radius: var(--r-md) }
+    .prefs-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) }
+    .prefs-nav {
+      display: flex; gap: 4px; padding: 8px 10px; overflow-x: auto; overflow-y: hidden;
+      border-right: 0; border-bottom: 1px solid var(--hair); scrollbar-width: none;
+    }
+    .prefs-nav::-webkit-scrollbar { display: none }
+    .prefs-nav .navsec, .prefs-nav .nv { display: none }
+    .prefs-nav button { flex: none; min-height: 32px; padding: 6px 10px }
+    .prefs-nav button::before {
+      left: 50%; top: auto; bottom: 0; width: 0; height: 2px;
+      transform: translateX(-50%); transition: width .24s var(--ease-spring);
+    }
+    .prefs-nav button[aria-selected="true"]::before { width: 18px; height: 2px }
+    .prefs-main { padding: 24px 22px 48px }
+  }
+
+  @media (max-width: 560px) {
+    .prefs { padding: 0 }
+    .prefs-sheet { border-inline: 0; border-bottom: 0; border-radius: 0 }
+    .prefs-hd { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 12px 14px }
+    .prefs-find { grid-column: 1 / -1; grid-row: 2; width: 100%; max-width: none; margin-left: 0 }
+    .prefs-found { right: 14px; width: calc(100% - 28px) }
+    .prefs-main { padding: 20px 14px 40px }
+    .prefs-intro { grid-template-columns: auto minmax(0, 1fr); gap: 11px; margin-bottom: 16px }
+    .prefs-intro-meta {
+      grid-column: 2; flex-direction: row; align-items: baseline; justify-content: space-between;
+    }
+    .prefs-intro-meta strong { max-width: 60% }
+    .grp { padding: 17px 15px 15px }
+    .advset { padding-inline: 15px }
+  }
+
+  @media (max-height: 620px) {
+    .prefs { padding-block: 10px }
+    .prefs-sheet { height: 100% }
+    .prefs-main { padding-top: 22px }
+  }
 
   /* 一行一个选项，settings 和 ask 卡是同一个控件 —— 分成两套只会各自漂。
      .prow 的差别只剩它自己的失效态和危险态。 */

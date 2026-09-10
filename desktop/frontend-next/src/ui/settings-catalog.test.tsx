@@ -33,9 +33,8 @@ const name = (el: Node): string => {
 };
 
 /** Every settings block the tree renders, by the id it names itself with.
- *  A hand-drawn frame counts as a settings block when it carries an h2 — that
- *  is the heading Group itself renders, and what tells a block apart from the
- *  sub-labels inside one (Storage draws three of those with h3). */
+ *  A hand-drawn frame counts when its direct group header carries an h3 — the
+ *  same structure Group renders, unlike nested labels such as Storage's. */
 function rendered(): { ids: string[]; unnamed: string[] } {
   const ids: string[] = [];
   const unnamed: string[] = [];
@@ -50,9 +49,15 @@ function rendered(): { ids: string[]; unnamed: string[] } {
       if (n.type !== "JSXElement") return;
       const open = n.openingElement as Node;
       if (literal(attr(open, "className")) !== "grp") return;
-      let titled = false;
-      walk(n, (d) => {
-        if (d.type === "JSXOpeningElement" && name(d) === "h2") titled = true;
+      const titled = ((n.children as Node[]) ?? []).some((child) => {
+        if (child.type !== "JSXElement") return false;
+        const childOpen = child.openingElement as Node;
+        if (literal(attr(childOpen, "className")) !== "grp-hd") return false;
+        let heading = false;
+        walk(child, (d) => {
+          if (d.type === "JSXOpeningElement" && name(d) === "h3") heading = true;
+        });
+        return heading;
       });
       if (!titled) return;
       const said = attr(open, "data-setting");

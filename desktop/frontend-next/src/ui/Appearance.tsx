@@ -224,7 +224,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
     <>
       <section className="grp" id="set-mode" data-setting="mode">
         <div className="grp-hd">
-          <h2>{t("明暗")}</h2>
+          <h3>{t("明暗")}</h3>
         </div>
         <p className="hint">{t("跟随系统时会随系统主题切换；手动选择后将保持固定。")}</p>
         <div className="grp-items">
@@ -241,7 +241,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <section className="grp" id="set-scheme" data-setting="scheme">
         <div className="grp-hd">
-          <h2>{t("配色")}</h2>
+          <h3>{t("配色")}</h3>
           <span className="now">{packs.length ? t("{n} 个已装", { n: packs.length }) : ""}</span>
         </div>
         <p className="hint">{t("配色包安装在记忆目录的 themes/ 下，每个目录包含一个 theme.json。配色包会应用表面色、强调色、圆角和字体；状态色（成功/警告/失败）不受影响。")}</p>
@@ -272,7 +272,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <section className="grp" id="set-size" data-setting="size">
         <div className="grp-hd">
-          <h2>{t("大小")}</h2>
+          <h3>{t("大小")}</h3>
         </div>
         <p className="hint">{t("「界面」会同时缩放边距与控件，「正文」仅调整对话中的文字大小，两者独立设置。")}</p>
         <div className="grp-items">
@@ -318,7 +318,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <section className="grp" id="set-wallpaper" data-setting="wallpaper">
         <div className="grp-hd">
-          <h2>{t("壁纸")}</h2>
+          <h3>{t("壁纸")}</h3>
           {look.wallpaper && (
               <button className="now nowbtn" data-action="wallpaper.remove" onClick={dropPaper}>
               {t("移除")}
@@ -452,7 +452,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
       <section className="grp" id="set-language" data-setting="language">
         <div className="grp-hd">
-          <h2>{t("语言")}</h2>
+          <h3>{t("语言")}</h3>
         </div>
         <p className="hint">
           {t("界面显示语言。模型回复所用的语言与此设置无关，将跟随你发送消息时使用的语言。")}
@@ -473,7 +473,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
       {tray && (
         <section className="grp" id="set-window" data-setting="window">
           <div className="grp-hd">
-            <h2>{t("窗口")}</h2>
+            <h3>{t("窗口")}</h3>
           </div>
           <p className="hint">
             {t("关闭窗口后需通过托盘图标重新打开主界面，下方选项依赖该图标。")}
@@ -526,7 +526,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         </summary>
         <section className="grp" id="set-font" data-setting="font">
           <div className="grp-hd">
-            <h2>{t("字体")}</h2>
+            <h3>{t("字体")}</h3>
           </div>
           <p className="hint">{t("可直接输入字体名称，或选择本机已安装的字体。下方文本会实时预览所选字体；若字体不可用，将自动使用默认字体。")}</p>
           <div className="grp-items">
@@ -552,7 +552,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
         <section className="grp" id="set-weight" data-setting="weight">
           <div className="grp-hd">
-            <h2>{t("文字粗细")}</h2>
+            <h3>{t("文字粗细")}</h3>
           </div>
           <p className="hint">{t("调整文字的笔画粗细。中文笔画密集，在小字号下加粗有助于提升清晰度。")}</p>
           <div className="grp-items">
@@ -569,7 +569,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
 
         <section className="grp" id="set-contrast" data-setting="contrast">
           <div className="grp-hd">
-            <h2>{t("文字对比度")}</h2>
+            <h3>{t("文字对比度")}</h3>
           </div>
           <p className="hint">{t("同时调整正文与次要文字的对比度。深色主题下若觉得刺眼，可调向「柔和」。")}</p>
           <div className="grp-items">

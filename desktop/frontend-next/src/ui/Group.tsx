@@ -14,7 +14,7 @@ export function Group({
   return (
     <section className="grp" id={`set-${id}`} data-setting={id}>
       <div className="grp-hd">
-        <h2>{title}</h2>
+        <h3>{title}</h3>
         {now && <span className="now">{now}</span>}
         {action}
       </div>
