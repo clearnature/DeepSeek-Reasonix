@@ -32,7 +32,7 @@ func TestCompactRefusedWhileRunning(t *testing.T) {
 	c.gate.running = true
 	c.mu.Unlock()
 
-	err := c.Compact(context.Background(), "")
+	_, err := c.Compact(context.Background(), agent.CompactRequest{})
 	if err == nil {
 		t.Fatal("Compact while running should be refused")
 	}

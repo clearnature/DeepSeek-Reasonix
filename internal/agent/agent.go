@@ -759,10 +759,18 @@ func (a *Agent) steerQueueLen() int {
 // fires (e.g. 0.8). The status line uses it to show headroom to the next compact.
 func (a *Agent) CompactRatio() float64 { return a.compactRatio }
 
-// CompactNow forces one projection compaction (canonical transcript untouched).
-func (a *Agent) CompactNow(ctx context.Context, instructions string) error {
-	_, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{Trigger: CompactionTriggerManual, Instructions: instructions, Force: true})
-	return err
+// CompactNow runs one requested projection compaction (canonical transcript
+// untouched). Asking waives the automatic threshold; it does not waive what the
+// fold has to be worth, so a context nothing was added to is declined rather
+// than summarized a second time. Only IgnoreEconomics waives that.
+func (a *Agent) CompactNow(ctx context.Context, req CompactRequest) (CompactVerdict, error) {
+	prepared, err := a.contextManager().Prepare(ctx, ContextPreparePolicy{
+		Trigger:         CompactionTriggerManual,
+		Instructions:    req.Instructions,
+		IgnoreThreshold: true,
+		IgnoreEconomics: req.IgnoreEconomics,
+	})
+	return prepared.Maintenance, err
 }
 
 // New constructs an Agent. MaxSteps <= 0 means no cap — the run loop continues

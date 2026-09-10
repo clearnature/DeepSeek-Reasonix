@@ -878,13 +878,17 @@ type preparedInvocationTurn struct {
 // declined is an answer about this transcript — nothing left worth folding —
 // and reporting it as a failure sent people looking for a broken kernel.
 func (c *Controller) compactAndReport(focus string) {
-	err := c.Compact(context.Background(), focus)
+	verdict, err := c.Compact(context.Background(), agent.CompactRequest{Instructions: focus})
 	switch {
-	case err == nil:
+	case err == nil && verdict.Compacted():
 		c.notice("compacted")
 		if err := c.SnapshotRewrite(); err != nil {
 			slog.Warn("controller: snapshot after compact", "err", err)
 		}
+	case err == nil:
+		// The host settled which economics declined; saying it in the kernel's
+		// own words beats a frontend inferring one from an empty result.
+		c.notice("nothing to compact — " + agent.CompactDeclineText(verdict.Reason))
 	case agent.IsCompactionDeclined(err):
 		c.notice("nothing to compact — " + agent.CompactionDeclineReason(err))
 	default:
@@ -1661,20 +1665,20 @@ func (c *Controller) GoalStatus() string {
 
 // Compact runs one compaction pass on the executor's session on demand.
 // instructions is optional `/compact <focus>` guidance steering what to keep.
-func (c *Controller) Compact(ctx context.Context, instructions string) error {
+func (c *Controller) Compact(ctx context.Context, req agent.CompactRequest) (agent.CompactVerdict, error) {
 	if c.executor == nil {
-		return nil
+		return agent.CompactVerdict{}, nil
 	}
 	// The rotation gate keeps a turn from starting while a manual compaction is
 	// building and installing a new model-visible projection.
 	if err := c.beginRotation(); err != nil {
 		if errors.Is(err, errTurnRunningRotation) {
-			return fmt.Errorf("cannot compact while a turn is running")
+			return agent.CompactVerdict{}, fmt.Errorf("cannot compact while a turn is running")
 		}
-		return err
+		return agent.CompactVerdict{}, err
 	}
 	defer c.endRotation()
-	return c.executor.CompactNow(ctx, instructions)
+	return c.executor.CompactNow(ctx, req)
 }
 
 func removeSessionArtifacts(path string) error {

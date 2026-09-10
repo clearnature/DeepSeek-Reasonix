@@ -138,7 +138,7 @@ func (h *harness) runGeneration(ctx context.Context, gen int, probes []probe) ge
 
 	h.calls.reset()
 	start := time.Now()
-	err := h.agentA.CompactNow(ctx, "")
+	_, err := h.agentA.CompactNow(ctx, agent.CompactRequest{})
 	r.Seconds = time.Since(start).Seconds()
 	if err != nil {
 		r.Error = err.Error()

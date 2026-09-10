@@ -53,7 +53,7 @@ func TestEveryNoopVerdictIsReachable(t *testing.T) {
 				t.Fatal("the first fold installed no projection")
 			}
 			a.sess.conversation.Add(provider.Message{Role: provider.RoleAssistant, Content: "one more step"})
-			_, reason, err := a.compactToProjection(ctx, CompactionTriggerPressure, "", false, false)
+			_, reason, err := a.compactToProjection(ctx, CompactionTriggerPressure, "", compactionScope{}, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -184,7 +184,7 @@ func directNoop(t *testing.T, a *Agent) string {
 	// A rejected checkpoint reports its verdict and an error together, and the
 	// verdict is what this reads: refusing to fold and failing to are the same
 	// answer to "why was nothing folded".
-	_, reason, err := a.compactToProjection(context.Background(), CompactionTriggerPressure, "", false, false)
+	_, reason, err := a.compactToProjection(context.Background(), CompactionTriggerPressure, "", compactionScope{}, false)
 	if reason == "" && err != nil {
 		t.Fatalf("compactToProjection: %v", err)
 	}

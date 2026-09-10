@@ -214,6 +214,7 @@ type Messages struct {
 
 	// chat TUI slash commands.
 	SlashCompactFailed           string // "/compact" errored, prefixed before the underlying error
+	SlashCompactDeclined         string // "/compact" found nothing worth folding, prefixed before the host's reason
 	SlashNewDone                 string // "/new" succeeded
 	SlashNewFailed               string // "/new" errored
 	SlashClearPrompt             string // "/clear" destructive confirmation prompt

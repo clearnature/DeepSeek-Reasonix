@@ -250,7 +250,7 @@ func TestCompactEmitsEvents(t *testing.T) {
 	sink := event.FuncSink(func(e event.Event) { got = append(got, e) })
 	a := New(prov, tool.NewRegistry(), sess, Options{ContextWindow: 50_000, RecentKeep: 2}, sink)
 
-	if err := a.compact(context.Background(), "auto", "", true); err != nil {
+	if err := a.compact(context.Background(), "auto", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestCompactInjectsFocusAndPreCompactHook(t *testing.T) {
 		Hooks: &stubHooks{preCompactOut: "KEEP-THE-MIGRATION-PLAN"},
 	}, event.Discard)
 
-	if err := a.compact(context.Background(), "manual", "focus on the auth refactor", true); err != nil {
+	if err := a.compact(context.Background(), "manual", "focus on the auth refactor", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	if len(prov.got) == 0 || prov.got[0].Role != provider.RoleSystem {
@@ -325,7 +325,7 @@ func TestCompactSkipsSingleSmallMessage(t *testing.T) {
 	}}
 	a := New(prov, tool.NewRegistry(), sess, Options{RecentKeep: 2, ArchiveDir: testenv.TempDir(t)}, event.Discard)
 
-	if err := a.compact(context.Background(), "auto", "", false); err != nil {
+	if err := a.compact(context.Background(), "auto", "", compactionScope{}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	if got := len(sess.Messages); got != 4 {
@@ -550,7 +550,7 @@ func TestCompactKeepsActiveTurnVerbatim(t *testing.T) {
 	}, event.Discard)
 	a.activeTurnCreatedAt.Store(currentCreatedAt)
 
-	if err := a.compact(context.Background(), "auto", "", true); err != nil {
+	if err := a.compact(context.Background(), "auto", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	start := a.activeTurnStart(sess.Messages)
@@ -683,7 +683,7 @@ func TestCompactRollsOldDigestsIntoNew(t *testing.T) {
 	a := New(&fakeProvider{reply: "merged digest"}, tool.NewRegistry(), sess,
 		Options{RecentKeep: 2, ArchiveDir: testenv.TempDir(t)}, event.Discard)
 
-	if err := a.compact(context.Background(), "manual", "", true); err != nil {
+	if err := a.compact(context.Background(), "manual", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	canonical := sess.Snapshot()

@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reasonix/internal/agent"
 	"slices"
 	"strings"
 	"sync"
@@ -252,7 +253,7 @@ func TestProjectionCompactionReOwesTheLatestCanonicalState(t *testing.T) {
 	if _, err := h.ctrl.CreateSkill("ledger-audit", skill.ScopeProject, projectionSkillFile); err != nil {
 		t.Fatalf("CreateSkill: %v", err)
 	}
-	if err := h.ctrl.Compact(context.Background(), ""); err != nil {
+	if _, err := h.ctrl.Compact(context.Background(), agent.CompactRequest{}); err != nil {
 		t.Fatalf("Compact: %v", err)
 	}
 	if !h.events.saw(event.CompactionDone) {

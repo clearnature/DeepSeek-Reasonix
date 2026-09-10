@@ -194,7 +194,7 @@ func TestReceiptCarriesTheWholeTransactionBill(t *testing.T) {
 	a := New(prov, reg, sess, Options{ContextWindow: 60_000, CompactRatio: 0.5, RecentKeep: 2,
 		ArchiveDir: testenv.TempDir(t)}, sink)
 
-	if _, _, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", true, false); err != nil {
+	if _, _, err := a.compactToProjection(context.Background(), CompactionTriggerManual, "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}, false); err != nil {
 		t.Fatalf("compactToProjection: %v", err)
 	}
 	r := a.sess.compactionState.LastReceipt

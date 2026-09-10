@@ -152,7 +152,7 @@ type SessionHistory interface {
 	Branches() ([]agent.BranchInfo, error)
 	BranchTreeText() string
 	SwitchBranch(ref string) (agent.BranchInfo, error)
-	Compact(ctx context.Context, instructions string) error
+	Compact(ctx context.Context, req agent.CompactRequest) (agent.CompactVerdict, error)
 	CompactRatio() float64
 	ContextReport() (summary, detail string)
 	SummarizeFrom(ctx context.Context, turn int) error

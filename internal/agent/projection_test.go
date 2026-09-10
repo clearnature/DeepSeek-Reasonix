@@ -152,7 +152,7 @@ func TestCompactToProjectionLeavesCanonicalIntact(t *testing.T) {
 		ModelRef:      "test/model",
 	}, event.Discard)
 
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	after := sess.Snapshot()
@@ -205,7 +205,7 @@ func TestCompactFailureDoesNotWriteMechanicalMarker(t *testing.T) {
 	}
 	before := append([]provider.Message(nil), sess.Messages...)
 	a := New(fp, nil, sess, Options{ContextWindow: 2000, RecentKeep: 2, ArchiveDir: testenv.TempDir(t)}, event.Discard)
-	err := a.CompactNow(context.Background(), "")
+	_, err := a.CompactNow(context.Background(), CompactRequest{})
 	if err == nil {
 		t.Fatal("expected compaction error")
 	}
@@ -239,7 +239,7 @@ func TestFixedEarlyUserTurnsStableAcrossCompactions(t *testing.T) {
 	}
 	dir := testenv.TempDir(t)
 	a := New(fp, nil, sess, Options{ContextWindow: 4000, RecentKeep: 2, ArchiveDir: dir, SessionPath: filepath.Join(dir, "s.jsonl")}, event.Discard)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("compact1: %v", err)
 	}
 	firstPrefix := earlyUserPrefix(a.sess.compactionState.Projection.Messages)
@@ -257,7 +257,7 @@ func TestFixedEarlyUserTurnsStableAcrossCompactions(t *testing.T) {
 		t.Fatalf("test did not install the intended dynamic calibration: %f", got)
 	}
 	fp.reply = "digest-2"
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("compact2: %v", err)
 	}
 	secondPrefix := earlyUserPrefix(a.sess.compactionState.Projection.Messages)
@@ -305,7 +305,7 @@ func TestLocalOnlyExcludedFromCompactionRequest(t *testing.T) {
 		Content: "secret local only", LocalOnly: true,
 	})
 	a := New(fp, nil, sess, Options{ContextWindow: 2000, RecentKeep: 2, ArchiveDir: testenv.TempDir(t)}, event.Discard)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	for _, m := range fp.got {
@@ -341,7 +341,7 @@ func TestArchiveDirIgnoredOnCheckpointInstall(t *testing.T) {
 	a := New(fp, nil, sess, Options{
 		ContextWindow: 50_000, CompactRatio: 0.85, RecentKeep: 2, ArchiveDir: badArchive,
 	}, event.Discard)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow with unusable ArchiveDir: %v", err)
 	}
 	if len(a.sess.compactionState.Projection.Messages) == 0 {
@@ -394,7 +394,7 @@ func TestCompactReplacesHistory(t *testing.T) {
 	}, event.Discard)
 	beforeLen := len(sess.Messages)
 
-	if err := a.compact(context.Background(), "manual", "", true); err != nil {
+	if err := a.compact(context.Background(), "manual", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	// Canonical transcript is never rewritten by projection compaction.
@@ -455,7 +455,7 @@ func TestManualCompactReportsSummarizerFailure(t *testing.T) {
 	a := New(prov, tool.NewRegistry(), sess, Options{RecentKeep: 2, ArchiveDir: testenv.TempDir(t)}, sink)
 
 	before := append([]provider.Message(nil), sess.Messages...)
-	if err := a.compact(context.Background(), "manual", "", true); err == nil {
+	if err := a.compact(context.Background(), "manual", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err == nil {
 		t.Fatal("compact should error when summarizer fails")
 	}
 	if len(sess.Messages) != len(before) {
@@ -501,7 +501,7 @@ func TestCompactRewriteVersionFeedsCacheDiagnostics(t *testing.T) {
 	}, event.Discard)
 	beforeVersion := sess.RewriteVersion()
 
-	if err := a.compact(context.Background(), "auto", "", true); err != nil {
+	if err := a.compact(context.Background(), "auto", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	if sess.RewriteVersion() != beforeVersion {
@@ -541,7 +541,7 @@ func TestCompactKeepsMidSessionUserTurns(t *testing.T) {
 	a := New(&fakeProvider{reply: "Standing facts: none"}, tool.NewRegistry(), sess,
 		Options{ContextWindow: window, CompactRatio: 0.85, RecentKeep: 2}, event.Discard)
 
-	if err := a.compact(context.Background(), "manual", "", true); err != nil {
+	if err := a.compact(context.Background(), "manual", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 
@@ -604,7 +604,7 @@ func TestCompactKeepsPriorDigests(t *testing.T) {
 	a := New(prov, tool.NewRegistry(), sess,
 		Options{RecentKeep: 2, ArchiveDir: testenv.TempDir(t)}, event.Discard)
 
-	if err := a.compact(context.Background(), "manual", "", true); err != nil {
+	if err := a.compact(context.Background(), "manual", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 
@@ -655,7 +655,7 @@ func TestCompactKeepsErrorMessages(t *testing.T) {
 		ContextWindow: 50_000, CompactRatio: 0.85, RecentKeep: 2, KeepPolicy: KeepErrors,
 	}, event.Discard)
 
-	if err := a.compact(context.Background(), "manual", "", true); err != nil {
+	if err := a.compact(context.Background(), "manual", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	// Canonical unchanged.
@@ -700,7 +700,7 @@ func TestCompactKeepsUserMarkedMessages(t *testing.T) {
 		ContextWindow: 50_000, CompactRatio: 0.85, RecentKeep: 2, KeepPolicy: KeepUserMarked,
 	}, event.Discard)
 
-	if err := a.compact(context.Background(), "manual", "", true); err != nil {
+	if err := a.compact(context.Background(), "manual", "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	var keptCanonical, keptProj bool
@@ -772,7 +772,7 @@ func TestCompactFoldsSingleLargeMessage(t *testing.T) {
 	a := New(prov, tool.NewRegistry(), sess, Options{RecentKeep: 2, ArchiveDir: testenv.TempDir(t)}, event.Discard)
 	before := len(sess.Messages)
 
-	if err := a.compact(context.Background(), "auto", "", false); err != nil {
+	if err := a.compact(context.Background(), "auto", "", compactionScope{}); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	if len(sess.Messages) != before {

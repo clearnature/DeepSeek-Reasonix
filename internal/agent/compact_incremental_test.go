@@ -28,7 +28,7 @@ func TestIncrementalFoldSummarizesPriorDigestPlusNewWork(t *testing.T) {
 		ContextWindow: 50_000, CompactRatio: 0.5, RecentKeep: 2,
 	}, event.Discard)
 
-	if err := a.compact(context.Background(), CompactionTriggerManual, "", true); err != nil {
+	if err := a.compact(context.Background(), CompactionTriggerManual, "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("first compact: %v", err)
 	}
 	if !hasCompactionSummary(a.modelVisibleMessages()) {
@@ -41,7 +41,7 @@ func TestIncrementalFoldSummarizesPriorDigestPlusNewWork(t *testing.T) {
 	sess.Add(provider.Message{Role: provider.RoleUser, Content: "tail2"})
 	sess.Add(provider.Message{Role: provider.RoleAssistant, Content: "done"})
 	prov.got = nil
-	if err := a.compact(context.Background(), CompactionTriggerManual, "", true); err != nil {
+	if err := a.compact(context.Background(), CompactionTriggerManual, "", compactionScope{ignoreThreshold: true, ignoreEconomics: true}); err != nil {
 		t.Fatalf("second compact: %v", err)
 	}
 	if len(prov.got) == 0 {

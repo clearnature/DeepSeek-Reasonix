@@ -50,7 +50,11 @@ type ContextManager struct {
 type ContextPreparePolicy struct {
 	Trigger      string
 	Instructions string
-	Force        bool
+	// IgnoreThreshold folds without waiting for the automatic trigger.
+	// IgnoreEconomics folds even when the saving does not pay for it. One bool
+	// for both let a hand-typed compact re-summarize an unchanged context.
+	IgnoreThreshold bool
+	IgnoreEconomics bool
 	// ObservedInputTokens pins the input size instead of estimating it. Tests use
 	// it to trigger a fold at an exact size; production reads the calibrated
 	// shape, which is anchored on real provider counts.
@@ -62,6 +66,9 @@ type PreparedContext struct {
 	Messages          []provider.Message
 	InputTokens       int
 	ProjectionVersion uint64
+	// Maintenance is what this preparation did to the context, and when it did
+	// nothing, which economics declined it.
+	Maintenance CompactVerdict
 }
 
 func (a *Agent) contextManager() ContextManager { return ContextManager{agent: a} }
@@ -124,21 +131,26 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	if a.sess.compaction.stuck && policy.Trigger == CompactionTriggerPressure {
 		return prepared, nil
 	}
-	// One user trigger. Overflow is a one-shot physical recovery path only.
-	forceFold := policy.Force || policy.Trigger == CompactionTriggerManual || policy.Trigger == CompactionTriggerOverflow || est >= hard
-	if est < fold && !forceFold {
+	// Asking, overflow and a physical ceiling each waive the trigger. Only the
+	// last two, and an explicit force, waive what the fold has to be worth.
+	scope := compactionScope{
+		ignoreThreshold: policy.IgnoreThreshold || policy.Trigger == CompactionTriggerManual ||
+			policy.Trigger == CompactionTriggerOverflow || est >= hard,
+		ignoreEconomics: policy.IgnoreEconomics || policy.Trigger == CompactionTriggerOverflow || est >= hard,
+	}
+	if est < fold && !scope.ignoreThreshold {
 		return prepared, nil
 	}
 
-	return m.foldContext(ctx, prepared, policy, inputHash, est, ownEst, fold, hard, forceFold)
+	return m.foldContext(ctx, prepared, policy, inputHash, est, ownEst, fold, hard, scope)
 }
 
-func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContext, policy ContextPreparePolicy, inputHash string, est, ownEst, fold, hard int, forceFold bool) (PreparedContext, error) {
+func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContext, policy ContextPreparePolicy, inputHash string, est, ownEst, fold, hard int, scope compactionScope) (PreparedContext, error) {
 	a := m.agent
 	// Where this function would answer ErrCompactionRequired, the fold is the
 	// only way out and a failed summary must degrade rather than strand the turn.
 	mustFree := policy.Trigger != CompactionTriggerManual && (policy.Trigger == CompactionTriggerOverflow || est >= hard)
-	outcome, noopReason, err := a.compactToProjection(ctx, policy.Trigger, policy.Instructions, forceFold, mustFree)
+	outcome, noopReason, err := a.compactToProjection(ctx, policy.Trigger, policy.Instructions, scope, mustFree)
 	if err != nil {
 		// Cancellation is the caller's decision, not a summary that failed:
 		// recording it as one would blame the summarizer for this generation,
@@ -189,19 +201,22 @@ func (m ContextManager) foldContext(ctx context.Context, prepared PreparedContex
 			reason = "no foldable region remains"
 		}
 		a.recordContextMaintenanceBlocked(inputHash, policy.Trigger, "summary", noopReason, reason)
-		// Manual carries Force, so without this a hand-typed compact answered
-		// with the overflow error — a sentence about a provider limit nowhere
-		// near being hit. Nothing to fold is a verdict, not a failure.
+		// A request that was declined is answered, not failed: the caller gets
+		// the reason the host already settled and says so in its own words.
+		// Only a fold nothing else can free is an error.
 		if policy.Trigger == CompactionTriggerManual && est < hard {
-			return PreparedContext{}, rejectCheckpoint("%s", reason)
+			prepared.Maintenance = CompactVerdict{Reason: noopReason}
+			return prepared, nil
 		}
-		if policy.Trigger == CompactionTriggerOverflow || policy.Force || est >= hard {
+		if policy.Trigger == CompactionTriggerOverflow || est >= hard {
 			return PreparedContext{}, fmt.Errorf("%w: %s", ErrCompactionRequired, reason)
 		}
+		prepared.Maintenance = CompactVerdict{Reason: noopReason}
 		return prepared, nil
 	}
 
 	result := m.currentPrepared()
+	result.Maintenance = CompactVerdict{Installed: outcome == CompactionInstalled}
 	if policy.Trigger == CompactionTriggerManual {
 		return result, nil
 	}

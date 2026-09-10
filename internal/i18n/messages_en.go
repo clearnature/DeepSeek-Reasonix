@@ -179,6 +179,7 @@ var English = Messages{
 	ExtFormFieldsHint:         "fields are collected through the usual prompts",
 	ExtRunActionFmt:           "run %s",
 	SlashCompactFailed:        "compaction failed",
+	SlashCompactDeclined:      "nothing to tidy",
 	SlashNewDone:              "new session started — previous transcript saved",
 	SlashNewFailed:            "could not start a new session",
 	SlashClearPrompt:          "Clear current context without saving?",

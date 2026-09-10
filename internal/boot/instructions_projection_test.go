@@ -7,6 +7,7 @@ package boot
 import (
 	"os"
 	"path/filepath"
+	"reasonix/internal/agent"
 	"strings"
 	"testing"
 
@@ -120,7 +121,7 @@ func TestInstructionsAreOwedAgainAfterAFold(t *testing.T) {
 	for _, prompt := range []string{"turn-1", "turn-2", "turn-3", "turn-4", "turn-5", "turn-6"} {
 		h.turn(prompt + " " + filler)
 	}
-	if err := h.ctrl.Compact(t.Context(), ""); err != nil {
+	if _, err := h.ctrl.Compact(t.Context(), agent.CompactRequest{}); err != nil {
 		t.Fatalf("Compact: %v", err)
 	}
 	if !h.events.saw(event.CompactionDone) {

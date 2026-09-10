@@ -634,24 +634,6 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) compact(w http.ResponseWriter, r *http.Request) {
-	if err := s.ctl().Compact(r.Context(), ""); err != nil {
-		// A declined fold is a verdict, not a fault: the candidate was no smaller
-		// than what it would replace. 500 made every frontend show it as a failure.
-		if agent.IsCompactionDeclined(err) {
-			writeErr(w, http.StatusConflict, err)
-			return
-		}
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	// Persist the compacted session to disk — ctrl.Compact() only mutates in-memory.
-	if err := s.ctl().Snapshot(); err != nil {
-		slog.Warn("serve: snapshot after compact", "err", err)
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (s *Server) newSession(w http.ResponseWriter, _ *http.Request) {
 	// Session-path-changing entry point: serialize with /resume, /fork, and
 	// switchModel so the controller and the lease keeper move together.

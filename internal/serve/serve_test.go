@@ -462,8 +462,10 @@ func TestServeCompactEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Errorf("compact = %d, want 204", resp.StatusCode)
+	// A request the host declined answers 200 with the reason it declined for;
+	// 204 could not tell a fold from a session it decided not to pay for.
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("compact = %d, want 200", resp.StatusCode)
 	}
 }
 

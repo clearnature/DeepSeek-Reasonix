@@ -184,7 +184,7 @@ func (gs *Session) review(ctx context.Context, toolName string, args json.RawMes
 	// when that same review already advanced the visible projection.
 	projectionAfter := gs.agent.ProjectionVersion()
 	if agentErr == nil && reviewN%compactEvery == 0 && projectionAfter == projectionBefore {
-		_ = gs.agent.CompactNow(reviewCtx, "")
+		_, _ = gs.agent.CompactNow(reviewCtx, agent.CompactRequest{})
 	}
 	reviewUsage := gs.snapshotReviewUsage()
 

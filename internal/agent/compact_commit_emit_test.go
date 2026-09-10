@@ -55,7 +55,7 @@ func TestCommitSummaryEmitsOutsideCompactionLock(t *testing.T) {
 		SessionPath: path, WorkspaceID: "ws", ModelRef: "p/m",
 	}, sink)
 	sink.agent = a
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	sink.mu.Lock()
@@ -93,7 +93,7 @@ func TestCommitSurvivesPostPublishDirSyncFailure(t *testing.T) {
 		ContextWindow: 20_000, CompactRatio: 0.5, RecentKeep: 2,
 		SessionPath: path, WorkspaceID: "ws", ModelRef: "p/m",
 	}, event.Discard)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow with post-publish dir sync fault: %v", err)
 	}
 	memVer := a.currentProjectionVersion()

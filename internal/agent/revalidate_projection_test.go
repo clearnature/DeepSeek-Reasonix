@@ -26,7 +26,7 @@ func projectionWithLiveTail(t *testing.T) (*Agent, *Session, int) {
 		ContextWindow: 2000, RecentKeep: 2, ArchiveDir: dir,
 		SessionPath: filepath.Join(dir, "s.jsonl"), WorkspaceID: "ws", ModelRef: "m",
 	}, event.Discard)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	covered := a.sess.compactionState.Projection.CoveredCount

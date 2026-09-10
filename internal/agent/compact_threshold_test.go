@@ -74,23 +74,23 @@ func TestAcceptCheckpointCandidateRules(t *testing.T) {
 	a := &Agent{agentConfig: agentConfig{contextWindow: 1_000_000, compactRatio: 0.85,
 		budgets: CompactionBudgets{ContextSoftLimitTokens: -1}}}
 	// 20% candidate under normal path: accept.
-	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, false, 850_000, 180_000, 50_000); err != nil {
+	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, compactionScope{}, 850_000, 180_000, 50_000); err != nil {
 		t.Fatalf("20%% candidate: %v", err)
 	}
 	// 51% candidate: reject.
-	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, false, 850_000, 510_000, 50_000); err == nil {
+	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, compactionScope{}, 850_000, 510_000, 50_000); err == nil {
 		t.Fatal("51% candidate should be rejected")
 	}
 	// Fixed prefix > 50% with enough savings: accept.
-	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, false, 900_000, 600_000, 520_000); err != nil {
+	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, compactionScope{}, 900_000, 600_000, 520_000); err != nil {
 		t.Fatalf("fixed-prefix exception: %v", err)
 	}
 	// Fixed prefix > 50% without 25% savings: reject.
-	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, false, 600_000, 550_000, 520_000); err == nil {
+	if err := a.acceptCheckpointCandidate(CompactionTriggerPressure, compactionScope{}, 600_000, 550_000, 520_000); err == nil {
 		t.Fatal("fixed-prefix without savings should reject")
 	}
 	// Manual below trigger: accept any reduction.
-	if err := a.acceptCheckpointCandidate(CompactionTriggerManual, false, 100_000, 80_000, 10_000); err != nil {
+	if err := a.acceptCheckpointCandidate(CompactionTriggerManual, compactionScope{}, 100_000, 80_000, 10_000); err != nil {
 		t.Fatalf("manual below trigger: %v", err)
 	}
 }

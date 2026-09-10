@@ -69,7 +69,6 @@ func (a *Agent) prepareSamplingRequest(ctx context.Context) (samplingRequest, er
 		// One-shot physical overflow recovery. Do not loop.
 		if _, perr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
 			Trigger: CompactionTriggerOverflow,
-			Force:   true,
 		}); perr != nil {
 			return samplingRequest{}, budgetErr
 		}

@@ -174,6 +174,7 @@ var ChineseTraditional = Messages{
 	ExtFormFieldsHint:         "欄位將透過逐項提問收集",
 	ExtRunActionFmt:           "執行 %s",
 	SlashCompactFailed:        "壓縮失敗",
+	SlashCompactDeclined:      "暫時不用整理",
 	SlashNewDone:              "已開啟新會話 — 之前的對話已存檔",
 	SlashNewFailed:            "新建會話失敗",
 	SlashUnknown:              "未知命令",

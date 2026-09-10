@@ -105,6 +105,28 @@ type ContextMaintenanceReceipt struct {
 	SummaryUsage CompactionUsage `json:"summary_usage,omitzero"`
 }
 
+// CompactRequest is a maintenance the user asked for. Asking is what makes it
+// manual, so the automatic threshold is always waived; economics is a separate
+// permission because "tidy this now" is not "spend whatever it costs".
+type CompactRequest struct {
+	Instructions    string
+	IgnoreEconomics bool
+}
+
+// CompactVerdict answers a CompactRequest. Declining is an answer and not a
+// failure: Reason names the economics that declined, so a frontend can say why
+// instead of reporting a command that did not work.
+type CompactVerdict struct {
+	// Installed says a projection was written. It is a bool rather than a
+	// CompactionOutcome because that enum's zero value is "installed", and a
+	// verdict nobody filled in must not claim a fold happened.
+	Installed bool
+	Reason    CompactionNoopReason
+}
+
+// Compacted reports whether a projection was installed.
+func (v CompactVerdict) Compacted() bool { return v.Installed }
+
 // CompactionOutcome reports whether compactToProjection installed a projection.
 type CompactionOutcome int
 
@@ -129,6 +151,31 @@ const (
 	NoopFoldEmptyAfterHooks     CompactionNoopReason = "fold_empty_after_hooks"
 	NoopFixedPrefixAboveTrigger CompactionNoopReason = "fixed_prefix_above_trigger"
 )
+
+// CompactDeclineText says why a request was declined. The code is the identity a
+// frontend matches and localizes; this is what one prints when it has no phrase
+// of its own, so nobody has to invent a reason from an empty result.
+func CompactDeclineText(reason CompactionNoopReason) string {
+	switch reason {
+	case NoopInputUnchanged:
+		return "the context has not changed since the last time it was tidied"
+	case NoopNoNewClosedPrefix:
+		return "nothing has closed since the last checkpoint"
+	case NoopFoldBelowEconomics:
+		return "too little has been added to pay for another summary"
+	case NoopActiveTurnBoundary:
+		return "the turn in flight has to finish first"
+	case NoopFoldEmptyAfterHooks:
+		return "everything foldable is content a hook keeps"
+	case NoopFixedPrefixAboveTrigger:
+		return "the part that cannot be folded is already over the threshold"
+	case NoopNoFoldableRegion:
+		return "no foldable region remains"
+	case "":
+		return "nothing left worth folding"
+	}
+	return string(reason)
+}
 
 // RecallLedger is what one projection generation has already pulled back out
 // of the fold. Carrying the generation it belongs to is what resets the budget:

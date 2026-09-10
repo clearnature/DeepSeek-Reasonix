@@ -180,6 +180,7 @@ var Chinese = Messages{
 	ExtFormFieldsHint:         "字段将通过逐项提问收集",
 	ExtRunActionFmt:           "运行 %s",
 	SlashCompactFailed:        "压缩失败",
+	SlashCompactDeclined:      "暂时不用整理",
 	SlashNewDone:              "已开启新会话 — 之前的对话已存档",
 	SlashNewFailed:            "新建会话失败",
 	SlashClearPrompt:          "清空当前上下文且不保存？",

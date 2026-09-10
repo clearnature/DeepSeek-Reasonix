@@ -382,8 +382,17 @@ func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int
 }
 
 // compact writes a context projection; trigger stays "auto"/"manual" for UI cards.
-func (a *Agent) compact(ctx context.Context, trigger, instructions string, force bool) error {
-	_, _, err := a.compactToProjection(ctx, trigger, instructions, force, false)
+// compactionScope is what a maintenance request may waive: the trigger it would
+// otherwise wait for, and the economics that decide whether the fold pays for
+// itself. They are separate because asking for a fold now is not asking to buy
+// one at any price — a checkpoint costs the whole prefix cache.
+type compactionScope struct {
+	ignoreThreshold bool
+	ignoreEconomics bool
+}
+
+func (a *Agent) compact(ctx context.Context, trigger, instructions string, scope compactionScope) error {
+	_, _, err := a.compactToProjection(ctx, trigger, instructions, scope, false)
 	return err
 }
 
@@ -392,7 +401,7 @@ func (a *Agent) compact(ctx context.Context, trigger, instructions string, force
 // The canonical transcript is never rewritten. CompactionNoop means nothing
 // was foldable; callers at physical overflow must treat that as hard failure.
 // mustFree marks the fold the caller cannot proceed without.
-func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, force, mustFree bool) (CompactionOutcome, CompactionNoopReason, error) {
+func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions string, scope compactionScope, mustFree bool) (CompactionOutcome, CompactionNoopReason, error) {
 	ctx, _ = withCompactionSpend(ctx)
 	a.sess.compactionRunMu.Lock()
 	defer a.sess.compactionRunMu.Unlock()
@@ -405,16 +414,16 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	a.sess.compactionMu.Unlock()
 	msgs, fromProjection := a.visibleInputForFold(stateSnapshot, canonical, transcriptVersion)
 	viewInputHash := providerVisibleFingerprint(provider.ModelMessages(msgs))
-	if trigger != CompactionTriggerManual && stateSnapshot.LastReceipt != nil && stateSnapshot.LastReceipt.Status == "applied" && stateSnapshot.LastReceipt.Action == "summary" && stateSnapshot.LastReceipt.InputHash == viewInputHash {
+	if !scope.ignoreEconomics && stateSnapshot.LastReceipt != nil && stateSnapshot.LastReceipt.Status == "applied" && stateSnapshot.LastReceipt.Action == "summary" && stateSnapshot.LastReceipt.InputHash == viewInputHash {
 		return CompactionNoop, NoopInputUnchanged, nil
 	}
-	head, start, ok, planReason := a.planFoldRegion(msgs, force)
+	head, start, ok, planReason := a.planFoldRegion(msgs, scope.ignoreThreshold)
 	if !ok {
 		return CompactionNoop, planReason, nil
 	}
 	// A checkpoint already holds everything up to its own length; folding only
 	// inside that buys a second digest of one digest.
-	if fromProjection && trigger != CompactionTriggerManual {
+	if fromProjection && !scope.ignoreEconomics {
 		held := len(stateSnapshot.Projection.Messages)
 		if start <= held {
 			return CompactionNoop, NoopNoNewClosedPrefix, nil
@@ -422,14 +431,14 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 		// Every checkpoint costs the whole prefix cache, so a second one waits
 		// for a tail's worth of new closed history — otherwise a small window
 		// folds every few rounds and spends more than the fold frees.
-		if !force && a.estimatedPromptTokens(msgs[held:start]) < a.recentTailBudget() {
+		if a.estimatedPromptTokens(msgs[held:start]) < a.recentTailBudget() {
 			return CompactionNoop, NoopFoldBelowEconomics, nil
 		}
 	}
 	// The annotation rides the projection, not the canonical transcript: the
 	// original stays whole for resume and rewind.
 	kept, fold, retention, policyKeep := a.partitionFoldForProjection(a.annotateFailureDiagnostics(ctx, msgs[head:start]))
-	if len(fold) == 0 || (!force && !a.foldEconomics(fold)) {
+	if len(fold) == 0 || (!scope.ignoreEconomics && !a.foldEconomics(fold)) {
 		return CompactionNoop, NoopFoldBelowEconomics, nil
 	}
 	fold, priorIndex := stripFoldIndexFromDigests(fold)
@@ -485,7 +494,7 @@ func (a *Agent) compactToProjection(ctx context.Context, trigger, instructions s
 	tele.ProjectionTokens = projTokens
 	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
 	a.emitCompactionTelemetry(tele)
-	if err := a.acceptCheckpointCandidate(trigger, force, sourceTokens, projTokens, fixedPrefixTokens); err != nil {
+	if err := a.acceptCheckpointCandidate(trigger, scope, sourceTokens, projTokens, fixedPrefixTokens); err != nil {
 		a.emitCompactionAborted(trigger)
 		return CompactionNoop, "", err
 	}
@@ -555,9 +564,10 @@ func (a *Agent) foldedProjection(state CompactionState, projected bool, msgs, ke
 	return checkpointProjectionMessages(msgs, head, kept, suffix, summary), boundary
 }
 
-// acceptCheckpointCandidate: ≤50% + smaller for auto; force may exceed 50%
-// only if still below trigger; manual below trigger accepts any savings.
-func (a *Agent) acceptCheckpointCandidate(trigger string, force bool, sourceTokens, candidateTokens, fixedPrefixTokens int) error {
+// acceptCheckpointCandidate: ≤50% + smaller for auto; waiving economics may
+// exceed 50% only if still below trigger; manual below trigger accepts any
+// savings, since below the trigger the ceiling has nothing to protect.
+func (a *Agent) acceptCheckpointCandidate(trigger string, scope compactionScope, sourceTokens, candidateTokens, fixedPrefixTokens int) error {
 	if candidateTokens >= sourceTokens {
 		return rejectCheckpoint("candidate would not reduce tokens (%d >= %d)", candidateTokens, sourceTokens)
 	}
@@ -587,15 +597,14 @@ func (a *Agent) acceptCheckpointCandidate(trigger string, force bool, sourceToke
 		// keep / recent_keep / active-turn protection made the candidate large;
 		// this is not a fixed-prefix exception. Force/overflow may still land
 		// a strictly smaller view below the trigger when the ceiling cannot.
-		if !force {
+		if !scope.ignoreEconomics {
 			return rejectCheckpoint("candidate %d exceeds checkpoint ceiling %d (protected content too large)", candidateTokens, ceiling)
 		}
 	}
-	if triggerTokens > 0 && candidateTokens >= triggerTokens && !force {
+	// Not an exception anyone may waive: a checkpoint that lands back at the
+	// trigger has bought the next fold rather than avoided it.
+	if triggerTokens > 0 && candidateTokens >= triggerTokens {
 		return rejectCheckpoint("candidate %d still at or above trigger %d", candidateTokens, triggerTokens)
-	}
-	if force && triggerTokens > 0 && candidateTokens >= triggerTokens {
-		return rejectCheckpoint("forced candidate %d still at or above trigger %d", candidateTokens, triggerTokens)
 	}
 	return nil
 }

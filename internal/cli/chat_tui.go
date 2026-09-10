@@ -472,11 +472,6 @@ const resetMouseTracking = ansi.ResetModeMouseX10 +
 	ansi.ResetModeMouseExtUrxvt +
 	ansi.ResetModeMouseExtSgrPixel
 
-// compactDoneMsg reports that an async /compact pass returned. The card was
-// already drawn from the CompactionDone event; this only surfaces a failure and
-// snapshots on success.
-type compactDoneMsg struct{ err error }
-
 // tuiShutdownMsg asks the live TUI model to persist its current controller and
 // quit. It is injected from the signal handler so shutdown does not snapshot a
 // stale controller captured before an in-TUI rebuild.
@@ -1941,12 +1936,7 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gitStatus = msg.status
 
 	case compactDoneMsg:
-		if msg.err != nil {
-			m.notice(fmt.Sprintf("%s: %v", i18n.M.SlashCompactFailed, msg.err))
-		} else {
-			_ = m.ctrl.Snapshot()
-			m.followSessionLease()
-		}
+		m.reportCompactDone(msg)
 
 	case tuiShutdownMsg:
 		return m.shutdownAndQuit()
@@ -4671,8 +4661,7 @@ func (m *chatTUI) runSlashCommand(input string) tea.Cmd {
 		// card as they arrive; compactDoneMsg only handles the terminal error /
 		// snapshot once the pass returns. Any text after "/compact" is focus
 		// guidance steering what the summary keeps.
-		focus := strings.TrimSpace(strings.TrimPrefix(input, typedCmd))
-		return func() tea.Msg { return compactDoneMsg{err: m.ctrl.Compact(context.Background(), focus)} }
+		return m.runCompact(strings.TrimSpace(strings.TrimPrefix(input, typedCmd)))
 	case "/context", "/graph":
 		return m.showReport(typedCmd, input)
 	case "/new":

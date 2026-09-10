@@ -94,7 +94,7 @@ func buildFixture(f fixtureInstance, arm ablation.Set, sessionPath string) (buil
 			fillerCall(sess, n)
 			n++
 		}
-		if err := a.CompactNow(context.Background(), ""); err != nil {
+		if _, err := a.CompactNow(context.Background(), agent.CompactRequest{}); err != nil {
 			return builtFixture{}, fmt.Errorf("%s: generation %d fold: %w", t.ID, gen, err)
 		}
 	}

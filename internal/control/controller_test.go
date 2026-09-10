@@ -2436,7 +2436,7 @@ func TestSessionMutationsRefuseWhileRotating(t *testing.T) {
 	if _, err := c.SwitchBranch("x"); !errors.Is(err, errRotationInProgress) {
 		t.Fatalf("SwitchBranch while rotating = %v, want errRotationInProgress", err)
 	}
-	if err := c.Compact(context.Background(), ""); !errors.Is(err, errRotationInProgress) {
+	if _, err := c.Compact(context.Background(), agent.CompactRequest{}); !errors.Is(err, errRotationInProgress) {
 		t.Fatalf("Compact while rotating = %v, want errRotationInProgress", err)
 	}
 	if err := c.Rewind(0, RewindConversation); !errors.Is(err, errRotationInProgress) {
@@ -2467,7 +2467,7 @@ func TestSessionMutationsRefuseWhileRotating(t *testing.T) {
 	if err := c.beginRotation(); !errors.Is(err, errTurnRunningRotation) {
 		t.Fatalf("beginRotation while running = %v, want errTurnRunningRotation", err)
 	}
-	if err := c.Compact(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "cannot compact while a turn is running") {
+	if _, err := c.Compact(context.Background(), agent.CompactRequest{}); err == nil || !strings.Contains(err.Error(), "cannot compact while a turn is running") {
 		t.Fatalf("Compact while running = %v, want 'cannot compact' message", err)
 	}
 	if err := c.Rewind(0, RewindConversation); err == nil || !strings.Contains(err.Error(), "cannot rewind while a turn is running") {

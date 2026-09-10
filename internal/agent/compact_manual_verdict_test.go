@@ -14,8 +14,9 @@ import (
 
 // A hand-typed /compact on a transcript with nothing to fold used to answer with
 // ErrCompactionRequired — "context exceeds provider limit and compaction failed"
-// — on a session nowhere near the limit. Manual carries Force, and the no-fold
-// branch read Force as overflow.
+// — on a session nowhere near the limit, because the no-fold branch read the
+// manual request as an overflow. It is now answered rather than failed, and the
+// answer names which economics declined it.
 func TestManualCompactWithNothingToFoldIsAVerdictNotAnOverflow(t *testing.T) {
 	shapes := map[string][]provider.Message{
 		"one exchange": {
@@ -39,20 +40,27 @@ func TestManualCompactWithNothingToFoldIsAVerdictNotAnOverflow(t *testing.T) {
 				WorkspaceID: "ws", ModelRef: "p/m",
 			}, event.Discard)
 
-			err := a.CompactNow(context.Background(), "")
-			if err == nil {
+			verdict, err := a.CompactNow(context.Background(), CompactRequest{})
+			if err != nil {
+				// A candidate the host built and refused is still declined, and
+				// still may not claim the provider limit on a 200k window over
+				// three lines of transcript.
+				if !IsCompactionDeclined(err) {
+					t.Fatalf("CompactNow = %v, want a declined verdict", err)
+				}
+				if strings.Contains(err.Error(), ErrCompactionRequired.Error()) {
+					t.Fatalf("CompactNow = %v, want no claim about the provider limit", err)
+				}
+				return
+			}
+			if verdict.Compacted() {
 				return // folding a short transcript is allowed to succeed
 			}
-			if !IsCompactionDeclined(err) {
-				t.Fatalf("CompactNow = %v, want a declined verdict", err)
+			if verdict.Reason == "" {
+				t.Fatal("a declined request carries no reason a frontend could show")
 			}
-			// The window is 200k and the transcript is three lines: nothing here
-			// may claim the provider limit was reached.
-			if strings.Contains(err.Error(), ErrCompactionRequired.Error()) {
-				t.Fatalf("CompactNow = %v, want no claim about the provider limit", err)
-			}
-			if CompactionDeclineReason(err) == "" {
-				t.Fatalf("CompactNow = %v, want a reason a frontend can show", err)
+			if CompactDeclineText(verdict.Reason) == "" {
+				t.Fatalf("no words for reason %q", verdict.Reason)
 			}
 		})
 	}

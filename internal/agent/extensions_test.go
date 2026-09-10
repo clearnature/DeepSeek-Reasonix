@@ -1141,7 +1141,7 @@ func TestCompactionPrepareReplaceGuidance(t *testing.T) {
 	}}
 	d := newExtDispatcher(client, true, nil, extension.PointCompactionPrepare)
 	mp, a := newCompactionAgent(t, d)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	for i, req := range mp.requests { // a fold too large for one call is summarized in parts
@@ -1168,7 +1168,7 @@ func TestCompactionPrepareReplaceMessages(t *testing.T) {
 	}}
 	d := newExtDispatcher(client, true, nil, extension.PointCompactionPrepare)
 	mp, a := newCompactionAgent(t, d)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	transcript := mp.requests[0].Messages[1].Content
@@ -1187,7 +1187,7 @@ func TestCompactionPrepareBlock(t *testing.T) {
 	d := newExtDispatcher(client, true, nil, extension.PointCompactionPrepare)
 	mp, a := newCompactionAgent(t, d)
 	before := len(a.Session().Messages)
-	err := a.CompactNow(context.Background(), "")
+	_, err := a.CompactNow(context.Background(), CompactRequest{})
 	if err == nil || !strings.Contains(err.Error(), "compaction denied") {
 		t.Fatalf("CompactNow err = %v, want the block reason", err)
 	}
@@ -1208,7 +1208,7 @@ func TestCompactionPrepareFailurePolicy(t *testing.T) {
 		d := newExtDispatcher(client, true, nil, extension.PointCompactionPrepare)
 		mp, a := newCompactionAgent(t, d)
 		before := len(a.Session().Messages)
-		err := a.CompactNow(context.Background(), "")
+		_, err := a.CompactNow(context.Background(), CompactRequest{})
 		if err == nil || !strings.Contains(err.Error(), "extension fake failed at compaction.prepare") {
 			t.Fatalf("CompactNow err = %v, want the required failure", err)
 		}
@@ -1223,7 +1223,7 @@ func TestCompactionPrepareFailurePolicy(t *testing.T) {
 		warns := &extWarnRecorder{}
 		d := newExtDispatcher(client, false, warns.warn, extension.PointCompactionPrepare)
 		_, a := newCompactionAgent(t, d)
-		if err := a.CompactNow(context.Background(), ""); err != nil {
+		if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 			t.Fatalf("CompactNow: %v", err)
 		}
 		if sc := joinContents(visibleContext(a)); !strings.Contains(sc, "SUMMARY TEXT") {
@@ -1251,7 +1251,7 @@ func TestCompactionCompleteReplace(t *testing.T) {
 	}}
 	d := newExtDispatcher(client, true, nil, extension.PointCompactionComplete)
 	_, a := newCompactionAgent(t, d)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	sc := joinContents(visibleContext(a))
@@ -1273,7 +1273,7 @@ func TestCompactionCompleteBlock(t *testing.T) {
 	d := newExtDispatcher(client, true, nil, extension.PointCompactionComplete)
 	_, a := newCompactionAgent(t, d)
 	before := len(a.Session().Messages)
-	err := a.CompactNow(context.Background(), "")
+	_, err := a.CompactNow(context.Background(), CompactRequest{})
 	if err == nil || !strings.Contains(err.Error(), "summary denied") {
 		t.Fatalf("CompactNow err = %v, want the block reason", err)
 	}
@@ -1289,7 +1289,7 @@ func TestCompactionCompleteRequiredFailure(t *testing.T) {
 	d := newExtDispatcher(client, true, nil, extension.PointCompactionComplete)
 	_, a := newCompactionAgent(t, d)
 	before := len(a.Session().Messages)
-	err := a.CompactNow(context.Background(), "")
+	_, err := a.CompactNow(context.Background(), CompactRequest{})
 	if err == nil || !strings.Contains(err.Error(), "extension fake failed at compaction.complete") {
 		t.Fatalf("CompactNow err = %v, want the required failure", err)
 	}
@@ -1657,7 +1657,7 @@ func TestCompactionPrepareSlotOwnerConsulted(t *testing.T) {
 	d := newExtSlotDispatcher(client, false, nil, nil,
 		map[extension.Slot]string{extension.SlotCompaction: extTestPlugin})
 	mp, a := newCompactionAgent(t, d)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	if sys := mp.requests[0].Messages[0].Content; !strings.Contains(sys, "OWNER GUIDANCE") {
@@ -1690,7 +1690,7 @@ func TestCompactionPrepareSlotOwnerFinalSayAfterChain(t *testing.T) {
 		[]extension.InterceptorPoint{extension.PointCompactionPrepare},
 		map[extension.Slot]string{extension.SlotCompaction: extTestPlugin})
 	mp, a := newCompactionAgent(t, d)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	if calls != 2 {
@@ -1710,7 +1710,7 @@ func TestCompactionPrepareSlotOwnerFailureIsFatal(t *testing.T) {
 		map[extension.Slot]string{extension.SlotCompaction: extTestPlugin})
 	mp, a := newCompactionAgent(t, d)
 	before := len(a.Session().Messages)
-	err := a.CompactNow(context.Background(), "")
+	_, err := a.CompactNow(context.Background(), CompactRequest{})
 	if err == nil || !strings.Contains(err.Error(), "extension fake failed at compaction.prepare") {
 		t.Fatalf("CompactNow err = %v, want the owner failure", err)
 	}
@@ -1729,7 +1729,7 @@ func TestCompactionCompleteSlotOwnerConsulted(t *testing.T) {
 	d := newExtSlotDispatcher(client, false, nil, nil,
 		map[extension.Slot]string{extension.SlotCompaction: extTestPlugin})
 	_, a := newCompactionAgent(t, d)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	if sc := joinContents(visibleContext(a)); !strings.Contains(sc, "OWNER SUMMARY") {
@@ -1760,7 +1760,7 @@ func TestCompactionCompleteSlotOwnerFinalSayAfterChain(t *testing.T) {
 		[]extension.InterceptorPoint{extension.PointCompactionComplete},
 		map[extension.Slot]string{extension.SlotCompaction: extTestPlugin})
 	_, a := newCompactionAgent(t, d)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatalf("CompactNow: %v", err)
 	}
 	if calls != 2 {
@@ -1783,7 +1783,7 @@ func TestCompactionCompleteSlotOwnerFailureIsFatal(t *testing.T) {
 		map[extension.Slot]string{extension.SlotCompaction: extTestPlugin})
 	_, a := newCompactionAgent(t, d)
 	before := len(a.Session().Messages)
-	err := a.CompactNow(context.Background(), "")
+	_, err := a.CompactNow(context.Background(), CompactRequest{})
 	if err == nil || !strings.Contains(err.Error(), "extension fake failed at compaction.complete") {
 		t.Fatalf("CompactNow err = %v, want the owner failure", err)
 	}

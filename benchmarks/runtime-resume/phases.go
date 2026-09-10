@@ -212,7 +212,7 @@ func runConstruct(dir, arm string) error {
 	if err := ctrl.SetGoalDurable(probeGoal); err != nil {
 		return fmt.Errorf("goal: %w", err)
 	}
-	if err := ctrl.Compact(ctx, "Fold the probe turn."); err != nil {
+	if _, err := ctrl.Compact(ctx, agent.CompactRequest{Instructions: "Fold the probe turn."}); err != nil {
 		return fmt.Errorf("compact: %w", err)
 	}
 	if taken, err := armConstruct(ctx, root, arm, bootSystem, ctrl, sink, prov, turn); taken {
@@ -233,7 +233,7 @@ func runConstruct(dir, arm string) error {
 		if _, err = runTurns(ctx, ctrl, turn+1, probeTurns); err != nil {
 			return err
 		}
-		if err := ctrl.Compact(ctx, "Fold again, after the identity moved."); err != nil {
+		if _, err := ctrl.Compact(ctx, agent.CompactRequest{Instructions: "Fold again, after the identity moved."}); err != nil {
 			return fmt.Errorf("refold: %w", err)
 		}
 	} else if arm == armRefoldIntoBody {
@@ -246,7 +246,7 @@ func runConstruct(dir, arm string) error {
 		if err := writeObservation(root, capture(extraPhase(arm), arm, bootSystem, ctrl, sink, root)); err != nil {
 			return err
 		}
-		if err := ctrl.Compact(ctx, "Fold again, into the stored body."); err != nil {
+		if _, err := ctrl.Compact(ctx, agent.CompactRequest{Instructions: "Fold again, into the stored body."}); err != nil {
 			return fmt.Errorf("refold: %w", err)
 		}
 	} else if appendsAfterFold(arm) {

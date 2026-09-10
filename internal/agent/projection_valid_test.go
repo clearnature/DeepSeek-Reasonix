@@ -305,7 +305,7 @@ func TestCompactInstallsCoveredPrefixHash(t *testing.T) {
 		WorkspaceID:   "ws",
 		ModelRef:      "m",
 	}, event.Discard)
-	if err := a.CompactNow(context.Background(), ""); err != nil {
+	if _, err := a.CompactNow(context.Background(), CompactRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	st := a.sess.compactionState

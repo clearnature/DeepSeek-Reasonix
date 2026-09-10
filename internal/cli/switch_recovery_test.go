@@ -414,7 +414,9 @@ func TestCompactDoneKeepsLeaseOnRecoveryPathAfterSnapshotConflict(t *testing.T) 
 		t.Fatalf("seed active lease: %v", err)
 	}
 
-	next, _ := m.Update(compactDoneMsg{})
+	// A compaction that actually landed: the snapshot below is what this test
+	// is about, and a declined request does not take that path.
+	next, _ := m.Update(compactDoneMsg{verdict: agent.CompactVerdict{Installed: true}})
 	m = next.(chatTUI)
 
 	recoveryPath := m.ctrl.SessionPath()

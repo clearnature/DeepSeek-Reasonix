@@ -108,7 +108,6 @@ func (a *Agent) recoverContextOverflow(ctx context.Context, frozen *samplingRequ
 	refused := providerVisibleFingerprint(provider.ModelMessages(frozen.req.Messages))
 	if _, prepareErr := a.contextManager().Prepare(ctx, ContextPreparePolicy{
 		Trigger: CompactionTriggerOverflow,
-		Force:   true,
 	}); prepareErr != nil {
 		return false
 	}
