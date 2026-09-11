@@ -2,11 +2,34 @@
 //
 // 补间这件事没有报错可言 —— grid-template-columns 那一列里放回一个 minmax()，
 // 动画就静静地退成跳变，界面照样能用。所以它得有人量。
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SRC = process.env.PERF_SRC ?? join(HERE, "..", "src");
+
+// Read from the source that decides them. Copied here, these numbers described
+// the rail until someone changed its default, and then they described nothing
+// while still failing.
+const span = (name) => {
+  const src = readFileSync(join(SRC, "ui", "Gutter.tsx"), "utf8");
+  const row = src.split(`export const ${name}: Span = {`)[1]?.split("}")[0] ?? "";
+  const num = (key) => {
+    const after = row.split(key + ":")[1];
+    return after === undefined ? NaN : parseInt(after.trim(), 10);
+  };
+  return { def: num("def"), min: num("min"), max: num("max") };
+};
+
 const PAGE = process.env.PERF_URL ?? "http://localhost:4399/perf.html";
-const RAIL = { def: 236, min: 176, max: 440 };
-const SIDE = { def: 316 };
+const RAIL = span("RAIL");
+const SIDE = span("SIDE");
+if (!Number.isFinite(RAIL.def) || !Number.isFinite(SIDE.def)) {
+  console.log("未能从 Gutter.tsx 读到栏宽定义：该检查将始终通过。");
+  process.exit(1);
+}
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

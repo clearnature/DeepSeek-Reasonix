@@ -39,7 +39,7 @@
   font-display: swap;
 }
 
-@property --rail-w { syntax: "<length>"; inherits: true; initial-value: 236px }
+@property --rail-w { syntax: "<length>"; inherits: true; initial-value: 264px }
 @property --side-w { syntax: "<length>"; inherits: true; initial-value: 316px }
 /* Registered so a bad write falls back to 16:10 rather than making aspect-ratio
    invalid, which would collapse every box using it to zero height. */
@@ -51,7 +51,7 @@
        engines without it fall back to the jump. */
     interpolate-size: allow-keywords;
 
-    --rail-open: 236px; --side-open: 316px;
+    --rail-open: 264px; --side-open: 316px;
     --page: oklch(95.8% .008 255); --surface: oklch(98.9% .004 255);
     --raised: oklch(100% 0 255); --overlay: oklch(93.1% .012 255);
     --border: oklch(87.6% .016 255); --hair: oklch(91.7% .011 255);

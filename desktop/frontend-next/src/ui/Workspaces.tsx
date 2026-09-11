@@ -349,7 +349,11 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                         ) : (
                           <span className="sesstitle" title={session.title || session.name}>{session.title || session.name}</span>
                         )}
-                        <span className="sessmeta">{session.turns ? t("{n} 轮", { n: session.turns }) : t("空会话")}</span>
+                        {/* The unit is the same on every row, so the row says
+                            the number and the title says what it is about. */}
+                        <span className="sessmeta" title={session.turns ? t("{n} 轮", { n: session.turns }) : t("空会话")}>
+                          {session.turns || ""}
+                        </span>
                         {copies.length > 0 && (
                           <button
                             className="sesscopies"

@@ -5117,7 +5117,10 @@
   .panes-empty button:hover { border-color: var(--faint) }
 
   /* ── 左栏：工作区 → 会话 ─────────────────────────────────────────── */
-  .wsnode { padding-bottom: 2px }
+  /* Three levels read as three only when each starts further in than its
+     parent. Machine and project both began at the rail's edge, so the tree had
+     two levels drawn at one depth and a third under a guide line. */
+  .wsnode { padding-bottom: 2px; padding-left: 12px }
   .wsnode[data-missing] .wsname { color: var(--err); text-decoration: line-through }
   /* 一个项目占两行：名字一行，它是什么一行。名字于是拿到整行宽度 —— 在 236px
      的栏里，名字、标签、计数、删除挤在一行时被截掉的永远是名字，而那正是这一
@@ -5125,7 +5128,7 @@
   .wsrow {
     position: relative; display: grid; gap: 0 7px; align-items: center;
     grid-template-columns: 10px 5px minmax(0, 1fr) auto;
-    padding: 8px 7px 9px; border-radius: var(--r-md); cursor: pointer;
+    padding: 5px 7px 6px; border-radius: var(--r-md); cursor: pointer;
     font: var(--w-med) var(--fs-ui) var(--ui); color: var(--muted);
     transition: background var(--m-line), color var(--m-line);
   }
@@ -5140,7 +5143,10 @@
   /* 选中的是项目节点，不是会话行：金色底 + 左边一条带辉的竖条，两行一起
      包在里面。会话行只给中性底，没有竖条 —— 两个层级各自有自己的记号，
      否则一列里两条金色竖条说不清到底选中的是哪一个。 */
-  .wsrow[data-open] { background: var(--accent-wash); color: var(--text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent) }
+  /* Two marks, not four: the fill says which row, the bar says it from the edge
+     where the eye is already travelling down the list. A ring at 12% accent on
+     top of a fill adds a fourth reading of one state. */
+  .wsrow[data-open] { background: var(--accent-wash); color: var(--text) }
   .wsrow[data-open]::before {
     content: ""; position: absolute; left: 0; top: 5px; bottom: 5px; width: 2px;
     border-radius: 2px; background: var(--accent);
@@ -5158,10 +5164,12 @@
   .wsrow[aria-expanded="true"] .twist svg, .machrow[aria-expanded="true"] .twist svg,
   .rmtwsrow[aria-expanded="true"] .twist svg { transform: rotate(90deg) }
   .twist:hover { color: var(--text) }
-  /* 这个点说的是「这个项目此刻有面板开着」——它是 .wsrow[data-open] 唯一看得见
-     的地方，此前那个状态只改了一档文字颜色，等于没说。 */
+  /* The dot was this state's only visible mark back when data-open changed a
+     text colour and nothing else. It has had a fill, a ring and a bar since —
+     four marks for one state, and none of them the main one. It stays neutral
+     and the state is said by the fill and the bar. */
   .wsdot { width: 5px; height: 5px; border-radius: 50%; background: var(--ghost); opacity: .45 }
-  .wsrow[data-open] .wsdot { background: var(--accent); opacity: 1 }
+  .wsrow[data-open] .wsdot { opacity: .7 }
   .wsname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   /* 行高跟着正文的 1.6 走时，一行 10px 的标注占掉 15.2px —— 比它自己高一半。
      正文需要那个行距是因为要换行，这一行不会。 */
@@ -5205,9 +5213,9 @@
 
   .sessrow {
     position: relative; display: flex; align-items: center; gap: 7px;
-    padding: 6px 8px; cursor: pointer; border-radius: var(--r-sm);
+    padding: 5px 8px; cursor: pointer; border-radius: var(--r-sm);
     border-left: 2px solid transparent;
-    font: var(--w-reg) var(--fs-ui) var(--ui); color: var(--faint);
+    font: var(--w-reg) var(--fs-meta) var(--ui); color: var(--faint);
   }
   .sessrow:hover { background: var(--overlay); color: var(--muted) }
   .sessrow[data-live] { color: var(--muted) }
@@ -5224,7 +5232,19 @@
   .app[data-run="running"] .sessrow[data-on][data-live] .pip { box-shadow: 0 0 0 2px color-mix(in srgb, var(--net) 14%, transparent) }
   .app[data-run="halt"] .sessrow[data-on] .pip { background: var(--accent); opacity: 1 }
   .sesstitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-  .sessmeta { flex: none; font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--ghost) }
+  .sessmeta {
+    flex: none; margin-right: 44px;
+    font: var(--w-reg) var(--fs-micro) var(--mono); color: var(--ghost);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Out of the layout, still on the row: the width they held was the title's,
+     and a control nobody can see is the other half of this that was already
+     wrong. */
+  .sessrow .sessedit-btn, .sessrow .wsdel {
+    position: absolute; top: 50%; transform: translateY(-50%);
+  }
+  .sessrow .sessedit-btn { right: 25px }
+  .sessrow .wsdel { right: 3px }
   /* 选中和悬停把行底换成 overlay，ghost 的余量是照默认底给的，到这里就不够了。 */
   .sessrow:hover .sessmeta, .sessrow[data-on] .sessmeta { color: var(--faint) }
   /* 冲突副本折进它来自的那条对话。计数常驻（不像改名/删除只在 hover 出现）：
@@ -5534,7 +5554,7 @@
     display: grid; gap: 0 7px; align-items: center;
     grid-template-columns: 10px 6px minmax(0, 1fr) auto;
     padding: 6px 6px 7px 6px; border-radius: var(--r-sm); cursor: pointer;
-    font: var(--w-med) var(--fs-ui) var(--ui); color: var(--muted);
+    font: var(--w-semi) var(--fs-ui) var(--ui); color: var(--muted);
     transition: background var(--m-line), color var(--m-line);
   }
   .machrow:hover { background: var(--overlay); color: var(--text) }
@@ -5815,12 +5835,15 @@
   .tabconfirm .a button[data-danger] { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, var(--border)) }
   .tabconfirm .a button[data-danger]:hover { background: var(--err); border-color: var(--err); color: var(--accent-fg) }
 
-  /* .wsdel 的绝对定位是给旧的会话卡片写的，在树的 flex 行里它会浮在行尾、
-     正好压住旁边的铅笔。树里的按钮一律回到流内，并排排在行尾。 */
-  .sessrow .wsdel, .wsrow .wsdel {
+  /* The absolute placement here was written for the old session card, where it
+     landed on the pencil beside it. A project's row keeps its buttons in the
+     flow, side by side; a conversation's are placed one after the other above
+     the row instead, because that row's title needs the width they held. */
+  .wsrow .wsdel {
     position: static; top: auto; right: auto; flex: none;
     background: transparent;
   }
+  .sessrow .wsdel { flex: none; background: transparent }
   .wsrow .wsdel { opacity: 1 }
   .sessrow .wsdel:hover, .wsrow .wsdel:hover { background: var(--border); color: var(--err) }
 
