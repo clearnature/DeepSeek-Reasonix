@@ -2504,8 +2504,8 @@
   /* .rail > * 把每个直接子元素钉在展开宽度上，好让收起的补间不重排内容 ——
      外边距于是加在那个宽度之外，右边的 ⌘K 被推出栏外。宽度自己减掉。 */
   .rail > .wsfind { width: calc(var(--rail-open) - 20px) }
-  /* 这个框自己画了清除按钮（.clr），浏览器给 type=search 的那个原生 × 会并排
-     再画一个：同一个动作两个控件，按哪个都对但看着像哪个都不对。 */
+  /* This field draws its own clear button, and the native one Chromium adds for
+     type=search would stand beside it: one action, two controls. */
   .wsfind input::-webkit-search-cancel-button,
   .wsfind input::-webkit-search-decoration { -webkit-appearance: none; appearance: none }
   .wsfind {
@@ -2962,8 +2962,9 @@
 
   /* 窗口矮下来时，按窗口比例分掉的那些高度加起来就是转录本身。让的顺序是离
      输入框最近的先让 —— 右栏在这一档已经横在流下面，它也是其中一份。 */
-  /* 转录占窗格的下限是承诺，辅助区预算是变量：界面整体字号抬高之后，矮窗口
-     里固定的那部分 chrome 多吃了几个像素，让开的必须仍然是这里。 */
+  /* The transcript's share of the pane is a promise and the auxiliary budget is
+     the variable: when type rose, fixed chrome took a few more pixels at short
+     heights, and what yields has to stay this. */
   [data-fold~="short"] .compose { --aux-budget: min(calc(24vh / var(--zoom, 1)), 176px) }
   [data-fold~="short"] .compose textarea { max-height: min(calc(var(--read, 13.5px) * 9.6), calc(24vh / var(--zoom, 1))) }
   [data-fold~="short"] .slashmenu { max-height: min(calc(38vh / var(--zoom, 1)), 220px) }
@@ -3311,8 +3312,8 @@
   .prefs-col { animation: navin var(--m-line) both }
   @keyframes navin { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
   .grp:last-child { margin-bottom: 0 }
-  /* 状态跟着分隔方式走：分隔不再是一条线，状态就不能再去染那条线。抬起来的
-     是这一层本身，聚焦画的是一圈环 —— 两者都还在同一档时长上。 */
+  /* A state is said in the vocabulary of the separation it modifies. With no
+     line to tint, hover lifts the fill and focus draws a ring. */
   @media (hover: hover) {
     .grp:hover { background: color-mix(in srgb, var(--accent) 3%, var(--surface)) }
   }
@@ -5145,7 +5146,8 @@
   .wsacts { display: flex; align-items: center; gap: 2px }
   /* 常驻，不是 hover 才出现：一个看不见的入口读起来就是没有这个功能。删除比
      新建安静一档，靠的是对比度，不是可见性。 */
-  /* 和机器行那个加号（.machpick）同一套：透明底、描边图标、悬停才上底。
+  /* The same as a machine row's add button: no fill, a stroked icon, and a
+     ground only on hover.
      之前那个填色芯片 + 内环是另一套语言，放进来就是一块外来的东西。
      图标用 SVG 而不是字符：place-items 对齐的是行盒，一个“+”字形在行盒里靠
      基线坐，看上去永远偏下——那就是“图标没居中”。 */
@@ -5487,8 +5489,8 @@
   /* ── 左栏：远程主机 ───────────────────────────────────────────────
      一台主机一段。同一台机器上的工作区共用一条连接，所以状态长在段头上：
      链路断了，整段一起暗下去，这正是它们的真实关系。 */
-  /* 机器之间靠留白分开，不靠线：一条线画在这里说的是「上面是本地、下面是远程」
-     —— 而列表里它们是同一种东西，一台机器一组。 */
+  /* Machines separate by space, not by a line: a line here says "local above,
+     remote below", and in this list they are one kind of thing. */
   .rmts { margin-top: 8px }
   .rmt { padding-bottom: 2px }
   .rmt + .rmt { margin-top: 8px }
@@ -5519,7 +5521,8 @@
   /* 一台主机只有六种状态，别让它们挤成两种：连上和没连上之间，还有「在连」、
      「在重连」、以及连上了却有转发没挂上 —— 最后这种看起来最像正常。 */
   .rmtpip { width: 6px; height: 6px; border-radius: 50%; background: var(--ghost); flex: none }
-  /* 本机不是「连上的」，它是「在这里的」：实心点留给连接状态，空心环说所在。 */
+  /* This machine is not connected, it is here: a filled pip is a connection
+     state, and a ring says where something is. */
   .machrow[data-here] .rmtpip { background: none; box-shadow: inset 0 0 0 1.5px var(--faint) }
   .rmt[data-state="connected"] .rmtpip, .rmtrow[data-state="connected"] .rmtpip { background: var(--net) }
   .rmt[data-state="connecting"] .rmtpip, .rmtrow[data-state="connecting"] .rmtpip,

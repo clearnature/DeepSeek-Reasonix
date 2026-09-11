@@ -85,7 +85,8 @@ export function remoteWorkspaces(host: RemoteHost, tree: TreeWorkspace[] | null 
   return out;
 }
 
-// 和本机那份同一条：命中文件夹名就整个留下，否则只留标题命中的会话。
+// The local list's rule: a hit on the folder keeps all of it, otherwise only
+// the conversations whose titles match survive.
 function makeHit(needle: string) {
   return (ws: RemoteWorkspace): RemoteWorkspace | null => {
     if (!needle) return ws;
@@ -206,9 +207,10 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
         const panes = runtimes.filter((rt) => rt.host === host.name);
         const tree = trees[host.name];
         const all = remoteWorkspaces(host, tree);
-        // 找的是整份列表，所以这里和本机那一半用同一条规矩：命中机器就整台留下，
-        // 否则只留命中的工作区和会话。一台还没连上的机器只有名字可以比 ——
-        // 它的项目在远端，说「这里没有」会是这扇窗在替它回答。
+        // The search asks the whole list, so this half follows the local rule: a
+        // hit on the machine keeps everything under it. A machine that has not
+        // connected has only its name to match on, because its projects are on
+        // the far side and this window cannot answer for them.
         const named = host.name.toLowerCase().includes(needle) || host.target.toLowerCase().includes(needle);
         const spaces = !needle || named ? all : (all.map(hit).filter(Boolean) as RemoteWorkspace[]);
         if (needle && !named && !spaces.length) return null;

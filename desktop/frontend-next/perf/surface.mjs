@@ -1,9 +1,12 @@
-// 一个盒子要和它坐着的底分开，只有三种说法：描一条线、垫一层底色、抬一层影子。
-// 三种都没有的盒子读起来是糊的；三种一起上的盒子读起来像表格。这份守卫问的是
-// 每个圆角盒子选了哪一种，以及选了底色的那些，这一层到底差得够不够看得见。
+// A box is separated from the surface it sits on in one of three ways: a line
+// around it, a step in fill, or an elevation. A box with none of them reads as
+// smeared; a box with all three reads as a table cell. This guard asks which
+// one each rounded box chose, and — for the ones that chose fill — whether the
+// step is large enough to be seen.
 //
-// 差多少算够从人眼算起，不从设计稿抄：明度差低于 2%（OKLab L）在深色底上基本
-// 看不出，那就不是一层，是一个没生效的决定。
+// The threshold is set from the eye rather than copied from a mockup: under 2%
+// in OKLab lightness is not a layer on a dark ground, it is a decision that did
+// not take effect.
 import { chromium } from "playwright";
 
 const PAGE = process.env.PERF_URL ?? "http://localhost:4399/perf.html?ws=1&sess=1&turns=4&pref=zh";
@@ -23,7 +26,8 @@ for (const scheme of ["dark", "light"]) {
   await page.waitForTimeout(300);
 
   const found = await page.evaluate((minL) => {
-    // sRGB -> OKLab L，只要明度这一项：分层靠的是明暗，不是色相。
+    // sRGB to OKLab, lightness only: a layer is read from light and dark, not
+    // from hue.
     const lum = (rgb) => {
       const m = rgb.match(/[\d.]+/g);
       if (!m) return null;
@@ -43,17 +47,15 @@ for (const scheme of ["dark", "light"]) {
       const s = getComputedStyle(el);
       if (s.display === "none" || s.visibility === "hidden") continue;
       const box = el.getBoundingClientRect();
-      // 只看真的被画成盒子的东西：有圆角、有面积。
+      // Only what is actually drawn as a box: a radius, and an area.
       if (box.width < 40 || box.height < 24) continue;
       if (parseFloat(s.borderTopLeftRadius) < 3) continue;
       if (!opaque(s.backgroundColor)) continue;
       const hasBorder = parseFloat(s.borderTopWidth) > 0 && opaque(s.borderTopColor);
-      const hasShadow = s.boxShadow !== "none" && !/inset/.test(s.boxShadow.replace(/inset/g, "inset"))
-        ? true
-        : s.boxShadow !== "none" && /(^|,)\s*(?!inset)[^,]*\d/.test(s.boxShadow);
+      const hasShadow = s.boxShadow !== "none" && /(^|,)\s*(?!inset)[^,]*\d/.test(s.boxShadow);
       if (hasBorder || hasShadow) continue;
 
-      // 它坐在谁身上：最近的一个自己有底色的祖先。
+      // What it sits on: the nearest ancestor with a fill of its own.
       let p = el.parentElement;
       while (p && !opaque(getComputedStyle(p).backgroundColor)) p = p.parentElement;
       if (!p) continue;
@@ -61,7 +63,8 @@ for (const scheme of ["dark", "light"]) {
       const b = lum(getComputedStyle(p).backgroundColor);
       if (a === null || b === null) continue;
       const d = Math.abs(a - b);
-      // 完全相同的底色是「不分层」，是个决定；差一点点才是「想分层但没生效」。
+      // An identical fill is a box not claiming to be a layer, which is a
+      // decision. A near-identical one is a layer that did not take effect.
       if (d > 0.05 && d < minL) {
         const cls = typeof el.className === "string" ? el.className.split(/\s+/).filter(Boolean).join(".") : "";
         thin.push(`${el.tagName.toLowerCase()}${cls ? "." + cls : ""}  ΔL=${d.toFixed(1)}`);
@@ -71,13 +74,17 @@ for (const scheme of ["dark", "light"]) {
   }, MIN_L);
 
   if (found.length) {
-    console.log(`\n${scheme}：只靠底色分层、但这一层看不出来的 ${found.length} 种：`);
+    console.log(`\n${scheme}：以底色分层、但这一层不可见的 ${found.length} 种：`);
     for (const f of found) console.log("  " + f);
   }
-  check(`${scheme}：用底色分层的盒子，这一层真的看得见`, found.length === 0, found.length ? `${found.length} 种低于 ΔL ${MIN_L}` : `阈值 ΔL ${MIN_L}`);
+  check(
+    `${scheme}：以底色分层的容器，这一层可见`,
+    found.length === 0,
+    found.length ? `${found.length} 种低于 ΔL ${MIN_L}` : `阈值 ΔL ${MIN_L}`,
+  );
   await page.close();
 }
 
 await browser.close();
-console.log(fails.length ? `\n${fails.length} 项不过` : "\n全过");
+console.log(fails.length ? `\n${fails.length} 项未通过` : "\n全部通过");
 process.exit(fails.length ? 1 : 0);

@@ -26,8 +26,9 @@ interface Props {
   onError: (e: unknown) => void;
   // 打开项目这个动作归 App —— 首启那条横幅按的是同一个它。
   adder: Adder;
-  // 远程主机画在同一棵树里。栏里是一份机器的列表，本机是其中一台 —— 在某台
-  // 机器的某个文件夹里开会话是一件事，此前它被画成了两件。
+  // Remote hosts render into this same tree. The rail is a list of machines and
+  // this one is among them: opening a session in a folder on a machine is one
+  // intent, and it used to be drawn as two.
   children?: ReactNode;
 }
 
@@ -39,7 +40,8 @@ const SHOWN = 30;
 
 function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, onOpen, onFocus, onClose, liveIds, onRename, onError, adder, children }: Props) {
   const [busy, setBusy] = useState("");
-  // 一台机器折起来是看的人的偏好，和主机行同一种做法（RemoteHosts 的 shut）。
+  // Folding a machine is the reader's own preference, held the way a host row
+  // holds it.
   const [hereShut, setHereShut] = useState(false);
   const [confirm, setConfirm] = useState("");
   const needle = useRailQuery();
@@ -146,7 +148,8 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
     return sessions.length ? { ...ws, sessions } : null;
   };
   const shownTree = needle ? (tree.map(hit).filter(Boolean) as TreeWorkspace[]) : tree;
-  // 折叠是歇着时的偏好；正在找东西时它藏起来的恰好是刚找到的那些行。
+  // A fold is a resting-state preference: while a word is being typed it would
+  // hide the very rows that word just found.
   const shutHere = needle ? false : hereShut;
 
   return (
@@ -172,8 +175,9 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
 
       <div className="scroll">
         <div role="tree" aria-label={t("机器、工作区与会话")}>
-          {/* 本机是列表里的第一台机器，不是另一种东西。加号也落在主机行加号的
-              同一个位置：在这台机器上打开一个文件夹。 */}
+          {/* This machine is the first row of the list rather than another kind of
+              thing, and its add button sits where a host's does: open a folder
+              on this machine. */}
           <div
             className="machrow"
             data-here=""

@@ -38,9 +38,10 @@ const draw = (hosts: RemoteHost[]) =>
 
 const find = () => screen.getByRole("searchbox", { name: "搜索会话 / 项目" });
 
-// 栏里是一份机器的列表，所以搜索框问的必须是整份列表。它此前只过滤本机那一半：
-// 在两个面板里那读起来像「本地搜索」，合成一个列表之后，它读起来是一个悄悄跳过
-// 大半列表的搜索 —— 而搜不到的那半边看上去就像不存在。
+// The rail is a list of machines, so its search has to ask the whole list. It
+// filtered only the local half: in two panels that read as a local search, and
+// in one list it reads as a search that skips most of it — and the half it
+// skips looks like a half that is not there.
 describe("the rail's search reaches every machine", () => {
   it("keeps a machine whose name matches", async () => {
     draw([host("gpu"), host("builder")]);
@@ -71,8 +72,8 @@ describe("the rail's search reaches every machine", () => {
     expect(screen.queryByText("builder")).toBeTruthy();
   });
 
-  // 折叠是歇着时的偏好。找东西时它藏起来的正是刚找到的那些行 —— 本机那一半
-  // 一直是这么做的，合并之后两边必须是同一条规矩。
+  // A fold is a resting-state preference, and while searching it hides the very
+  // rows just found. The local half has always done this; both halves must.
   it("opens a folded machine rather than hiding what it just found", async () => {
     draw([host("gpu", { workspaces: ["/home/ada/training"] })]);
     await userEvent.click(screen.getByText("gpu"));

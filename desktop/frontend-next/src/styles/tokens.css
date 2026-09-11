@@ -150,12 +150,13 @@
        让它们读起来像表格的格子而不是可操作的面。整档抬高，比例不变。 */
     --r-xs: 4px; --r-sm: 6px; --r-md: 9px; --r-lg: 12px; --r-pill: 999px;
 
-    /* 界面自己的字号音阶。此前是 24 个尺寸，其中 442 处挤在 10 到 11.5px 之
-       间的四档里 —— 相差半个像素不是一个层级，是噪声：读起来只有「哪儿都不
-       太一样」，没有「这一行比那一行重」。六档，间距逐档拉开。
-       下限抬到 11px：汉字笔画密，10px 上先糊掉的是它的字腔，而 AA 给大字的
-       豁免是 18.66px 以上，这一档从来不在里面。
-       24px 以上不在音阶里：那是品牌时刻，一次一个尺寸，不是界面的层级。 */
+    /* The interface's own scale. It carried 24 sizes, 442 of them inside the
+       four steps between 10 and 11.5px — half a pixel is not a level, it is
+       noise, and it reads as nothing quite matching rather than as one line
+       outweighing another. Six steps, widening as they go.
+       The floor rises to 11px: dense Han strokes lose their counters there
+       first, and the large-text exemption starts at 18.66px.
+       Above 24px is off the scale: a brand moment is one size for one thing. */
     --fs-micro: 11px; --fs-meta: 12px; --fs-ui: 13px;
     --fs-lead: 15px; --fs-title: 17px; --fs-display: 22px;
 
@@ -235,8 +236,8 @@
   /* 笔画粗细是和对比度并列的一个轴，不是它的一部分：颜色调得再亮，400 的汉字
      在 11px 上仍然是细的。汉字笔画密，同字号下比拉丁更早糊，所以中文界面从
      medium 起步 —— 这两件事以前只有「整体放大」一个旋钮去凑。 */
-  /* 不动的那一档：按下仍然要有回答，但回答不靠位移。--press-wash 留着，
-     颜色不是动效。 */
+  /* The tier that does not move: a press is still answered, but not by
+     displacement. The wash stays — colour is not motion. */
   @media (prefers-reduced-motion: reduce) { :root { --press: none } }
 
   :root { --w-reg: 400; --w-med: 500; --w-semi: 600 }

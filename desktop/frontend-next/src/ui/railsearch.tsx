@@ -2,12 +2,13 @@ import { type ReactNode, createContext, useContext, useEffect, useRef, useState 
 import { t } from "../i18n";
 import { chord } from "./keys";
 
-// 栏里现在是一份机器的列表，搜索框问的是整份列表。它自己拥有这个词，两个列表
-// 都读它 —— 把状态搬进 App 会让「栏顶那个框」和「谁在用它」分成两处维护，而
-// 让本机那半边持有它，远程那半边就只能从旁边要。
+// The rail is a list of machines, so the box at the top of it asks the whole
+// list. It owns the word and publishes it; both lists read it. Lifting the state
+// into App would separate the box from who uses it, and leaving it with the
+// local half would make the remote half ask a sibling for it.
 const RailQuery = createContext("");
 
-/** 此刻栏里在找的词，已去掉首尾空白；空串表示没有在找。 */
+/** What the rail is searching for, trimmed and lowercased. Empty when idle. */
 export const useRailQuery = () => useContext(RailQuery).trim().toLowerCase();
 
 export function RailSearch({ children }: { children: ReactNode }) {
