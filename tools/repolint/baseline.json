@@ -4,8 +4,8 @@
     "commented-code": 1,
     "complexity": 1875,
     "essay": 2071,
-    "file-size": 102210,
-    "function-size": 8196,
+    "file-size": 102217,
+    "function-size": 8199,
     "layering": 2,
     "marker": 0,
     "narrative": 72,
@@ -397,7 +397,7 @@
     "internal/agent/agent.go": {
       "complexity": 27,
       "essay": 25,
-      "file-size": 2065,
+      "file-size": 2066,
       "function-size": 88,
       "struct-state": 2
     },
@@ -415,8 +415,8 @@
     },
     "internal/agent/compact_projection.go": {
       "essay": 1,
-      "file-size": 27,
-      "function-size": 13
+      "file-size": 30,
+      "function-size": 16
     },
     "internal/agent/context_manager.go": {
       "essay": 1
@@ -583,7 +583,7 @@
     "internal/agent/task.go": {
       "complexity": 3,
       "essay": 12,
-      "file-size": 1176,
+      "file-size": 1179,
       "function-size": 18
     },
     "internal/agent/task_test.go": {

@@ -79,9 +79,11 @@ Run these **before every commit** to catch the fastest CI failures locally:
 ```bash
 gofmt -w .                          # catches gofmt (saves ~13s CI)
 go vet ./...                        # catches vet warnings (saves ~52s CI/lint)
-make lint                           # golangci-lint at CI's pin + repolint
+make lint                           # golangci-lint at CI's pin + repolint + check-wails-pin
 go test ./internal/tool/builtin/ ./internal/boot/  # catches tool/boot test breaks
 ```
+
+`make lint` 是唯一完整入口 —— 裸 `golangci-lint run` 看不到 repolint 与 wails-pin。判据是**零 issue 且无 typecheck 报错**：离线或冷 module cache 会报 `could not import …: i/o timeout`，只计入 typecheck（实况 `1 issues: typecheck: 1`），此时**不算通过**，先 `go build ./...` 预热再重跑，把"环境失败"与"真 issue"分流。新增功能行可能推高 repolint 的 file-size/total：确属必要增量时用 `go run ./tools/repolint -update` 并在提交信息里 justify；不得用它掩盖新违规。本地 dev 分支无 upstream ⇒ **CI 从不运行**，不得以"CI 会抓"为由跳过。
 
 ## 合并后必做遥测四方审计
 
