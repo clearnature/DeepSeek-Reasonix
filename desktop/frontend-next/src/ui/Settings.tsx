@@ -5,7 +5,7 @@ import { useRuntimeReload } from "./RuntimeReload";
 import type { AccountState, AgentPort, Appearance as Look, ApprovalMode, CapabilityScope, McpEntry, ModelEntry, PluginPackage, Preset, RoleAssignments, SessionStatus, SkillEntry } from "../port/port";
 import { arrowTabs } from "./tablist";
 import { bytes, tokens as fmtTokens } from "../i18n/format";
-import { ICON, NAV, SETTINGS } from "./prefsnav";
+import { ICON, NAV, SECTION_NAME, SETTINGS, settingMatches } from "./prefsnav";
 import { Group, SCOPE_SAID } from "./Group";
 import type { Section } from "./prefsnav";
 import { AddServer } from "./AddServer";
@@ -301,7 +301,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
   const found = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
-    return SETTINGS.filter((e) => shown(e.section) && matches(e, q));
+    return SETTINGS.filter((e) => shown(e.section) && settingMatches(e, q));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, remoteBook]);
   // 落点：跳过去之后短暂标一下「就是这里」。这是导航反馈，不是状态变化。
@@ -783,16 +783,4 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
       </div>
     </div>
   );
-}
-
-const SECTION_NAME: Partial<Record<Section, string>> = Object.fromEntries(
-  NAV.flatMap(([, items]) => items),
-) as Partial<Record<Section, string>>;
-
-// Title, aliases, and the page it is on. An alias is a way in and nothing
-// more: it never becomes the setting's name and no judgement reads it.
-function matches(e: (typeof SETTINGS)[number], q: string): boolean {
-  if (e.title.toLowerCase().includes(q)) return true;
-  if ((SECTION_NAME[e.section] ?? "").toLowerCase().includes(q)) return true;
-  return (e.keywords ?? []).some((k) => k.toLowerCase().includes(q));
 }
