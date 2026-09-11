@@ -2504,6 +2504,10 @@
   /* .rail > * 把每个直接子元素钉在展开宽度上，好让收起的补间不重排内容 ——
      外边距于是加在那个宽度之外，右边的 ⌘K 被推出栏外。宽度自己减掉。 */
   .rail > .wsfind { width: calc(var(--rail-open) - 20px) }
+  /* 这个框自己画了清除按钮（.clr），浏览器给 type=search 的那个原生 × 会并排
+     再画一个：同一个动作两个控件，按哪个都对但看着像哪个都不对。 */
+  .wsfind input::-webkit-search-cancel-button,
+  .wsfind input::-webkit-search-decoration { -webkit-appearance: none; appearance: none }
   .wsfind {
     display: flex; align-items: center; gap: 7px; margin: 3px 10px 10px; padding: 7px 9px;
     border: 1px solid var(--border); border-radius: var(--r-md); background: var(--raised); box-shadow: inset 0 1px 0 rgb(255 255 255 / .2);

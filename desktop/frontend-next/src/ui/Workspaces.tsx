@@ -1,8 +1,8 @@
-import { Fragment, type ReactNode, memo, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, memo, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { HubPort, RuntimeView, TreeSession, TreeWorkspace } from "../port/hub";
 import type { Adder } from "./addws";
-import { chord } from "./keys";
+import { useRailQuery } from "./railsearch";
 
 const parentOf = (root: string) => root.replace(/[/\\]+$/, "").split(/[/\\]/).slice(-2, -1)[0] ?? "";
 
@@ -42,19 +42,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
   // 一台机器折起来是看的人的偏好，和主机行同一种做法（RemoteHosts 的 shut）。
   const [hereShut, setHereShut] = useState(false);
   const [confirm, setConfirm] = useState("");
-  const [q, setQ] = useState("");
-  const find = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key !== "k" || !(ev.metaKey || ev.ctrlKey)) return;
-      ev.preventDefault();
-      find.current?.focus();
-      find.current?.select();
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, []);
+  const needle = useRailQuery();
   // Renaming is a pencil, not a double-click: a single click already opens the
   // session, so a double one would open it twice on the way to the edit.
   const [editing, setEditing] = useState("");
@@ -151,35 +139,18 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
   // search route, and a round trip to re-derive what the window is holding would
   // be slower than the typing. A hit on the folder keeps all of its sessions.
   const hit = (ws: TreeWorkspace) => {
-    const needle = q.trim().toLowerCase();
     if (!needle) return ws;
     const named = (x: TreeSession) => (x.title || x.name || "").toLowerCase().includes(needle);
     if (ws.name.toLowerCase().includes(needle)) return ws;
     const sessions = ws.sessions.filter(named);
     return sessions.length ? { ...ws, sessions } : null;
   };
-  const shownTree = q.trim() ? (tree.map(hit).filter(Boolean) as TreeWorkspace[]) : tree;
+  const shownTree = needle ? (tree.map(hit).filter(Boolean) as TreeWorkspace[]) : tree;
+  // 折叠是歇着时的偏好；正在找东西时它藏起来的恰好是刚找到的那些行。
+  const shutHere = needle ? false : hereShut;
 
   return (
     <>
-      <div className="wsfind">
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M7.2 3.1a4.1 4.1 0 1 0 0 8.2 4.1 4.1 0 0 0 0-8.2M10.3 10.3 13 13" />
-        </svg>
-        <input
-          ref={find}
-          value={q}
-          onChange={(ev) => setQ(ev.target.value)}
-          onKeyDown={(ev) => ev.key === "Escape" && setQ("")}
-          placeholder={t("搜索会话 / 项目")}
-          aria-label={t("搜索会话 / 项目")}
-        />
-        <kbd hidden={!!q}>{chord("K")}</kbd>
-        <button className="clr" hidden={!q} onClick={() => setQ("")} aria-label={t("清空")}>
-          ×
-        </button>
-      </div>
-
       {/* Naming a folder by typing it is the same thing as naming it with the
           picker: one intent, two ways in, and the id belongs to the intent —
           which is why this is the id the empty transcript's own button already
@@ -207,7 +178,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
             className="machrow"
             data-here=""
             role="treeitem"
-            aria-expanded={!hereShut}
+            aria-expanded={!shutHere}
             onClick={() => setHereShut((v) => !v)}
           >
             <button className="twist" tabIndex={-1} aria-hidden="true">
@@ -234,10 +205,10 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
               </svg>
             </button>
           </div>
-          {hereShut ? null : shownTree.map((ws) => {
+          {shutHere ? null : shownTree.map((ws) => {
             // A fold is a resting-state preference; while a query is on it would hide
             // the very rows the query just found.
-            const shut = q.trim() ? false : folded.has(ws.root);
+            const shut = needle ? false : folded.has(ws.root);
             // Only while the question is on screen: panesOf walks every runtime.
             const doomed = confirm === ws.root ? panesOf(ws.root) : [];
             const busyPanes = liveIds(doomed).length;
@@ -471,10 +442,10 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
               </div>
             );
           })}
-          {!hereShut && tree.length > 0 && shownTree.length === 0 && (
+          {!shutHere && tree.length > 0 && shownTree.length === 0 && (
             <div className="ws-empty">{t("没有匹配的会话")}</div>
           )}
-          {!hereShut && tree.length === 0 && <div className="ws-empty">{t("尚无文件夹")}</div>}
+          {!shutHere && tree.length === 0 && <div className="ws-empty">{t("尚无文件夹")}</div>}
           {children}
         </div>
       </div>

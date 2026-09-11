@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useState } from "react";
+import { useRailQuery } from "./railsearch";
 import { t } from "../i18n";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
 import { REMOTE_STEP_LABEL, REMOTE_STEPS, type RemoteHost } from "../port/remote";
@@ -84,6 +85,16 @@ export function remoteWorkspaces(host: RemoteHost, tree: TreeWorkspace[] | null 
   return out;
 }
 
+// 和本机那份同一条：命中文件夹名就整个留下，否则只留标题命中的会话。
+function makeHit(needle: string) {
+  return (ws: RemoteWorkspace): RemoteWorkspace | null => {
+    if (!needle) return ws;
+    if (ws.name.toLowerCase().includes(needle)) return ws;
+    const sessions = ws.sessions.filter((x) => (x.title || x.name || "").toLowerCase().includes(needle));
+    return sessions.length ? { ...ws, sessions } : null;
+  };
+}
+
 // What the pip alone cannot say. Degraded is the one that matters: the link is
 // up, so nothing looks wrong until a button does nothing.
 function note(host: RemoteHost): string {
@@ -110,6 +121,8 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
   // Folded rows. A host's key is its name; a workspace's carries the host, so
   // one machine collapsing never takes a folder on another with it.
   const [shut, setShut] = useState<Set<string>>(new Set());
+  const needle = useRailQuery();
+  const hit = makeHit(needle);
   // Workspaces the reader asked to see in full.
   const [whole, setWhole] = useState<Set<string>>(new Set());
 
@@ -192,8 +205,14 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
         // holding: the link goes down with the last of them.
         const panes = runtimes.filter((rt) => rt.host === host.name);
         const tree = trees[host.name];
-        const spaces = remoteWorkspaces(host, tree);
-        const folded = shut.has(host.name);
+        const all = remoteWorkspaces(host, tree);
+        // 找的是整份列表，所以这里和本机那一半用同一条规矩：命中机器就整台留下，
+        // 否则只留命中的工作区和会话。一台还没连上的机器只有名字可以比 ——
+        // 它的项目在远端，说「这里没有」会是这扇窗在替它回答。
+        const named = host.name.toLowerCase().includes(needle) || host.target.toLowerCase().includes(needle);
+        const spaces = !needle || named ? all : (all.map(hit).filter(Boolean) as RemoteWorkspace[]);
+        if (needle && !named && !spaces.length) return null;
+        const folded = needle ? false : shut.has(host.name);
         const working = host.status === "connecting" || host.status === "reconnecting";
         const hint = note(host);
         return (
@@ -241,7 +260,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
             {folded ? null : spaces.length
               ? spaces.map((ws) => {
                   const key = host.name + ":" + ws.root;
-                  const folded = shut.has(key);
+                  const folded = needle ? false : shut.has(key);
                   return (
                     <div key={key} className="rmtws-node">
                       <div

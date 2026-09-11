@@ -17,6 +17,7 @@ import { trailing } from "./trailing";
 import { RemoteAsk } from "./RemoteAsk";
 import { RemoteHosts } from "./RemoteHosts";
 import type { RemoteAsk as RemoteAskT, RemoteHost } from "../port/remote";
+import { RailSearch } from "./railsearch";
 import { Workspaces } from "./Workspaces";
 import { Sky } from "./Sky";
 import { useAddWorkspace } from "./addws";
@@ -586,6 +587,7 @@ export function App({ hub }: { hub: HubPort }) {
             屏幕上没有的栏还能被 Tab 走进去。 */}
         <div className="rail" inert={focus}>
           <div className="railscroll">
+          <RailSearch>
           <Workspaces
             hub={hub}
             tree={tree}
@@ -615,6 +617,7 @@ export function App({ hub }: { hub: HubPort }) {
               />
             ) : null}
           </Workspaces>
+          </RailSearch>
           </div>
           <div className="railfoot">
             <AccountRow account={account} unread={accountUnread} onOpen={() => showPrefs("account")} />
