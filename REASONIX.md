@@ -156,6 +156,7 @@ Use `go test ./path/to/target/` to detect cycles **before** pushing. A `[setup f
 - **`splitActive` 分支删不得**：`planFoldRegion` 的 `splitActive`（= `mustFree`，`trigger==overflow || est >= hard`）允许折入 active turn；删掉会让长 active turn 下无可折叠区域 → `CompactionNoop` → 压缩永不发动。B2 约束的是**常规 pressure 折叠**（那一路仍是 `start = active` 位置固定）。
 - **桌面预算按 dev 增量校准**：合并后 `wails build` 会因 `check-bundle-budget.mjs` 失败（上游 budgets 不含 dev 前端增量），按实测取下一个十分位并把实测值写进注释。
 - **本地零丢失检查法**：除 11 项冻结哨兵外，做一次**符号级全量对比**（提取 `HEAD` 每个 `.go` 的顶层 `func/type/const/var` 与工作区比对）——本次结论 0 缺失。脚本与哨兵命令见 `docs/merge/20260910-v1383-merge-record.md` §5.1。
+- **`unused` 死代码扫描（v1.38.3 事后审计补充，2026-09-11）**：上面那条对比只查**定义**在不在，抓不到更常见的形态——merge 取上游侧时**定义保留、调用点被整体替换**（`withAgentContext` 被上游重写抹掉 parent-agent stamp；`prepareSamplingRequest` 被重构进 `buildSamplingRequest`）。`go vet`/`repolint`/`gofmt` 都不查未使用符号，**只有 `golangci-lint` 的 `unused` 抓得到**：本次一次揪出 21 个（skill fork / calibration / maybePredictOverflow / sameTurnCompactionBlocked / wrapAskGates / closeSubSessions），其中 skill fork 链路已静默失效多轮而无任何报错。**合并后必须跑 `golangci-lint run ./...`**；任何 `unused` 按"接线优先"处理——`git show <feat-commit> --stat` 看该符号引入时改过哪些调用方，恢复原调用点；确认已被替代才删。**禁止**塞进 `.golangci.yml` 排除或 repolint baseline 掩盖。守卫测试会一起丢（`calibration_test.go` 整文件消失）——恢复测试与恢复接线同等重要。
 
 ## PR hygiene
 
