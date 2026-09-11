@@ -53,29 +53,6 @@ func (a *Agent) summaryFoldEstimate(msgs []provider.Message, head, candidate int
 	return a.summaryRequest(msgs[:head], msgs[head:candidate], instructions)
 }
 
-// summaryMaxPromptTokens is the admissible summarizer input ceiling, shared by
-// planning (maximumSafeSummaryPrefixEnd), the replay-fits check, and send-time
-// admission so a planned request is never rejected after it is selected.
-func (a *Agent) summaryMaxPromptTokens() int {
-	window := a.effectiveContextWindow()
-	if window <= 0 {
-		return 0
-	}
-	policy := contextBudgetPolicyOf(a.svc.prov)
-	if policy.WindowMode == provider.ContextWindowUnknown {
-		// A learned overflow makes an unknown gateway shared-window. Otherwise
-		// preserve the request because the configured window may be an estimate.
-		if a.lastAdmission().ObservedWindow <= 0 {
-			return a.hardInputCeiling()
-		}
-		policy.WindowMode = provider.ContextWindowShared
-	}
-	if policy.WindowMode == provider.ContextWindowShared {
-		return window - outputBudgetReserve - protocolReserveTokens
-	}
-	return a.hardInputCeiling()
-}
-
 // summaryViewReplayFits reports whether the whole live view can be replayed
 // as the summarizer prefix (view + instruction within the admissible input
 // ceiling). Over-ceiling views must crop instead, at the cost of the prefix
