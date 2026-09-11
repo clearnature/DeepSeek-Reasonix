@@ -24,6 +24,7 @@ import (
 	"reasonix/internal/boot"
 	"reasonix/internal/config"
 	"reasonix/internal/event"
+	"reasonix/internal/i18n"
 	"reasonix/internal/instanceid"
 	"reasonix/internal/notify"
 	"reasonix/internal/remotehost"
@@ -31,7 +32,6 @@ import (
 	"reasonix/internal/surface"
 	"reasonix/internal/traystate"
 	"reasonix/internal/update"
-
 	// Kinds register from init, so a binary builds only what it links. Without
 	// these every Anthropic model answers "unknown kind" at switch time.
 	_ "reasonix/internal/provider/anthropic"
@@ -248,6 +248,15 @@ func parentLease(f *os.File) io.Reader {
 	return f
 }
 
+// resolveKernelLanguage points the kernel's catalogue at a language. Every other
+// entry point does this before anything renders and this host never did, so its
+// own text reached Chinese windows in English.
+func resolveKernelLanguage(cfg *config.Config) string {
+	// The top-level language, not the desktop one: that is the split config.toml
+	// declares between what dresses a kernel and what dresses a shell.
+	return i18n.DetectLanguage(cfg.Language)
+}
+
 // assemble builds the hub this host serves: one pane on the workspace it was
 // launched in, carrying the capabilities a local window may exercise.
 func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdentity, page fs.FS) (*serve.Hub, error) {
@@ -255,6 +264,7 @@ func assemble(ctx context.Context, logs, handshakeTo io.Writer, shell shellIdent
 	if err != nil {
 		return nil, err
 	}
+	resolveKernelLanguage(cfg)
 	// This window is the only client of its kernel, so a system notification
 	// reaches the person who asked for it. Every pane gets the same wrapper,
 	// not just the one the launch started with.

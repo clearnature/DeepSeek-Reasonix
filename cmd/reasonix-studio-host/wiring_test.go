@@ -5,6 +5,9 @@ import (
 	"go/parser"
 	"go/token"
 	"testing"
+
+	"reasonix/internal/config"
+	"reasonix/internal/i18n"
 )
 
 // A capability this host implements and does not hand to its hub is one the
@@ -41,6 +44,30 @@ func TestTheHostHandsItsHubEveryCapabilityItImplements(t *testing.T) {
 	for _, want := range []string{"Tray", "Asks", "Remote", "DecorateSink", "Grant"} {
 		if !keys[want] {
 			t.Errorf("the hub is built without %s, so nothing can reach what this host implements for it", want)
+		}
+	}
+}
+
+// The kernel renders text of its own — the built-in slash hints are the ones a
+// window shows — and it renders them from a process-wide catalogue that
+// something has to point at a language. Every other entry point does it; this
+// host did not, and English reached windows set to Chinese for as long as that
+// was true. Restored after, because the catalogue outlives the test.
+func TestTheHostPointsTheKernelsCatalogueAtTheConfiguredLanguage(t *testing.T) {
+	t.Cleanup(func() { i18n.DetectLanguage("en") })
+
+	for _, tt := range []struct {
+		lang string
+		want string
+	}{
+		{lang: "zh", want: i18n.Chinese.CmdContext},
+		{lang: "en", want: i18n.English.CmdContext},
+	} {
+		if got := resolveKernelLanguage(&config.Config{Language: tt.lang}); got == "" {
+			t.Fatalf("language %q resolved to nothing", tt.lang)
+		}
+		if i18n.M.CmdContext != tt.want {
+			t.Errorf("language %q: kernel says %q, want %q", tt.lang, i18n.M.CmdContext, tt.want)
 		}
 	}
 }
