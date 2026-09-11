@@ -72,8 +72,6 @@ jobs:
             exit 0
           fi
 
-          response_body="$(cat /tmp/pages-response.json)"
-
           if [ "${status_code}" = "404" ]; then
             echo "enabled=false" >> "${GITHUB_OUTPUT}"
             echo "::notice::Skipping deploy: GitHub Pages is not enabled for ${GITHUB_REPOSITORY}."
@@ -81,11 +79,11 @@ jobs:
           fi
 
           if [ "${status_code}" = "403" ]; then
-            echo "::error::Failed to check GitHub Pages status (HTTP 403): token lacks access or API rate limit exceeded. Response: ${response_body}"
+            echo "::error::Failed to check GitHub Pages status (HTTP 403): token lacks access or API rate limit exceeded."
             exit 1
           fi
 
-          echo "::error::Failed to check GitHub Pages status (HTTP ${status_code}). Response: ${response_body}"
+          echo "::error::Failed to check GitHub Pages status (HTTP ${status_code})."
           exit 1
       - id: deploy
         if: steps.pages_status.outputs.enabled == 'true'
