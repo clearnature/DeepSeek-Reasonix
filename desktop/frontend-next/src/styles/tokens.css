@@ -108,6 +108,11 @@
 
     /* 三档时长对应三档份量：一行 / 一张卡 / 一整块面板 */
     --t-line: .14s; --t-card: .22s; --t-panel: .34s;
+    /* The fourth is not a weight: it is motion's other job. A meter or a fill
+       reports work that is running, and it reports it by growing — so this tier
+       drives a fill's own geometry and never answers a click, which at .6s it
+       would answer late. Held by src/ui/motion.test.tsx. */
+    --t-live: .6s;
     /* 一档份量把时长和缓动一起说完。分开放着的时候，同一档的两处动画可以各
        配各的缓动，而「这是一张卡」本来就同时决定了这两件事。--m-step 是编排：
        一批元素彼此错开多久 —— 过去每个调用点自己定一个数。 */

@@ -136,6 +136,53 @@ describe("mount is not a cause", () => {
   });
 });
 
+// One weight decides a duration, so a duration is never typed at the call site.
+// Four speeds for one weight was the state this replaced: .12 / .14 / .15 / .16
+// all meant "a line just changed", and the same change ran at four speeds in
+// four corners — which is what reads as an interface that is not quite settled.
+describe("a duration comes from a weight", () => {
+  /** Every `transition:` declaration body, joined across the lines it spans. */
+  const transitions = (): string[] => {
+    const out: string[] = [];
+    for (const m of css.matchAll(/\btransition:/g)) {
+      let i = m.index + m[0].length;
+      let depth = 0;
+      for (; i < css.length; i++) {
+        const c = css[i];
+        if (c === "(") depth++;
+        else if (c === ")") depth--;
+        else if ((c === ";" || c === "}") && depth === 0) break;
+      }
+      out.push(css.slice(m.index + m[0].length, i));
+    }
+    return out;
+  };
+
+  it("never writes one into a transition", () => {
+    const raw = transitions().filter((body) => /(?<![\w.-])\d*\.?\d+m?s(?![\w-])/.test(body));
+    expect(raw, "hand-written durations: a weight token says it once for every use").toEqual([]);
+  });
+
+  it("covers every transition in the stylesheet", () => {
+    // Guards the guard: a renamed property or a moved file would leave the rule
+    // above passing on an empty list.
+    expect(transitions().length).toBeGreaterThan(120);
+  });
+
+  // --t-live is the tier that is not a weight. A fill reports a rate, and the
+  // way it reports is by growing — so this tier drives a fill's own geometry
+  // and nothing else. Acknowledging a click on it would take .6s to answer.
+  it("keeps the live tier on a fill's geometry", () => {
+    const GEOMETRY = /^\s*(width|height|flex-grow|flex-basis|stroke-dashoffset|stroke-dasharray)\s/;
+    const misused = transitions()
+      .filter((body) => body.includes("var(--t-live)"))
+      .flatMap((body) => body.split(","))
+      .filter((seg) => seg.includes("var(--t-live)") && !GEOMETRY.test(seg))
+      .map((seg) => seg.trim());
+    expect(misused, "the live tier reports work by growing; it does not answer actions").toEqual([]);
+  });
+});
+
 describe("navigation focus", () => {
   it("marks a tool's identity without repainting its full output card", () => {
     expect(css).not.toMatch(/\.call\[data-hit\]\s*\{\s*animation:/);

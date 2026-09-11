@@ -206,7 +206,7 @@
      breadcrumb after it never moves. */
   [data-titlebar="app"][data-platform="darwin"] .brand {
     position: absolute; left: 12px; top: 50%; margin: -7px 0 0;
-    opacity: 0; transition: opacity .22s var(--ease-out);
+    opacity: 0; transition: opacity var(--m-card) ;
   }
   [data-titlebar="app"][data-platform="darwin"][data-focused="no"] .brand { opacity: 1 }
   /* Windows puts its controls on the other end, hard against the corner, and
@@ -214,7 +214,7 @@
   .winctl { display: flex; margin-left: 6px; margin-right: -12px; align-self: stretch }
   .winctl .wc {
     display: grid; place-items: center; width: 44px; border: 0; background: transparent;
-    color: var(--faint); cursor: pointer; transition: background .14s, color .14s;
+    color: var(--faint); cursor: pointer; transition: background var(--m-line), color var(--m-line);
   }
   .winctl .wc svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.1 }
   .winctl .wc:hover { background: var(--overlay); color: var(--text) }
@@ -239,7 +239,7 @@
     padding: 4px 11px; border-radius: var(--r-sm); border: 1px solid var(--border);
     background: transparent; color: var(--muted); font: var(--w-med) 12px var(--ui);
     cursor: pointer; white-space: nowrap;
-    transition: color .15s, border-color .15s, background .15s, transform .1s;
+    transition: color var(--m-line), border-color var(--m-line), background var(--m-line), transform var(--m-line);
   }
   .btn:hover { color: var(--text); border-color: var(--faint); }
   .btn:active { transform: translateY(1px); }
@@ -255,11 +255,11 @@
     display: inline-flex; align-items: center; gap: 5px; padding: 2px 6px;
     border: 0; border-radius: var(--r-xs); background: transparent;
     color: var(--muted); font: var(--w-reg) 12px var(--mono); cursor: pointer;
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .crumb-btn:hover { background: var(--overlay); color: var(--text) }
   .crumb-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
-  .crumb-btn .cv { font-size: 8px; color: var(--ghost); transition: transform .18s var(--ease) }
+  .crumb-btn .cv { font-size: 8px; color: var(--ghost); transition: transform var(--t-card) var(--ease) }
   .isolab { font: var(--w-med) 9.5px var(--mono); letter-spacing: var(--track-cap); color: var(--ok); padding: 1.5px 6px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--ok) 13%, transparent) }
   .isolab[hidden] { display: none }
   /* 同一个槽位、同一种形状，换一种颜色：绿色说的是「这是隔离副本」，这个说的
@@ -320,7 +320,7 @@
   .mi {
     display: flex; gap: 9px; width: 100%; padding: 7px 9px; text-align: left;
     border: 0; border-radius: var(--r-sm); background: transparent;
-    color: inherit; font: inherit; cursor: pointer; transition: background .13s;
+    color: inherit; font: inherit; cursor: pointer; transition: background var(--m-line);
   }
   .mi:hover { background: var(--float-hi) }
   .mi:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
@@ -409,8 +409,8 @@
     display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px;
     border: 1px solid var(--border); border-radius: var(--r-pill); background: transparent;
     color: var(--muted); font: var(--w-med) 11.5px var(--ui); cursor: pointer;
-    transition: color .15s, border-color .15s, background-color .15s,
-                transform .16s var(--ease-out);
+    transition: color var(--m-line), border-color var(--m-line), background-color var(--m-line),
+ transform var(--m-line) ;
   }
   .mode:hover { color: var(--text); border-color: var(--faint); background: var(--overlay); transform: translateY(-1px) }
   /* 按下要顶到底再回弹，否则这一排在触控板上摸起来是块玻璃 */
@@ -418,7 +418,7 @@
   .mode:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   /* 菜单开着的时候按钮得留在按下态 —— 不然点开一个菜单，源头看着像没被点中 */
   .mode[aria-expanded="true"] { color: var(--text); border-color: var(--faint); background: var(--overlay) }
-  .mode .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ok); transition: background .2s }
+  .mode .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ok); transition: background var(--m-card) }
   .mode .modelmark {
     width: 7px; height: 7px; flex: none; border: 1px solid var(--faint); border-radius: 2px;
     transform: rotate(45deg); background: color-mix(in srgb, var(--faint) 10%, transparent);
@@ -428,10 +428,10 @@
   /* The value is what this pill says, not a second plate stuck onto it: weight
      and colour separate it from the name. Only the effort ladder is the API's
      own word, so only it is set in mono — an approval mode is human wording. */
-  .mode .lb { color: var(--faint); font: var(--w-reg) 11px var(--ui); transition: color .15s }
+  .mode .lb { color: var(--faint); font: var(--w-reg) 11px var(--ui); transition: color var(--m-line) }
   .mode .vl {
     color: var(--muted); font: var(--w-med) 11.5px var(--mono);
-    transition: color .15s; animation: modeval .34s var(--ease-spring);
+    transition: color var(--m-line); animation: modeval var(--t-panel) var(--ease-spring);
   }
   .mode:hover .lb, .mode[aria-expanded="true"] .lb { color: var(--muted) }
   .mode:hover .vl, .mode[aria-expanded="true"] .vl { color: var(--text) }
@@ -445,7 +445,7 @@
      only exists once you are already touching it is the one nobody finds. */
   .mode.tog:not([aria-pressed="true"]) { border-color: transparent; color: var(--faint) }
   .mode.tog:not([aria-pressed="true"]):hover { border-color: var(--border); color: var(--text) }
-  .mode.tog .ic path { opacity: .4; transition: opacity .2s }
+  .mode.tog .ic path { opacity: .4; transition: opacity var(--m-card) }
   .mode.tog[aria-pressed="true"] .ic path { opacity: 1; animation: plandraw .5s var(--ease-out) }
   @keyframes plandraw {
     from { stroke-dasharray: 1; stroke-dashoffset: 1 }
@@ -457,7 +457,7 @@
   .mode.tog::before {
     content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
     background: var(--net-wash); transform: scaleX(0); transform-origin: left;
-    transition: transform .34s var(--ease-out);
+    transition: transform var(--m-panel) ;
   }
   .mode.tog[aria-pressed="true"]::before { transform: none }
   .mode.danger { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, var(--border)) }
@@ -474,18 +474,18 @@
   .sep { width: 1px; height: 14px; flex: none; margin-inline: -1px; background: var(--border); opacity: .75 }
 
   /* 开关拨了，界面就得跟着变 —— 否则它只是个标签 */
-  .side .block { transition: opacity .3s var(--ease-out), filter .3s var(--ease-out) }
+  .side .block { transition: opacity var(--m-panel) , filter var(--m-panel) }
   [data-plan="on"] .side [data-b="files"] { opacity: .28; filter: saturate(.35) }
   [data-apv="yolo"] .side [data-b="files"] .lbl { color: var(--err) }
 
   .thbtn {
     display: grid; place-items: center; width: 28px; height: 28px; flex: none;
     border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ghost);
-    cursor: pointer; transition: background .14s, color .14s;
+    cursor: pointer; transition: background var(--m-line), color var(--m-line);
   }
   .thbtn:hover { background: var(--overlay); color: var(--text) }
   .thbtn:active { background: var(--border); transform: scale(.93) }
-  .thbtn { transition: background .14s, color .14s, transform .1s var(--ease-out) }
+  .thbtn { transition: background var(--m-line), color var(--m-line), transform var(--m-line) }
   .thbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   .thbtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round }
 
@@ -497,7 +497,7 @@
 
   /* R 是全稿唯一张扬的地方。三笔依次描出 → 停一拍 → 擦掉重写：
      推理是一步步推的，指示器就该一笔笔画，而不是转圈。 */
-  .rmark { width: 15px; height: 15px; flex: none; display: block; color: var(--ghost); transition: color .3s }
+  .rmark { width: 15px; height: 15px; flex: none; display: block; color: var(--ghost); transition: color var(--m-panel) }
   .rmark path {
     fill: none; stroke: currentColor; stroke-width: 1.7;
     stroke-linecap: round; stroke-linejoin: round;
@@ -520,7 +520,7 @@
     display: flex; flex-direction: column; gap: 5px; margin-bottom: 9px;
     min-height: 0;
     font: var(--w-reg) 11px var(--mono);
-    animation: qin .22s var(--ease-out) both;
+    animation: qin var(--m-card) both;
   }
   @keyframes qin { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
   .qhd { display: flex; align-items: center; gap: 8px }
@@ -544,7 +544,7 @@
   .qhold {
     flex: none; padding: 1px 7px; border: 1px solid var(--hair); border-radius: var(--r-xs);
     background: none; color: var(--muted); font: inherit; cursor: pointer;
-    transition: color .15s var(--ease-out), border-color .15s var(--ease-out);
+    transition: color var(--m-line) , border-color var(--m-line) ;
   }
   .qhold:hover:not(:disabled) { color: var(--text); border-color: var(--border) }
   .qhold:disabled { opacity: .45; cursor: default }
@@ -598,14 +598,14 @@
   .qacts button {
     min-width: 17px; padding: 0 3px; border: none; border-radius: var(--r-xs);
     background: none; color: var(--faint); font: inherit; cursor: pointer;
-    transition: color .15s var(--ease-out), background .15s var(--ease-out);
+    transition: color var(--m-line) , background var(--m-line) ;
   }
   .qacts button:hover:not(:disabled) { background: var(--overlay); color: var(--text) }
   .qacts button:disabled { opacity: .3; cursor: default }
   .qi .x {
     flex: none; padding: 0 3px; border: none; border-radius: var(--r-xs); background: none;
     color: var(--faint); font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
-    transition: color .15s var(--ease-out), background .15s var(--ease-out);
+    transition: color var(--m-line) , background var(--m-line) ;
   }
   .qi .x:hover { color: var(--err-ink); background: color-mix(in srgb, var(--err) 12%, transparent) }
 
@@ -662,8 +662,8 @@
   .rail > * { width: var(--rail-open); flex: none }
   .side > * { width: var(--side-open) }
   .rail > .scroll, .side > .scroll { flex: 1 }   /* 列表撑开，位置声明才会被推到栏底 */
-  .rail, .side { transition: opacity .2s var(--ease-out) .05s }
-  [data-rail="off"] .rail, [data-side="off"] .side { opacity: 0; transition: opacity .12s var(--ease-in) }
+  .rail, .side { transition: opacity var(--m-card) var(--m-step) }
+  [data-rail="off"] .rail, [data-side="off"] .side { opacity: 0; transition: opacity var(--m-exit) }
 
   /* 栏横过来的那一档，缝也横过来。这枚把手是左边那枚转了 90°：同样三点静止、
      同样收起时变成一枚带箭头的标签，位置同样在两块内容之间。 */
@@ -679,9 +679,9 @@
     content: ""; position: absolute; left: 50%; top: 50%;
     width: 32px; height: 16px; margin: -8px 0 0 -16px;
     border: 1px solid transparent; border-radius: var(--r-pill); background: var(--surface);
-    transition: background .14s, border-color .14s, box-shadow .18s;
+    transition: background var(--m-line), border-color var(--m-line), box-shadow var(--m-card);
   }
-  .sidepeek > * { grid-area: 1 / 1; z-index: 1; transition: opacity .14s var(--ease-out) }
+  .sidepeek > * { grid-area: 1 / 1; z-index: 1; transition: opacity var(--m-line) }
   .sidepeek .knurl {
     width: 2.5px; height: 2.5px; border-radius: 50%; background: currentColor;
     box-shadow: -5.5px 0 currentColor, 5.5px 0 currentColor;
@@ -723,7 +723,7 @@
     content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px;
     background: var(--faint); opacity: 0;
     transform: translateX(var(--over, 0px));
-    transition: opacity .16s var(--ease-out) .14s, transform .4s var(--ease-spring);
+    transition: opacity var(--m-line) var(--t-line), transform var(--t-panel) var(--ease-spring);
   }
   .gutter:hover::after { opacity: .55; transition-delay: 0s }
   /* Reaching a limit by keyboard nudges this line, so the line has to be there to
@@ -733,7 +733,7 @@
      Releasing drops data-on, which hands transform back to the spring above and
      the borrowed pixels return on their own. */
   .gutter[data-on]::after { opacity: .9; transition-delay: 0s; transition-duration: .16s, 0s }
-  .gutter[data-edge]::after { animation: edgebump .22s var(--ease-out) }
+  .gutter[data-edge]::after { animation: edgebump var(--m-card) }
   @keyframes edgebump { 0%, 100% { transform: none } 40% { transform: translateX(var(--bump, 0px)) } }
   .gutter:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; border-radius: var(--r-xs) }
   /* One switch, one shape, three weights. The grip lives on the divider — where
@@ -752,9 +752,9 @@
     border: 1px solid transparent; border-radius: var(--r-pill);
     background: var(--surface); color: var(--muted);
     font: var(--w-reg) 10px/1 var(--mono); cursor: pointer;
-    transition: color .14s, background .14s, border-color .14s, box-shadow .18s;
+    transition: color var(--m-line), background var(--m-line), border-color var(--m-line), box-shadow var(--m-card);
   }
-  .grip > * { grid-area: 1 / 1; transition: opacity .14s var(--ease-out) }
+  .grip > * { grid-area: 1 / 1; transition: opacity var(--m-line) }
   /* Three dots on the seam, at a weight that survives a glance. The previous
      resting state was one chevron at 45% — invisible until hovered, which is
      not restraint but a seam that appears to do nothing. Dots rather than an
@@ -800,7 +800,7 @@
     font: var(--w-reg) 11.5px/1.65 var(--mono);
     overflow: auto; overscroll-behavior: contain;
     white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
-    animation: card .14s var(--ease-out) both;
+    animation: card var(--m-line) both;
   }
   /* 有东西可看，才提示可以看。没被截断的那些一个记号都不该多。 */
   [data-cut] { cursor: help }
@@ -820,7 +820,7 @@
   .ws {
     display: block; width: 100%; text-align: left; background: none; border: 0;
     border-left: 2px solid transparent; padding: 8px 12px 9px 11px; cursor: pointer;
-    font: inherit; color: inherit; transition: background .14s;
+    font: inherit; color: inherit; transition: background var(--m-line);
   }
   .ws:hover { background: var(--overlay) }
   .ws:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
@@ -847,7 +847,7 @@
     position: absolute; top: 7px; right: 7px; width: 17px; height: 17px;
     display: grid; place-items: center; border: 0; border-radius: var(--r-xs);
     background: var(--overlay); color: var(--ghost); font: var(--w-reg) 12px/1 var(--mono);
-    cursor: pointer; opacity: 0; transition: opacity .14s, background .14s, color .14s;
+    cursor: pointer; opacity: 0; transition: opacity var(--m-line), background var(--m-line), color var(--m-line);
   }
   .ws:hover .wsdel, .wsdel:focus-visible { opacity: 1 }
   .wsdel:hover { background: var(--border); color: var(--err) }
@@ -857,12 +857,12 @@
   .ws[data-stop] .meta .st { color: var(--accent-ink) }
   .ws[data-gone] {
     height: 0 !important; opacity: 0; padding-block: 0; overflow: hidden;
-    transition: height .22s var(--ease-in), opacity .15s, padding .22s var(--ease-in);
+    transition: height var(--t-card) var(--ease-in), opacity var(--m-line), padding var(--t-card) var(--ease-in);
   }
   .mkbtn {
     width: 19px; height: 19px; flex: none; display: grid; place-items: center;
     border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ghost);
-    font: var(--w-reg) 13px/1 var(--mono); cursor: pointer; transition: background .14s, color .14s;
+    font: var(--w-reg) 13px/1 var(--mono); cursor: pointer; transition: background var(--m-line), color var(--m-line);
   }
   .mkbtn:hover { background: var(--overlay); color: var(--text) }
   .mkbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
@@ -882,7 +882,7 @@
   .railfoot { flex: none; display: flex; gap: 14px; padding: 9px 13px 11px; border-top: 1px solid var(--hair) }
   .lnk {
     border: 0; background: none; padding: 2px 0; cursor: pointer;
-    color: var(--muted); font: var(--w-reg) 11px var(--ui); text-align: left; transition: color .14s;
+    color: var(--muted); font: var(--w-reg) 11px var(--ui); text-align: left; transition: color var(--m-line);
   }
   .lnk:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px }
   .lnk[disabled] { opacity: .4; cursor: default; pointer-events: none }
@@ -922,13 +922,13 @@
   .tabmark {
     position: absolute; bottom: 0; left: 0; height: 2px; border-radius: var(--r-xs);
     background: var(--accent); pointer-events: none;
-    transition: transform .3s var(--ease-out), width .3s var(--ease-out);
+    transition: transform var(--m-panel) , width var(--m-panel) ;
   }
   .tab {
     flex: none; padding: 5px 11px; border: 0; border-radius: var(--r-sm);
     background: none; cursor: pointer; white-space: nowrap;
     font: var(--w-med) 12px var(--ui); color: var(--faint);
-    transition: color .15s, background .15s;
+    transition: color var(--m-line), background var(--m-line);
   }
   .tab:hover { color: var(--text) }
   .tab[aria-selected="true"], .tab.on { background: var(--overlay); color: var(--text) }
@@ -938,7 +938,7 @@
   .tabs > .picker { margin-left: auto }
   .tabs .picker .projmenu { left: auto; right: 0; transform-origin: top right }
   .tab.more { display: inline-flex; align-items: center; gap: 5px }
-  .tab.more .cv { font: var(--w-reg) 9.5px var(--ui); color: var(--faint); font-style: normal; transition: transform .18s var(--ease) }
+  .tab.more .cv { font: var(--w-reg) 9.5px var(--ui); color: var(--faint); font-style: normal; transition: transform var(--t-card) var(--ease) }
   .tab.more[aria-expanded="true"] .cv { transform: rotate(180deg) }
 
   /* ── 中栏顶：运行头卡 ─────────────────────────────────────────────── */
@@ -957,7 +957,7 @@
     flex: none; display: grid; place-items: center; width: 30px; height: 30px;
     border: 1px solid var(--hair); border-radius: var(--r-md);
     background: var(--surface); color: var(--faint);
-    transition: color .25s var(--ease), border-color .25s var(--ease);
+    transition: color var(--t-card) var(--ease), border-color var(--t-card) var(--ease);
   }
   .runhead .ic .rmark { width: 17px; height: 17px }
   .runhead[data-run="running"] .ic { color: var(--net); border-color: color-mix(in srgb, var(--net) 40%, var(--border)) }
@@ -1020,7 +1020,7 @@
     padding: 8px 20px; border: 1px solid var(--accent); border-radius: var(--r-sm);
     background: var(--accent); color: var(--accent-fg); box-shadow: var(--lit);
     font: var(--w-med) 13px var(--ui); cursor: pointer;
-    transition: filter .14s;
+    transition: filter var(--m-line);
   }
   .pick:hover { filter: brightness(1.06) }
   .stay {
@@ -1079,7 +1079,7 @@
     padding: 0; appearance: none;
     border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
     background: color-mix(in srgb, var(--text) 6%, transparent);
-    opacity: .5; transition: opacity .2s, background-color .15s;
+    opacity: .5; transition: opacity var(--m-card), background-color var(--m-line);
     pointer-events: auto; cursor: grab; touch-action: none;
   }
   .srail-view:active { cursor: grabbing }
@@ -1093,7 +1093,7 @@
   .srail-m > i {
     margin-right: 3px; border-radius: var(--r-sm); background: var(--ghost); opacity: .38;
     transform-origin: right center;
-    transition: opacity .16s, background-color .16s, transform .16s var(--ease-out);
+    transition: opacity var(--m-line), background-color var(--m-line), transform var(--m-line) ;
   }
   .srail-m:focus-visible > i { outline: 2px solid var(--focus); outline-offset: 3px }
   .srail-m[data-close] > i { opacity: .9; transform: scaleX(1.35) }
@@ -1106,7 +1106,7 @@
     position: absolute; right: 48px; z-index: 5; width: 300px; padding: 9px 11px;
     border: 1px solid var(--border); border-radius: var(--r-md); background: var(--float);
     box-shadow: var(--shadow-float); pointer-events: none; transform: translateY(-50%);
-    animation: peekin .16s var(--ease-out) both;
+    animation: peekin var(--m-line) both;
   }
   @keyframes peekin { from { opacity: 0; transform: translate(8px, -50%) } to { opacity: 1; transform: translateY(-50%) } }
   .srail-peek .hd { display: flex; align-items: baseline; gap: 8px; font: var(--w-reg) 10.5px var(--mono); color: var(--faint) }
@@ -1170,14 +1170,14 @@
   .tl-track {
     position: relative; display: block; height: 9px; margin-top: 3px;
     border-radius: var(--r-sm); background: color-mix(in srgb, var(--hair) 38%, transparent);
-    transition: background .15s;
+    transition: background var(--m-line);
     /* 一条比整轴还长的耗时是可能的（子代理的时钟从它自己开始算），越界的部分
        裁掉而不是让它压到下一列上去。 */
     overflow: hidden;
   }
   .tl-bar, .tl-tick {
     position: absolute; top: 1.5px; height: 6px; border-radius: var(--r-sm);
-    background: var(--faint); transition: opacity .15s;
+    background: var(--faint); transition: opacity var(--m-line);
   }
   .tl-bar { min-width: 2px }
   /* 瞬时事件没有长度，画成刻点 —— 给它一个假宽度会谎报耗时 */
@@ -1247,7 +1247,7 @@
     display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left;
     padding: 8px 10px 9px; border: 1px solid transparent; border-radius: var(--r-md);
     background: none; color: inherit; font: inherit; cursor: pointer;
-    transition: background .14s, border-color .14s;
+    transition: background var(--m-line), border-color var(--m-line);
   }
   .tl-hd:hover { background: var(--overlay) }
   .tl-hd:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
@@ -1273,7 +1273,7 @@
   .tl-chev {
     flex: none; width: 5px; height: 5px; margin: 0 3px 0 2px; align-self: center;
     border-right: 1.5px solid var(--ghost); border-bottom: 1.5px solid var(--ghost);
-    transform: rotate(-45deg); transition: transform .2s var(--ease-out);
+    transform: rotate(-45deg); transition: transform var(--m-card) ;
   }
   .tl-step[data-open] .tl-chev { transform: rotate(45deg) }
   .tl-sub { font: var(--w-reg) 11.5px/1.5 var(--ui); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
@@ -1531,7 +1531,7 @@
   .nest, .ask { transform-origin: top }
 
   /* 「正在读取…」→「读了 7 个文件」是这一步唯一的状态跃迁，别用 0ms 换掉它 */
-  .hl { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; transition: opacity 90ms var(--ease-in) }
+  .hl { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; transition: opacity var(--m-exit) }
   .hl[data-swap] { opacity: 0 }
   .enterbox[data-enter] .hl .cost { animation: costin var(--t-card) var(--ease-out) both }
   @keyframes costin { from { opacity: 0; transform: translateX(5px) } to { opacity: 1; transform: none } }
@@ -1559,7 +1559,7 @@
     transition: opacity var(--t-card) var(--ease-out),
                 box-shadow var(--t-card) var(--ease-out);
   }
-  .call > .g .sym[data-done] { animation: symdone .34s var(--ease-out) }
+  .call > .g .sym[data-done] { animation: symdone var(--m-panel) }
   @keyframes symdone { 0% { transform: scale(1) } 38% { transform: scale(.86) } 100% { transform: scale(1) } }
   .hl .nm { font: var(--w-med) 12.5px var(--ui); color: var(--text) }
   .call[data-k="say"] .hl .nm, .call[data-k="me"] .hl .nm { font-size: 11px; font-family: var(--mono); font-weight: var(--w-med); letter-spacing: var(--track-lead); text-transform: uppercase; color: var(--faint) }
@@ -1597,7 +1597,7 @@
   .doing .d { color: var(--ghost) }
 
   /* 步骤级干预：hover 才出现 */
-  .stepctl { display: flex; gap: 5px; opacity: 0; transition: opacity .16s; flex: none }
+  .stepctl { display: flex; gap: 5px; opacity: 0; transition: opacity var(--m-line); flex: none }
   .call > .c:hover .stepctl, .call > .c:focus-within .stepctl { opacity: 1 }
   .stepctl button {
     position: relative; border: 0; background: var(--overlay); color: var(--faint); cursor: pointer;
@@ -1621,7 +1621,7 @@
      portal 到 body 之后位置由测量写进来（left/top 是行内样式），这里只管长相。 */
   .rewindmenu {
     position: fixed; z-index: 60; min-width: 208px;
-    animation: card .14s var(--ease-out) both;
+    animation: card var(--m-line) both;
   }
 
   /* 首字节之前那段空白是真实存在的，别装作一问就有回应 */
@@ -1673,7 +1673,7 @@
   .copy {
     border: 0; background: transparent; color: var(--ghost); cursor: pointer;
     font: var(--w-med) 10px var(--mono); letter-spacing: var(--track-cap); padding: 2px 6px;
-    border-radius: var(--r-xs); transition: color .12s, background .12s;
+    border-radius: var(--r-xs); transition: color var(--m-line), background var(--m-line);
   }
   .copy:hover { background: var(--overlay); color: var(--text) }
   .copy:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
@@ -1699,7 +1699,7 @@
   .rcpt[data-lvl="ok"] {
     display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
     font: var(--w-reg) 11.5px var(--ui); color: var(--faint);
-    animation: settle .26s var(--ease-out) both;
+    animation: settle var(--m-card) both;
   }
   .rcpt[data-lvl="ok"] .tick { font-size: 10px; color: var(--ok); opacity: .75 }
   .rcpt[data-lvl="ok"] .src { font: var(--w-reg) 10.5px var(--mono); color: var(--ghost); min-width: 0; overflow-wrap: anywhere }
@@ -1768,7 +1768,7 @@
   details > summary::-webkit-details-marker { display: none }
   details > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs) }
   .fold { display: inline-flex; align-items: center; gap: 5px; font: var(--w-reg) 11px var(--mono); color: var(--faint) }
-  .fold::before { content: "▸"; font-size: 8px; color: var(--ghost); transition: transform .18s var(--ease) }
+  .fold::before { content: "▸"; font-size: 8px; color: var(--ghost); transition: transform var(--t-card) var(--ease) }
   details[open] > summary .fold::before { transform: rotate(90deg) }
   .fold:hover { color: var(--text) }
 
@@ -1894,7 +1894,7 @@
   /* 压缩：核心是 Started/Done 一对，值得一张能展开的卡 */
   .comp { margin-top: 7px }
   .comp-bar { height: 3px; background: color-mix(in srgb, var(--accent) 20%, var(--overlay)); overflow: hidden }
-  .comp-bar i { display: block; height: 100%; background: var(--ok); transition: width .6s var(--ease-out) }
+  .comp-bar i { display: block; height: 100%; background: var(--ok); transition: width var(--t-live) var(--ease-out) }
   .comp-n { margin-top: 5px; font: var(--w-reg) 11px var(--mono); color: var(--faint) }
   .comp-n b { color: var(--text); font-weight: var(--w-reg); font-variant-numeric: tabular-nums }
   .comp details { margin-top: 5px }
@@ -1981,7 +1981,7 @@
     display: flex; gap: 10px; padding: 10px 12px; text-align: left; width: 100%;
     border: 0; border-top: 1px solid var(--hair); background: transparent;
     cursor: pointer; font: inherit; color: inherit;
-    transition: background .14s, box-shadow .14s;
+    transition: background var(--m-line), box-shadow var(--m-line);
   }
   /* Not on .opt: its mark rides the first line of text, which is what the
      default stretch gives it. */
@@ -1994,13 +1994,13 @@
   .opt .mark, .prow .mark {
     width: 14px; height: 14px; flex: none; margin-top: 2px;
     border: 1.5px solid var(--ghost); border-radius: 50%;
-    display: grid; place-items: center; transition: border-color .14s, background .14s;
+    display: grid; place-items: center; transition: border-color var(--m-line), background var(--m-line);
   }
   .opt[data-multi] .mark { border-radius: var(--r-xs) }
   .opt[data-on] .mark, .prow[data-on] .mark { border-color: var(--accent); background: var(--accent) }
   .opt .mark::after, .prow .mark::after {
     content: ""; width: 5px; height: 5px; border-radius: inherit;
-    background: var(--accent-fg); opacity: 0; transition: opacity .14s;
+    background: var(--accent-fg); opacity: 0; transition: opacity var(--m-line);
   }
   .opt[data-multi] .mark::after { width: 7px; height: 4px; border-radius: 0; background: none;
     border-left: 1.5px solid var(--accent-fg); border-bottom: 1.5px solid var(--accent-fg);
@@ -2063,14 +2063,14 @@
   .pane::after {
     content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
     background: color-mix(in srgb, var(--page) 74%, transparent);
-    opacity: 0; transition: opacity .12s var(--ease-out);
+    opacity: 0; transition: opacity var(--m-line) ;
   }
   .pane[data-intake]::after { opacity: 1 }
   /* 输入框自己抬起来换色，亮的是它而不是一个虚线矩形 */
   .pane[data-intake] .compose {
     position: relative; z-index: 4;
     transform: translateY(-2px);
-    transition: transform .12s var(--ease-out), box-shadow .12s var(--ease-out);
+    transition: transform var(--m-line) , box-shadow var(--m-line) ;
   }
   .pane[data-intake="attach"] .compose { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent) }
   .pane[data-intake="attach"] .compose::after { border-color: var(--accent) }
@@ -2084,7 +2084,7 @@
   /* 说的是动词，不是「把文件拖到这里」—— 松手之前就知道会得到什么 */
   .intake {
     margin: 0 0 7px; padding: 0 2px; font: var(--w-med) 11.5px var(--ui);
-    animation: intakein .12s var(--ease-out) both;
+    animation: intakein var(--m-line) both;
   }
   .intake[data-tone="attach"] { color: var(--accent-ink) }
   .intake[data-tone="ref"] { color: var(--net) }
@@ -2103,7 +2103,7 @@
     display: inline-flex; align-items: center; gap: 8px; flex: none; max-width: min(310px, 78vw);
     padding: 4px 4px 4px 5px;
     border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--raised);
-    animation: shotin .1s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms);
+    animation: shotin var(--m-line) both; animation-delay: calc(var(--i, 0) * 45ms);
   }
   .shot[data-state="adding"] { border-style: dashed; color: var(--faint) }
   .shot[data-state="failed"] { border-color: color-mix(in srgb, var(--err) 42%, var(--border)) }
@@ -2136,7 +2136,7 @@
   .shot .x {
     width: 22px; height: 22px; flex: none; border: 0; border-radius: var(--r-sm); cursor: pointer;
     background: transparent; color: var(--ghost); font: var(--w-reg) 13px/1 var(--mono);
-    display: grid; place-items: center; transition: color .12s, background .12s;
+    display: grid; place-items: center; transition: color var(--m-line), background var(--m-line);
   }
   .shot .x:hover { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent) }
   .shot button:focus-visible, .intake:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
@@ -2157,7 +2157,7 @@
     background: linear-gradient(180deg,
       color-mix(in srgb, var(--raised) 94%, var(--text) 6%), var(--raised));
     box-shadow: 0 1px 2px rgba(0, 0, 0, .14), 0 18px 38px -30px rgb(0 0 0 / .48);
-    transition: box-shadow .22s var(--ease);
+    transition: box-shadow var(--t-card) var(--ease);
   }
   /* 孩子各自滚，和不超过预算。 */
   .composeaux {
@@ -2175,7 +2175,7 @@
   .compose::after {
     content: ""; position: absolute; inset: 0; border-radius: inherit;
     border: 1px solid var(--border); pointer-events: none;
-    transition: border-color .22s;
+    transition: border-color var(--m-card);
   }
   .compose:hover::after { border-color: color-mix(in srgb, var(--accent) 22%, var(--border)) }
   .compose:focus-within::after { border-color: color-mix(in srgb, var(--accent) 52%, var(--border)) }
@@ -2203,7 +2203,7 @@
   .glowring {
     position: absolute; inset: -1px; border-radius: calc(var(--r-lg) + 1px); padding: 1px;
     pointer-events: none; overflow: hidden; opacity: 0;
-    transition: opacity .35s;
+    transition: opacity var(--m-panel);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
             mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
@@ -2260,7 +2260,7 @@
     justify-self: center; line-height: 1.6; color: var(--ghost);
     font: var(--w-semi) 14px var(--mono);
     -webkit-user-select: none; user-select: none;
-    transition: color .2s var(--ease), transform .2s var(--ease-out);
+    transition: color var(--t-card) var(--ease), transform var(--m-card) ;
   }
   .compose:focus-within .prompt { color: var(--accent-ink); transform: translateX(2px) }
   .composeguide {
@@ -2298,13 +2298,13 @@
   /* 一排东西同时出现是一堵墙，依次出现是一句话。只在挂载时走一次。
      z-index 不是装饰：带 fill 的动画让这些子元素各自成层，弹出的菜单于是被
      关在里面，输入框自己的描边（.compose::after）会横穿过菜单。 */
-  .compose .row > * { position: relative; z-index: 1; animation: rowin .32s var(--ease-out) both }
+  .compose .row > * { position: relative; z-index: 1; animation: rowin var(--m-panel) both }
   @keyframes rowin { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
   /* A model switch rebuilds the runtime; keep the control live-looking but
      uninteractive rather than letting a second click queue another rebuild.
      只标在等的那一个上：整排一起变灰说的是「现在什么都不能改」，而那从来
      不是真的 —— 另外几个仍然是你的。 */
-  .compose .row [data-pending] { pointer-events: none; opacity: .5; transition: opacity .12s }
+  .compose .row [data-pending] { pointer-events: none; opacity: .5; transition: opacity var(--m-line) }
   /* 那半秒不该看着像死了：一道光扫过这排，说明改动正在生效 */
   .compose .row:has([data-pending])::after {
     content: ""; position: absolute; left: 0; right: 0; bottom: -7px; height: 1px;
@@ -2318,7 +2318,7 @@
      执行方式、思考强度、工具权限是同一个问题的三个变量，所以画在一块面板里；
      内核那边它们是三个独立的 effect，所以各自等、各自被拒。槽本身用树里已有
      的 .seg —— 设置页画的就是这同样三个字段，两处不该长得不一样。 */
-  .policy .vl { font-family: var(--ui); font-size: 11.5px; animation: polval .12s var(--ease-out) both }
+  .policy .vl { font-family: var(--ui); font-size: 11.5px; animation: polval var(--m-line) both }
   /* The baseline still needs a door back in. Draw it at the same quiet weight
      as plan-off; the actual values only take width when one of them changed. */
   .policy[data-quiet] .mode { border-color: transparent; color: var(--faint) }
@@ -2380,7 +2380,7 @@
   .sug {
     border: 0; background: var(--overlay); border-radius: var(--r-sm);
     padding: 4px 10px; color: var(--faint); font: var(--w-reg) 11.5px var(--ui); cursor: pointer;
-    transition: color .15s, background .15s;
+    transition: color var(--m-line), background var(--m-line);
   }
   .sug::before { content: "↩ "; color: var(--ghost); font: var(--w-reg) 10px var(--mono) }
   .sug:hover { color: var(--text); background: var(--border) }
@@ -2450,7 +2450,7 @@
   .tk-plan li:last-child { border-bottom: 0 }
   .tk-plan li .mk {
     width: 13px; height: 13px; flex: none; align-self: center; border-radius: var(--r-pill);
-    border: 1.5px solid var(--border); transition: border-color .2s, background .2s;
+    border: 1.5px solid var(--border); transition: border-color var(--m-card), background var(--m-card);
   }
   .tk-plan li[data-done] { color: var(--faint) }
   .tk-plan li[data-done] .mk { border-color: var(--ok); background: var(--ok) }
@@ -2541,7 +2541,7 @@
   .runpill {
     display: flex; align-items: center; gap: 6px; flex: none; padding: 5px 11px;
     border: 1px solid var(--hair); border-radius: var(--r-pill); background: var(--raised); color: var(--faint);
-    font: var(--w-med) 11.5px var(--ui); transition: color .3s, background .3s;
+    font: var(--w-med) 11.5px var(--ui); transition: color var(--m-panel), background var(--m-panel);
   }
   .runpill i { width: 5px; height: 5px; border-radius: var(--r-pill); background: currentColor }
   .runpill[data-run="running"] { background: var(--net-wash); color: var(--net) }
@@ -2568,7 +2568,7 @@
   .navbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
   .navbtn[aria-current] { color: var(--accent-ink); background: var(--accent-wash) }
   .navbtn[aria-current]::before { content: ""; position: absolute; left: -7px; top: 9px; bottom: 9px; width: 2px; border-radius: var(--r-pill); background: var(--accent) }
-  .navhint { position: absolute; left: calc(100% + 10px); top: 50%; z-index: 40; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--float); box-shadow: var(--shadow); color: var(--text); font: var(--w-med) 11.5px var(--ui); white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-3px, -50%); transition: opacity .12s, transform .12s }
+  .navhint { position: absolute; left: calc(100% + 10px); top: 50%; z-index: 40; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--float); box-shadow: var(--shadow); color: var(--text); font: var(--w-med) 11.5px var(--ui); white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-3px, -50%); transition: opacity var(--m-line), transform var(--m-line) }
   .navbtn:hover .navhint, .navbtn:focus-visible .navhint { opacity: 1; transform: translate(0, -50%) }
 
   /* ── 右 ───────────────────────────────────────────────────────────── */
@@ -2590,14 +2590,14 @@
   .side .more > summary {
     list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
     padding: 10px 0 9px; font: var(--w-med) 11.5px var(--ui); color: var(--faint);
-    transition: color .14s;
+    transition: color var(--m-line);
   }
   .side .more > summary::-webkit-details-marker { display: none }
   /* 画出来的，不是打出来的:U+203A 不在随包的等宽子集里,打出来是一个豆腐块。 */
   .side .more > summary::after {
     content: ""; margin-left: auto; width: 5px; height: 5px; margin-right: 3px;
     border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
-    transform: rotate(-45deg); transition: transform .2s var(--ease-out);
+    transform: rotate(-45deg); transition: transform var(--m-card) ;
   }
   .side .more[open] > summary::after { transform: rotate(45deg) }
   .side .more > summary:hover { color: var(--text) }
@@ -2665,7 +2665,7 @@
 
   /* 有真分母才画条 —— 见 kit.tsx 的 Bar */
   .gbar { height: 3px; background: var(--hair); border-radius: var(--r-pill); overflow: hidden }
-  .gbar i { display: block; height: 100%; background: var(--faint); border-radius: inherit; transition: width .6s var(--ease) }
+  .gbar i { display: block; height: 100%; background: var(--faint); border-radius: inherit; transition: width var(--t-live) var(--ease) }
   .gbar[data-tone="ok"] i { background: var(--ok) }
   .gbar[data-tone="net"] i { background: var(--net) }
   .gbar[data-tone="accent"] i { background: var(--accent) }
@@ -2689,7 +2689,7 @@
   .cachemoved i { font-style: normal; font-size: 10px }
 
   .bar { display: flex; height: 3px; overflow: hidden; background: var(--hair); gap: 1px }
-  .bar i { display: block; transition: flex-grow .6s var(--ease); position: relative }
+  .bar i { display: block; transition: flex-grow var(--t-live) var(--ease); position: relative }
   .bar .c { background: var(--ok) } .bar .f { background: var(--overlay) }
   .bar .c::after {
     content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 16px;
@@ -2713,7 +2713,7 @@
 
   /* 上下行是两笔独立的账：上行按命中/未命中分档计价，下行只有一个价 */
   .rate { display: flex; align-items: baseline; gap: 7px; font: var(--w-reg) 11px var(--mono); color: var(--faint) }
-  .rate .v { color: var(--ghost); font-variant-numeric: tabular-nums; transition: color .3s }
+  .rate .v { color: var(--ghost); font-variant-numeric: tabular-nums; transition: color var(--m-panel) }
   /* 只有真的在收字的时候这个数才是活的；工具在跑时它就该是 "—" */
   .rate[data-live] .v { color: var(--text) }
   .rate .u { color: var(--ghost); font-size: 10px }
@@ -2721,9 +2721,9 @@
   /* Colour belongs to the mark, not to one of its two callers. Scoped under
      .rate, none of it reached the cost panel's copy — and an SVG with no fill
      declared is filled black, which is what that panel was showing. */
-  .spark .line { fill: none; stroke: var(--ghost); stroke-width: 1.2; stroke-linejoin: round; transition: stroke .3s }
-  .spark .fill { fill: color-mix(in srgb, var(--ghost) 10%, transparent); transition: fill .3s }
-  .spark .tip { fill: var(--ghost); transition: fill .3s }
+  .spark .line { fill: none; stroke: var(--ghost); stroke-width: 1.2; stroke-linejoin: round; transition: stroke var(--m-panel) }
+  .spark .fill { fill: color-mix(in srgb, var(--ghost) 10%, transparent); transition: fill var(--m-panel) }
+  .spark .tip { fill: var(--ghost); transition: fill var(--m-panel) }
   .rate .spark { flex: 1; min-width: 34px; height: 18px; margin-inline: 2px; align-self: center; overflow: visible }
   .rate[data-live] .spark .line, .rate[data-live] .spark .tip { stroke: var(--net); fill: var(--net) }
   .rate[data-live] .spark .line { fill: none }
@@ -2737,14 +2737,14 @@
   /* 游标在计划上向下接力，而不是每条各自变色 —— 一眼看出「现在在这」 */
   .planwrap .cursor {
     position: absolute; left: 0; top: 0; width: 2px; border-radius: var(--r-xs); background: var(--net);
-    transition: transform .36s var(--ease-out), height .36s var(--ease-out);
+    transition: transform var(--m-panel) , height var(--m-panel) ;
   }
   .planwrap .cursor[hidden] { display: none }
-  .plan .s { display: flex; align-items: baseline; gap: 9px; padding: 6px 0 6px 10px; font-size: 12.5px; color: var(--muted); border-bottom: 1px solid var(--hair); transition: color .25s, opacity .25s, background .16s; border-radius: var(--r-xs) }
+  .plan .s { display: flex; align-items: baseline; gap: 9px; padding: 6px 0 6px 10px; font-size: 12.5px; color: var(--muted); border-bottom: 1px solid var(--hair); transition: color var(--m-card), opacity var(--m-card), background var(--m-line); border-radius: var(--r-xs) }
   .plan .s:hover { background: var(--overlay) }
   .plan .s[data-done] { opacity: .72 }
   .plan .s:last-child { border-bottom: 0 }
-  .plan .s .b { font: var(--w-reg) 10px var(--mono); width: 10px; flex: none; color: var(--ghost); font-variant-numeric: tabular-nums; transition: color .2s }
+  .plan .s .b { font: var(--w-reg) 10px var(--mono); width: 10px; flex: none; color: var(--ghost); font-variant-numeric: tabular-nums; transition: color var(--m-card) }
   .plan .s[data-done] { color: var(--faint) }
   .plan .s[data-done] .b { color: var(--ok) }
   /* 划线是画出来的，不是凭空出现的 —— 这是「刚刚完成」和「本来就完成」的区别。
@@ -2754,7 +2754,7 @@
     background: linear-gradient(var(--ghost), var(--ghost)) no-repeat 0 62% / 0 1px;
     -webkit-box-decoration-break: clone;
             box-decoration-break: clone;
-    transition: background-size .34s var(--ease-out);
+    transition: background-size var(--m-panel) ;
   }
   .plan .s[data-done] .t .ln, .steps .s[data-done] .t .ln { background-size: 100% 1px }
   .plan .s[data-now] { color: var(--text) }
@@ -2764,7 +2764,7 @@
 
   .prog2 { display: flex; align-items: center; gap: 9px }
   .prog2 .track { flex: 1; height: 3px; border-radius: var(--r-sm); background: var(--overlay); overflow: hidden }
-  .prog2 .track i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .5s var(--ease) }
+  .prog2 .track i { display: block; height: 100%; width: 0; background: var(--ok); transition: width var(--t-live) var(--ease) }
 
   .agents { display: flex; flex-direction: column; gap: 7px; min-height: 18px }
   .ag { display: flex; align-items: center; gap: 9px; font: var(--w-reg) 11.5px var(--mono); color: var(--muted); animation: card var(--t-card) var(--ease-out) both }
@@ -2835,7 +2835,7 @@
     padding: 5px 6px; margin-inline: -6px; border: 0; border-radius: var(--r-xs);
     background: transparent; font: var(--w-reg) 11.5px var(--mono); color: var(--muted);
     animation: card var(--t-card) var(--ease-out) both;
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   button.file { cursor: pointer }
   button.file:hover { background: var(--overlay); color: var(--text) }
@@ -2896,7 +2896,7 @@
     /* The limit nudge is a displacement, and displacement is the thing motion
        sensitivity is about. A still dip in the line says "this is the edge"
        without moving anything. */
-    .gutter[data-edge]::after { animation: edgeflash .26s var(--ease) }
+    .gutter[data-edge]::after { animation: edgeflash var(--t-card) var(--ease) }
     @keyframes edgeflash { 0%, 100% { opacity: .9 } 50% { opacity: .25 } }
     /* 动画停了，「正在跑」这件事还得说 —— 换成不动的实心表达 */
     .call[data-running] > .g .line { background: color-mix(in srgb, var(--net) 55%, var(--hair)) }
@@ -3066,7 +3066,7 @@
     display: flex; flex-direction: column; overflow: hidden;
     border: 1px solid var(--border); border-radius: var(--r-lg);
     background: var(--float); box-shadow: var(--shadow-float);
-    animation: sheetin .42s var(--ease-spring) both;
+    animation: sheetin var(--t-panel) var(--ease-spring) both;
   }
   /* 一层浮起来的东西是淡进来的，不是推进来的：整幅铺满的模糊背板一挪就露边。 */
   @keyframes prefsin { from { opacity: 0 } to { opacity: 1 } }
@@ -3084,10 +3084,10 @@
     :root { view-transition-name: none }
     .prefs { view-transition-name: prefsveil; animation: none }
     .prefs-sheet { view-transition-name: prefssheet; animation: none }
-    [data-vt="prefs"]::view-transition-new(prefsveil) { animation: prefsin .18s var(--ease-out) both }
-    [data-vt="prefs"]::view-transition-old(prefsveil) { animation: prefsout .16s var(--ease-in) both }
-    [data-vt="prefs"]::view-transition-new(prefssheet) { animation: sheetin .28s var(--ease-spring) both }
-    [data-vt="prefs"]::view-transition-old(prefssheet) { animation: sheetout .16s var(--ease-in) both }
+    [data-vt="prefs"]::view-transition-new(prefsveil) { animation: prefsin var(--m-card) both }
+    [data-vt="prefs"]::view-transition-old(prefsveil) { animation: prefsout var(--t-line) var(--ease-in) both }
+    [data-vt="prefs"]::view-transition-new(prefssheet) { animation: sheetin var(--t-panel) var(--ease-spring) both }
+    [data-vt="prefs"]::view-transition-old(prefssheet) { animation: sheetout var(--t-line) var(--ease-in) both }
     @keyframes prefsout { to { opacity: 0 } }
     @keyframes sheetout { to { opacity: 0; transform: translateY(6px) scale(.992) } }
   }
@@ -3106,7 +3106,7 @@
     display: flex; flex-direction: column; overflow: hidden;
     border: 1px solid var(--border); border-radius: var(--r-lg);
     background: var(--float); box-shadow: var(--shadow-float);
-    animation: sheetin .42s var(--ease-spring) both;
+    animation: sheetin var(--t-panel) var(--ease-spring) both;
   }
   .cpv-hd {
     flex: none; display: flex; align-items: center; gap: 12px; padding: 11px 12px 11px 16px;
@@ -3125,7 +3125,7 @@
     .cpv { view-transition-name: cpv; animation: none }
     .cpv-sheet { animation: none }
     [data-vt="cpv"]::view-transition-new(cpv) { animation: prefsin var(--t-card) var(--ease-out) both }
-    [data-vt="cpv"]::view-transition-old(cpv) { animation: prefsout .24s var(--ease-in) both }
+    [data-vt="cpv"]::view-transition-old(cpv) { animation: prefsout var(--t-card) var(--ease-in) both }
   }
   /* 面板里那张 diff 自带上边距，是给卡片里用的；这里它是唯一的内容。 */
   .cpv-body .dif { margin-top: 0 }
@@ -3149,7 +3149,7 @@
     padding: 7px 12px; border-radius: var(--r-pill);
     border: 1px solid var(--border); background: var(--overlay);
     font: var(--w-reg) 12px var(--ui); color: var(--text);
-    transition: border-color .14s, background-color .14s;
+    transition: border-color var(--m-line), background-color var(--m-line);
   }
   .prefs-find::placeholder { color: var(--ghost) }
   .prefs-find:focus { outline: none; border-color: var(--focus); background: var(--raised) }
@@ -3161,7 +3161,7 @@
     display: flex; flex-direction: column; padding: 5px;
     border: 1px solid var(--border); border-radius: 0 0 var(--r-md) var(--r-md);
     border-top: 0; background: var(--float); box-shadow: var(--shadow-float);
-    animation: card .14s var(--ease-out) both;
+    animation: card var(--m-line) both;
   }
   .prefs-found button {
     display: flex; align-items: baseline; gap: 9px; padding: 7px 9px;
@@ -3219,12 +3219,12 @@
     display: flex; align-items: center; gap: 9px;
     min-height: 34px; text-align: left; padding: 7px 10px; border: 0; border-radius: var(--r-sm); cursor: pointer;
     background: transparent; color: var(--muted); font: var(--w-reg) 13px var(--ui);
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .prefs-nav button svg {
     width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
     stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round;
-    color: var(--faint); transition: color .14s, transform .5s var(--ease-out);
+    color: var(--faint); transition: color var(--m-line), transform var(--t-panel) var(--ease-out);
   }
   /* The value gives up its width first. Chinese names fit in this column and
      English ones do not, and a row that truncates the section's own name to
@@ -3236,7 +3236,7 @@
   .prefs-nav button::before {
     content: ""; position: absolute; left: 0; top: 50%; width: 2px; height: 0;
     border-radius: 0 2px 2px 0; background: var(--accent); transform: translateY(-50%);
-    transition: height .24s var(--ease-spring);
+    transition: height var(--t-card) var(--ease-spring);
   }
   .prefs-nav button:hover { background: var(--overlay); color: var(--text) }
   .prefs-nav button:hover svg { color: var(--accent-ink) }
@@ -3301,7 +3301,7 @@
                 box-shadow var(--t-card) var(--ease-out),
                 background-color var(--t-card) var(--ease-out);
   }
-  .prefs-col { animation: navin .14s var(--ease-out) both }
+  .prefs-col { animation: navin var(--m-line) both }
   @keyframes navin { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
   .grp:last-child { margin-bottom: 0 }
   @media (hover: hover) {
@@ -3328,7 +3328,7 @@
   .advset > summary::-webkit-details-marker { display: none }
   .advset > summary::after {
     content: "▾"; margin-left: auto; flex: none; font-size: 10px; color: var(--ghost);
-    transition: transform .16s var(--ease-out);
+    transition: transform var(--m-line) ;
   }
   .advset[open] > summary::after { transform: rotate(180deg) }
   .advset > summary:hover { color: var(--text) }
@@ -3383,7 +3383,7 @@
     .prefs-nav button { flex: none; min-height: 32px; padding: 6px 10px }
     .prefs-nav button::before {
       left: 50%; top: auto; bottom: 0; width: 0; height: 2px;
-      transform: translateX(-50%); transition: width .24s var(--ease-spring);
+      transform: translateX(-50%); transition: width var(--t-card) var(--ease-spring);
     }
     .prefs-nav button[aria-selected="true"]::before { width: 18px; height: 2px }
     .prefs-main { padding: 24px 22px 48px }
@@ -3491,7 +3491,7 @@
   .act {
     padding: 3px 9px; border: 1px solid var(--border); border-radius: var(--r-pill);
     background: transparent; color: var(--text); font: var(--w-reg) 11px var(--ui); cursor: pointer;
-    transition: background .14s, border-color .14s;
+    transition: background var(--m-line), border-color var(--m-line);
   }
   .act:hover:not(:disabled) { background: var(--overlay); border-color: var(--muted) }
   .act:disabled { color: var(--ghost); cursor: default }
@@ -3509,7 +3509,7 @@
   .reload[data-s="run"]:disabled { color: var(--text) }
   .reload[data-s="ok"] { color: var(--ok); border-color: var(--ok) }
   .reload[data-s="ok"] .rdot { background: var(--ok); animation: bumpup var(--t-card) var(--ease-out) }
-  .reload[data-s="bad"] { color: var(--err); border-color: var(--err); animation: nudge .2s var(--ease-out) }
+  .reload[data-s="bad"] { color: var(--err); border-color: var(--err); animation: nudge var(--m-card) }
   .reload[data-s="bad"] .rdot { background: var(--err) }
   /* 拒绝要能被感觉到,但这套界面的位移都在 2px 上下,再大就成了另一种语言 */
   @keyframes nudge { 0%, 100% { transform: none } 30% { transform: translateX(-2px) } 70% { transform: translateX(2px) } }
@@ -3524,7 +3524,7 @@
     position: relative;
     flex: none; width: 30px; height: 17px; padding: 0; border: 0; border-radius: var(--r-pill);
     background: var(--overlay); box-shadow: inset 0 0 0 1px var(--hair); cursor: pointer;
-    transition: background .16s;
+    transition: background var(--m-line);
   }
   /* The pill is 30×17 because that is how big it should look, not how big it
      should be to hit. This grows the target to 44×27 without moving anything:
@@ -3532,7 +3532,7 @@
      trackpad, and the miss lands on the row, which does nothing. */
   .sw::before { content: ""; position: absolute; inset: -5px -7px }
   .sw i { display: block; width: 13px; height: 13px; margin-left: 2px; border-radius: 50%;
-    background: var(--faint); transition: transform .16s var(--ease-out), background .16s }
+    background: var(--faint); transition: transform var(--m-line) , background var(--m-line) }
   /* 开着是常态，不该在页面上有重量：填充用中性色，只有位置在说状态。
      强调色留给真正需要你动手的东西（重连按钮、连不上的左色条）。 */
   .sw[aria-checked="true"] { background: var(--muted); box-shadow: none }
@@ -4016,7 +4016,7 @@
   .scope button {
     flex: 1; display: flex; flex-direction: column; gap: 3px; padding: 8px 11px; text-align: left;
     border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent;
-    color: var(--muted); font: var(--w-reg) 12px var(--ui); cursor: pointer; transition: border-color .14s, color .14s;
+    color: var(--muted); font: var(--w-reg) 12px var(--ui); cursor: pointer; transition: border-color var(--m-line), color var(--m-line);
   }
   .scope button i { font: var(--w-reg) 10.5px var(--ui); font-style: normal; color: var(--ghost) }
   .scope button[aria-checked="true"] { border-color: var(--accent); color: var(--text) }
@@ -4076,7 +4076,7 @@
   }
   .cmpbar > i {
     display: block; height: 100%; border-radius: var(--r-md);
-    background: var(--accent); transition: width .3s var(--ease-out);
+    background: var(--accent); transition: width var(--m-panel) ;
   }
   .cmp .note { margin-top: 8px }
 
@@ -4184,7 +4184,7 @@
   .rg-hd .caret {
     flex: none; width: 0; height: 0; align-self: center;
     border: 4px solid transparent; border-left-color: var(--ghost); margin-right: 1px;
-    transition: transform .16s var(--ease-out);
+    transition: transform var(--m-line) ;
   }
   .rg-hd[aria-expanded="true"] .caret { transform: rotate(90deg) }
   .rg-hd code { font: var(--w-med) 12px var(--mono); color: var(--text) }
@@ -4210,7 +4210,7 @@
   .rrow:hover select { border-color: var(--border); background: var(--raised) }
   .rrow select:focus { outline: 2px solid var(--focus); outline-offset: 1px }
   /* 删除是不可逆的一步，所以它等到指针到了这一行才出现 */
-  .rrow .act.ghost { opacity: 0; transition: opacity .12s }
+  .rrow .act.ghost { opacity: 0; transition: opacity var(--m-line) }
   .rrow:hover .act.ghost, .rrow:focus-within .act.ghost { opacity: 1 }
   .rtable .empty { padding: 14px 2px; font: var(--w-reg) 11.5px var(--ui); color: var(--faint) }
 
@@ -4419,7 +4419,7 @@
     flex: none; min-width: 0; padding: 4px 11px; border: 0; border-radius: var(--r-xs);
     background: transparent; color: var(--muted); font: var(--w-reg) 11.5px var(--mono);
     white-space: nowrap; cursor: pointer;
-    transition: background .14s, color .14s, box-shadow .14s, transform .13s var(--ease-spring);
+    transition: background var(--m-line), color var(--m-line), box-shadow var(--m-line), transform var(--t-line) var(--ease-spring);
   }
   .seg button:hover:not(:disabled) { color: var(--text) }
   .seg button:active:not(:disabled) { transform: scale(.96) }
@@ -4683,7 +4683,7 @@
     position: relative; display: flex; aspect-ratio: 16 / 10; overflow: hidden;
     border: 1px solid var(--border); border-radius: var(--r-sm);
     background: var(--pal-page, var(--page));
-    transition: border-color .16s var(--ease-out), box-shadow .16s var(--ease-out);
+    transition: border-color var(--m-line) , box-shadow var(--m-line) ;
   }
   .pal:hover .pal-art { border-color: color-mix(in srgb, var(--pal-accent, var(--accent)) 55%, var(--border)) }
   .pal[data-on] .pal-art { border-color: var(--pal-accent, var(--accent)); box-shadow: 0 0 0 1px var(--pal-accent, var(--accent)) }
@@ -4763,7 +4763,7 @@
   .slotted { position: relative; display: flex; align-items: center; gap: 6px }
   .movegrip {
     flex: none; padding: 0 4px; border: 0; background: none; cursor: pointer;
-    color: transparent; font: var(--w-reg) 12px var(--ui); line-height: 1; transition: color .14s;
+    color: transparent; font: var(--w-reg) 12px var(--ui); line-height: 1; transition: color var(--m-line);
   }
   .slotted:hover .movegrip, .movegrip:focus-visible { color: var(--ghost) }
   .movegrip:hover { color: var(--muted) }
@@ -4805,7 +4805,7 @@
     align-content: safe center; row-gap: 30px; padding-block: 26px;
     overflow: hidden auto;
   }
-  .oobe[data-leaving] { animation: oobeout .4s var(--ease-out) forwards }
+  .oobe[data-leaving] { animation: oobeout var(--m-panel) forwards }
   @keyframes oobeout { to { opacity: 0; visibility: hidden } }
 
   .oobe-glow {
@@ -4907,7 +4907,7 @@
                  background: linear-gradient(90deg, rgba(221,161,68,.35), #FFE0A0) }
   .oobe[data-play] .oobe-prog i { animation: oobefill 9.4s linear forwards }
   .oobe[data-play] .oobe-prog,
-  .oobe[data-play] .oobe-skip { animation: oobegone .45s var(--ease-out) 9.5s forwards }
+  .oobe[data-play] .oobe-skip { animation: oobegone var(--m-panel) 9.5s forwards }
   @keyframes oobefill { to { width: 100% } }
   @keyframes oobegone { to { opacity: 0; visibility: hidden } }
   .oobe-skip { position: absolute; right: 18px; bottom: 16px; z-index: 3;
@@ -5009,12 +5009,12 @@
      reuses the card / panel distance, so it speaks the same language. */
   .pane:not([data-off]) { view-transition-name: pane }
   [data-vt="tab"] .pane:not([data-off]) .scroll[data-pane]:not([hidden]) { view-transition-name: tabbody }
-  [data-vt="tab"]::view-transition-old(tabbody) { animation: tabout .16s var(--ease-in) both }
-  [data-vt="tab"]::view-transition-new(tabbody) { animation: tabin .26s var(--ease-out) both }
+  [data-vt="tab"]::view-transition-old(tabbody) { animation: tabout var(--t-line) var(--ease-in) both }
+  [data-vt="tab"]::view-transition-new(tabbody) { animation: tabin var(--m-card) both }
   @keyframes tabout { to { opacity: 0; transform: translateY(-4px) } }
   @keyframes tabin { from { opacity: 0; transform: translateY(6px) } }
-  [data-vt="pane"]::view-transition-old(pane) { animation: paneout .2s var(--ease-in) both }
-  [data-vt="pane"]::view-transition-new(pane) { animation: panein .3s var(--ease-out) both }
+  [data-vt="pane"]::view-transition-old(pane) { animation: paneout var(--t-card) var(--ease-in) both }
+  [data-vt="pane"]::view-transition-new(pane) { animation: panein var(--m-panel) both }
   @keyframes paneout { to { opacity: 0; transform: translateY(-6px) } }
   @keyframes panein { from { opacity: 0; transform: translateY(8px) } }
 
@@ -5033,7 +5033,7 @@
     padding: 7px 8px 8px 11px; cursor: pointer; border-radius: var(--r-xs) var(--r-xs) 0 0;
     border-bottom: 2px solid transparent; margin-bottom: -1px;
     font: var(--w-med) 12px var(--ui); color: var(--faint); white-space: nowrap;
-    transition: color .14s, background .14s;
+    transition: color var(--m-line), background var(--m-line);
   }
   .ptab:hover { color: var(--text); background: var(--overlay) }
   .ptab[aria-selected="true"] { color: var(--text); background: var(--surface); box-shadow: inset 0 1px 0 var(--border) }
@@ -5052,7 +5052,7 @@
   .ptab-x {
     flex: none; width: 17px; height: 17px; display: grid; place-items: center;
     border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ghost);
-    font: var(--w-reg) 12px/1 var(--mono); cursor: pointer; opacity: 0; transition: opacity .14s, color .14s;
+    font: var(--w-reg) 12px/1 var(--mono); cursor: pointer; opacity: 0; transition: opacity var(--m-line), color var(--m-line);
   }
   .ptab:hover .ptab-x, .ptab[aria-selected="true"] .ptab-x, .ptab-x:focus-visible { opacity: 1 }
   .ptab-x:hover { color: var(--err) }
@@ -5086,7 +5086,7 @@
     grid-template-columns: 10px 5px minmax(0, 1fr) auto;
     padding: 8px 7px 9px; border-radius: var(--r-md); cursor: pointer;
     font: var(--w-med) 12.5px var(--ui); color: var(--muted);
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .wsrow .twist { grid-area: 1 / 1 }
   .wsdot { grid-area: 1 / 2 }
@@ -5112,7 +5112,7 @@
   }
   .twist svg {
     width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.8;
-    stroke-linecap: round; stroke-linejoin: round; transition: transform .24s var(--ease, ease);
+    stroke-linecap: round; stroke-linejoin: round; transition: transform var(--t-card) var(--ease, ease);
   }
   .wsrow[aria-expanded="true"] .twist svg, .rmthead[aria-expanded="true"] .twist svg,
   .rmtwsrow[aria-expanded="true"] .twist svg { transform: rotate(90deg) }
@@ -5143,7 +5143,7 @@
     flex: none; width: 20px; height: 20px; display: grid; place-items: center;
     border: 0; padding: 0; border-radius: var(--r-xs); cursor: pointer;
     background: transparent; color: var(--faint);
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .wsadd svg {
     width: 13px; height: 13px; fill: none; stroke: currentColor;
@@ -5203,7 +5203,7 @@
   .sessedit-btn {
     flex: none; width: 18px; height: 18px; display: grid; place-items: center;
     border: 0; border-radius: var(--r-xs); background: transparent; color: var(--ghost);
-    font: var(--w-reg) 10px/1 var(--mono); cursor: pointer; transition: opacity .14s, color .14s;
+    font: var(--w-reg) 10px/1 var(--mono); cursor: pointer; transition: opacity var(--m-line), color var(--m-line);
   }
   .sessedit-btn:hover { color: var(--accent-ink) }
   .sessedit {
@@ -5219,7 +5219,7 @@
     display: flex; align-items: center; gap: 7px; width: 100%;
     border: 0; background: none; cursor: pointer; text-align: left;
     font: var(--w-med) 11.5px var(--ui); color: var(--faint);
-    transition: color .14s, background .14s;
+    transition: color var(--m-line), background var(--m-line);
   }
   .newsess .plus, .paperpick .plus {
     display: grid; place-items: center; width: 13px; height: 13px; flex: none; color: var(--ghost);
@@ -5307,7 +5307,7 @@
     flex: none; padding: 6px 10px; border-radius: var(--r-xs);
     border: 1px solid var(--border); background: transparent; color: var(--muted);
     font: var(--w-med) 12px var(--ui); cursor: pointer;
-    transition: color .14s, border-color .14s;
+    transition: color var(--m-line), border-color var(--m-line);
   }
   .pickup { display: grid; place-items: center; width: 30px; height: 30px; padding: 0 }
   .pickup svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round }
@@ -5328,7 +5328,7 @@
     padding: 5px 8px; border: 0; border-radius: var(--r-xs);
     background: none; color: var(--muted); cursor: pointer; text-align: left;
     font: var(--w-reg) 12.5px var(--ui);
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .pickrow svg { flex: none; width: 14px; height: 14px; fill: none; stroke: var(--ghost); stroke-width: 1.3; stroke-linejoin: round }
   .pickrow span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
@@ -5492,7 +5492,7 @@
     grid-template-columns: 10px 6px minmax(0, 1fr) auto;
     padding: 6px 6px 7px 6px; border-radius: var(--r-sm); cursor: pointer;
     font: var(--w-med) 12.5px var(--ui); color: var(--muted);
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .rmthead:hover { background: var(--overlay); color: var(--text) }
   .rmthead .twist { grid-area: 1 / 1 }
@@ -5527,7 +5527,7 @@
     grid-area: 1 / 4; flex: none; display: grid; place-items: center;
     width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--r-xs);
     background: transparent; color: var(--ghost); cursor: pointer;
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .rmtpick svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round }
   .rmtpick:hover:not(:disabled) { background: var(--raised); color: var(--text) }
@@ -5575,7 +5575,7 @@
     padding: 5px 9px 7px 22px;
     border: 0; background: none; cursor: pointer; text-align: left;
     font: var(--w-med) 11.5px var(--ui); color: var(--faint);
-    transition: color .14s, background .14s;
+    transition: color var(--m-line), background var(--m-line);
   }
   .rmtopen .plus { display: grid; place-items: center; width: 13px; height: 13px; flex: none; color: var(--ghost) }
   .rmtopen .plus svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round }
@@ -5610,7 +5610,7 @@
     padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--r-sm);
     background: none; cursor: pointer; text-align: left;
     font: var(--w-med) 11.5px var(--ui); color: var(--faint);
-    transition: color .14s, background .14s;
+    transition: color var(--m-line), background var(--m-line);
   }
   .paperpick:hover { color: var(--text); background: var(--overlay) }
   .paperpick:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
@@ -5634,7 +5634,7 @@
     width: 13px; height: 13px; margin-top: -5px; border-radius: 50%;
     background: var(--raised); border: 1.5px solid var(--accent);
     box-shadow: 0 1px 3px rgb(0 0 0 / .3);
-    transition: transform .12s var(--ease-out), border-color .12s;
+    transition: transform var(--m-line) , border-color var(--m-line);
   }
   .slider::-moz-range-thumb {
     width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--accent);
@@ -5671,7 +5671,7 @@
   .sessmore {
     width: 100%; padding: 5px 9px 7px 22px; border: 0; background: none; cursor: pointer;
     text-align: left; font: var(--w-reg) 11px var(--mono); color: var(--ghost);
-    transition: color .14s, background .14s;
+    transition: color var(--m-line), background var(--m-line);
   }
   .sessmore:hover { color: var(--text); background: var(--overlay) }
   .sessmore:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
@@ -5682,7 +5682,7 @@
     flex: none; display: grid; place-items: center; width: 20px; height: 20px;
     margin-right: -3px; padding: 0; border: 0; border-radius: var(--r-xs);
     background: transparent; color: var(--faint); cursor: pointer;
-    transition: background .14s, color .14s;
+    transition: background var(--m-line), color var(--m-line);
   }
   .addws svg {
     width: 13px; height: 13px; fill: none; stroke: currentColor;
@@ -5715,7 +5715,7 @@
     display: flex; align-items: center; gap: 8px;
     padding: 7px 9px 8px 11px;
     background: var(--overlay); border-left: 2px solid var(--accent);
-    animation: card .16s var(--ease-out) both;
+    animation: card var(--m-line) both;
   }
   .wsconfirm-t { flex: 1; min-width: 0; display: grid; gap: 1px }
   .wsconfirm-t .q {
@@ -5728,7 +5728,7 @@
     padding: 4px 9px; border-radius: var(--r-xs); cursor: pointer;
     border: 1px solid var(--border); background: transparent; color: var(--muted);
     font: var(--w-med) 11px var(--ui); white-space: nowrap;
-    transition: color .14s, border-color .14s, background .14s;
+    transition: color var(--m-line), border-color var(--m-line), background var(--m-line);
   }
   .wsconfirm-a button:hover { color: var(--text); border-color: var(--faint) }
   .wsconfirm-a button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
@@ -5748,7 +5748,7 @@
     display: grid; padding: 4px; border-radius: var(--r-sm);
     background: var(--float); border: 1px solid var(--border);
     box-shadow: var(--shadow-float);
-    animation: card .14s var(--ease-out) both;
+    animation: card var(--m-line) both;
   }
   .tabmenu button {
     padding: 6px 9px; border: 0; border-radius: var(--r-xs); background: none;
@@ -5767,7 +5767,7 @@
     padding: 9px 11px 10px; border-radius: var(--r-sm);
     background: var(--float); border: 1px solid var(--border);
     box-shadow: var(--shadow-float);
-    animation: tabconfirmin .18s var(--ease-out) both;
+    animation: tabconfirmin var(--m-card) both;
   }
   @keyframes tabconfirmin { from { opacity: 0; transform: translateY(-3px) } to { opacity: 1; transform: none } }
   .tabconfirm .q { font: var(--w-med) 12px var(--ui); color: var(--text) }
@@ -5836,7 +5836,7 @@
   .ctxden {
     padding: 0; border: 0; background: none; cursor: pointer;
     font: inherit; color: inherit; letter-spacing: inherit;
-    border-bottom: 1px dashed var(--faint); transition: color .14s, border-color .14s;
+    border-bottom: 1px dashed var(--faint); transition: color var(--m-line), border-color var(--m-line);
   }
   .ctxden:hover, .ctxden[aria-expanded="true"] { color: var(--accent-ink); border-bottom-color: var(--accent) }
   /* 只有这一处能把缺的窗口补上，所以字段是常驻的，不藏在 hover 或折叠后面。 */
@@ -5852,7 +5852,7 @@
   .ctxwin button {
     flex: none; padding: 4px 11px; border: 1px solid var(--border); border-radius: var(--r-xs);
     background: var(--overlay); color: var(--text); font: var(--w-med) 11px var(--ui); cursor: pointer;
-    transition: background .14s, color .14s, border-color .14s;
+    transition: background var(--m-line), color var(--m-line), border-color var(--m-line);
   }
   .ctxwin button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-ink) }
   .ctxwin button:disabled { color: var(--ghost); cursor: default }
@@ -5861,7 +5861,7 @@
     border-radius: var(--r-md); background: var(--overlay); overflow: visible; cursor: default;
   }
   .ctxbar > i {
-    height: 100%; min-width: 2px; transition: width .3s var(--ease-out);
+    height: 100%; min-width: 2px; transition: width var(--m-panel) ;
     border-radius: var(--r-xs);
   }
   .ctxbar > i:first-child { border-radius: var(--r-md) var(--r-xs) var(--r-xs) var(--r-md) }
@@ -5891,7 +5891,7 @@
   }
   .ctxcapbar > i {
     display: block; height: 100%; border-radius: var(--r-md);
-    background: var(--faint); transition: width .3s var(--ease-out);
+    background: var(--faint); transition: width var(--m-panel) ;
   }
 
   /* 常驻图例：这一块就是为构成而存在的，把构成藏到 hover 后面等于这块只剩一根条。 */
@@ -5933,7 +5933,7 @@
     border-radius: var(--r-sm); background: var(--float);
     border: 1px solid var(--border); box-shadow: var(--shadow-float);
     pointer-events: none;
-    animation: card .14s var(--ease-out) both;
+    animation: card var(--m-line) both;
   }
   .ctxpop .hd { display: flex; align-items: baseline; font: var(--w-med) 11.5px var(--ui); color: var(--text) }
   .ctxpop .hd .n { margin-left: auto; font: var(--w-reg) 10.5px var(--mono); color: var(--muted) }
@@ -6060,7 +6060,7 @@
 .utrack { height: 6px; background: var(--hair); border-radius: var(--r-pill); overflow: hidden }
 /* display:block — an <i> is inline, and an inline box ignores width/height. */
 .ufill { display: block; height: 100%; background: var(--chart); border-radius: var(--r-pill);
-  transition: width .9s var(--ease-spring) }
+  transition: width var(--t-live) var(--ease-spring) }
 
 /* ── 记忆：就地编辑 ─────────────────────────────────────────────────
    保存写成新的一版而不是覆盖，所以这里敢直接给一个可改的框。 */
