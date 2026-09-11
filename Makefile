@@ -1,11 +1,11 @@
-VERSION := $(shell git describe --tags --always --match 'v*' 2>/dev/null || echo dev)
 BUILD_TIME_UTC := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 GIT_COMMIT := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
-# Local dated build version, e.g. v1.38.0-local-20260906-1430. Hour+minute
-# disambiguate multiple builds in one day. `git describe` can return a
-# desktop-module tag (desktop-vX.Y.Z), so pin the main release line here and
-# bump it on release; DATE_VERSION=… overrides wholesale.
-DATE_VERSION := v1.38.3-local-$(shell date +%Y%m%d-%H%M)
+# Local build version, e.g. v1.38.3-local-20260911-1948. A day of local
+# development rebuilds the same sources many times and `git describe` returns
+# an identical string for unchanged sources, so the clock is what tells two
+# builds apart. Upstream releases take their tag from goreleaser, not here;
+# VERSION=… overrides wholesale.
+VERSION := v1.38.3-local-$(shell date +%Y%m%d-%H%M)
 LDFLAGS := -s -w \
 	-X main.version=$(VERSION) \
 	-X main.gitCommit=$(GIT_COMMIT) \
@@ -16,7 +16,7 @@ LDFLAGS := -s -w \
 # webkit2gtk-4.1 + libsoup-3.0). Without it wails probes webkit2gtk-4.0 and
 # fails on a 4.1-only host.
 DESKTOP_LDFLAGS := -s -w \
-	-X main.version=$(DATE_VERSION) \
+	-X main.version=$(VERSION) \
 	-X main.gitCommit=$(GIT_COMMIT) \
 	-X main.buildTimeUTC=$(BUILD_TIME_UTC)
 GOEXE := $(shell go env GOEXE)
