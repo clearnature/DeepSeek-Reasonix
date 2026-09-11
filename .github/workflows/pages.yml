@@ -54,10 +54,18 @@ jobs:
         run: |
           auth_scheme='Bearer'
           auth_header="Authorization: ${auth_scheme} ${GH_TOKEN}"
+          set +e
           status_code="$(curl -sS -o /tmp/pages-response.json -w '%{http_code}' \
             -H "${auth_header}" \
             -H 'Accept: application/vnd.github+json' \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")"
+          curl_status="$?"
+          set -e
+
+          if [ "${curl_status}" != "0" ]; then
+            echo "::error::Failed to query GitHub Pages status: curl exited with code ${curl_status}."
+            exit 1
+          fi
 
           if [ "${status_code}" = "200" ]; then
             echo "enabled=true" >> "${GITHUB_OUTPUT}"
