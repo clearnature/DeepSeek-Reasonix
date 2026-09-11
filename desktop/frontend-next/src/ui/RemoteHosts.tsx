@@ -187,10 +187,6 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
           }}
         />
       ) : null}
-      <div className="rmtcap">
-        {t("远程")}
-        <span className="c">{hosts.length}</span>
-      </div>
       {hosts.map((host) => {
         // Panes on this machine, which is also what makes the connection worth
         // holding: the link goes down with the last of them.
@@ -203,7 +199,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
         return (
           <div className="rmt" key={host.name} data-state={host.status}>
             <div
-              className="rmthead"
+              className="machrow"
               title={host.target}
               role="treeitem"
               aria-expanded={!folded}
@@ -221,7 +217,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
               {/* Always drawn, never only on hover: an entry nobody can see is
                   read as a feature this build does not have. */}
               <button
-                className="rmtpick"
+                className="machpick"
                 disabled={!!busy}
                 title={t("在 {name} 上选择要打开的目录", { name: host.name })}
                 aria-label={t("在 {name} 上选择要打开的目录", { name: host.name })}

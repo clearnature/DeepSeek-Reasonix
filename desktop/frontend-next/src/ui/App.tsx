@@ -601,19 +601,20 @@ export function App({ hub }: { hub: HubPort }) {
             onRename={renameSession}
             onError={fail}
             adder={adder}
-          />
-          {remotes ? (
-            <RemoteHosts
-              hub={hub}
-              hosts={remotes}
-              runtimes={runtimes}
-              active={active}
-              onOpen={openRemotePane}
-              onFocus={focusPane}
-              reload={reloadRemotes}
-              onError={fail}
-            />
-          ) : null}
+          >
+            {remotes ? (
+              <RemoteHosts
+                hub={hub}
+                hosts={remotes}
+                runtimes={runtimes}
+                active={active}
+                onOpen={openRemotePane}
+                onFocus={focusPane}
+                reload={reloadRemotes}
+                onError={fail}
+              />
+            ) : null}
+          </Workspaces>
           </div>
           <div className="railfoot">
             <AccountRow account={account} unread={accountUnread} onOpen={() => showPrefs("account")} />

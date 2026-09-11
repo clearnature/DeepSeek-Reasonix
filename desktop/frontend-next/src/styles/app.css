@@ -815,8 +815,6 @@
      而那正是有人去找它的时候。 */
   .railscroll { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden }
   .railfoot { flex: none; border-top: 1px solid var(--border); padding: 6px 7px }
-  .rail-hd { display: flex; align-items: center; gap: 8px; padding: 16px 14px 8px; flex: none }
-  .rail-hd .lbl { flex: 1 }
   .ws {
     display: block; width: 100%; text-align: left; background: none; border: 0;
     border-left: 2px solid transparent; padding: 8px 12px 9px 11px; cursor: pointer;
@@ -2620,12 +2618,12 @@
      字体是 --ui；mono 留给右边那个限定词。此前右栏并存两套 —— Jobs/MCP 用小标签，
      子代理/运行详情用 12px 深色大标题 —— 一个面板里两种写法，扫下去就不像
      同一张表。只接管字形，布局还是各自的。 */
-  .rail-hd .lbl, .rmtcap, .side .lbl, .dgrp-h {
+  .side .lbl, .dgrp-h {
     font: var(--w-semi) var(--fs-micro) var(--ui); letter-spacing: .14em;
     text-transform: uppercase; color: var(--ghost);
   }
   /* 计数和限定词回到 mono，否则它们跟着标题一起变成了 --ui 大写。 */
-  .rail-hd .lbl .c, .rmtcap .c, .side .lbl .c {
+  .side .lbl .c {
     font: var(--w-reg) var(--fs-micro) var(--mono); letter-spacing: 0; text-transform: none;
   }
   /* 设计稿给块标题下面 9px 的空，我们只给了 3px——标题一矮下来就贴到了正文。 */
@@ -5122,7 +5120,7 @@
     width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.8;
     stroke-linecap: round; stroke-linejoin: round; transition: transform var(--t-card) var(--ease, ease);
   }
-  .wsrow[aria-expanded="true"] .twist svg, .rmthead[aria-expanded="true"] .twist svg,
+  .wsrow[aria-expanded="true"] .twist svg, .machrow[aria-expanded="true"] .twist svg,
   .rmtwsrow[aria-expanded="true"] .twist svg { transform: rotate(90deg) }
   .twist:hover { color: var(--text) }
   /* 这个点说的是「这个项目此刻有面板开着」——它是 .wsrow[data-open] 唯一看得见
@@ -5143,7 +5141,7 @@
   .wsacts { display: flex; align-items: center; gap: 2px }
   /* 常驻，不是 hover 才出现：一个看不见的入口读起来就是没有这个功能。删除比
      新建安静一档，靠的是对比度，不是可见性。 */
-  /* 和栏顶那个加号（.addws）同一套：透明底、描边图标、悬停才上底。
+  /* 和机器行那个加号（.machpick）同一套：透明底、描边图标、悬停才上底。
      之前那个填色芯片 + 内环是另一套语言，放进来就是一块外来的东西。
      图标用 SVG 而不是字符：place-items 对齐的是行盒，一个“+”字形在行盒里靠
      基线坐，看上去永远偏下——那就是“图标没居中”。 */
@@ -5485,25 +5483,22 @@
   /* ── 左栏：远程主机 ───────────────────────────────────────────────
      一台主机一段。同一台机器上的工作区共用一条连接，所以状态长在段头上：
      链路断了，整段一起暗下去，这正是它们的真实关系。 */
-  .rmts { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px }
-  .rmtcap {
-    display: flex; align-items: center; gap: 7px;
-    padding: 0 9px 4px 9px; font: var(--w-med) var(--fs-micro) var(--mono);
-    letter-spacing: var(--track-cap); color: var(--ghost); text-transform: uppercase;
-  }
-  .rmtcap .c { margin-left: auto; letter-spacing: 0; font: var(--w-reg) var(--fs-micro) var(--mono) }
+  /* 机器之间靠留白分开，不靠线：一条线画在这里说的是「上面是本地、下面是远程」
+     —— 而列表里它们是同一种东西，一台机器一组。 */
+  .rmts { margin-top: 8px }
   .rmt { padding-bottom: 2px }
+  .rmt + .rmt { margin-top: 8px }
   /* 同一个节点形状：名字一行，它是哪台机器一行。此前 target 挤在名字右边争同
      一行宽度，而 ada@build.internal 这种长度一来，被截的是主机名。 */
-  .rmthead {
+  .machrow {
     display: grid; gap: 0 7px; align-items: center;
     grid-template-columns: 10px 6px minmax(0, 1fr) auto;
     padding: 6px 6px 7px 6px; border-radius: var(--r-sm); cursor: pointer;
     font: var(--w-med) var(--fs-ui) var(--ui); color: var(--muted);
     transition: background var(--m-line), color var(--m-line);
   }
-  .rmthead:hover { background: var(--overlay); color: var(--text) }
-  .rmthead .twist { grid-area: 1 / 1 }
+  .machrow:hover { background: var(--overlay); color: var(--text) }
+  .machrow .twist { grid-area: 1 / 1 }
   .rmtpip { grid-area: 1 / 2 }
   .rmtname { grid-area: 1 / 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   /* 第二行是“这台机器是谁、此刻怎么样”：地址在左，状态在右。 */
@@ -5520,6 +5515,8 @@
   /* 一台主机只有六种状态，别让它们挤成两种：连上和没连上之间，还有「在连」、
      「在重连」、以及连上了却有转发没挂上 —— 最后这种看起来最像正常。 */
   .rmtpip { width: 6px; height: 6px; border-radius: 50%; background: var(--ghost); flex: none }
+  /* 本机不是「连上的」，它是「在这里的」：实心点留给连接状态，空心环说所在。 */
+  .machrow[data-here] .rmtpip { background: none; box-shadow: inset 0 0 0 1.5px var(--faint) }
   .rmt[data-state="connected"] .rmtpip, .rmtrow[data-state="connected"] .rmtpip { background: var(--net) }
   .rmt[data-state="connecting"] .rmtpip, .rmtrow[data-state="connecting"] .rmtpip,
   .rmt[data-state="reconnecting"] .rmtpip, .rmtrow[data-state="reconnecting"] .rmtpip {
@@ -5531,16 +5528,17 @@
   .rmt[data-state="degraded"] .rmtname { color: var(--text) }
   /* Row 1, column 4 — above the status line, where the local column keeps its
      own add button. Always drawn: an entry revealed on hover reads as absent. */
-  .rmtpick {
+  .machpick {
     grid-area: 1 / 4; flex: none; display: grid; place-items: center;
     width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--r-xs);
     background: transparent; color: var(--ghost); cursor: pointer;
     transition: background var(--m-line), color var(--m-line);
   }
-  .rmtpick svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round }
-  .rmtpick:hover:not(:disabled) { background: var(--raised); color: var(--text) }
-  .rmtpick:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px }
-  .rmtpick:disabled { opacity: .4; cursor: default }
+  .machpick svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round }
+  .machpick:hover:not(:disabled) { background: var(--raised); color: var(--text) }
+  .machpick:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px }
+  .machpick:disabled { opacity: .4; cursor: default }
+  .machpick[data-busy] { opacity: .5; pointer-events: none }
   .rmtnote {
     padding: 0 9px 4px 22px; font: var(--w-reg) var(--fs-meta)/1.5 var(--ui); color: var(--faint);
   }
@@ -5684,21 +5682,6 @@
   .sessmore:hover { color: var(--text); background: var(--overlay) }
   .sessmore:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
 
-  /* 加项目的按钮长在分组标签的尾侧，和栏里其他东西同一种语言：没有边框，只有
-     停下来时的那块底色。栏底那条描边按钮是网页表单的语气，不是这里的。 */
-  .addws {
-    flex: none; display: grid; place-items: center; width: 20px; height: 20px;
-    margin-right: -3px; padding: 0; border: 0; border-radius: var(--r-xs);
-    background: transparent; color: var(--faint); cursor: pointer;
-    transition: background var(--m-line), color var(--m-line);
-  }
-  .addws svg {
-    width: 13px; height: 13px; fill: none; stroke: currentColor;
-    stroke-width: 1.5; stroke-linecap: round;
-  }
-  .addws:hover { background: var(--overlay); color: var(--text) }
-  .addws:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px }
-  .addws[data-busy] { opacity: .5; pointer-events: none }
 
   /* 同名的两个文件夹（隔离副本最常见）靠这一小块区分 */
   .wstag {

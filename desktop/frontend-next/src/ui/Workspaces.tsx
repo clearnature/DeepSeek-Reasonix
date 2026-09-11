@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, memo, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { HubPort, RuntimeView, TreeSession, TreeWorkspace } from "../port/hub";
 import type { Adder } from "./addws";
@@ -26,6 +26,9 @@ interface Props {
   onError: (e: unknown) => void;
   // 打开项目这个动作归 App —— 首启那条横幅按的是同一个它。
   adder: Adder;
+  // 远程主机画在同一棵树里。栏里是一份机器的列表，本机是其中一台 —— 在某台
+  // 机器的某个文件夹里开会话是一件事，此前它被画成了两件。
+  children?: ReactNode;
 }
 
 // How many of a folder's sessions get a row before the rest are summarised.
@@ -34,8 +37,10 @@ interface Props {
 // nodes in the sidebar — more than the transcript at 20000 turns.
 const SHOWN = 30;
 
-function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, onOpen, onFocus, onClose, liveIds, onRename, onError, adder }: Props) {
+function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, onOpen, onFocus, onClose, liveIds, onRename, onError, adder, children }: Props) {
   const [busy, setBusy] = useState("");
+  // 一台机器折起来是看的人的偏好，和主机行同一种做法（RemoteHosts 的 shut）。
+  const [hereShut, setHereShut] = useState(false);
   const [confirm, setConfirm] = useState("");
   const [q, setQ] = useState("");
   const find = useRef<HTMLInputElement>(null);
@@ -157,24 +162,6 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
 
   return (
     <>
-      <div className="rail-hd">
-        <div className="lbl">
-          {t("工作区")}<span className="c">{tree.length}</span>
-        </div>
-        <button
-          className="addws"
-          data-busy={adder.busy ? "" : undefined}
-          title={t("打开或新建项目…")}
-          aria-label={t("打开或新建项目…")}
-          data-action="workspace.add"
-          onClick={() => adder.add("rail")}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M8 3.7v8.6M3.7 8h8.6" />
-          </svg>
-        </button>
-      </div>
-
       <div className="wsfind">
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <path d="M7.2 3.1a4.1 4.1 0 1 0 0 8.2 4.1 4.1 0 0 0 0-8.2M10.3 10.3 13 13" />
@@ -213,8 +200,41 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
       )}
 
       <div className="scroll">
-        <div role="tree" aria-label={t("工作区与会话")}>
-          {shownTree.map((ws) => {
+        <div role="tree" aria-label={t("机器、工作区与会话")}>
+          {/* 本机是列表里的第一台机器，不是另一种东西。加号也落在主机行加号的
+              同一个位置：在这台机器上打开一个文件夹。 */}
+          <div
+            className="machrow"
+            data-here=""
+            role="treeitem"
+            aria-expanded={!hereShut}
+            onClick={() => setHereShut((v) => !v)}
+          >
+            <button className="twist" tabIndex={-1} aria-hidden="true">
+              <svg viewBox="0 0 10 10">
+                <path d="M3.4 1.6 6.8 5 3.4 8.4" />
+              </svg>
+            </button>
+            <i className="rmtpip" aria-hidden="true" />
+            <span className="rmtname">{t("这台机器")}</span>
+            <span className="rmtsub">{t("{n} 个项目", { n: tree.length })}</span>
+            <button
+              className="machpick"
+              data-busy={adder.busy ? "" : undefined}
+              title={t("打开或新建项目…")}
+              aria-label={t("打开或新建项目…")}
+              data-action="workspace.add"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                adder.add("rail");
+              }}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 3.7v8.6M3.7 8h8.6" />
+              </svg>
+            </button>
+          </div>
+          {hereShut ? null : shownTree.map((ws) => {
             // A fold is a resting-state preference; while a query is on it would hide
             // the very rows the query just found.
             const shut = q.trim() ? false : folded.has(ws.root);
@@ -451,8 +471,11 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
               </div>
             );
           })}
-          {tree.length > 0 && shownTree.length === 0 && <div className="ws-empty">{t("没有匹配的会话")}</div>}
-          {tree.length === 0 && <div className="ws-empty">{t("尚无文件夹")}</div>}
+          {!hereShut && tree.length > 0 && shownTree.length === 0 && (
+            <div className="ws-empty">{t("没有匹配的会话")}</div>
+          )}
+          {!hereShut && tree.length === 0 && <div className="ws-empty">{t("尚无文件夹")}</div>}
+          {children}
         </div>
       </div>
 
