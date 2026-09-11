@@ -65,7 +65,7 @@ describe("every deviation is visible", () => {
     ["preset", status({ preset: "delivery" as Preset }), /交付/],
     ["effort", status({ effort: "high" }), /High/],
     ["approval", status({ toolApprovalMode: "auto" as ApprovalMode }), /自动批准/],
-    ["a stricter approval", status({ toolApprovalMode: "dontAsk" as ApprovalMode }), /不打扰/],
+    ["a stricter approval", status({ toolApprovalMode: "dontAsk" as ApprovalMode }), /不询问/],
   ])("surfaces %s", (_what, st, want) => {
     const { container } = draw(st);
     expect(container.textContent).toMatch(want);
@@ -81,7 +81,7 @@ describe("every deviation is visible", () => {
     const { container } = draw(
       status({ preset: "delivery" as Preset, effort: "high", toolApprovalMode: "yolo" as ApprovalMode, plan: true }),
     );
-    for (const want of [/交付/, /High/, /全放行/, /计划/]) expect(container.textContent).toMatch(want);
+    for (const want of [/交付/, /High/, /全部放行/, /计划/]) expect(container.textContent).toMatch(want);
   });
 });
 
@@ -91,13 +91,13 @@ describe("every deviation is visible", () => {
 describe("the quiet may not swallow a fully-permitted session", () => {
   it("shows it, marks it, and does so even with everything else at baseline", () => {
     const { container } = draw(status({ toolApprovalMode: "yolo" as ApprovalMode }));
-    expect(container.querySelector(".polrisk")?.textContent).toContain("全放行");
+    expect(container.querySelector(".polrisk")?.textContent).toContain("全部放行");
     expect(container.querySelector(".polwarn")?.textContent).toBe("⚠");
   });
 
   it("shows it while a plan is running too", () => {
     const { container } = draw(status({ toolApprovalMode: "yolo" as ApprovalMode, plan: true }));
-    expect(container.textContent).toMatch(/全放行/);
+    expect(container.textContent).toMatch(/全部放行/);
     expect(container.textContent).toMatch(/计划/);
   });
 });

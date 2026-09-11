@@ -35,7 +35,7 @@ describe("a read the kernel refuses", () => {
     render(<Versions port={port} />);
     expect(await screen.findByText(said("studio.no_install"))).toBeTruthy();
     expect(screen.queryByText("正在读取版本…")).toBeNull();
-    expect(screen.getByRole("button", { name: "再试一次" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
   });
 
   it("says why on the memory panel instead of calling an unread store empty", async () => {
@@ -44,7 +44,7 @@ describe("a read the kernel refuses", () => {
     render(<Memory port={refusing} />);
     expect(await screen.findByText(said("internal.failed"))).toBeTruthy();
     // The old first paint said this outright, before any answer had arrived.
-    expect(screen.queryByText("读不到记忆。")).toBeNull();
+    expect(screen.queryByText("无法读取记忆。")).toBeNull();
   });
 
   it("says why on the account panel instead of checking forever", () => {
@@ -67,7 +67,7 @@ describe("a store with nothing in it", () => {
     const port = new MockPort() as unknown as AgentPort;
     const empty = { ...port, memories: () => Promise.resolve({ memories: [], recallQuery: "" }) } as unknown as AgentPort;
     render(<Memory port={empty} />);
-    expect(await screen.findByText("还没有记下任何东西。")).toBeTruthy();
+    expect(await screen.findByText("暂无记录。")).toBeTruthy();
     expect(screen.getByText("/remember")).toBeTruthy();
   });
 });

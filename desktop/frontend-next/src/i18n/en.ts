@@ -235,9 +235,9 @@ export const EN: Record<string, string> = {
   "每次动手前问你。": "Asks before every action.",
   "自动": "Auto",
   "低风险自己过，写操作仍然问。": "Low-risk steps proceed; writes still ask.",
-  "不打扰": "Don't interrupt",
+  "不询问": "Don't interrupt",
   "不弹审批；要批准才能做的一概不做。": "No approval prompts; anything needing approval is not done.",
-  "全放行": "Allow all",
+  "全部放行": "Allow all",
   "不问了。只在你完全信任这个工作区时用。": "No more questions. Only for a workspace you fully trust.",
   "均衡": "Balanced",
   "交付": "Delivery",
@@ -292,14 +292,14 @@ export const EN: Record<string, string> = {
   "字体": "Typeface",
   "等宽": "Monospace",
   "清除": "Clear",
-  "回到默认字体": "Back to the default typeface",
+  "恢复默认字体": "Back to the default typeface",
   "默认": "Default",
   "默认 · 本机有 {n} 个可选": "Default · {n} available on this machine",
   "可直接输入字体名称，或选择本机已安装的字体。下方文本会实时预览所选字体；若字体不可用，将自动使用默认字体。":
     "Enter a typeface name or choose one installed on this device. The text below previews your selection; unavailable typefaces fall back to the default.",
   "字体预览 · 中文 Aa Bb 0123": "Typeface preview · Aa Bb 0123",
   "壁纸": "Wallpaper",
-  "选一张图片…": "Choose an image…",
+  "选择图片…": "Choose an image…",
   "换一张…": "Choose another…",
   "浓度": "Strength",
   "压暗": "Dim",
@@ -316,11 +316,11 @@ export const EN: Record<string, string> = {
   "中文": "中文",
   "英文": "English",
   "界面显示语言。模型回复所用的语言与此设置无关，将跟随你发送消息时使用的语言。": "The language of the interface. It does not affect the language the model replies in, which follows the language you write in.",
-  "改语言要重开窗口才生效": "Changing the language reloads the window",
+  "语言更改需重启窗口后生效": "Changing the language reloads the window",
 
   // ── 高级外观 ─────────────────────────────────────────────────────
   "高级外观": "Advanced appearance",
-  "已改：{list}": "Changed: {list}",
+  "已修改：{list}": "Changed: {list}",
   "字体、文字粗细、文字对比度": "Fonts, text weight, text contrast",
 
   // ── 明暗与配色 ───────────────────────────────────────────────────
@@ -331,11 +331,11 @@ export const EN: Record<string, string> = {
   "文字粗细": "Text weight",
   "调整文字的笔画粗细。中文笔画密集，在小字号下加粗有助于提升清晰度。": "Adjusts stroke weight. Dense Chinese glyphs lose definition first at small sizes, and more weight recovers it.",
   "跟随语言": "Match the language",
-  "中文界面用中等字重，西文用常规": "Medium for Chinese, regular for Latin",
+  "中文界面使用中等字重，西文使用常规字重": "Medium for Chinese, regular for Latin",
   "常规": "Regular",
-  "笔画更细，字距看着更松": "Thinner strokes, looser texture",
+  "笔画更细，字距更宽松": "Thinner strokes, looser texture",
   "加粗": "Bolder",
-  "小字号下更实，屏幕远或反光时更好读": "Firmer at small sizes, and in glare",
+  "小字号下更扎实，屏幕距离较远或有反光时更易读": "Firmer at small sizes, and in glare",
   "文字对比度": "Text contrast",
   "柔和": "Soft",
   "更强": "Stronger",
@@ -346,9 +346,9 @@ export const EN: Record<string, string> = {
 
   // ── 连接与来源 ───────────────────────────────────────────────────
   "添加模型来源": "Add a model source",
-  "还没有配置任何模型来源。": "No model sources configured yet.",
+  "尚未配置任何模型来源。": "No model sources configured yet.",
   "正在读取…": "Loading…",
-  "名字": "Name",
+  "名称": "Name",
   "接口地址": "Endpoint address",
   "API Key（留空就不动它）": "API key (leave blank to keep the current one)",
   "接入方式": "Protocol",
@@ -368,11 +368,11 @@ export const EN: Record<string, string> = {
     "The kernel sends no images to this model; changing this has no effect",
   "读图": "Reads images",
   "推理": "Reasoning",
-  "自己写一条": "Write one myself",
-  "连不上": "Unreachable",
+  "手动添加": "Write one myself",
+  "无法连接": "Unreachable",
   "连上了": "Connected",
   "{n} 条规则": "{n} rules",
-  "忘掉": "Forget",
+  "忘记": "Forget",
   "重连": "Reconnect",
   "立即连接": "Connect now",
   "记的是 {had}，但它答的是 {got}。": "Recorded as {had}, but it answers as {got}.",
@@ -398,11 +398,11 @@ export const EN: Record<string, string> = {
   "缺 key": "no key",
   "编辑": "Edit",
   "测试中…": "Testing…",
-  "测一下": "Test it",
+  "测试连接": "Test it",
   "没保存成功": "Not saved",
   "重新问一次有哪些模型": "Ask for the model list again",
   "重新向该端点获取模型列表，适用于端点新增或下架模型之后": "Ask this endpoint for its model list again — use it after the endpoint adds or removes models",
-  "探到了下面这些。都是猜的，不对就改。": "Here is what was probed. All of it is a guess; correct anything wrong.",
+  "探测结果如下。均为推断值，如有不符请直接修改。": "Here is what was probed. All of it is a guess; correct anything wrong.",
   "两种接入方式都能返回模型列表，仅凭列表无法区分；两者的聊天入口路径通常不同，选错会导致聊天报错。如需同时使用，请再添加一次并选择另一种。":
     "Both access methods answer with a model list, and the lists do not tell them apart; their chat endpoints usually sit on different paths, so the wrong choice makes chat fail. To use both, add the source again and pick the other one.",
   "这会为该来源添加另一种接入方式，两者合并为同一个来源，通过「接入方式」切换；若填写新的 key，则视为本机的另一个账号，用量分别计算。":
@@ -411,28 +411,27 @@ export const EN: Record<string, string> = {
   "{n} 个模型": "{n} models",
 
   // ── 外部服务与插件 ───────────────────────────────────────────────
-  "一段 JSON、一行命令，或者一个 https 地址": "A block of JSON, a command line, or an https address",
-  "装到哪": "Where to install it",
-  "所有项目里都能用": "Available in every project",
-  "写进仓库，clone 的人也会拿到": "Written into the repository, so whoever clones it gets it too",
+  "一段 JSON、一行命令，或一个 https 地址": "A block of JSON, a command line, or an https address",
+  "安装位置": "Where to install it",
+  "所有项目均可使用": "Available in every project",
+  "写入仓库，clone 仓库的人也会获得": "Written into the repository, so whoever clones it gets it too",
   "返回": "Back",
   "完成": "Done",
-  "一个仓库地址，或者把文件夹拖进来": "A repository address, or drop a folder in",
+  "仓库地址，或将文件夹拖入此处": "A repository address, or drop a folder in",
   "选文件夹": "Choose a folder",
-  "会加进来": "Will be added",
-  "要你填": "Needs filling in",
-  "用不了": "Unusable",
+  "将添加": "Will be added",
+  "需填写": "Needs filling in",
+  "不可用": "Unusable",
   "更新": "Update",
   "常驻进程": "Long-running process",
 
   // ── 自动化 ───────────────────────────────────────────────────────
-  "删掉": "Delete",
   "要运行的命令": "The command to run",
   "匹配哪些工具（正则，留空=全部）": "Which tools to match (regex; blank means all)",
-  "会真的执行这条命令": "Really runs this command",
-  "能挡住 agent": "Can stop the agent",
-  "这些规则写在哪": "Where these rules live",
-  "读不到 hooks 配置。": "Could not read the hooks config.",
+  "将实际执行该命令": "Really runs this command",
+  "可拦截 agent": "Can stop the agent",
+  "规则写入位置": "Where these rules live",
+  "无法读取 hooks 配置。": "Could not read the hooks config.",
 
   // ── 网络 ─────────────────────────────────────────────────────────
   "代理模式": "Proxy mode",
@@ -442,10 +441,10 @@ export const EN: Record<string, string> = {
   "端口": "Port",
   "用户名（可选）": "Username (optional)",
   "密码（可选）": "Password (optional)",
-  "删掉已保存的密码": "Delete the saved password",
+  "删除已保存的密码": "Delete the saved password",
   "这些地址直连": "Reach these addresses directly",
   "测试目标": "Test target",
-  "读不到网络配置。": "Could not read the network config.",
+  "无法读取网络配置。": "Could not read the network config.",
 
   // ── 命令解释器 ───────────────────────────────────────────────────
   "当前生效": "In effect",
@@ -498,25 +497,24 @@ export const EN: Record<string, string> = {
 
   // ── 版本 ─────────────────────────────────────────────────────────
   "正在读取版本…": "Loading versions…",
-  "读不到版本信息": "Version information could not be read",
-  "再试一次": "Try again",
-  "连不上版本目录": "Cannot reach the version index",
+  "无法读取版本信息": "Version information could not be read",
+  "无法连接版本目录": "Cannot reach the version index",
   "已固定": "Pinned",
   "固定在这里": "Pin here",
   "清除固定": "Clear the pin",
   "恢复自动更新": "Resume automatic updates",
-  "在下面那一行装它，安装完会自动重启。": "Install it from the row below; it restarts itself when done.",
-  "回退之后固定是有意的：否则下次更新会把你放回刚离开的那个版本。":
+  "可在下方对应行安装，安装完成后会自动重启。": "Install it from the row below; it restarts itself when done.",
+  "回退后固定是有意为之：否则下次更新会将你带回刚离开的版本。":
     "Pinning after a rollback is deliberate: otherwise the next update would put you back on the version you just left.",
-  "这条固定已经不再描述现实，自动更新按未固定处理。":
+  "该固定已与实际情况不符，自动更新按未固定处理。":
     "This pin no longer describes anything real, so automatic updates treat it as unpinned.",
-  "切换版本期间请不要关窗口。较新版本写过的会话，回到旧版本后会暂时打不开，升回去就能看。":
+  "切换版本期间请勿关闭窗口。较新版本写入的会话在旧版本中暂时无法打开，升级回去后即可恢复。":
     "Do not close the window while versions are switching. A session written by a newer version will not open on an older one until you upgrade again.",
 
   // ── 账号 ─────────────────────────────────────────────────────────
   "正在检查登录状态…": "Checking sign-in status…",
-  "读不到登录状态": "Sign-in status could not be read",
-  "这里读不到登录状态": "Sign-in status cannot be read here",
+  "无法读取登录状态": "Sign-in status could not be read",
+  "登录状态不可用": "Sign-in status unavailable",
   "上次的登录已过期。": "The previous sign-in has expired.",
   "只清除本地登录凭证，不影响会话、记忆和配置":
     "Clears the local credential only; sessions, memory and config are untouched",
@@ -526,45 +524,45 @@ export const EN: Record<string, string> = {
   // ── 分工与模型 ───────────────────────────────────────────────────
   "对话 · 主模型": "Conversation · main model",
   "跟随主模型": "Follow the main model",
-  "读不到分工。": "Could not read the role assignments.",
+  "无法读取角色分工。": "Could not read the role assignments.",
   "搜索模型": "Search models",
-  "搜模型名，或输入「图」只看能读图的…": "Search by name, or type “vision” for the ones that read images…",
+  "搜索模型名称，或输入「图」仅显示支持读图的模型…": "Search by name, or type “vision” for the ones that read images…",
   "没有匹配的模型。": "No models match.",
-  "读不到模型列表。": "Could not read the model list.",
+  "无法读取模型列表。": "Could not read the model list.",
 
   // ── 记忆 ─────────────────────────────────────────────────────────
-  "还没有记下任何东西。": "Nothing has been written down yet.",
-  "一直生效": "Always on",
-  "相关时才被想起": "Recalled when relevant",
-  "只有这一轮看起来相关时才会被翻出来": "Only surfaced when this turn looks like it needs them",
+  "暂无记录。": "Nothing has been written down yet.",
+  "始终生效": "Always on",
+  "相关时才会检索": "Recalled when relevant",
+  "仅在当前轮次相关时才会被检索": "Only surfaced when this turn looks like it needs them",
   "工作目录与「我的」中的技能。带 / 的可以由你直接调用，其余的由模型根据任务判断是否使用。关掉一个立刻生效：从你的下一条消息起模型不再拿到它，直接点名也调不动，不用新建会话。":
     "Skills from the working directory and from My skills. Those with a / you can invoke yourself; the rest the model decides on per task. Switching one off takes effect at once: from your next message the model no longer has it, and naming it yourself stops working too — no new session needed.",
-  "模型自动发现已关闭：现在只有你点名的技能会跑。开关立刻生效，从你的下一条消息起，不用新建会话。":
+  "模型自动发现已关闭：仅显式指定的技能会运行。开关立即生效，自下一条消息起，无需新建会话。":
     "Model discovery is off: only the skills you name by hand will run. The switch takes effect at once, from your next message — no new session needed.",
-  "每一轮都在提示词里，等同于你给它的长期指令":
+  "每轮均写入提示词，等同于长期指令":
     "In the prompt every turn — the same standing as an instruction you gave it yourself",
-  "，用上了 {n} 条": " · {n} of them used",
-  "，一条都没用上": " · none of them used",
-  "上一轮用上了": "Used last turn",
-  "上一轮因为「{why}」被翻出来": "Surfaced last turn because of “{why}”",
-  "上一轮从「{q}」出发翻了一次记忆": "Last turn searched memory from “{q}”",
+  "，命中 {n} 条": " · {n} of them used",
+  "，未命中任何条目": " · none of them used",
+  "上一轮已使用": "Used last turn",
+  "上一轮因「{why}」被检索到": "Surfaced last turn because of “{why}”",
+  "上一轮以「{q}」为线索检索了一次记忆": "Last turn searched memory from “{q}”",
   "只能点名": "By name only",
   "只能模型自选": "Model's choice only",
   "调不到": "Unreachable",
-  "改完文件自动格式化": "Format files after they are edited",
-  "每次写入之后跑一遍格式化命令，失败了只提醒，不打断":
+  "文件修改后自动格式化": "Format files after they are edited",
+  "每次写入后执行一次格式化命令；失败时仅提醒，不中断":
     "Runs a formatter after every write; a failure only warns and does not interrupt",
-  "写密钥文件前问我一声": "Ask me before writing a secrets file",
-  "碰 .env 之类的路径时挡下来，由你决定要不要放行":
+  "写入密钥文件前请求确认": "Ask me before writing a secrets file",
+  "访问 .env 一类路径时拦截，由你决定是否放行":
     "Stops on paths like .env and leaves the call to you",
   "任务做完通知我": "Notify me when a task finishes",
   "一轮结束时响一下，人不用一直盯着": "Chimes at the end of a turn so nobody has to watch it",
-  "收工前跑一遍测试": "Run the tests before wrapping up",
-  "一轮结束时跑测试，红了会作为提醒显示出来": "Runs the tests at the end of a turn; a red one shows up as a warning",
+  "结束前执行一次测试": "Run the tests before wrapping up",
+  "每轮结束时运行测试，失败时以提醒形式显示": "Runs the tests at the end of a turn; a red one shows up as a warning",
   "已过期": "Expired",
-  "读不到记忆。": "Could not read the memory.",
-  "读不到记忆": "Memory could not be read",
-  "要自己记一条：在输入框里用 {cmd} 写下来。": "To write one yourself, use {cmd} in the composer.",
+  "无法读取记忆。": "Could not read the memory.",
+  "无法读取记忆": "Memory could not be read",
+  "如需手动记录，请在输入框中使用 {cmd} 命令。": "To write one yourself, use {cmd} in the composer.",
   "正在读取记忆…": "Loading memory…",
 
   // ── 其余 ─────────────────────────────────────────────────────────
@@ -580,13 +578,13 @@ export const EN: Record<string, string> = {
   "尚未安装配色包。将包含 theme.json 的目录放入 themes/ 后即会显示在此处。": "No palettes installed. Put a folder containing a theme.json into themes/ and it appears here.",
 
   // ── 常量表：档位、分区、状态 ─────────────────────────────────────
-  "做到模型认为做完为止。日常用这档": "Runs until the model considers it done. The everyday setting",
-  "改了东西就得验证、复核、签收，少一样都不算做完":
+  "以模型判定任务完成为准，适用于日常任务": "Runs until the model considers it done. The everyday setting",
+  "任何修改均需经过验证、复核与签收，缺一不可视为完成":
     "Anything changed must be verified, reviewed and signed off; short of that it is not done",
-  "每次动手前问你": "Asks before every action",
-  "低风险自己过，写操作仍然问": "Low-risk steps proceed; writes still ask",
-  "不弹审批；要批准才能做的一概不做": "No approval prompts; anything needing approval is not done",
-  "不问了。只在你完全信任这个工作区时用": "Stops asking. Only for a workspace you fully trust",
+  "每次执行操作前请求确认": "Asks before every action",
+  "低风险操作自动放行，写入操作仍需确认": "Low-risk steps proceed; writes still ask",
+  "不显示审批请求；需要批准的操作一律不执行": "No approval prompts; anything needing approval is not done",
+  "不再请求确认，仅在完全信任当前工作区时使用": "Stops asking. Only for a workspace you fully trust",
   "会话": "Session",
   "工具与权限": "Tools and permissions",
   "高级": "Advanced",
@@ -607,25 +605,25 @@ export const EN: Record<string, string> = {
   "这个项目": "This project",
   "导出": "Export",
   "{n} 个已指派": "{n} assigned",
-  "所有分工都跟着它": "Every role follows it",
+  "所有角色均跟随主模型": "Every role follows it",
   "已指派": "Assigned",
   "{name}用哪个模型": "Which model for {name}",
-  "主模型看不了的图现在没人读得了 —— 会在发出去之前被丢掉。给「看图」指一个带「读图」标签的模型就能接上。":
+  "主模型无法识别的图片当前无人处理 —— 会在发送前被丢弃。为「看图」指定一个带「读图」标签的模型即可接管。":
     "Images the main model cannot read now have no reader — they are dropped before anything is sent. Assign Vision a model tagged as reading images and they get through.",
-  "只读地出计划": "Drafts a plan, read-only",
-  "派出去的活": "Work sent out",
+  "仅生成计划，不写入": "Drafts a plan, read-only",
+  "派发的子任务": "Work sent out",
   "看图": "Vision",
-  "读主模型看不了的图": "Reads images the main model cannot",
+  "处理主模型无法识别的图片": "Reads images the main model cannot",
   "复核": "Review",
-  "独立审这一轮": "Audits this turn independently",
+  "独立复核本轮": "Audits this turn independently",
   "认得 && 和 ||，但语法仍然是 PowerShell，不是 bash":
     "Understands && and ||, but the syntax is still PowerShell, not bash",
   "不认 && 和 ||，链式命令得拆成两条": "Does not accept && or ||; chained commands must be split in two",
   "保存这个路径": "Save this path",
   "验证中…": "Verifying…",
-  "{n} 个分工跟着它": "{n} roles follow it",
+  "{n} 个角色跟随主模型": "{n} roles follow it",
   "自己找，优先真 bash。这台机器上会选到": "Finds one itself, preferring a real bash. On this machine that picks",
-  "用系统或环境变量里已经设好的代理": "Uses whatever proxy the system or the environment already sets",
+  "使用系统或环境变量中已配置的代理": "Uses whatever proxy the system or the environment already sets",
   "{n} 个": "{n}",
   "{n} 个技能": "{n} skills",
   "{n} 个子代理": "{n} subagents",
@@ -635,10 +633,10 @@ export const EN: Record<string, string> = {
   "{n} 套配色": "{n} palettes",
   "{n} 条钩子": "{n} hooks",
   "{n} 个服务": "{n} services",
-  "{on}/{all} 开着": "{on}/{all} on",
+  "{on}/{all} 已启用": "{on}/{all} on",
   "打包中…": "Packing…",
-  "导出好了。": "Exported.",
-  "存到 {path}。": "Saved to {path}.",
+  "导出完成。": "Exported.",
+  "已保存至 {path}。": "Saved to {path}.",
   "{n} 个命令": "{n} commands",
 
   // ── 面板标签与关闭确认 ───────────────────────────────────────────
@@ -662,16 +660,16 @@ export const EN: Record<string, string> = {
   "准备中…": "Starting…",
 
   // ── 插件安装 ─────────────────────────────────────────────────────
-  "这个来源里没有能装的东西": "There is nothing installable at that source",
+  "该来源中没有可安装的内容": "There is nothing installable at that source",
   "重装 {name}": "Reinstall {name}",
-  "这一版新增了：{list}": "This version adds: {list}",
-  "没有新增会执行的东西。": "Nothing new that runs.",
+  "本版本新增：{list}": "This version adds: {list}",
+  "没有新增的可执行内容。": "Nothing new that runs.",
   "更新中…": "Updating…",
   "安装中…": "Installing…",
-  "装上": "Install",
-  "读不到 {name} 的来源": "Cannot read {name}'s source",
+  "安装": "Install",
+  "无法读取 {name} 的来源": "Cannot read {name}'s source",
   "正在读取 {name} 的来源…": "Reading {name}'s source…",
-  "核心给出的判定（{n}）": "The kernel's assessment ({n})",
+  "内核给出的判定（{n}）": "The kernel's assessment ({n})",
 
   // ── 来源与自动化 ─────────────────────────────────────────────────
   "{name} 的接入方式": "Protocol for {name}",
@@ -679,7 +677,7 @@ export const EN: Record<string, string> = {
   "{name} 的思考参数": "Thinking parameter for {name}",
   "记的是 {had}，但它答的是 {got}": "Recorded as {had}, but it answers as {got}",
   "没有打开项目": "No project open",
-  "读不了：": "could not be read: ",
+  "无法读取：": "could not be read: ",
   "插件带来的 {n} 条": "{n} from plugins",
   "超时了，这一步会被当成失败": "Timed out — this step counts as a failure",
 
@@ -708,7 +706,7 @@ export const EN: Record<string, string> = {
 
   // ── 作用范围：一处例外归谁管 ─────────────────────────────────────
   "仅本项目": "This project only",
-  "恢复成跟随全局": "Go back to following the global setting",
+  "恢复为跟随全局": "Go back to following the global setting",
   "{n} 个工作树共用这份设置": "{n} worktrees share this setting",
   "不是 git 仓库，按目录单独记": "Not a git repository — kept per directory",
   "{n} 项只在这里生效": "{n} settings apply only here",
@@ -723,9 +721,9 @@ export const EN: Record<string, string> = {
   "没有匹配的项目。": "No project matches.",
 
   // ── 接入外部服务 ─────────────────────────────────────────────────
-  "不写进仓库，别人不会拿到": "stays out of the repository; nobody else gets it",
-  "clone 的人也会拿到": "whoever clones it gets it too",
-  "这会改动仓库里的配置文件，是一处等着提交的改动。":
+  "不写入仓库，他人不会获得": "stays out of the repository; nobody else gets it",
+  "clone 仓库的人也会获得": "whoever clones it gets it too",
+  "这会修改仓库中的配置文件，属于一处待提交的改动。":
     "This edits a config file in the repository, and leaves a change waiting to be committed.",
 
   // ── 首次连接 ─────────────────────────────────────────────────

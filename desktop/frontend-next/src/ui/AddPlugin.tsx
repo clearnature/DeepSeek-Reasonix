@@ -12,9 +12,9 @@ const PLACEHOLDER = `https://github.com/acme/review-kit
 ~/projects/my-plugin`;
 
 const RISK_TITLE: Record<string, string> = {
-  high: "这些会在你机器上跑东西",
-  medium: "这些会改变可用的能力",
-  low: "这些只是加文件",
+  high: "以下项目会在本机运行程序",
+  medium: "以下项目会改变可用能力",
+  low: "以下项目仅添加文件",
 };
 
 const ORDER = ["high", "medium", "low"];
@@ -53,7 +53,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
       // "Nothing installable here" is the plan's own answer, and its reason is
       // more useful than anything this component could invent.
       if (!p.actions?.length) {
-        setError(p.error || p.next || t("这个来源里没有能装的东西"));
+        setError(p.error || p.next || t("该来源中没有可安装的内容"));
         setPlan(null);
         return;
       }
@@ -131,7 +131,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
                 ? `${updating.name} ${updating.version} → ${version(plan.actions)}`
                 : t("重装 {name}", { name: updating.name })}
             </span>
-            <span className="why">{gained.length ? t("这一版新增了：{list}", { list: gained.join("、") }) : t("没有新增会执行的东西。")}</span>
+            <span className="why">{gained.length ? t("本版本新增：{list}", { list: gained.join("、") }) : t("没有新增的可执行内容。")}</span>
           </div>
         )}
         {groups.map((g) => (
@@ -148,7 +148,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
           </div>
         ))}
         <div className="acts">
-          <span className="note">{t(updating ? "覆盖已装的那一份" : "装到「我的」，所有项目都能用")}</span>
+          <span className="note">{t(updating ? "覆盖已安装的版本" : "安装到「我的」，所有项目均可使用")}</span>
           <button
             className="act"
             data-action={updating ? "extensions.cancel" : "extensions.back"}
@@ -163,7 +163,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
             disabled={busy}
             onClick={() => void install()}
           >
-            {t(busy ? (updating ? "更新中…" : "安装中…") : updating ? "更新" : "装上")}
+            {t(busy ? (updating ? "更新中…" : "安装中…") : updating ? "更新" : "安装")}
           </button>
         </div>
         {error && <div className="why">{error}</div>}
@@ -177,7 +177,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
     return (
       <div className="addpkg" data-stage="reading">
         <div className="find" data-lvl={error ? "err" : undefined}>
-          <span className="t">{error ? t("读不到 {name} 的来源", { name: updating.name }) : t("正在读取 {name} 的来源…", { name: updating.name })}</span>
+          <span className="t">{error ? t("无法读取 {name} 的来源", { name: updating.name }) : t("正在读取 {name} 的来源…", { name: updating.name })}</span>
           <span className="why">{error || updating.source}</span>
         </div>
         <div className="acts">
@@ -204,7 +204,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
         }}
       />
       <div className="acts">
-        <span className="note">{t("一个仓库地址，或者把文件夹拖进来")}</span>
+        <span className="note">{t("仓库地址，或将文件夹拖入此处")}</span>
         <button className="act" onClick={() => void pick()}>
           {t("选文件夹")}
         </button>
@@ -218,7 +218,7 @@ export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
           disabled={!text.trim() || busy}
           onClick={() => void look()}
         >
-          {t(busy ? "读取中…" : "看看是什么")}
+          {t(busy ? "读取中…" : "查看内容")}
         </button>
       </div>
       {error && <div className="why">{error}</div>}
@@ -249,26 +249,26 @@ function Candidate({ a }: { a: PluginAction }) {
       ))}
       {adds.length > 0 && (
         <div className="risk">
-          <span className="lb">{t("会加进来")}</span>
+          <span className="lb">{t("将添加")}</span>
           <span className="dt">{adds.join(" · ")}</span>
         </div>
       )}
       {Object.keys(a.env ?? {}).map((k) => (
         <div className="risk" data-kind="secret" key={k}>
-          <span className="lb">{t("要你填")}</span>
+          <span className="lb">{t("需填写")}</span>
           <span className="dt">{k}</span>
         </div>
       ))}
       {a.skippedCapabilities?.map((s) => (
         <div className="risk" key={s.capability + s.reason}>
-          <span className="lb">{t("用不了")}</span>
+          <span className="lb">{t("不可用")}</span>
           <span className="dt">{s.capability}</span>
           <span className="why">{s.reason}</span>
         </div>
       ))}
       {a.riskReasons?.length ? (
         <details className="reasons">
-          <summary>{t("核心给出的判定（{n}）", { n: a.riskReasons.length })}</summary>
+          <summary>{t("内核给出的判定（{n}）", { n: a.riskReasons.length })}</summary>
           {a.riskReasons.map((r) => (
             <p key={r}>{r}</p>
           ))}
@@ -287,20 +287,20 @@ function executes(a: PluginAction): { label: string; detail: string; why?: strin
     out.push({
       label: "常驻进程",
       detail: [a.runtime.command, ...(a.runtime.args ?? [])].join(" "),
-      why: "它跑在 Reasonix 内部，能读整个会话、绕过权限、直接操作这台机器",
+      why: "运行于 Reasonix 内部，可读取整个会话、绕过权限并直接操作本机",
     });
   }
   if (a.hookCount) {
-    out.push({ label: "自动化钩子", detail: `${a.hookCount} 条`, why: "会在会话的生命周期里自动执行" });
+    out.push({ label: "自动化钩子", detail: `${a.hookCount} 条`, why: "在会话生命周期内自动执行" });
   }
   if (a.toolCount) {
-    out.push({ label: "外部服务", detail: `${a.toolCount} 个 MCP 服务`, why: "它给 agent 的能力和内置工具一样真实" });
+    out.push({ label: "外部服务", detail: `${a.toolCount} 个 MCP 服务`, why: "为 agent 提供的能力与内置工具等同" });
   }
   if (a.kind === "mcp" && a.command) {
-    out.push({ label: "会启动", detail: [a.command, ...(a.args ?? [])].join(" ") });
+    out.push({ label: "将启动", detail: [a.command, ...(a.args ?? [])].join(" ") });
   }
   if (a.kind === "mcp" && a.url) {
-    out.push({ label: "会连到", detail: a.url });
+    out.push({ label: "将连接至", detail: a.url });
   }
   return out;
 }

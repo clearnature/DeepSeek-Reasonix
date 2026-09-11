@@ -13,7 +13,7 @@ import { reason } from "../i18n/kernel";
 const MCP_STATE: Record<string, string> = {
   ready: "已连接",
   connecting: "连接中",
-  failed: "连不上",
+  failed: "无法连接",
   disabled: "已关闭",
   standby: "待命 · 首次调用时启动",
   idle: "未连接",
@@ -78,10 +78,10 @@ export function ServerRow({
   const confirm = confirming && (
     <div className="confirm">
       <span className="q">
-        {t("把 {name} 从 {where} 里删掉？只是想暂时不用的话，关掉开关就够了。", { name: m.name, where: m.source || t("配置") })}
+        {t("从 {where} 中删除 {name}？若只是暂时停用，关闭开关即可。", { name: m.name, where: m.source || t("配置") })}
       </span>
       <button className="act" data-action="mcp.remove" data-target={m.name} data-value="cancel" onClick={() => setConfirming(false)}>
-        {t("算了")}
+        {t("取消")}
       </button>
       <button
         className="act danger"
@@ -95,7 +95,7 @@ export function ServerRow({
             setConfirming(false);
             // A lower-precedence declaration with the same name may have taken
             // over; saying so beats a list that looks like the delete failed.
-            if (r.stillConfigured) setFailed(t("同名的另一处声明现在生效了，这一行不会消失。"));
+            if (r.stillConfigured) setFailed(t("同名的另一处声明已生效，该行不会消失。"));
           })
         }
       >
@@ -119,10 +119,10 @@ export function ServerRow({
   // 没有 —— 拿名字或配置凑一句出来，等于替它编。
   const about = (!!m.description || (!tools.length && m.state !== "connecting")) && (
     <div className="srv-ab">
-      <span className="ds">{m.description || t("这个服务没写自我说明。")}</span>
+      <span className="ds">{m.description || t("该服务未提供自我说明。")}</span>
       {m.remembered && (
-        <i className="w" title={t("现在没连着，这是上一次连上时它自己给的答复。")}>
-          {t(m.stale ? "上次连上时的记录 · 声明改过，可能对不上了" : "上次连上时的记录")}
+        <i className="w" title={t("当前未连接，以下是上次连接时它返回的内容。")}>
+          {t(m.stale ? "上次连上时的记录 · 声明改过，可能对不上了" : "上次连接时的记录")}
         </i>
       )}
     </div>
@@ -152,9 +152,9 @@ export function ServerRow({
           // 你的东西。schema 被拒的那些照列，但写明为什么调不了。
           <div className="trow" key={tool.name} data-bad={tool.error ? "" : undefined}>
             <span className="nm">{tool.name}</span>
-            <span className="ds">{tool.error || tool.description || t("没有写说明")}</span>
+            <span className="ds">{tool.error || tool.description || t("未提供说明")}</span>
             <span className="face">
-              {tool.destructive ? <i className="dg">{t("会改东西")}</i> : tool.readOnly ? <i className="ro">{t("只读")}</i> : null}
+              {tool.destructive ? <i className="dg">{t("会修改数据")}</i> : tool.readOnly ? <i className="ro">{t("只读")}</i> : null}
             </span>
           </div>
         ))}

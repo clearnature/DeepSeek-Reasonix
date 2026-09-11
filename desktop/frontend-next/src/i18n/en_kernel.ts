@@ -141,7 +141,7 @@ export const EN_KERNEL: Record<string, string> = {
   "这台服务器没有开放权限编辑": "This server does not open permission editing",
   "这台服务器没有开放沙箱编辑": "This server does not open sandbox editing",
   "这台服务器没有开放角色编辑": "This server does not open role editing",
-  "这台服务器没有开放搬迁存储": "This server does not open storage moves",
+  "这台服务器未开放存储迁移": "This server does not open storage moves",
   "已经有一个搬迁在跑了，等它结束": "A move is already running — wait for it to finish",
   "这不是一个插件名": "That is not a plugin name",
   "这个插件没有安装": "That plugin is not installed",

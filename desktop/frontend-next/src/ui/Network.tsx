@@ -6,9 +6,9 @@ import { reason } from "../i18n/kernel";
 // Three modes, not six input boxes. Nobody's first question is whether they want
 // http_proxy or https_proxy — it is "use what the system uses" or "here is mine".
 const MODES: [string, string, string][] = [
-  ["auto", "跟随系统", "用系统或环境变量里已经设好的代理"],
-  ["custom", "手动设置", "自己指定一个代理服务器"],
-  ["off", "直连", "谁的代理都不走"],
+  ["auto", "跟随系统", "使用系统或环境变量中已配置的代理"],
+  ["custom", "手动设置", "手动指定代理服务器"],
+  ["off", "直连", "不使用任何代理"],
 ];
 
 const STEP_LABEL: Record<string, string> = {
@@ -33,7 +33,7 @@ export function Network({ port }: { port: AgentPort }) {
     port.network().then(setNet).catch(() => setNet(null));
   }, [port]);
 
-  if (!net) return <div className="empty">{t("读不到网络配置。")}</div>;
+  if (!net) return <div className="empty">{t("无法读取网络配置。")}</div>;
 
   const patch = (p: Partial<NetworkSettings>) => setNet({ ...net, ...p });
 
@@ -129,7 +129,7 @@ export function Network({ port }: { port: AgentPort }) {
             <input
               type="password"
               value={password}
-              placeholder={t(net.hasPassword ? "已保存，留空即保持不变" : "可以写 ${PROXY_PASSWORD}")}
+              placeholder={t(net.hasPassword ? "已保存，留空即保持不变" : "可填写 ${PROXY_PASSWORD}")}
               onChange={(e) => {
                 setPassword(e.target.value);
                 setClear(false);
@@ -139,7 +139,7 @@ export function Network({ port }: { port: AgentPort }) {
           {net.hasPassword && !password && (
             <label className="chk">
               <input type="checkbox" checked={clearPassword} onChange={(e) => setClear(e.target.checked)} />
-              <span>{t("删掉已保存的密码")}</span>
+              <span>{t("删除已保存的密码")}</span>
             </label>
           )}
           <label className="grow full">
@@ -155,7 +155,7 @@ export function Network({ port }: { port: AgentPort }) {
 
       <div className="acts">
         <button className="act" data-action="network.diagnose" disabled={!!busy} onClick={() => void diagnose()}>
-          {t(busy === "test" ? "测试中…" : "测一下")}
+          {t(busy === "test" ? "测试中…" : "测试连接")}
         </button>
         <button className="act" data-action="network.save" data-primary disabled={!!busy} onClick={() => void save()}>
           {t(busy === "save" ? "保存中…" : "保存")}

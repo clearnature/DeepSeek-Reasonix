@@ -57,7 +57,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
 
   const sent = useRef<number | null>(null);
 
-  if (!box) return <div className="empty">{t("读不到压缩配置。")}</div>;
+  if (!box) return <div className="empty">{t("无法读取压缩配置。")}</div>;
 
   const save = async (value: number) => {
     setBusy(true);
@@ -118,7 +118,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
     <>
       <div className="cmp">
         {off ? (
-          <p className="note">{t("这个来源没有声明上下文窗口，所以不会自动整理上下文。先在右侧「上下文」里填上这个模型的窗口。")}</p>
+          <p className="note">{t("该来源未声明上下文窗口，因此不会自动整理上下文。请先在右侧「上下文」中填写该模型的窗口大小。")}</p>
         ) : (
           <>
             <div className="cmpg">
@@ -175,7 +175,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
             <span className="tx">
               <span className="lb">{t("经济维护阈值")}</span>
               <span className="ds">
-                {t("可见输入到这个大小就整理，与模型声明的窗口无关。默认 {n}。", { n: tokens(box.default_soft_limit) })}
+                {t("可见输入达到该大小即整理，与模型声明的窗口无关。默认 {n}。", { n: tokens(box.default_soft_limit) })}
               </span>
             </span>
             <div className="seg" data-text role="group" aria-label={t("经济维护阈值")}>
@@ -232,7 +232,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
             <span className="tx">
               <span className="lb">{t("容量保护")}</span>
               <span className="ds">
-                {t("模型窗口的 {p}%，永远生效 —— 关掉经济阈值关不掉它。", { p: String(Math.round(box.ratio * 100)) })}
+                {t("模型窗口的 {p}%，始终生效 —— 关闭经济阈值不会影响它。", { p: String(Math.round(box.ratio * 100)) })}
               </span>
             </span>
             <span className="sc">{off ? "—" : tokens(capacity)}</span>

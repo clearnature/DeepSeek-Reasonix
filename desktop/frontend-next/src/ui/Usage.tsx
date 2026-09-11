@@ -170,7 +170,7 @@ export function Usage({ port }: { port: AgentPort }) {
   const hitRate = input > 0 ? (report!.cache_hit / input) * 100 : 0;
 
   if (err) return <div className="uerr">{err}</div>;
-  if (!report) return <div className="uwait">{t("正在读记录…")}</div>;
+  if (!report) return <div className="uwait">{t("正在读取记录…")}</div>;
 
   return (
     <div className="usage">
@@ -193,7 +193,7 @@ export function Usage({ port }: { port: AgentPort }) {
           {report.costEstimated && <span className="uhero-scope">{t("含估算")}</span>}
         </div>
         <p className="uhero-note">
-          {t("这段时间送进去的 {tok} 输入 tokens 里，{rate}% 命中前缀缓存 —— 命中的部分按缓存价计费，比未命中便宜一个量级。", {
+          {t("该时间段送入的 {tok} 输入 tokens 中，{rate}% 命中前缀缓存 —— 命中部分按缓存价计费，较未命中低一个数量级。", {
             tok: fmtTokens(input), rate: hitRate.toFixed(1),
           })}
         </p>
@@ -203,7 +203,7 @@ export function Usage({ port }: { port: AgentPort }) {
         <div className="utile"><div className="k">Tokens</div><div className="v">{fmtTokens(report.tokens)}</div>
           <div className="m">{t("其中输入 {n}：命中 {a} · 未命中 {b}", { n: fmtTokens(input), a: fmtTokens(report.cache_hit), b: fmtTokens(report.cache_miss) })}</div></div>
         <div className="utile"><div className="k">{t("缓存命中率")}</div><div className="v">{hitRate.toFixed(1)}%</div>
-          <div className="m">{t("越高越省 —— 前缀保持稳定")}</div></div>
+          <div className="m">{t("命中率越高成本越低 —— 需保持前缀稳定")}</div></div>
         <div className="utile"><div className="k">Turns</div><div className="v">{fmtTokens(report.turns)}</div>
           <div className="m">{t("{n} 次 API 请求", { n: fmtTokens(report.requests) })}</div></div>
         <div className="utile"><div className="k">{t("活跃天数")}</div><div className="v">{report.active_days}</div>

@@ -73,11 +73,11 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
   if (unread) {
     return (
       <div className="find" data-lvl="warn" role="alert">
-        <span className="t">{t("读不到登录状态")}</span>
+        <span className="t">{t("无法读取登录状态")}</span>
         <span className="why">
           {unread}
           <button className="lnk" data-action="account.reload" onClick={reload}>
-            {t("再试一次")}
+            {t("重试")}
           </button>
         </span>
       </div>

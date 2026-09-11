@@ -116,10 +116,10 @@ function Package({
   const confirm = confirming && (
     <div className="confirm">
       <span className="q">
-        {t("删掉 {name}？它带来的技能、命令和服务会一起消失。只是想暂时不用的话，关掉开关就够了。", { name: p.name })}
+        {t("删除 {name}？其提供的技能、命令与服务将一并移除。若只是暂时停用，关闭开关即可。", { name: p.name })}
       </span>
       <button className="act" onClick={() => setConfirming(false)}>
-        {t("算了")}
+        {t("取消")}
       </button>
       <button
         className="act danger"
@@ -134,7 +134,7 @@ function Package({
           })
         }
       >
-        {t(busy === "remove" ? "移除中…" : "删掉")}
+        {t(busy === "remove" ? "移除中…" : "删除")}
       </button>
     </div>
   );
@@ -163,10 +163,10 @@ function Package({
       ))}
       {exported && (
         <div className="why">
-          {exported.savedTo ? t("存到 {path}。", { path: exported.savedTo }) : t("导出好了。")}
+          {exported.savedTo ? t("已保存至 {path}。", { path: exported.savedTo }) : t("导出完成。")}
           {exported.required.length
             ? `里面的密钥值已经去掉，装它的人要自己提供：${exported.required.join("、")}`
-            : "这个包里没有需要对方填的密钥。"}
+            : "该包不需要填写任何密钥。"}
         </div>
       )}
     </>

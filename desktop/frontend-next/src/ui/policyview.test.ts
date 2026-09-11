@@ -51,9 +51,9 @@ describe("what a deviation is allowed to cost the shelf", () => {
     ["balanced", "high", "ask", "High"],
     ["delivery", "high", "ask", "交付 · High"],
     ["balanced", "auto", "auto", "自动批准"],
-    ["balanced", "auto", "dontAsk", "不打扰"],
-    ["balanced", "auto", "yolo", "全放行"],
-    ["delivery", "high", "yolo", "交付 · High · 全放行"],
+    ["balanced", "auto", "dontAsk", "不询问"],
+    ["balanced", "auto", "yolo", "全部放行"],
+    ["delivery", "high", "yolo", "交付 · High · 全部放行"],
   ] as [Preset, string, ApprovalMode, string][])("reads %s/%s/%s as %s", (p, e, m, want) => {
     expect(shelf(at(p, e, m))).toBe(want);
   });
@@ -78,7 +78,7 @@ describe("the two postures that must never be quiet", () => {
   // forget they are in, and forgetting it is what costs a workspace.
   it("keeps a fully-permitted session visible and toned", () => {
     const s = at("balanced", "auto", "yolo");
-    expect(s.ready && s.approval).toBe("全放行");
+    expect(s.ready && s.approval).toBe("全部放行");
     expect(s.ready && s.danger).toBe(true);
   });
 
@@ -86,7 +86,7 @@ describe("the two postures that must never be quiet", () => {
   // asked about. Hidden, it reads as "Reasonix suddenly changes nothing".
   it("keeps a session that refuses rather than asks visible, and not as danger", () => {
     const s = at("balanced", "auto", "dontAsk");
-    expect(s.ready && s.approval).toBe("不打扰");
+    expect(s.ready && s.approval).toBe("不询问");
     expect(s.ready && s.danger).toBeUndefined();
   });
 
@@ -160,7 +160,7 @@ describe("what the quiet may never swallow", () => {
   it("never goes quiet on a fully-permitted session, whatever else is baseline", () => {
     const s = at("balanced", "auto", "yolo");
     expect(deviates(s)).toBe(true);
-    expect(shelf(s)).toContain("全放行");
+    expect(shelf(s)).toContain("全部放行");
     expect(s.ready && s.danger).toBe(true);
   });
 });

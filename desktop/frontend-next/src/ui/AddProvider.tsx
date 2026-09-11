@@ -129,7 +129,7 @@ export function AddProvider({
 
       {err && (
         <div className="find" data-lvl="warn">
-          <span className="t">{t("连不上")}</span>
+          <span className="t">{t("无法连接")}</span>
           <span className="why">{err}</span>
         </div>
       )}
@@ -137,11 +137,11 @@ export function AddProvider({
       {probe && (
         <>
           {/* The heading says these are guesses, so no row has to repeat it. */}
-          <p className="acct-note">{t("探到了下面这些。都是猜的，不对就改。")}</p>
+          <p className="acct-note">{t("探测结果如下。均为推断值，如有不符请直接修改。")}</p>
 
           <div className="fields">
             <label className="grow">
-              <span>{t("名字")}</span>
+              <span>{t("名称")}</span>
               <input value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
             </label>
             <label className="grow">

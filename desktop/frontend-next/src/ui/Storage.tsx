@@ -13,10 +13,10 @@ import type { StoragePlan, StorageRoot, StorageState } from "../port/storage";
 // than hiding storage someone is looking for.
 const NAMED: Record<string, [string, string]> = {
   state: ["会话与归档", "转录、压缩归档、用量统计、回溯快照"],
-  cache: ["索引与缓存", "搜索索引与派生数据，删掉会自动重建"],
+  cache: ["索引与缓存", "搜索索引与派生数据，删除后会自动重建"],
   worktrees: ["隔离工作区", "交付模式检出的独立副本"],
-  home: ["配置与凭据", "设置和 API key，始终随用户配置文件走"],
-  locks: ["进程锁", "多个实例互斥用，必须留在本机固定位置。每个是空文件，删掉会破坏互斥，所以只留不删"],
+  home: ["配置与凭据", "设置与 API key，始终随用户配置文件保存"],
+  locks: ["进程锁", "用于多实例互斥，必须保留在本机固定位置。每个均为空文件；删除会破坏互斥，因此只保留不清理"],
 };
 
 export function Storage({ port }: { port: AgentPort }) {
@@ -31,7 +31,7 @@ export function Storage({ port }: { port: AgentPort }) {
     port
       .storage()
       .then(setState)
-      .catch(() => setError(t("读不到存储占用。")));
+      .catch(() => setError(t("无法读取存储占用。")));
   }, [port]);
 
   useEffect(read, [read]);
@@ -72,7 +72,7 @@ export function Storage({ port }: { port: AgentPort }) {
           setPlan(null);
           read();
         })
-        .catch(() => setError(t("搬迁没能开始。")));
+        .catch(() => setError(t("迁移未能启动。")));
     },
     [port, read],
   );
@@ -101,7 +101,7 @@ export function Storage({ port }: { port: AgentPort }) {
             about this kernel, not a property of any one path. Without it the
             rows lose their 「移动…」 with nothing in its place, which is the
             reading Row's own note exists to prevent. */}
-        {!state.editable && <p className="note">{t("这台服务器没有开放搬迁存储")}</p>}
+        {!state.editable && <p className="note">{t("这台服务器未开放存储迁移")}</p>}
         {state.roots.map((root) => (
           <Row
             key={root.id}
@@ -166,9 +166,9 @@ function Bar({ root, largest }: { root: StorageRoot; largest: number }) {
 function LeftBehind({ at }: { at: { dir: string; names: string[] } }) {
   return (
     <section className="grp">
-      <h3 className="lbl">{t("上一个位置还留着东西")}</h3>
+      <h3 className="lbl">{t("原位置仍有残留数据")}</h3>
       <p className="note">
-        {t("这些还在 {dir}：{names}。移动存储位置时它们没有被一起带走，所以这台机器上的壁纸、主题包或更新回滚备份可能看起来不见了。手动把这几个目录复制到当前位置即可恢复。", {
+        {t("以下内容仍位于 {dir}：{names}。迁移存储位置时未一并迁移，因此本机的壁纸、主题包或更新回滚备份可能显示为缺失。手动将这些目录复制到当前位置即可恢复。", {
           dir: at.dir,
           names: at.names.join("、"),
         })}
@@ -253,7 +253,7 @@ function Row({
             ref={inputRef}
             value={target}
             spellCheck={false}
-            placeholder={t("目标文件夹的完整路径，空文件夹，或本来就存着这块数据的那个")}
+            placeholder={t("目标文件夹的完整路径：空文件夹，或已存有该数据的文件夹")}
             onChange={(e) => onTarget(e.target.value)}
           />
           {plan && <Verdict plan={plan} />}
@@ -262,7 +262,7 @@ function Row({
               {t("取消")}
             </button>
             <button className="btn pri" data-action="storage.move" disabled={!plan?.ok} onClick={onStart}>
-              {t(plan?.adopt ? "指向这里" : "开始搬迁")}
+              {t(plan?.adopt ? "指向这里" : "开始迁移")}
             </button>
           </div>
         </div>
@@ -289,19 +289,19 @@ function Verdict({ plan }: { plan: StoragePlan }) {
   if (plan.adopt) {
     return (
       <p className="ready">
-        {t("这个文件夹里已经存着这块数据（{size}，{n} 个文件）。直接指过去就行，不复制、也不删。重启后生效。", {
+        {t("该文件夹中已存有此数据（{size}，{n} 个文件）。将直接指向该位置，不复制也不删除。重启后生效。", {
           size: bytes(plan.bytes),
           n: plan.files,
         })}
         {(plan.stays ?? 0) > 0
-          ? " " + t("当前位置还留着 {size}，不会一起带过去。", { size: bytes(plan.stays ?? 0) })
+          ? " " + t("当前位置仍有 {size}，不会一并迁移。", { size: bytes(plan.stays ?? 0) })
           : null}
       </p>
     );
   }
   return (
     <p className="ready">
-      {t("将搬走 {size}（{n} 个文件），目标盘剩余 {free}。完成后需要重启才会生效。", {
+      {t("将迁移 {size}（{n} 个文件），目标磁盘剩余 {free}。完成后需重启生效。", {
         size: bytes(plan.bytes),
         n: plan.files,
         free: bytes(plan.free),
@@ -322,7 +322,7 @@ function Moving({ move }: { move: NonNullable<StorageState["move"]> }) {
   const pct = move.total > 0 ? Math.min(100, Math.round((move.bytes / move.total) * 100)) : 0;
   return (
     <section className="grp moving">
-      <h3 className="lbl">{t("搬迁")}</h3>
+      <h3 className="lbl">{t("迁移")}</h3>
       {move.err ? (
         <p className="failed">{move.err}</p>
       ) : (
@@ -336,7 +336,7 @@ function Moving({ move }: { move: NonNullable<StorageState["move"]> }) {
           <div className="meter">
             <i style={{ width: `${pct}%` }} />
           </div>
-          {move.done && <p className="ready">{t("已搬完。重启后生效。")}</p>}
+          {move.done && <p className="ready">{t("迁移完成。重启后生效。")}</p>}
           {move.detail && <p className="ready">{move.detail}</p>}
         </>
       )}

@@ -120,11 +120,11 @@ export function Versions({ port }: { port: Port }) {
   if (unread) {
     return (
       <div className="find" data-lvl="warn" role="alert">
-        <span className="t">{t("读不到版本信息")}</span>
+        <span className="t">{t("无法读取版本信息")}</span>
         <span className="why">
           {unread}
           <button className="lnk" data-action="versions.reload" onClick={reload}>
-            {t("再试一次")}
+            {t("重试")}
           </button>
         </span>
       </div>
@@ -152,13 +152,13 @@ export function Versions({ port }: { port: Port }) {
           Pinned is not a problem, so it is ok-coloured; a stale pin is. */}
       {hub.err && (
         <div className="find" data-lvl="warn">
-          <span className="t">{t("连不上版本目录")}</span>
-          <span className="why">{t("{err}　—— 本地功能不受影响，稍后再试。", { err: hub.err })}</span>
+          <span className="t">{t("无法连接版本目录")}</span>
+          <span className="why">{t("{err}　—— 本地功能不受影响，请稍后重试。", { err: hub.err })}</span>
         </div>
       )}
       {failed && (
         <div className="find" data-lvl="warn" role="alert">
-          <span className="t">{t("这一步没做成")}</span>
+          <span className="t">{t("操作未完成")}</span>
           <span className="why">{failed}</span>
         </div>
       )}
@@ -166,7 +166,7 @@ export function Versions({ port }: { port: Port }) {
         <div className="find" data-lvl="ok">
           <span className="t">{t("已固定在 {v}，不会自动更新", { v: hub.pinned })}</span>
           <span className="why">
-            {t("回退之后固定是有意的：否则下次更新会把你放回刚离开的那个版本。")}
+            {t("回退后固定是有意为之：否则下次更新会将你带回刚离开的版本。")}
               <button className="lnk" data-action="versions.pin" onClick={() => pin("")} disabled={locked}>
               {t("恢复自动更新")}
             </button>
@@ -175,9 +175,9 @@ export function Versions({ port }: { port: Port }) {
       )}
       {hub.stalePin && (
         <div className="find" data-lvl="warn">
-          <span className="t">固定的是 {hub.pinned}，但现在跑的是 {hub.current}</span>
+          <span className="t">固定版本为 {hub.pinned}，当前运行的是 {hub.current}</span>
           <span className="why">
-            {t("这条固定已经不再描述现实，自动更新按未固定处理。")}
+            {t("该固定已与实际情况不符，自动更新按未固定处理。")}
               <button className="lnk" data-action="versions.pin" onClick={() => pin("")} disabled={locked}>
               {t("清除固定")}
             </button>
@@ -187,19 +187,19 @@ export function Versions({ port }: { port: Port }) {
       {!hub.err && hub.newer && !hub.pinned && (
         <div className="find" data-lvl="ok">
           <span className="t">有新版本 {hub.latest}</span>
-          <span className="why">{t("在下面那一行装它，安装完会自动重启。")}</span>
+          <span className="why">{t("可在下方对应行安装，安装完成后会自动重启。")}</span>
         </div>
       )}
       {progress?.phase === "error" && (
         <div className="find" data-lvl="warn">
           <span className="t">切换到 {progress.version} 失败</span>
-          <span className="why">{progress.err}　—— 当前版本没有被动过，可以再试一次。</span>
+          <span className="why">{progress.err}　—— 当前版本未被改动，可以重试。</span>
         </div>
       )}
       {/* Going back is the one move with a consequence the user cannot undo by
           going forward again, so it is said before they click, not after. */}
       {going !== "" && (
-        <p className="acct-note">{t("切换版本期间请不要关窗口。较新版本写过的会话，回到旧版本后会暂时打不开，升回去就能看。")}</p>
+        <p className="acct-note">{t("切换版本期间请勿关闭窗口。较新版本写入的会话在旧版本中暂时无法打开，升级回去后即可恢复。")}</p>
       )}
 
       {/* Newest first: the list reads as history, and where you are in it is

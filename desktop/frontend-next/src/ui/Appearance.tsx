@@ -58,16 +58,16 @@ const ZOOM_RANGE = { min: 0.8, max: 2.5, step: 0.05 };
 // 笔画粗细是另一条轴：颜色调得再亮，400 的汉字在 11px 上仍然是细的。默认跟着
 // 语言走 —— 汉字笔画密，同字号下比拉丁更早糊。
 const WEIGHTS: [string, string, string][] = [
-  ["", "跟随语言", "中文界面用中等字重，西文用常规"],
-  ["light", "常规", "笔画更细，字距看着更松"],
-  ["heavy", "加粗", "小字号下更实，屏幕远或反光时更好读"],
+  ["", "跟随语言", "中文界面使用中等字重，西文使用常规字重"],
+  ["light", "常规", "笔画更细，字距更宽松"],
+  ["heavy", "加粗", "小字号下更扎实，屏幕距离较远或有反光时更易读"],
 ];
 
 const CONTRASTS: [string, string, string][] = [
-  ["", "跟随系统", "系统开了「增强对比度」就用最强的一档"],
-  ["soft", "柔和", "正文没那么刺眼，长时间看更省力"],
+  ["", "跟随系统", "系统已开启「增强对比度」时使用最强档"],
+  ["soft", "柔和", "正文不易刺眼，长时间阅读更省力"],
   ["normal", "标准", "介于两者之间"],
-  ["strong", "更强", "环境光很亮，或需要更清楚的边界"],
+  ["strong", "更强", "环境光较强，或需要更清晰的边界"],
 ];
 
 // WebKit 的滑块轨道不知道当前值，填充比例得由调用方喂进来。
@@ -344,7 +344,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 <path d="M8 3.7v8.6M3.7 8h8.6" />
               </svg>
             </span>
-            {t(look.wallpaper ? "换一张…" : "选一张图片…")}
+            {t(look.wallpaper ? "换一张…" : "选择图片…")}
           </button>
           {failed && (
             <div className="find" data-lvl="err">
@@ -465,7 +465,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
               </button>
             ))}
           </div>
-          <p className="note">{t("改语言要重开窗口才生效")}</p>
+          <p className="note">{t("语言更改需重启窗口后生效")}</p>
         </div>
         <ApplyNote id="language" />
       </section>
@@ -484,10 +484,10 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 <span className="lb">{t("在托盘显示图标")}</span>
                 <span className="ds">
                   {tray.icon === tray.live
-                    ? t("在跑、还是在等你批准，扫一眼图标就知道")
+                    ? t("通过图标即可判断正在运行还是等待批准")
                     : tray.icon
                       ? t("下次启动时出现")
-                      : t("下次启动时不再出现，这次还在")}
+                      : t("下次启动时不再显示，本次仍保留")}
                 </span>
               </span>
               <Switch data-action="tray.icon" on={tray.icon} label={t("在托盘显示图标")} onClick={() => flipTray({ icon: !tray.icon })} />
@@ -497,14 +497,14 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
                 you have to discover by watching it grey out. */}
             <div className="lrow subrow" data-off={tray.icon && tray.live ? undefined : ""}>
               <span className="tx">
-                <span className="lb">{t("关掉窗口后继续在托盘里跑")}</span>
+                <span className="lb">{t("关闭窗口后在托盘中继续运行")}</span>
                 <span className="ds">{t("关闭窗口不会中断会话和后台任务；从托盘菜单退出才会完全关闭程序")}</span>
               </span>
               <Switch
                 data-action="tray.close-to-tray"
                 on={tray.closeToTray}
                 busy={!tray.icon || !tray.live}
-                label={t("关掉窗口后继续在托盘里跑")}
+                label={t("关闭窗口后在托盘中继续运行")}
                 onClick={() => flipTray({ closeToTray: !tray.closeToTray })}
               />
             </div>
@@ -521,7 +521,7 @@ export function Appearance({ port, theme, onTheme, contrast, onContrast, weight,
         <summary>
           <span className="tx">
             <span className="lb">{t("高级外观")}</span>
-            <span className="ds">{changed.length ? t("已改：{list}", { list: changed.join(" · ") }) : t("字体、文字粗细、文字对比度")}</span>
+            <span className="ds">{changed.length ? t("已修改：{list}", { list: changed.join(" · ") }) : t("字体、文字粗细、文字对比度")}</span>
           </span>
         </summary>
         <section className="grp" id="set-font" data-setting="font">
@@ -627,7 +627,7 @@ function FontPick({
           ))}
         </datalist>
         {value && (
-          <button className="nowbtn" data-action="appearance.font" data-target={slot} data-value="default" onClick={() => onPick("")} title={t("回到默认字体")}>
+          <button className="nowbtn" data-action="appearance.font" data-target={slot} data-value="default" onClick={() => onPick("")} title={t("恢复默认字体")}>
             {t("清除")}
           </button>
         )}

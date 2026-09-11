@@ -1,10 +1,11 @@
-// Package workspacelease serializes Delivery writers that target the same
-// workspace. Readers never acquire a lease. A writer keeps its lease from the
-// first mutation until every participating agent run has finished, so review
-// and verification cannot be invalidated by another Delivery session changing
-// the workspace mid-turn. It never outlives those runs: a process a session
-// leaves behind, a dev server or a watcher, is not a run, and an exclusion
-// another session cannot outwait is worse than no exclusion at all.
+// Package workspacelease serializes writers in different sessions that target
+// the same workspace, so one session's verification is not invalidated by
+// another's writes mid-turn. Readers never take one, and it is re-entrant
+// within a session: parallel tool calls and concurrent subagents share one
+// lease, so an agent team is never serialized here — scheduling those is
+// agent.SubagentScheduler's, and it claims write paths, not the workspace.
+// A writer holds from its first mutation until every participating run ends,
+// and never past them: an exclusion nobody can outwait is worse than none.
 package workspacelease
 
 import (

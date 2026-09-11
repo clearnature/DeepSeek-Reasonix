@@ -123,7 +123,7 @@ describe("what turning the economic bound off is allowed to claim", () => {
   it("says capacity still applies rather than that maintenance is off", async () => {
     await open(port({ soft_limit_tokens: -1, trigger: 850000 }));
     expect(screen.getByText("容量保护")).toBeTruthy();
-    const guard = screen.getByText(/永远生效/).closest(".lrow");
+    const guard = screen.getByText(/始终生效/).closest(".lrow");
     // With the economic bound retired the two figures coincide, so the capacity
     // row is read on its own rather than by searching the whole panel.
     expect(guard?.querySelector(".sc")?.textContent).toBe("850k");
@@ -139,7 +139,7 @@ describe("what turning the economic bound off is allowed to claim", () => {
   // Nothing folds without a declared window, and that outranks either bound.
   it("says an undeclared window is what actually turns maintenance off", async () => {
     render(<Compaction port={port({ context_window: 0, trigger: 0 })} onChanged={() => {}} />);
-    expect(await screen.findByText(/没有声明上下文窗口/)).toBeTruthy();
+    expect(await screen.findByText(/未声明上下文窗口/)).toBeTruthy();
     expect(screen.queryByText("下次整理")).toBeNull();
   });
 });

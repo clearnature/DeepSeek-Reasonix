@@ -14,8 +14,8 @@ npx -y chrome-devtools-mcp@latest
 https://mcp.example.com/sse`;
 
 const KIND_LABEL: Record<string, string> = {
-  shell: "会在你机器上运行",
-  "unknown-host": "会连到",
+  shell: "将在本机运行",
+  "unknown-host": "将连接至",
   secret: "密钥",
 };
 
@@ -97,12 +97,12 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
             }}
           />
           <div className="acts">
-            <span className="note">{t("一段 JSON、一行命令，或者一个 https 地址")}</span>
+            <span className="note">{t("一段 JSON、一行命令，或一个 https 地址")}</span>
             <button className="act" onClick={onClose}>
               {t("取消")}
             </button>
             <button className="act" data-action="mcp.inspect" data-primary disabled={!text.trim() || busy} onClick={() => void parse()}>
-              {t(busy ? "读取中…" : "看看是什么")}
+              {t(busy ? "读取中…" : "查看内容")}
             </button>
           </div>
         </>
@@ -130,9 +130,9 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
           {/* Installing is a global act; how far it reaches is a separate
               question. Only the third option edits a tracked file, so it is the
               one that has to say so out loud — and it is never the default. */}
-          <div className="scope" role="radiogroup" aria-label={t("装到哪")}>
+          <div className="scope" role="radiogroup" aria-label={t("安装位置")}>
             <button role="radio" aria-checked={scope === "user"} onClick={() => setScope("user")}>
-              {t("我的")}<i>{t("所有项目里都能用")}</i>
+              {t("我的")}<i>{t("所有项目均可使用")}</i>
             </button>
             <button
               role="radio"
@@ -140,7 +140,7 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
               disabled={!canProject}
               onClick={() => setScope("local")}
             >
-              {t("只在这个项目")}<i>{t("不写进仓库，别人不会拿到")}</i>
+              {t("仅当前项目")}<i>{t("不写入仓库，他人不会获得")}</i>
             </button>
             <button
               role="radio"
@@ -148,11 +148,11 @@ export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
               disabled={!canProject}
               onClick={() => setScope("project")}
             >
-              {t("写进仓库")}<i>{t("clone 的人也会拿到")}</i>
+              {t("写进仓库")}<i>{t("clone 仓库的人也会获得")}</i>
             </button>
           </div>
           {scope === "project" && (
-            <div className="warn">{t("这会改动仓库里的配置文件，是一处等着提交的改动。")}</div>
+            <div className="warn">{t("这会修改仓库中的配置文件，属于一处待提交的改动。")}</div>
           )}
           <div className="acts">
             <button className="act" onClick={() => setDraft(null)}>

@@ -79,7 +79,7 @@ export const ICON: Record<Section, ReactNode> = {
 // aim at.
 export const NAV: [string, [Section, string][]][] = [
   [
-    "这一轮",
+    "本轮执行",
     [
       ["session", "会话"],
       ["model", "模型"],
@@ -89,7 +89,7 @@ export const NAV: [string, [Section, string][]][] = [
     ],
   ],
   [
-    "在哪里跑",
+    "运行环境",
     [
       ["network", "网络"],
       ["remote", "远程"],
@@ -97,7 +97,7 @@ export const NAV: [string, [Section, string][]][] = [
     ],
   ],
   [
-    "它记得什么",
+    "记录与用量",
     [
       ["memory", "记忆"],
       ["usage", "用量"],
@@ -182,9 +182,9 @@ export const SETTINGS: SettingEntry[] = [
   // and do persist — which is the whole reason this column exists.
   { section: "session", anchor: "preset", title: "执行设定", scope: "session", apply: "immediate", keywords: ["均衡", "交付", "完成判定"] },
   { section: "session", anchor: "plan-mode", title: "计划模式", scope: "session", apply: "immediate", keywords: ["只读", "先规划"] },
-  { section: "session", anchor: "session-dir", title: "这个会话在哪写", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
+  { section: "session", anchor: "session-dir", title: "会话写入位置", scope: "workspace", apply: "none", keywords: ["工作目录", "路径"] },
 
-  { section: "model", anchor: "roles", title: "分工", scope: "machine", apply: "runtime-rebuild", keywords: ["子代理", "规划", "执行", "审查"] },
+  { section: "model", anchor: "roles", title: "角色分工", scope: "machine", apply: "runtime-rebuild", keywords: ["子代理", "规划", "执行", "审查"] },
   { section: "model", anchor: "model", title: "模型", scope: "machine", apply: "runtime-rebuild", keywords: ["切换", "端点"] },
   // Written onto the provider entry, not the model row: SetProviderEffort keys
   // by provider name, so every model reached through that source shares it.
@@ -203,9 +203,9 @@ export const SETTINGS: SettingEntry[] = [
   // every later session starts from. Machine is the wider of the two answers
   // and the one a reader cannot see from the screen.
   { section: "tools", anchor: "approval", title: "工具批准", scope: "machine", apply: "immediate", keywords: ["权限", "yolo", "询问", "放行"] },
-  { section: "tools", anchor: "rules", title: "明确的规矩", scope: "machine", apply: "runtime-rebuild", keywords: ["permissions", "允许", "拒绝", "配方"] },
+  { section: "tools", anchor: "rules", title: "明确的规则", scope: "machine", apply: "runtime-rebuild", keywords: ["permissions", "允许", "拒绝", "配方"] },
   { section: "tools", anchor: "sandbox", title: "沙箱", scope: "machine", apply: "runtime-rebuild", keywords: ["隔离", "联网", "写权限", "ssh-agent"] },
-  { section: "tools", anchor: "shell", title: "命令交给谁执行", scope: "machine", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
+  { section: "tools", anchor: "shell", title: "命令执行程序", scope: "machine", apply: "runtime-rebuild", keywords: ["bash", "powershell", "解释器"] },
 
   // The four blocks below carry a scope control of their own, and the kernel
   // takes that choice as a parameter — hook.Scope, McpInstallScope, the skill
@@ -225,7 +225,7 @@ export const SETTINGS: SettingEntry[] = [
   { section: "memory", anchor: "memory", title: "记忆", scope: "chosen", apply: "immediate", keywords: ["记住", "忘记", "事实"] },
   { section: "usage", anchor: "usage", title: "用量与成本", scope: "machine", apply: "none", keywords: ["token", "花费", "缓存命中"] },
   { section: "storage", anchor: "storage", title: "存储", scope: "machine", apply: "restart", keywords: ["搬家", "迁移", "磁盘", "位置"] },
-  { section: "advanced", anchor: "elsewhere", title: "还不在这一版里", scope: "machine", apply: "none", keywords: ["配置文件"] },
+  { section: "advanced", anchor: "elsewhere", title: "本版本尚未提供", scope: "machine", apply: "none", keywords: ["配置文件"] },
 
   { section: "appearance", anchor: "language", title: "语言", scope: "machine", apply: "restart", keywords: ["中文", "english", "界面语言"] },
   { section: "appearance", anchor: "window", title: "窗口", scope: "machine", apply: "immediate", keywords: ["托盘", "关闭行为"] },

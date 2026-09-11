@@ -57,7 +57,7 @@ export const SCOPE_SAID: Record<SettingScope, string> = {
   workspace: "当前工作区",
   machine: "本机",
   account: "账号",
-  chosen: "写在哪由你选",
+  chosen: "写入位置由你选择",
 };
 
 // 「已保存」和「生效」是两件事，重启那一档必须把它们分开说 —— 否则关掉设置的人

@@ -46,12 +46,12 @@ export function ConfigTrouble({ port, onRepaired }: { port: AgentPort; onRepaire
   return (
     <div className="find cfgbad" data-lvl="warn" role="status">
       <span className="t">
-        {problem.line ? t("配置文件第 {line} 行读不了", { line: problem.line }) : t("配置文件读不了")}
+        {problem.line ? t("配置文件第 {line} 行无法解析", { line: problem.line }) : t("配置文件无法解析")}
       </span>
       <span className="why">
         {problem.recovered === "last-known-good"
-          ? t("下面显示的是上一次能读通的那份设置。这个文件不会被覆盖，所以现在什么都存不进去。")
-          : t("下面显示的是内置默认值，不是你的设置。这个文件不会被覆盖，所以现在什么都存不进去。")}
+          ? t("下方显示的是上一次成功解析的配置。该文件不会被覆盖，因此当前无法保存任何更改。")
+          : t("下方显示的是内置默认值，而非你的配置。该文件不会被覆盖，因此当前无法保存任何更改。")}
       </span>
       <div className="term">
         <div className="term-l dim">{problem.path}</div>
@@ -72,7 +72,7 @@ export function ConfigTrouble({ port, onRepaired }: { port: AgentPort; onRepaire
       <div className="acts">
         {problem.repair && (
           <button className="act" data-action="config.repair" disabled={busy} onClick={() => void repair()}>
-            {busy ? t("正在修…") : t("备份原文件并修好")}
+            {busy ? t("正在修复…") : t("备份原文件并修复")}
           </button>
         )}
         <CopyButton text={problem.path} />

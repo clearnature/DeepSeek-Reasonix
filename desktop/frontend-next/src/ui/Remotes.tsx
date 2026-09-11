@@ -13,9 +13,9 @@ interface Props {
 const STATUS_LABEL: Record<string, string> = {
   idle: "未连接",
   connecting: "连接中",
-  connected: "已连上",
+  connected: "已连接",
   reconnecting: "重连中",
-  degraded: "有转发没挂上",
+  degraded: "部分转发未建立",
   stopped: "已断开",
 };
 
@@ -152,7 +152,7 @@ export function Remotes({ hub, onError }: Props) {
                   .finally(() => setProbing(""));
               }}
             >
-              {t(probing === host.name ? "问着…" : "测一下")}
+              {t(probing === host.name ? "询问中…" : "测试连接")}
             </button>
             <button
               className="rmtlnk"
@@ -168,7 +168,7 @@ export function Remotes({ hub, onError }: Props) {
             </button>
           </div>
           <div className="sub">
-            {host.workspace ? <span dir="ltr">{host.workspace}</span> : <span className="dim">{t("没设默认工作区")}</span>}
+            {host.workspace ? <span dir="ltr">{host.workspace}</span> : <span className="dim">{t("未设置默认工作区")}</span>}
             {workspacesOf(host).length > 1 ? (
               <span className="tag">{t("还有 {n} 个项目", { n: workspacesOf(host).length - 1 })}</span>
             ) : null}
@@ -179,7 +179,7 @@ export function Remotes({ hub, onError }: Props) {
           {probes[host.name] ? <ProbeCard probe={probes[host.name]} host={host.name} /> : null}
           {confirm === host.name && (
             <div className="rmtconfirm" role="alertdialog">
-              <span>{t("从列表移除「{name}」？远端什么都不会删。", { name: host.name })}</span>
+              <span>{t("从列表中移除「{name}」？远端数据不会被删除。", { name: host.name })}</span>
               <button onClick={() => setConfirm("")}>{t("取消")}</button>
               <button data-danger="" data-action="remotes.remove" data-target={host.name} autoFocus onClick={() => void drop(host.name)}>
                 {t("移除")}
@@ -189,20 +189,20 @@ export function Remotes({ hub, onError }: Props) {
         </div>
       ))}
 
-      {!hosts.length && !draft && <p className="rmtempty">{t("还没有远程机器。加一台，它的工作区就和本地的并排出现在左栏。")}</p>}
+      {!hosts.length && !draft && <p className="rmtempty">{t("尚未添加远程机器。添加后，其工作区将与本地工作区并列显示在左栏。")}</p>}
 
       {/* Importing beats typing: on a machine that already uses ssh, the
           addresses are written down next door and this only borrows the name. */}
       {candidates.length > 0 && (
         <div className="rmtcands">
-          <span className="cap">{t("~/.ssh/config 里还有")}</span>
+          <span className="cap">{t("~/.ssh/config 中还有")}</span>
           {candidates.map((alias) => (
             <button
               key={alias}
               data-action="remotes.add"
               className="rmtcand"
               disabled={!!busy}
-              title={t("按 ssh_config 里的设置加进来")}
+              title={t("按 ssh_config 中的配置添加")}
               onClick={() => void save({ name: alias, useSSHConfig: true })}
             >
               + {alias}
@@ -226,7 +226,7 @@ export function Remotes({ hub, onError }: Props) {
 
       {draft ? (
         <div className="rmtform">
-          {field("name", "名字", "gpu-box")}
+          {field("name", "名称", "gpu-box")}
           {field("host", "地址", "10.0.0.4")}
           {field("user", "用户", "ada")}
           <label className="rmtf">
@@ -252,7 +252,7 @@ export function Remotes({ hub, onError }: Props) {
                 ) : (
                   <button
                     className="act ghost"
-                    aria-label={t("把 {path} 设成默认", { path })}
+                    aria-label={t("将 {path} 设为默认", { path })}
                     onClick={() => setDirs([path, ...(draft.workspaces ?? []).filter((x) => x !== path)])}
                   >
                     {t("设为默认")}
@@ -263,7 +263,7 @@ export function Remotes({ hub, onError }: Props) {
                   aria-label={t("不再列出 {path}", { path })}
                   onClick={() => setDirs((draft.workspaces ?? []).filter((x) => x !== path))}
                 >
-                  {t("删掉")}
+                  {t("删除")}
                 </button>
               </div>
             ))}
@@ -275,7 +275,7 @@ export function Remotes({ hub, onError }: Props) {
                 onKeyDown={(ev) => ev.key === "Enter" && addDir()}
               />
               <button className="act" disabled={!dir.trim()} onClick={addDir}>
-                {t("加上")}
+                {t("添加")}
               </button>
               {editing ? (
                 <button className="act ghost" onClick={() => setPicking(true)}>
@@ -295,13 +295,13 @@ export function Remotes({ hub, onError }: Props) {
             <span>{t("安装方式")}</span>
             <select
               value={draft.serveInstall || "auto"}
-              title={t("第一次连接要在那台机器上装一个 reasonix")}
+              title={t("首次连接需在该机器上安装 reasonix")}
               onChange={(ev) => setDraft((d) => (d ? { ...d, serveInstall: ev.target.value } : d))}
             >
-              <option value="auto">{t("自动挑一种")}</option>
-              <option value="npm">{t("用远端的 npm")}</option>
-              <option value="upload">{t("传本机这个过去")}</option>
-              <option value="never">{t("不装，我自己装好了")}</option>
+              <option value="auto">{t("自动选择")}</option>
+              <option value="npm">{t("使用远端的 npm")}</option>
+              <option value="upload">{t("上传本机的副本")}</option>
+              <option value="never">{t("不安装，已自行安装")}</option>
             </select>
           </label>
           {/* 远端跑的内核用哪台机器的 Key。默认用本机的，经隧道回来 —— 那台
@@ -310,11 +310,11 @@ export function Remotes({ hub, onError }: Props) {
             <span>{t("模型凭据")}</span>
             <select
               value={draft.provider || "local"}
-              title={t("远端会话用哪台机器上配置的 Provider 和 Key")}
+              title={t("远端会话使用哪台机器上配置的 Provider 与 Key")}
               onChange={(ev) => setDraft((d) => (d ? { ...d, provider: ev.target.value } : d))}
             >
-              <option value="local">{t("用本机的，经隧道过去")}</option>
-              <option value="remote">{t("用那台机器自己配的")}</option>
+              <option value="local">{t("使用本机配置，经隧道转发")}</option>
+              <option value="remote">{t("使用该机器自身的配置")}</option>
             </select>
           </label>
           <label className="rmtf rmtck">
@@ -323,7 +323,7 @@ export function Remotes({ hub, onError }: Props) {
               checked={!!draft.useSSHConfig}
               onChange={(ev) => setDraft((d) => (d ? { ...d, useSSHConfig: ev.target.checked } : d))}
             />
-            <span>{t("空着的项去 ~/.ssh/config 里找")}</span>
+            <span>{t("留空的项将从 ~/.ssh/config 读取")}</span>
           </label>
           <div className="rmtact">
             <button
@@ -342,14 +342,14 @@ export function Remotes({ hub, onError }: Props) {
         </div>
       ) : (
         <button className="rmtadd" onClick={() => setDraft(draftOf(null))}>
-          + {t("加一台机器")}
+          + {t("添加机器")}
         </button>
       )}
     </div>
   );
 }
 
-const ROUTE_LABEL: Record<string, string> = { npm: "npm", upload: "传过去", download: "下载" };
+const ROUTE_LABEL: Record<string, string> = { npm: "npm", upload: "上传", download: "下载" };
 
 /** What one machine answered. A connect stops at the first missing piece, so
  *  the value here is seeing all of them together — and each closed route is
@@ -369,21 +369,21 @@ function ProbeCard({ probe, host }: { probe: RemoteProbe; host: string }) {
           {probe.kernel
             ? `${probe.kernel}${probe.version ? " " + probe.version : ""}`
             : probe.outdated
-              ? t("那边是 {v}，太旧了，连的时候会换掉", { v: probe.outdated })
-              : t("还没有")}
+              ? t("远端为 {v}，版本过旧，连接时将被替换", { v: probe.outdated })
+              : t("尚未安装")}
         </span>
       </div>
       <div className="rmtprobe-r">
         <span className="k">npm</span>
-        <span className="v">{probe.npm || t("跑不了")}</span>
+        <span className="v">{probe.npm || t("无法运行")}</span>
       </div>
       {closed.map((r) => (
         <p className="rmtprobe-why" key={r.name}>
-          {say({ code: r.code, params: { host } }, t("{name} 这条路走不通", { name: t(ROUTE_LABEL[r.name] ?? r.name) }))}
+          {say({ code: r.code, params: { host } }, t("{name} 无法连通", { name: t(ROUTE_LABEL[r.name] ?? r.name) }))}
         </p>
       ))}
       <div className="rmtprobe-end">
-        {probe.ready ? t("能连上 —— 那边有内核，或者装得上一个") : t("连不上 —— 上面任意一条解决掉就行")}
+        {probe.ready ? t("可以连接 —— 远端已有内核，或可安装一个") : t("无法连接 —— 解决上述任意一项即可")}
       </div>
     </div>
   );

@@ -12,15 +12,15 @@ type List = "deny" | "ask" | "allow";
 // groups by tool and lets the verdict be changed in place. Filing rules into
 // three separate lists made "this one is too strict" a delete-and-retype.
 const LEVELS: [List, string, string][] = [
-  ["deny", "拒绝", "命中就没得商量：全放行也拦得住，批准框不会出现"],
-  ["ask", "询问", "命中就停下来等你，哪怕自动批准开着"],
-  ["allow", "放行", "命中就不再问你"],
+  ["deny", "拒绝", "命中即终止：全部放行下同样拦截，不显示审批框"],
+  ["ask", "询问", "命中即暂停并请求确认，即使已开启自动批准"],
+  ["allow", "放行", "命中后不再请求确认"],
 ];
 
 const MODES: [string, string, string][] = [
-  ["ask", "问我", "没被任何规矩说中的写操作，动手前问一次"],
-  ["allow", "放行", "没被说中的写操作直接做"],
-  ["deny", "拒绝", "没被说中的写操作一律不做"],
+  ["ask", "请求确认", "未被任何规则命中的写入操作，执行前请求一次确认"],
+  ["allow", "放行", "未被命中的写入操作直接执行"],
+  ["deny", "拒绝", "未被命中的写入操作一律不执行"],
 ];
 
 // The tools worth offering by name. `file_mutation` is not a tool but the gate's
@@ -32,9 +32,9 @@ const TOOLS: [string, string][] = [
   ["read_file", "读文件"],
   ["write_file", "整份写入"],
   ["edit_file", "改动文件"],
-  ["web_fetch", "抓网页"],
+  ["web_fetch", "抓取网页"],
   ["grep", "全文搜索"],
-  ["glob", "找文件"],
+  ["glob", "查找文件"],
 ];
 
 const TOOL_LABEL = new Map(TOOLS);
@@ -50,20 +50,20 @@ interface Recipe {
 const RECIPES: Recipe[] = [
   {
     id: "secrets",
-    title: "不许动 .env",
-    desc: "文件工具读或写 .env 一律拒绝。bash 里的 cat 走另一条路，这条管不到它",
+    title: "禁止访问 .env",
+    desc: "文件工具读写 .env 一律拒绝。bash 中的 cat 属于另一条路径，本规则不覆盖",
     list: "deny",
     rules: ["file_mutation(*.env*)", "read_file(*.env*)"],
   },
-  { id: "push", title: "不许推到远端", desc: "本地怎么改都行，推出去永远留给你", list: "deny", rules: ["bash(git push:*)"] },
+  { id: "push", title: "禁止推送到远端", desc: "本地修改不受限制，推送始终由你执行", list: "deny", rules: ["bash(git push:*)"] },
   {
     id: "history",
-    title: "不许改写 git 历史",
-    desc: "rebase 和 reset 能吃掉还没推的提交",
+    title: "禁止改写 git 历史",
+    desc: "rebase 与 reset 可能丢弃尚未推送的提交",
     list: "deny",
     rules: ["bash(git rebase:*)", "bash(git reset:*)"],
   },
-  { id: "tests", title: "跑测试不用问", desc: "测试命令直接放行，其余照旧", list: "allow", rules: ["bash(go test:*)", "bash(npm test:*)", "bash(pytest:*)"] },
+  { id: "tests", title: "运行测试无需确认", desc: "测试命令直接放行，其余保持不变", list: "allow", rules: ["bash(go test:*)", "bash(npm test:*)", "bash(pytest:*)"] },
 ];
 
 // A rule is "tool" or "tool(subject)". Splitting it is what lets the tool name
@@ -83,9 +83,9 @@ const joinRule = (tool: string, pattern: string) => (pattern.trim() ? `${tool.tr
 // the same glob means different things per tool and the header has to say which.
 const MATCHING: Record<string, string> = {
   bash: "按命令的词比对",
-  grep: "比的是搜索式，不是路径",
-  glob: "比的是搜索式，不是路径",
-  web_fetch: "比的是网址",
+  grep: "比对的是搜索式，而非路径",
+  glob: "比对的是搜索式，而非路径",
+  web_fetch: "比对的是网址",
 };
 const pathMatching = "按路径匹配，* 能跨过 /";
 
@@ -98,11 +98,11 @@ function odd(tool: string, pattern: string): string {
   if (!p) return t("这个工具的每一次调用");
   if (tool === "bash") {
     if (p.endsWith(":*")) return "";
-    if (p.includes("*")) return t("整条命令匹配，不是按词前缀");
-    return t("正好这一条命令，多一个参数就不算");
+    if (p.includes("*")) return t("匹配完整命令，而非按词前缀");
+    return t("仅匹配该命令本身，附加任何参数即不匹配");
   }
   if (p.includes("*")) return "";
-  return MATCHING[tool] ? t("正好这一个值") : t("正好这一个路径");
+  return MATCHING[tool] ? t("仅匹配该值") : t("仅匹配该路径");
 }
 
 // The add form is the one place the full sentence belongs: nothing is on screen
@@ -111,12 +111,12 @@ function explain(tool: string, pattern: string): string {
   const p = pattern.trim();
   if (!p) return t("这个工具的每一次调用");
   if (tool === "bash") {
-    if (p.endsWith(":*")) return t("以 {cmd} 开头的命令，带什么参数都算", { cmd: p.slice(0, -2) });
+    if (p.endsWith(":*")) return t("以 {cmd} 开头的命令，不限参数", { cmd: p.slice(0, -2) });
     if (p.includes("*")) return t("命令整体匹配 {pat}", { pat: p });
-    return t("正好是 {cmd} 这条命令", { cmd: p });
+    return t("仅为 {cmd} 这条命令", { cmd: p });
   }
-  if (p.includes("*")) return t("路径匹配 {pat} 的调用（* 能跨过 /）", { pat: p });
-  return t("正好是 {path} 这个路径", { path: p });
+  if (p.includes("*")) return t("路径匹配 {pat} 的调用（* 可跨越 /）", { pat: p });
+  return t("仅为 {path} 这个路径", { path: p });
 }
 
 interface Group {
@@ -162,7 +162,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
   const lists: PermissionLists | null = rules && { mode: rules.mode, deny: rules.deny, ask: rules.ask, allow: rules.allow };
   const groups = useMemo(() => (lists ? group(lists, query) : []), [lists, query]);
 
-  if (!rules || !lists) return <div className="empty">{t("读不到权限配置。")}</div>;
+  if (!rules || !lists) return <div className="empty">{t("无法读取权限配置。")}</div>;
 
   const counts = { deny: rules.deny.length, ask: rules.ask.length, allow: rules.allow.length };
   const total = counts.deny + counts.ask + counts.allow;
@@ -211,9 +211,9 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
     <div className="rules">
       {rules.shadowedBy && (
         <div className="find" data-lvl="warn" role="status">
-          <span className="t">{t("这个项目自带一份权限配置")}</span>
+          <span className="t">{t("当前项目自带权限配置")}</span>
           <span className="why">
-            {t("{path} 里也写了 permissions，实际生效的是它。这里的改动会存下来，但要等它不再声明才用得上。", { path: rules.shadowedBy })}
+            {t("{path} 中同样声明了 permissions，实际生效的是该文件。此处的修改会被保存，但需待其不再声明后才会生效。", { path: rules.shadowedBy })}
           </span>
         </div>
       )}
@@ -231,8 +231,8 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
       </div>
 
       <div className="fallback">
-        <span className="k">{t("剩下的写操作")}</span>
-        <div className="seg fit" data-text role="radiogroup" aria-label={t("剩下的写操作")}>
+        <span className="k">{t("其余写入操作")}</span>
+        <div className="seg fit" data-text role="radiogroup" aria-label={t("其余写入操作")}>
           {MODES.map(([id, label]) => (
             <button key={id} role="radio" data-action="permissions.mode" data-value={id}
               aria-checked={rules.mode === id} disabled={!!busy}
@@ -249,7 +249,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
           like three. */}
       <div className="rhead">
         <span className="n">
-          {total ? t("{n} 条规矩", { n: total }) : t("还没有额外的规矩")}
+          {total ? t("{n} 条规则", { n: total }) : t("尚无额外规则")}
           {total > 0 && (
             <span className="mix">
               <i data-k="deny" title={t("拒绝")}>{counts.deny}</i>
@@ -259,9 +259,9 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
           )}
         </span>
         {total > 6 && (
-          <input className="find-rule" value={query} placeholder={t("筛一下…")} onChange={(e) => setQuery(e.target.value)} />
+          <input className="find-rule" value={query} placeholder={t("筛选…")} onChange={(e) => setQuery(e.target.value)} />
         )}
-        <button className="act" onClick={() => setAdding((v) => !v)}>{t(adding ? "取消" : "加一条")}</button>
+        <button className="act" onClick={() => setAdding((v) => !v)}>{t(adding ? "取消" : "添加规则")}</button>
       </div>
 
       {adding && <AddRule busy={!!busy} onAdd={(rule, level) => { add(rule, level); setAdding(false); }} />}
@@ -294,16 +294,16 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
                       ))}
                     </select>
                     <button className="act ghost" data-action="permissions.remove-rule" data-target={row.rule}
-                      disabled={!!busy} aria-label={t("删掉 {rule}", { rule: row.rule })}
+                      disabled={!!busy} aria-label={t("删除 {rule}", { rule: row.rule })}
                       onClick={() => drop(row.rule)}>
-                      {t("删掉")}
+                      {t("删除")}
                     </button>
                   </div>
                 ))}
             </section>
           );
         })}
-        {total > 0 && groups.length === 0 && <div className="empty">{t("没有匹配的规矩。")}</div>}
+        {total > 0 && groups.length === 0 && <div className="empty">{t("没有匹配的规则。")}</div>}
       </div>
 
       {total > 0 && <p className="path">{rules.path}</p>}
@@ -343,7 +343,7 @@ function AddRule({ busy, onAdd }: { busy: boolean; onAdd: (rule: string, level: 
           ))}
         </select>
         <button className="act" data-primary data-action="permissions.add-rule" disabled={busy || !rule} onClick={() => onAdd(rule, level)}>
-          {t("加上")}
+          {t("添加")}
         </button>
       </div>
       <p className="preview">

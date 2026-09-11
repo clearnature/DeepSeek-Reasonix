@@ -50,7 +50,7 @@ const SAID: Record<string, string> = {
   "permissions.editing_disabled": "这台服务器没有开放权限编辑",
   "sandbox.editing_disabled": "这台服务器没有开放沙箱编辑",
   "roles.editing_disabled": "这台服务器没有开放角色编辑",
-  "storage.moving_disabled": "这台服务器没有开放搬迁存储",
+  "storage.moving_disabled": "这台服务器未开放存储迁移",
   "storage.move_running": "已经有一个搬迁在跑了，等它结束",
   "plugin.bad_name": "这不是一个插件名",
   "plugin.not_installed": "这个插件没有安装",

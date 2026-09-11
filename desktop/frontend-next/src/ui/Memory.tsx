@@ -8,8 +8,8 @@ import type { AgentPort, MemoryEdit, MemoryEntry } from "../port/port";
 // user ever configuring it — the agent writes it. So the grouping answers the
 // question that actually gets asked: when does this one apply?
 const GROUPS: [string, string, string][] = [
-  ["pinned", "一直生效", "每一轮都在提示词里，等同于你给它的长期指令"],
-  ["relevant", "相关时才被想起", "只有这一轮看起来相关时才会被翻出来"],
+  ["pinned", "始终生效", "每轮均写入提示词，等同于长期指令"],
+  ["relevant", "相关时才会检索", "仅在当前轮次相关时才会被检索"],
 ];
 
 const SCOPE: Record<string, string> = { project: "项目", global: "我的" };
@@ -45,7 +45,7 @@ export function Memory({ port }: { port: AgentPort }) {
   // Naming it here rather than opening a second write path keeps one way in,
   // and this page had none at all: an empty store was a dead end.
   const authoring = (
-    <p className="note">{tx("要自己记一条：在输入框里用 {cmd} 写下来。", { cmd: <code>/remember</code> })}</p>
+    <p className="note">{tx("如需手动记录，请在输入框中使用 {cmd} 命令。", { cmd: <code>/remember</code> })}</p>
   );
 
   // Three answers, not two: a request still out is not a store that refused,
@@ -54,11 +54,11 @@ export function Memory({ port }: { port: AgentPort }) {
   if (unread)
     return (
       <div className="find" data-lvl="warn" role="alert">
-        <span className="t">{t("读不到记忆")}</span>
+        <span className="t">{t("无法读取记忆")}</span>
         <span className="why">
           {unread}
           <button className="lnk" data-action="memory.reload" onClick={reload}>
-            {t("再试一次")}
+            {t("重试")}
           </button>
         </span>
       </div>
@@ -67,7 +67,7 @@ export function Memory({ port }: { port: AgentPort }) {
   if (items.length === 0)
     return (
       <>
-        <div className="empty">{t("还没有记下任何东西。")}</div>
+        <div className="empty">{t("暂无记录。")}</div>
         {authoring}
       </>
     );
@@ -141,8 +141,8 @@ export function Memory({ port }: { port: AgentPort }) {
     <div className="mem">
       {query && (
         <p className="recall">
-          {t("上一轮从「{q}」出发翻了一次记忆", { q: clip(query) })}
-          {usedCount > 0 ? t("，用上了 {n} 条", { n: usedCount }) : t("，一条都没用上")}
+          {t("上一轮以「{q}」为线索检索了一次记忆", { q: clip(query) })}
+          {usedCount > 0 ? t("，命中 {n} 条", { n: usedCount }) : t("，未命中任何条目")}
         </p>
       )}
       {GROUPS.map(([id, label, desc]) => {
@@ -158,7 +158,7 @@ export function Memory({ port }: { port: AgentPort }) {
             {group.map((m) => (
               <div className="memrow" key={m.name} data-used={m.usedLastTurn ? "" : undefined}>
                 <div className="line">
-                  <i className="dot" title={m.usedLastTurn ? t("上一轮用上了") : undefined} />
+                  <i className="dot" title={m.usedLastTurn ? t("上一轮已使用") : undefined} />
                   <button className="nm" onClick={() => setOpen(open === m.name ? "" : m.name)}>
                     {m.title || m.name}
                   </button>
@@ -167,10 +167,10 @@ export function Memory({ port }: { port: AgentPort }) {
                   <span className="sc">{t(SCOPE[m.scope ?? ""] ?? m.scope ?? "")}</span>
                   <span className="at">{m.updatedAt || m.createdAt}</span>
                   <button className="act ghost" data-action="memory.forget" data-target={m.name} disabled={busy === m.name} onClick={() => void forget(m.name)}>
-                    {t(busy === m.name ? "…" : "忘掉")}
+                    {t(busy === m.name ? "…" : "忘记")}
                   </button>
                 </div>
-                {m.usedLastTurn && m.why && <div className="why-used">{t("上一轮因为「{why}」被翻出来", { why: m.why })}</div>}
+                {m.usedLastTurn && m.why && <div className="why-used">{t("上一轮因「{why}」被检索到", { why: m.why })}</div>}
                 {open === m.name && (
                   <div className="peek">
                     {edit?.name === m.name ? (
@@ -180,7 +180,7 @@ export function Memory({ port }: { port: AgentPort }) {
                           <input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
                         </label>
                         <label>
-                          {t("一句话说明")}
+                          {t("简要说明")}
                           <input value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} />
                         </label>
                         <label>
@@ -188,10 +188,10 @@ export function Memory({ port }: { port: AgentPort }) {
                           <textarea rows={8} value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />
                         </label>
                         <label className="when">
-                          {t("什么时候用上")}
+                          {t("生效时机")}
                           <select value={edit.activation} onChange={(e) => setEdit({ ...edit, activation: e.target.value })}>
-                            <option value="relevant">{t("相关时想起")}</option>
-                            <option value="pinned">{t("每轮都在")}</option>
+                            <option value="relevant">{t("相关时启用")}</option>
+                            <option value="pinned">{t("每轮常驻")}</option>
                           </select>
                         </label>
                         <div className="row">
@@ -201,12 +201,12 @@ export function Memory({ port }: { port: AgentPort }) {
                           <button className="act ghost" onClick={() => setEdit(null)}>{t("取消")}</button>
                           {/* Saving writes a new revision rather than overwriting, which is
                               what makes offering an edit at all safe. */}
-                          <span className="hint">{t("保存会记成新的一版，旧的还在")}</span>
+                          <span className="hint">{t("保存将记为新版本，旧版本仍保留")}</span>
                         </div>
                       </div>
                     ) : (
                       <>
-                        <pre>{m.body?.trim() || t("（没有正文）")}</pre>
+                        <pre>{m.body?.trim() || t("（无正文）")}</pre>
                         <div className="row">
                           <button
                             className="act ghost"
@@ -217,7 +217,7 @@ export function Memory({ port }: { port: AgentPort }) {
                           </button>
                           {(m.revision ?? 1) > 1 && (
                             <button className="act ghost" onClick={() => void openHistory(m.name)}>
-                              {t(showPast === m.name ? "收起旧版本" : "第 {n} 版，看旧的", { n: m.revision ?? 1 })}
+                              {t(showPast === m.name ? "收起旧版本" : "第 {n} 版，查看历史", { n: m.revision ?? 1 })}
                             </button>
                           )}
                           {m.path && <span className="path">{m.path}</span>}
@@ -253,9 +253,9 @@ function History({ list, current, busy, onRestore }: {
   busy: boolean;
   onRestore: (revision: number) => void;
 }) {
-  if (!list) return <div className="memhist"><span className="ds">{t("正在读旧版本…")}</span></div>;
+  if (!list) return <div className="memhist"><span className="ds">{t("正在读取历史版本…")}</span></div>;
   const older = list.filter((m) => (m.revision ?? 1) !== current);
-  if (older.length === 0) return <div className="memhist"><span className="ds">{t("只有当前这一版。")}</span></div>;
+  if (older.length === 0) return <div className="memhist"><span className="ds">{t("仅有当前版本。")}</span></div>;
   return (
     <div className="memhist">
       {older.map((m) => (
@@ -264,19 +264,19 @@ function History({ list, current, busy, onRestore }: {
           <span className="at">{m.updatedAt || m.createdAt}</span>
           <span className="ds" title={m.title}>{m.title}</span>
           <button className="act ghost" data-action="memory.restore" data-target={m.name} disabled={busy} onClick={() => onRestore(m.revision ?? 1)}>
-            {t(busy ? "…" : "恢复这版")}
+            {t(busy ? "…" : "恢复此版本")}
           </button>
           <pre>{clip2(m.body)}</pre>
         </div>
       ))}
-      <span className="hint">{t("恢复也会记成新的一版，这些都还在")}</span>
+      <span className="hint">{t("恢复同样记为新版本，历史版本均保留")}</span>
     </div>
   );
 }
 
 function clip2(s: string | undefined): string {
   const body = (s ?? "").trim();
-  if (!body) return "（没有正文）";
+  if (!body) return "（无正文）";
   return body.length > 200 ? body.slice(0, 200) + "…" : body;
 }
 

@@ -13,7 +13,7 @@ const ACTIVATION: Record<string, string> = {
   relevant: "以后相关时会想起来",
 };
 
-const SCOPE: Record<string, string> = { project: "只在这个项目", global: "在所有项目里" };
+const SCOPE: Record<string, string> = { project: "仅当前项目", global: "在所有项目里" };
 
 export const RememberCard = memo(function RememberCard({
   m, forgotten, onForget,
@@ -37,7 +37,7 @@ export const RememberCard = memo(function RememberCard({
         </span>
         {!forgotten && (
           <button className="act" data-action="memory.forget" disabled={busy} onClick={forget}>
-            {t(busy ? "忘掉中…" : "忘掉")}
+            {t(busy ? "忘掉中…" : "忘记")}
           </button>
         )}
       </div>

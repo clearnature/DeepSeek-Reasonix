@@ -10,10 +10,10 @@ import { useDismiss } from "./dismiss";
 type RoleKey = keyof RoleAssignments;
 
 const ROLES: [RoleKey, string, string][] = [
-  ["planner", "计划", "只读地出计划"],
-  ["subagent", "子代理", "派出去的活"],
-  ["vision", "看图", "读主模型看不了的图"],
-  ["guardian", "复核", "独立审这一轮"],
+  ["planner", "计划", "仅生成计划，不写入"],
+  ["subagent", "子代理", "派发的子任务"],
+  ["vision", "看图", "处理主模型无法识别的图片"],
+  ["guardian", "复核", "独立复核本轮"],
 ];
 
 interface Props {
@@ -34,7 +34,7 @@ export function Roles({ models, roles, main, busy, onSet }: Props) {
   const visionModel = models.find((m) => m.ref === visionRef);
   const readable = visionModel?.vision === true;
 
-  if (!roles) return <div className="empty">{t("读不到分工。")}</div>;
+  if (!roles) return <div className="empty">{t("无法读取角色分工。")}</div>;
 
   const following = ROLES.filter(([k]) => !roles[k]).length;
 
@@ -45,7 +45,7 @@ export function Roles({ models, roles, main, busy, onSet }: Props) {
           <span className="cap">{t("对话 · 主模型")}</span>
           <span className="nm">{anchor?.model ?? main ?? "—"}</span>
           <span className="meta">
-            {[anchor?.provider, following === ROLES.length ? t("所有分工都跟着它") : t("{n} 个分工跟着它", { n: following })]
+            {[anchor?.provider, following === ROLES.length ? t("所有角色均跟随主模型") : t("{n} 个角色跟随主模型", { n: following })]
               .filter(Boolean)
               .join(" · ")}
           </span>
@@ -72,7 +72,7 @@ export function Roles({ models, roles, main, busy, onSet }: Props) {
       <p className="note">
         {readable
           ? `主模型看不了的图会交给 ${visionModel?.model}，它读图，所以附件真的会被看到。`
-          : t("主模型看不了的图现在没人读得了 —— 会在发出去之前被丢掉。给「看图」指一个带「读图」标签的模型就能接上。")}
+          : t("主模型无法识别的图片当前无人处理 —— 会在发送前被丢弃。为「看图」指定一个带「读图」标签的模型即可接管。")}
       </p>
     </>
   );

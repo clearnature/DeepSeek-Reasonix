@@ -41,15 +41,15 @@ import { ScopeBar } from "./CapabilityScope";
 import { reason } from "../i18n/kernel";
 
 const PRESETS: [Preset, string, string][] = [
-  ["balanced", "均衡", "做到模型认为做完为止。日常用这档"],
-  ["delivery", "交付", "改了东西就得验证、复核、签收，少一样都不算做完"],
+  ["balanced", "均衡", "以模型判定任务完成为准，适用于日常任务"],
+  ["delivery", "交付", "任何修改均需经过验证、复核与签收，缺一不可视为完成"],
 ];
 
 const APPROVALS: [ApprovalMode, string, string][] = [
-  ["dontAsk", "不打扰", "不弹审批；要批准才能做的一概不做"],
-  ["ask", "询问", "每次动手前问你"],
-  ["auto", "自动", "低风险自己过，写操作仍然问"],
-  ["yolo", "全放行", "不问了。只在你完全信任这个工作区时用"],
+  ["dontAsk", "不询问", "不显示审批请求；需要批准的操作一律不执行"],
+  ["ask", "询问", "每次执行操作前请求确认"],
+  ["auto", "自动", "低风险操作自动放行，写入操作仍需确认"],
+  ["yolo", "全部放行", "不再请求确认，仅在完全信任当前工作区时使用"],
 ];
 
 // What still lives in the old desktop app. Bots are not on the roadmap, so
@@ -444,7 +444,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
             fallback={
               <div className="find" data-lvl="err" role="alert">
                 <span className="t">{t("这个设置分区出错了")}</span>
-                <span className="why">{t("其它分区和你的会话不受影响；关掉设置再打开可重试。")}</span>
+                <span className="why">{t("其他分区与当前会话不受影响；关闭设置后重新打开可重试。")}</span>
               </div>
             }
           >
@@ -453,7 +453,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           <div className="prefs-col" key={at}>
           {at === "session" && (
             <>
-              <Group id="preset" title={t("执行设定")} now={preset} hint={t("决定任务完成的判定标准。切换立刻生效，不会重建运行时。")}>
+              <Group id="preset" title={t("执行设定")} now={preset} hint={t("决定任务完成的判定标准。切换立即生效，不会重建运行时。")}>
                 <div className="seg" data-text role="radiogroup" aria-label={t("执行设定")}>
                   {PRESETS.map(([id, name]) => (
                     <button key={id} role="radio" data-action="chrome.preset" data-value={id}
@@ -471,9 +471,9 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               <Group id="plan-mode" title={t("计划模式")} hint={t("开启时 agent 无法获得写权限。该限制由工具本身实施，不依赖提示词中的约定。")}>
                 <div className="lrow">
                   <span className="tx">
-                    <span className="lb">{t("只读地出计划")}</span>
+                    <span className="lb">{t("仅生成计划，不写入")}</span>
                     <span className="ds">
-                      {t(status?.plan ? "只读加出计划，你批准后核心自己关掉它" : "正常执行：批准过的写操作直接做")}
+                      {t(status?.plan ? "仅生成只读计划，经你批准后由内核自动关闭" : "正常执行：已批准的写入操作直接执行")}
                     </span>
                   </span>
                   <Switch
@@ -485,7 +485,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                   />
                 </div>
               </Group>
-              <Group id="session-dir" title={t("这个会话在哪写")}>
+              <Group id="session-dir" title={t("会话写入位置")}>
                 <div className="kv">
                   <span className="k">{t("工作目录")}</span>
                   <span className="v"><Path of={status?.cwd ?? "—"} /></span>
@@ -498,11 +498,11 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                     never have. */}
                 <div className="lrow">
                   <span className="tx">
-                    <span className="lb">{t("拉一份隔离副本")}</span>
-                    <span className="ds">{t("在 Git worktree 中创建独立副本，改动不会影响当前分支")}</span>
+                    <span className="lb">{t("创建隔离副本")}</span>
+                    <span className="ds">{t("在 Git worktree 中创建独立副本，修改不会影响当前分支")}</span>
                   </span>
                   <button className="act" data-action="workspace.isolate" disabled={!!busy} onClick={() => run("isolate", () => port.isolateWorkspace())}>
-                    {t(busy === "isolate" ? "开着…" : "开一份")}
+                    {t(busy === "isolate" ? "启用中…" : "创建")}
                   </button>
                 </div>
               </Group>
@@ -515,11 +515,11 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                   say why one was refused covers all of them. */}
               {failed && (
                 <div className="find" data-lvl="warn" role="alert">
-                  <span className="t">{t("这一步没做成")}</span>
+                  <span className="t">{t("操作未完成")}</span>
                   <span className="why">{failed}</span>
                 </div>
               )}
-              <Group id="roles" title={t("分工")} now={roles ? t("{n} 个已指派", { n: assigned }) : undefined}
+              <Group id="roles" title={t("角色分工")} now={roles ? t("{n} 个已指派", { n: assigned }) : undefined}
                 hint={t("每个位置默认使用主模型，只有明确指派过的才会单独设置。更换指派与更换主模型一样需要重建运行时，任务运行期间无法修改。")}>
                 <Roles models={models} roles={roles} main={status?.modelRef} busy={busy}
                   onSet={(role, ref) => run(`role:${role}`, async () => {
@@ -563,7 +563,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
 
           {at === "tools" && (
             <>
-              <Group id="approval" title={t("工具批准")} now={approval} hint={t("这是 agent 访问你的文件前的唯一审批入口，被拦下的操作没有其他途径可以绕过。")}>
+              <Group id="approval" title={t("工具批准")} now={approval} hint={t("这是 agent 访问文件前的唯一审批入口，被拦截的操作没有其他途径可以绕过。")}>
                 {/* Four rows of label-and-description was 190px for one choice,
                     and it was the only choice in this pane shaped that way. The
                     description follows the selection instead: what a档 does is
@@ -581,8 +581,8 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                 <p className="note">{t(APPROVALS.find(([id]) => id === status?.toolApprovalMode)?.[2] ?? "")}</p>
               </Group>
               <Group id="rules"
-                title={t("明确的规矩")}
-                hint={t("上一项决定是否向你询问，此处决定哪些操作始终禁止、哪些无需询问。改动会重建运行时，任务运行期间无法修改。")}
+                title={t("明确的规则")}
+                hint={t("上一项决定是否请求确认，此处决定哪些操作始终禁止、哪些无需确认。修改会重建运行时，任务运行期间无法变更。")}
               >
                 <Rules port={port} onChanged={onChanged} />
               </Group>
@@ -593,7 +593,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                 <Sandbox port={port} onChanged={onChanged} />
               </Group>
               <Group id="shell"
-                title={t("命令交给谁执行")}
+                title={t("命令执行程序")}
                 hint={t("agent 的所有命令都由该程序执行，它也决定命令使用哪种语法；选择错误会导致每条命令都执行失败。下方只列出本机已安装的程序。更换需要重建运行时，任务运行期间无法修改。")}
               >
                 <ShellPicker port={port} onChanged={onChanged} />
@@ -604,7 +604,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           {at === "hooks" && (
             <Group id="hooks"
               title={t("自动化")}
-              hint={t("在 agent 执行任务前后运行你自己的命令。这些命令在本机以你的权限运行；可以拦截 agent 的两个事件已在下方标出。")}
+              hint={t("在 agent 执行任务前后运行自定义命令。这些命令在本机以当前用户权限运行；可拦截 agent 的两个事件已在下方标出。")}
             >
               <Hooks port={port} onChanged={afterExtChange} />
             </Group>
@@ -615,7 +615,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               {scope && <ScopeBar scope={scope} scopes={scopes} onPick={setScopeAt} />}
               {failed && (
                 <div className="find" data-lvl="warn" role="alert">
-                  <span className="t">{t("这一步没做成")}</span>
+                  <span className="t">{t("操作未完成")}</span>
                   <span className="why">{failed}</span>
                 </div>
               )}
@@ -658,7 +658,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                   updating={updatingPkg}
                   onUpdate={setUpdatingPkg}
                 />
-                {packages.length === 0 && !addingPkg && <div className="empty">{t("还没装插件包。")}</div>}
+                {packages.length === 0 && !addingPkg && <div className="empty">{t("尚未安装插件包。")}</div>}
               </Group>
               {/* Below the packages: what was added by hand. A server the user
                   typed in themselves is not part of anyone's package, and
@@ -666,7 +666,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               <Group id="mcp"
                 title={t("外部工具")}
                 now={looseMcp.length ? t("{n} 个服务", { n: looseMcp.length }) : undefined}
-                hint={t("你自行接入的 MCP 服务。它们提供的能力与内置工具等同，列出的每一项都可以操作你的文件和数据。关闭后会立即从本轮工具列表中移除，重启后保持关闭。")}
+                hint={t("已接入的 MCP 服务。其提供的能力与内置工具等同，列出的每一项均可访问文件与数据。关闭后立即从本轮工具列表中移除，重启后保持关闭。")}
                 action={
                   adding || !live ? undefined : (
                     <button className="act" onClick={() => setAdding(true)}>
@@ -686,21 +686,21 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
                 {looseMcp.map((m) => (
                   <ServerRow key={m.name} m={m} port={port} onDone={afterExtChange} root={scopeAt} live={live} />
                 ))}
-                {looseMcp.length === 0 && !adding && <div className="empty">{t("没有自己接入的外部服务。")}</div>}
+                {looseMcp.length === 0 && !adding && <div className="empty">{t("尚未接入外部服务。")}</div>}
               </Group>
               <Group id="skills"
                 title={t("技能")}
-                now={looseSkills.length ? t("{on}/{all} 开着", { on: looseOn, all: looseSkills.length }) : undefined}
+                now={looseSkills.length ? t("{on}/{all} 已启用", { on: looseOn, all: looseSkills.length }) : undefined}
                 hint={t(
                   implicit
                     ? "工作目录与「我的」中的技能。带 / 的可以由你直接调用，其余的由模型根据任务判断是否使用。关掉一个立刻生效：从你的下一条消息起模型不再拿到它，直接点名也调不动，不用新建会话。"
-                    : "模型自动发现已关闭：现在只有你点名的技能会跑。开关立刻生效，从你的下一条消息起，不用新建会话。",
+                    : "模型自动发现已关闭：仅显式指定的技能会运行。开关立即生效，自下一条消息起，无需新建会话。",
                 )}
               >
                 {looseSkills.map((sk) => (
                   <SkillRow key={sk.name} sk={sk} implicit={implicit} port={port} onDone={afterExtChange} root={scopeAt} onFailed={setFailed} />
                 ))}
-                {looseSkills.length === 0 && <div className="empty">{t("这个工作目录下没有技能。")}</div>}
+                {looseSkills.length === 0 && <div className="empty">{t("当前工作目录下没有技能。")}</div>}
               </Group>
             </>
           )}
@@ -735,7 +735,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           {at === "versions" && (
             <Group id="versions"
               title={t("版本")}
-              hint={t("当前安装的版本、可用更新，以及出现问题时如何回退。回退后将固定在你选择的版本，不会被自动更新覆盖。")}
+              hint={t("当前安装的版本、可用更新，以及出现问题时如何回退。回退后将固定在所选版本，不会被自动更新覆盖。")}
             >
               <Versions port={port} />
             </Group>
@@ -744,7 +744,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           {at === "memory" && (
             <Group id="memory"
               title={t("记忆")}
-              hint={t("agent 自动记录的内容：你没有配置过，但它会据此执行。此处按触发时机分组，并标出上一轮实际使用的条目。")}
+              hint={t("agent 自动记录的内容：未经配置，但会据此执行。此处按触发时机分组，并标出上一轮实际使用的条目。")}
             >
               <Memory port={port} />
             </Group>
@@ -768,7 +768,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           )}
 
           {at === "advanced" && (
-            <Group id="elsewhere" title={t("还不在这一版里")} hint={t("以下项目尚未提供设置界面，此处仅说明它们当前的位置。")}>
+            <Group id="elsewhere" title={t("本版本尚未提供")} hint={t("以下项目尚未提供设置界面，此处仅说明它们当前的位置。")}>
               {ELSEWHERE.map((x) => (
                 <div className="lrow" key={x}>
                   <span className="ds">{x}</span>

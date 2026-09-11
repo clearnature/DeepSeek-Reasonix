@@ -37,7 +37,7 @@ const rung = (id: string): string => id.charAt(0).toUpperCase() + id.slice(1);
 // word stands next to a reasoning rung with nothing to tell them apart, so the
 // summary says what is automatic. The other three read the same in both places.
 const briefApproval = (mode: ApprovalMode): string =>
-  ({ dontAsk: t("不打扰"), ask: t("询问"), auto: t("自动批准"), yolo: t("全放行") })[mode];
+  ({ dontAsk: t("不询问"), ask: t("询问"), auto: t("自动批准"), yolo: t("全部放行") })[mode];
 
 /** The collapsed projection of the three values that decide how a turn runs.
  *

@@ -54,7 +54,7 @@ describe("what the closed control says", () => {
   it("tones a fully-permitted session and marks it, without repainting the control", () => {
     const { container } = draw({ status: status("balanced", "auto", "yolo") });
     const risk = container.querySelector(".vl .polrisk");
-    expect(risk?.textContent).toContain("全放行");
+    expect(risk?.textContent).toContain("全部放行");
     expect(container.querySelector(".vl .polwarn")?.textContent).toBe("⚠");
     // The button itself stays quiet; only the segment that must be remembered
     // is toned, or every ordinary turn is watched too.
@@ -63,7 +63,7 @@ describe("what the closed control says", () => {
 
   it("leaves a stricter-than-default posture visible but untoned", () => {
     const { container } = draw({ status: status("balanced", "auto", "dontAsk") });
-    expect(container.querySelector(".vl")?.textContent).toBe("不打扰");
+    expect(container.querySelector(".vl")?.textContent).toBe("不询问");
     expect(container.querySelector(".vl .polrisk")).toBeNull();
   });
 });
@@ -98,7 +98,7 @@ describe("the shelf reads committed fact, never the answer being waited on", () 
     const setApprovalMode = vi.fn(() => Promise.reject(new Error("not while a turn is running")));
     const { shelf, container } = draw({ status: status("delivery", "auto", "ask"), port: { setApprovalMode } });
     await userEvent.click(screen.getByRole("button", { name: "交付" }));
-    await userEvent.click(screen.getByRole("button", { name: "全放行" }));
+    await userEvent.click(screen.getByRole("button", { name: "全部放行" }));
     await waitFor(() => expect(container.querySelector(".segbad")).toBeTruthy());
     expect(shelf()).toBe("交付");
   });

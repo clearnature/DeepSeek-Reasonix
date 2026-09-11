@@ -29,7 +29,7 @@ export function Sandbox({ port, onChanged }: { port: AgentPort; onChanged: () =>
       .catch(() => setBox(null));
   }, [port]);
 
-  if (!box) return <div className="empty">{t("读不到沙箱配置。")}</div>;
+  if (!box) return <div className="empty">{t("无法读取沙箱配置。")}</div>;
 
   const save = async (what: string, next: SandboxSettings) => {
     setBusy(what);
@@ -55,17 +55,17 @@ export function Sandbox({ port, onChanged }: { port: AgentPort; onChanged: () =>
     <div className="box">
       {box.shadowedBy && (
         <div className="find" data-lvl="warn" role="status">
-          <span className="t">{t("这个项目自带一份沙箱配置")}</span>
+          <span className="t">{t("当前项目自带沙箱配置")}</span>
           <span className="why">
-            {t("{path} 里也写了 sandbox，实际生效的是它。", { path: box.shadowedBy })}
+            {t("{path} 中同样声明了 sandbox，实际生效的是该文件。", { path: box.shadowedBy })}
           </span>
         </div>
       )}
 
       <div className="sec">
-        <h3>{t("能写到哪")}</h3>
+        <h3>{t("可写入范围")}</h3>
         <p className="note">
-          {t("已批准的写操作也只能作用于这些目录。该限制由文件工具实施，不依赖提示词中的约定。")}
+          {t("已批准的写入操作也只能作用于这些目录。该限制由文件工具实施，不依赖提示词中的约定。")}
         </p>
         <div className="fields">
           <label className="grow">
@@ -85,7 +85,7 @@ export function Sandbox({ port, onChanged }: { port: AgentPort; onChanged: () =>
         </div>
 
         <div className="extra">
-          <div className="sublb">{t("另外还能写")}</div>
+          <div className="sublb">{t("额外可写目录")}</div>
           {box.allowWrite.map((p) => (
             <div className="prule" key={p}>
               <code>{p}</code>
@@ -94,10 +94,10 @@ export function Sandbox({ port, onChanged }: { port: AgentPort; onChanged: () =>
                 data-action="sandbox.remove-write-root"
                 data-target={p}
                 disabled={!!busy}
-                aria-label={t("不再允许写 {path}", { path: p })}
+                aria-label={t("移除 {path} 的写入权限", { path: p })}
                 onClick={() => void save("extra", { ...box, allowWrite: box.allowWrite.filter((x) => x !== p) })}
               >
-                {t("删掉")}
+                {t("删除")}
               </button>
             </div>
           ))}
@@ -108,7 +108,7 @@ export function Sandbox({ port, onChanged }: { port: AgentPort; onChanged: () =>
             <input
               value={draft}
                 data-action-keydown="sandbox.add-write-root"
-              placeholder={t("再开一个可写目录，例如 /tmp/scratch")}
+              placeholder={t("添加可写目录，例如 /tmp/scratch")}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== "Enter" || !draft.trim()) return;
@@ -125,7 +125,7 @@ export function Sandbox({ port, onChanged }: { port: AgentPort; onChanged: () =>
                 setDraft("");
               }}
             >
-              {t("加上")}
+              {t("添加")}
             </button>
           </div>
         </div>
@@ -176,14 +176,14 @@ export function CommandMode({
 
   return (
     <div className="sec">
-      <h3>{t("命令怎么跑")}</h3>
+      <h3>{t("命令执行方式")}</h3>
       {box.available ? (
         <p className="note">
           {t("启用沙箱后，命令无法写入清单之外的位置。上方的可写目录清单由操作系统实施，不依赖 agent 自觉遵守。")}
         </p>
       ) : (
         <div className="find" data-lvl="warn" role="status" id={whyId}>
-          <span className="t">{t("这台机器没有可用的 OS 沙箱")}</span>
+          <span className="t">{t("本机没有可用的操作系统沙箱")}</span>
           <span className="why">
             {why || t("命令将不受限制地运行；上方的可写范围仍由工具实施。")}
           </span>
@@ -193,7 +193,7 @@ export function CommandMode({
           only place a reader learns the mode exists and why it is out. The
           reason hangs on the option itself: a card above a live-looking button
           reads as commentary rather than as the cause. */}
-      <div className="seg" data-text role="radiogroup" aria-label={t("命令怎么跑")}>
+      <div className="seg" data-text role="radiogroup" aria-label={t("命令执行方式")}>
         {MODES.map(([id, name]) => {
           const locked = id === "enforce" && !box.available;
           return (

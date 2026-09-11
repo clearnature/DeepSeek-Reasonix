@@ -113,7 +113,7 @@ export function Providers({ port, onChanged, onFailed, protocol, onProtocol, act
             onEdited={() => { reload(); onChanged(); }}
             onFailed={onFailed} />
         ))}
-        {list.length === 0 && <div className="empty">{t("还没有配置任何模型来源。")}</div>}
+        {list.length === 0 && <div className="empty">{t("尚未配置任何模型来源。")}</div>}
       </div>
       {adding ? (
         <AddProvider
@@ -212,7 +212,7 @@ function Conn({
           {t(editing ? "收起" : "编辑")}
         </button>
         <button className="sa lnk" data-keep data-action="provider.probe" onClick={check} disabled={busy !== ""}>
-          {t(checking ? "测试中…" : "测一下")}
+          {t(checking ? "测试中…" : "测试连接")}
         </button>
         {!entry.inUse && (
           <button className="sa lnk" data-action="provider.remove" data-target={entry.name} onClick={() => onRemove(entry.name)} disabled={busy !== ""}>
@@ -287,7 +287,7 @@ function Conn({
           <span className="t">
             {found.ok
               ? `${t("连上了")} · ${t(KIND_LABEL[found.kind ?? ""] ?? found.kind ?? "")} · ${t("{n} 个模型", { n: found.models?.length ?? 0 })}`
-              : t("连不上")}
+              : t("无法连接")}
           </span>
           <span className="why">
             {!found.ok && found.error}

@@ -24,7 +24,7 @@ export function AccountRow({ account, unread, onOpen }: { account: AccountState 
               : signedIn
                 ? user?.email || ""
                 : unread
-                  ? t("这里读不到登录状态")
+                  ? t("登录状态不可用")
                   : t("只有联网功能需要它")}
         </span>
       </span>

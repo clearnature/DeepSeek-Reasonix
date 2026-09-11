@@ -19,24 +19,24 @@ interface Recipe {
 const RECIPES: Recipe[] = [
   {
     id: "format",
-    title: "改完文件自动格式化",
-    desc: "每次写入之后跑一遍格式化命令，失败了只提醒，不打断",
+    title: "文件修改后自动格式化",
+    desc: "每次写入后执行一次格式化命令；失败时仅提醒，不中断",
     event: "PostToolUse",
     match: "edit_file|write_file|multi_edit",
     command: "gofmt -w . 2>/dev/null || true",
   },
   {
     id: "guard-secrets",
-    title: "写密钥文件前问我一声",
-    desc: "碰 .env 之类的路径时挡下来，由你决定要不要放行",
+    title: "写入密钥文件前请求确认",
+    desc: "访问 .env 一类路径时拦截，由你决定是否放行",
     event: "PreToolUse",
     match: "edit_file|write_file",
     command: `grep -q '"\\.env' <<< "$REASONIX_HOOK_PAYLOAD" && exit 2 || exit 0`,
   },
   {
     id: "test-before-stop",
-    title: "收工前跑一遍测试",
-    desc: "一轮结束时跑测试，红了会作为提醒显示出来",
+    title: "结束前执行一次测试",
+    desc: "每轮结束时运行测试，失败时以提醒形式显示",
     event: "Stop",
     command: "go test ./... 2>&1 | tail -5",
   },
@@ -69,7 +69,7 @@ export function Hooks({ port, onChanged }: Props) {
   };
   useEffect(reload, [port]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!cat) return <div className="empty">{t("读不到 hooks 配置。")}</div>;
+  if (!cat) return <div className="empty">{t("无法读取 hooks 配置。")}</div>;
 
   const mine = cat.hooks.filter((h) => h.scope === (scope === "user" ? "global" : "project"));
   const plugin = cat.hooks.filter((h) => h.scope === "plugin");
@@ -113,7 +113,7 @@ export function Hooks({ port, onChanged }: Props) {
 
   return (
     <div className="hooks">
-      <div className="scope" role="radiogroup" aria-label={t("这些规则写在哪")}>
+      <div className="scope" role="radiogroup" aria-label={t("规则写入位置")}>
         {(["user", "project"] as const).map((s) => (
           <button
             key={s}
@@ -123,7 +123,7 @@ export function Hooks({ port, onChanged }: Props) {
             onClick={() => setScope(s)}
           >
             {t(SCOPE_LABEL[s])}
-            <i>{t(s === "user" ? "只在这台机器上" : "写进仓库，clone 的人也会拿到")}</i>
+            <i>{t(s === "user" ? "只在这台机器上" : "写入仓库，clone 仓库的人也会获得")}</i>
           </button>
         ))}
       </div>
@@ -131,7 +131,7 @@ export function Hooks({ port, onChanged }: Props) {
 
       {broken.map((s) => (
         <div className="why" key={s.path}>
-          {s.path} {t("读不了：")}{s.parseError || s.status}
+          {s.path} {t("无法读取：")}{s.parseError || s.status}
         </div>
       ))}
 
@@ -159,7 +159,7 @@ export function Hooks({ port, onChanged }: Props) {
       </div>
 
       <button className="more" aria-expanded={expert} onClick={() => setExpert((v) => !v)}>
-        {t(expert ? "收起" : "自己写一条")}
+        {t(expert ? "收起" : "手动添加")}
         <span className="c">{t("{n} 条规则", { n: mine.length })}</span>
       </button>
 
@@ -223,9 +223,9 @@ function Expert({
                   onChange={(e) => patch(i, { match: e.target.value })}
                 />
               )}
-              {meta?.blocking && <i className="warn">{t("能挡住 agent")}</i>}
+              {meta?.blocking && <i className="warn">{t("可拦截 agent")}</i>}
                 <button className="act ghost" data-action="hooks.remove" onClick={() => onSave(draft.filter((_, k) => k !== i))}>
-                {t("删掉")}
+                {t("删除")}
               </button>
             </div>
             <input
@@ -241,11 +241,11 @@ function Expert({
             ))}
             <div className="line">
                 <button className="act" data-action="hooks.run-once" disabled={busy === key} onClick={() => onTry(h, key)}>
-                {t(busy === key ? "运行中…" : "试跑一次")}
+                {t(busy === key ? "运行中…" : "试运行")}
               </button>
               {/* The command really runs. Saying so is the difference between a
                   button that checks syntax and one that might delete a file. */}
-              <span className="note">{t("会真的执行这条命令")}</span>
+              <span className="note">{t("将实际执行该命令")}</span>
             </div>
             {res && <DryRun res={res} blocking={!!meta?.blocking} />}
           </div>
@@ -257,7 +257,7 @@ function Expert({
           className="act"
           onClick={() => setDraft((d) => [...d, { event: "PostToolUse", command: "", scope }])}
         >
-          {t("加一条")}
+          {t("添加规则")}
         </button>
             <button className="act" data-action="hooks.save" data-primary disabled={busy === "save"} onClick={() => onSave(draft)}>
           {t(busy === "save" ? "保存中…" : "保存")}
@@ -291,7 +291,7 @@ function DryRun({ res, blocking }: { res: HookDryRun; blocking: boolean }) {
         ? "这个事件挡不住东西，只会提醒你"
         : res.decision === "warn"
           ? "会作为提醒显示出来"
-          : "会放行";
+          : "将放行";
   return (
     <span className="dryrun" data-blocks={res.blocks ? "" : undefined}>
       <b>{verdict}</b>

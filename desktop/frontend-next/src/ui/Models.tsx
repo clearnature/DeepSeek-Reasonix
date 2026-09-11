@@ -110,7 +110,7 @@ export function Models({ models, current, busy, protocol, onPick }: Props) {
   const vendors = useMemo(() => groupVendors(models), [models]);
   const query = q.trim().toLowerCase();
 
-  if (models.length === 0) return <div className="empty">{t("读不到模型列表。")}</div>;
+  if (models.length === 0) return <div className="empty">{t("无法读取模型列表。")}</div>;
 
   const shown = vendors.map((v) => {
     const kind = protocol[v.key] ?? activeKind(v, current);
@@ -128,7 +128,7 @@ export function Models({ models, current, busy, protocol, onPick }: Props) {
             type="search"
             value={q}
             spellCheck={false}
-            placeholder={t("搜模型名，或输入「图」只看能读图的…")}
+            placeholder={t("搜索模型名称，或输入「图」仅显示支持读图的模型…")}
             aria-label={t("搜索模型")}
             onChange={(e) => setQ(e.target.value)}
           />

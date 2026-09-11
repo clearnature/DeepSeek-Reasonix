@@ -85,7 +85,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
           in this pane. The executable's path is too long for a segment, and it
           is not what you pick by anyway — it rides the 当前生效 row above and
           the note below, where it can be read rather than scanned. */}
-      <div className="seg" data-text role="radiogroup" aria-label={t("命令交给谁执行")}>
+      <div className="seg" data-text role="radiogroup" aria-label={t("命令执行程序")}>
         <button role="radio" data-action="shell.executor" aria-checked={auto} disabled={!!busy} onClick={() => void save("auto", "auto", "")}>
           {t("自动")}
         </button>
