@@ -12,9 +12,9 @@ const status = (over: Partial<SessionStatus> = {}) =>
   ({ preset: "balanced" as Preset, effort: "auto", toolApprovalMode: "ask" as ApprovalMode,
      plan: false, modelRef: "deepseek/deepseek-v4-pro", ...over } as SessionStatus);
 
-function draw(st: SessionStatus | null = status()) {
+function draw(st: SessionStatus | null = status(), running = false) {
   const r = render(
-    <Composer port={new MockPort() as unknown as AgentPort} status={st} running={false}
+    <Composer port={new MockPort() as unknown as AgentPort} status={st} running={running}
       focus={0} onSubmit={vi.fn()} onChanged={vi.fn()} onError={vi.fn()} />,
   );
   // The separators are the shelf's own, so counting them says whether anything
@@ -99,5 +99,30 @@ describe("the quiet may not swallow a fully-permitted session", () => {
     const { container } = draw(status({ toolApprovalMode: "yolo" as ApprovalMode, plan: true }));
     expect(container.textContent).toMatch(/全部放行/);
     expect(container.textContent).toMatch(/计划/);
+  });
+});
+
+// Which button is filled is the answer to "what would you press now", and while
+// a turn runs that is stopping it. Steering is an Enter away and the footer
+// says so; stopping has no other way in. Held here rather than only in
+// perf/focus.mjs, because that one needs a browser and does not run in CI.
+describe("the emphasised action while a turn runs", () => {
+  it("is stopping, not steering", () => {
+    const { container } = draw(status(), true);
+    const primary = container.querySelector(".go .btn[data-primary] span:last-child");
+    expect(primary?.textContent).toBe("停下");
+  });
+
+  it("leaves steering where sending was, so the rightmost button never moves", () => {
+    const idle = draw().container.querySelector(".go .btn:last-child span:last-child")?.textContent;
+    cleanup();
+    const live = draw(status(), true).container.querySelector(".go .btn:last-child span:last-child")?.textContent;
+    expect([idle, live]).toEqual(["发送", "插话"]);
+  });
+
+  it("puts it back on sending once the turn is over", () => {
+    const { container } = draw(status(), false);
+    expect(container.querySelector(".go .btn[data-primary] span:last-child")?.textContent).toBe("发送");
+    expect(container.querySelector(".go .btn.stop")).toBeNull();
   });
 });

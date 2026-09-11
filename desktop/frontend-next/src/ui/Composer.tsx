@@ -644,6 +644,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
           {running && (
             <button
               className="btn stop"
+              data-primary
               data-action="session.stop"
               data-pending={stopping ? "" : undefined}
               disabled={stopping}
@@ -667,9 +668,13 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
               <span>{t(stopping ? "正在停止…" : "停下")}</span>
             </button>
           )}
+          {/* While a turn runs, the emphasised action is stopping it: steering is
+              one Enter away and the footer says so, while stopping has no other
+              way in. The rightmost button keeps its place either way — it is
+              always "send what I typed". */}
           <button
             className="btn send"
-            data-primary
+            data-primary={running ? undefined : ""}
             data-action="session.send"
             data-running={running ? "" : undefined}
             disabled={sendDisabled}

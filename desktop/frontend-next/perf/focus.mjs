@@ -93,12 +93,15 @@ const reachable = await page.evaluate(() => {
 check("专注时两栏都进不去键盘焦点", reachable.length === 0, reachable.join("、") || "一个都进不去");
 
 // ── 5：专注不是阅读器，会话仍然可操作 ────────────────────────────────
-// 一轮真在跑的时候：状态看得见，那一枚是「停下」而不是「发送」。
+// A turn actually running: the state is visible, and the emphasised button is
+// 停下 rather than 发送. Read by [data-primary] rather than by the send
+// button's class — which one is emphasised is the question, and .send was only
+// the answer back when there was a single button.
 await page.evaluate(() => window.__feed({ kind: "turn_started" }));
 await page.waitForTimeout(500);
 const running = await page.evaluate(() => ({
   run: document.querySelector(".app")?.dataset.run ?? "",
-  action: document.querySelector(".compose .go .send span:last-child")?.textContent?.trim() ?? "",
+  action: document.querySelector(".compose .go .btn[data-primary] span:last-child")?.textContent?.trim() ?? "",
   composer: !!document.querySelector(".compose textarea"),
 }));
 check("专注时仍然看得出这一轮在跑", running.run === "running", `data-run=${running.run}`);
