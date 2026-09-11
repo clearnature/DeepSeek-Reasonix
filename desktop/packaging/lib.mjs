@@ -120,6 +120,10 @@ export function packagerOptions({ target, version, identity, root, electronVersi
     ignore: shellIgnore,
   };
   if (icon) options.icon = icon;
+  // Offline packaging: point @electron/packager at a pre-seeded directory
+  // holding the Electron dist zip, so a proxied link cannot fail the build.
+  // Unset keeps the upstream download behaviour.
+  if (process.env.ELECTRON_ZIP_DIR) options.electronZipDir = process.env.ELECTRON_ZIP_DIR;
   if (target.packagerPlatform === "win32") {
     options.win32metadata = {
       CompanyName: identity.companyName,
