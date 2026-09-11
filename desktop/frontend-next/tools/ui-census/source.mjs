@@ -107,8 +107,12 @@ for (const [path, tree] of trees) {
         if (sp.type === "ImportDefaultSpecifier") m.set(sp.local.name, { file: target, name: "default" });
       }
     }
-    if (isCall(n) && n.callee?.type === "Import" && n.arguments[0]?.type === "StringLiteral") {
-      const target = resolveSpec(path, n.arguments[0].value);
+    // A deferred route is still production code. The parser spells `import()`
+    // as ImportExpression, so reading it as a call by that name reaches nothing
+    // and every action behind a lazy boundary reads as orphaned.
+    const dyn = n.type === "ImportExpression" && n.source?.type === "StringLiteral" && n.source.value;
+    if (dyn) {
+      const target = resolveSpec(path, dyn);
       if (target) fs.add(target);
     }
   });
