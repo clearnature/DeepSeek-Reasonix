@@ -150,12 +150,23 @@ func TestWorkspacesUnderATempRootAreNotOrdinaryUse(t *testing.T) {
 		scratch bool
 	}{
 		{"a driven run's workspace", config.WorkspaceSlug(filepath.Join(os.TempDir(), "assay", "ws")), true},
-		{"the system temp root itself", config.WorkspaceSlug(filepath.Join("/private/tmp", "run")), true},
+		{"the system temp root itself", config.WorkspaceSlug(filepath.Clean(os.TempDir())), true},
 		{"a person's own project", config.WorkspaceSlug(filepath.Join(home(t), "projects", "thing")), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := underScratch(tc.dir, slugs); got != tc.scratch {
 				t.Fatalf("underScratch(%q) = %v, want %v", tc.dir, got, tc.scratch)
+			}
+		})
+	}
+	// Where one temp root is reached by two names, the host may have written
+	// either. Asserting the second name unconditionally instead asserts that
+	// a Unix path is a temp root on hosts where it is an ordinary directory.
+	if alias := resolved("/tmp"); filepath.Clean(alias) != filepath.Clean("/tmp") {
+		t.Run("the temp root's other name", func(t *testing.T) {
+			dir := config.WorkspaceSlug(filepath.Join(alias, "run"))
+			if !underScratch(dir, slugs) {
+				t.Fatalf("underScratch(%q) = false, want true", dir)
 			}
 		})
 	}
