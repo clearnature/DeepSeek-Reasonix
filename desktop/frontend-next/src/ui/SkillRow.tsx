@@ -9,13 +9,17 @@ import { reason } from "../i18n/kernel";
 // reach it at all, and which of the layers it was switched at.
 const SCOPE: Record<string, string> = { project: "项目", custom: "自定义", global: "我的", builtin: "内置" };
 
-function triggerNote(sk: SkillEntry, implicit: boolean): string {
-  if (!sk.enabled) return "";
+// Which way the model can reach this skill, and whether it can reach it at all.
+// The second was being read back off the first by comparing the sentence — a
+// judgement that a rewrite of the sentence breaks silently, because nothing
+// renders differently until someone notices the mark is gone.
+function triggerNote(sk: SkillEntry, implicit: boolean): { text: string; reachable: boolean } {
+  if (!sk.enabled) return { text: "", reachable: true };
   const auto = !sk.manual && implicit;
-  if (sk.slashName && auto) return "";
-  if (sk.slashName) return "只能点名";
-  if (auto) return "只能模型自选";
-  return "调不到";
+  if (sk.slashName && auto) return { text: "", reachable: true };
+  if (sk.slashName) return { text: "只能点名", reachable: true };
+  if (auto) return { text: "只能模型自选", reachable: true };
+  return { text: "调不到", reachable: false };
 }
 
 export function SkillRow({
@@ -44,7 +48,7 @@ export function SkillRow({
     <div className="skrow" data-off={sk.enabled ? undefined : ""} data-local={local ? "" : undefined}>
       <span className="nm">{sk.slashName ? "/" + sk.slashName : sk.name}</span>
       <span className="ds" title={sk.description || undefined}>{sk.description || t("未提供说明")}</span>
-      <span className="how">{note && <i className={note === "调不到" ? "w none" : "w"}>{t(note)}</i>}</span>
+      <span className="how">{note.text && <i className={note.reachable ? "w" : "w none"}>{t(note.text)}</i>}</span>
       <span className="face">
         {sk.subagent && <i className="sa">{t("子代理")}</i>}
         {sk.readOnly && <i className="ro">{t("只读")}</i>}

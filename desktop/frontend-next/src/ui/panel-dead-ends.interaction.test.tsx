@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import "./testkit";
 import { Account } from "./Account";
+import { Settings } from "./Settings";
+import { MockHub } from "../port/mock_hub";
+import userEvent from "@testing-library/user-event";
 import { Memory } from "./Memory";
 import { Versions } from "./Versions";
 import { HttpError, type AgentPort } from "../port/port";
@@ -40,8 +43,8 @@ describe("a read the kernel refuses", () => {
 
   it("says why on the memory panel instead of calling an unread store empty", async () => {
     const port = new MockPort() as unknown as AgentPort;
-    const refusing = { ...port, memories: () => Promise.reject(refusal("internal.failed")) } as unknown as AgentPort;
-    render(<Memory port={refusing} />);
+    port.memories = () => Promise.reject(refusal("internal.failed"));
+    render(<Memory port={port} />);
     expect(await screen.findByText(said("internal.failed"))).toBeTruthy();
     // The old first paint said this outright, before any answer had arrived.
     expect(screen.queryByText("无法读取记忆。")).toBeNull();
@@ -65,9 +68,33 @@ describe("a store with nothing in it", () => {
   // Not a second write path — the one the CLI's memory view already points at.
   it("names the way to write a fact instead of ending the page", async () => {
     const port = new MockPort() as unknown as AgentPort;
-    const empty = { ...port, memories: () => Promise.resolve({ memories: [], recallQuery: "" }) } as unknown as AgentPort;
-    render(<Memory port={empty} />);
+    port.memories = () => Promise.resolve({ memories: [], recallQuery: "" });
+    render(<Memory port={port} />);
     expect(await screen.findByText("暂无记录。")).toBeTruthy();
     expect(screen.getByText("/remember")).toBeTruthy();
+  });
+});
+
+describe("a write the kernel refuses", () => {
+  // A third way a page becomes a dead end: the click is refused, run() catches
+  // it and stores the reason, and the page it happened on has nowhere to print
+  // it. The banner used to be copied onto the two pages someone remembered;
+  // 创建隔离副本 sits on a third, and showed nothing at all.
+  it("says so on whichever page the click was made", async () => {
+    const port = new MockPort() as unknown as AgentPort;
+    port.isolateWorkspace = () => Promise.reject(refusal("workspace.changing_disabled"));
+    render(
+      <Settings
+        hub={new MockHub() as never}
+        port={port}
+        status={{ preset: "balanced", toolApprovalMode: "ask" } as never}
+        theme="light" onTheme={() => {}} contrast="" onContrast={() => {}} weight="" onWeight={() => {}}
+        look={{} as never} onLook={() => {}} reloadThemes={() => {}}
+        onClose={() => {}} onChanged={() => {}} onError={() => {}}
+        account={null} accountUnread="" reloadAccount={() => {}}
+      />,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "创建" }));
+    expect(await screen.findByText(said("workspace.changing_disabled"))).toBeTruthy();
   });
 });

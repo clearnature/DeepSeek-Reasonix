@@ -18,6 +18,12 @@ import { dropTool, foldLastRead, foldTool, mergeReads } from "./fold";
 export { quoteAmount };
 export { showsReceipt };
 
+// doing is what the status chip prints. These two values are also read back by
+// the reducer, so they get a name: a comparison against a sentence is one copy
+// pass away from never matching again, and nothing fails when it stops.
+const RUNNING = "运行中";
+const WAITING_WORKSPACE = "等待工作区";
+
 export const initialState: SessionState = {
   error: "",
   executions: {},
@@ -249,7 +255,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     // 计划卡的三个结局里只有一个是「放行」：改计划和暂不执行都在门口否决，
     // 区别只在离不离开计划模式 —— 两个都不该把标签写成某个工具正在跑。
     const halted = ev.verdict === "deny" || ev.verdict === "revise" || ev.verdict === "exit";
-    const resumed = decided?.t === "approval" && !halted ? decided.a.tool || "运行中" : s.doing;
+    const resumed = decided?.t === "approval" && !halted ? decided.a.tool || RUNNING : s.doing;
     return {
       ...s,
       doing: decided?.t === "ask" ? "运行中" : resumed,
@@ -493,7 +499,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
       // after the wait was over.
       if (ev.code === "workspace_lease") {
         const waiting: Item = { t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code };
-        return { ...s, doing: "等待工作区", items: [...s.items, waiting] };
+        return { ...s, doing: WAITING_WORKSPACE, items: [...s.items, waiting] };
       }
       if (ev.code === "workspace_lease_resumed" || ev.code === "workspace_lease_abandoned") {
         const items = s.items.slice();
@@ -509,7 +515,7 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
         if (!closed) {
           items.push({ t: "notice", id: nextId(), level, text: ev.text ?? "", detail: ev.detail, code: ev.code });
         }
-        return { ...s, doing: s.doing === "等待工作区" ? "运行中" : s.doing, items };
+        return { ...s, doing: s.doing === WAITING_WORKSPACE ? RUNNING : s.doing, items };
       }
       // A retry that repeats says the same thing each time. Three identical
       // lines push whatever came before them off the screen and read as three

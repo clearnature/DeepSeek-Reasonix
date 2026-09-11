@@ -451,6 +451,16 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           {/* Keyed on the section: replacing this column is the navigation,
               and it is the one thing here whose mount really is the cause. */}
           <div className="prefs-col" key={at}>
+            {/* Every refused write on every page lands in one state, so it is
+                said in one place. Copied onto the pages somebody remembered, it
+                was missing from the third that writes it: 创建隔离副本 was
+                refused by the kernel and the screen showed nothing at all. */}
+            {failed && (
+              <div className="find" data-lvl="warn" role="alert">
+                <span className="t">{t("操作未完成")}</span>
+                <span className="why">{failed}</span>
+              </div>
+            )}
           {at === "session" && (
             <>
               <Group id="preset" title={t("执行设定")} now={preset} hint={t("决定任务完成的判定标准。切换立即生效，不会重建运行时。")}>
@@ -511,14 +521,6 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
 
           {at === "model" && (
             <>
-              {/* Every switch on this page goes through run(), so one place to
-                  say why one was refused covers all of them. */}
-              {failed && (
-                <div className="find" data-lvl="warn" role="alert">
-                  <span className="t">{t("操作未完成")}</span>
-                  <span className="why">{failed}</span>
-                </div>
-              )}
               <Group id="roles" title={t("角色分工")} now={roles ? t("{n} 个已指派", { n: assigned }) : undefined}
                 hint={t("每个位置默认使用主模型，只有明确指派过的才会单独设置。更换指派与更换主模型一样需要重建运行时，任务运行期间无法修改。")}>
                 <Roles models={models} roles={roles} main={status?.modelRef} busy={busy}
@@ -613,12 +615,6 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
           {at === "ext" && (
             <>
               {scope && <ScopeBar scope={scope} scopes={scopes} onPick={setScopeAt} />}
-              {failed && (
-                <div className="find" data-lvl="warn" role="alert">
-                  <span className="t">{t("操作未完成")}</span>
-                  <span className="why">{failed}</span>
-                </div>
-              )}
               {/* 装完、改完、删完都要过这一步才算数——把它放在包列表上面，
                   因为它管的是整个运行时，不是某一个包。 */}
               <Group id="ext-runtime"
