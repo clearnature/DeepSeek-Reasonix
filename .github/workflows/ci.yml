@@ -98,6 +98,26 @@ jobs:
         with:
           node-version: "22"
 
+      # Defender real-time scanning on GitHub Windows runners intermittently
+      # crashes Go test binaries mid-syscall (DEP fault at PC=0 in the Windows
+      # syscall trampoline, e.g. golang/go#67139) and briefly keeps freshly
+      # written test files open, causing flaky sharing violations. Exclude the
+      # ephemeral build/test locations; failures stay non-fatal warnings.
+      - name: Exclude build dirs from Defender scanning
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, (go env GOCACHE)) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          foreach ($p in $paths) {
+            try {
+              Add-MpPreference -ExclusionPath $p -ErrorAction Stop
+              Write-Host "Defender exclusion added: $p"
+            } catch {
+              Write-Host "::warning::Defender exclusion failed for ${p}: $($_.Exception.Message)"
+            }
+          }
+
       - name: Install and verify Linux sandbox backend
         if: env.RUN_STEPS == 'true' && runner.os == 'Linux'
         run: |
@@ -219,6 +239,25 @@ jobs:
         with:
           node-version: "22"
 
+      # Defender real-time scanning on GitHub Windows runners intermittently
+      # crashes Go test binaries mid-syscall (DEP fault at PC=0 in the Windows
+      # syscall trampoline, e.g. golang/go#67139) and briefly keeps freshly
+      # written test files open, causing flaky sharing violations. Exclude the
+      # ephemeral build/test locations; failures stay non-fatal warnings.
+      - name: Exclude build dirs from Defender scanning
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, (go env GOCACHE)) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          foreach ($p in $paths) {
+            try {
+              Add-MpPreference -ExclusionPath $p -ErrorAction Stop
+              Write-Host "Defender exclusion added: $p"
+            } catch {
+              Write-Host "::warning::Defender exclusion failed for ${p}: $($_.Exception.Message)"
+            }
+          }
+
       - name: test
         if: env.RUN_STEPS == 'true'
         timeout-minutes: 10
@@ -244,6 +283,25 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+
+      # Defender real-time scanning on GitHub Windows runners intermittently
+      # crashes Go test binaries mid-syscall (DEP fault at PC=0 in the Windows
+      # syscall trampoline, e.g. golang/go#67139) and briefly keeps freshly
+      # written test files open, causing flaky sharing violations. Exclude the
+      # ephemeral build/test locations; failures stay non-fatal warnings.
+      - name: Exclude build dirs from Defender scanning
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, (go env GOCACHE)) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          foreach ($p in $paths) {
+            try {
+              Add-MpPreference -ExclusionPath $p -ErrorAction Stop
+              Write-Host "Defender exclusion added: $p"
+            } catch {
+              Write-Host "::warning::Defender exclusion failed for ${p}: $($_.Exception.Message)"
+            }
+          }
       - name: test
         timeout-minutes: 10
         env:
@@ -318,6 +376,26 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: sdk/go/go.mod
+
+      # Defender real-time scanning on GitHub Windows runners intermittently
+      # crashes Go test binaries mid-syscall (DEP fault at PC=0 in the Windows
+      # syscall trampoline, e.g. golang/go#67139) and briefly keeps freshly
+      # written test files open, causing flaky sharing violations. Exclude the
+      # ephemeral build/test locations; failures stay non-fatal warnings.
+      - name: Exclude build dirs from Defender scanning
+        if: env.RUN_STEPS == 'true' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, (go env GOCACHE)) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          foreach ($p in $paths) {
+            try {
+              Add-MpPreference -ExclusionPath $p -ErrorAction Stop
+              Write-Host "Defender exclusion added: $p"
+            } catch {
+              Write-Host "::warning::Defender exclusion failed for ${p}: $($_.Exception.Message)"
+            }
+          }
 
       - name: gofmt
         if: env.RUN_STEPS == 'true'
@@ -614,6 +692,10 @@ jobs:
       - name: Test native macOS signing coverage
         run: node --test packaging/sign-macos.test.mjs
 
+      - name: Test bounded Electron diagnostics
+        timeout-minutes: 3
+        run: node electron/scripts/performance-smoke.mjs
+
       # The production desktop build uses CGO. Keep the explicit unavailable
       # backend buildable as a fail-closed portability contract instead of
       # silently falling back to kqueue's per-file descriptor usage.
@@ -680,6 +762,25 @@ jobs:
           cache: pnpm
           cache-dependency-path: desktop/pnpm-lock.yaml
 
+      # Defender real-time scanning on GitHub Windows runners intermittently
+      # crashes Go test binaries mid-syscall (DEP fault at PC=0 in the Windows
+      # syscall trampoline, e.g. golang/go#67139) and briefly keeps freshly
+      # written test files open, causing flaky sharing violations. Exclude the
+      # ephemeral build/test locations; failures stay non-fatal warnings.
+      - name: Exclude build dirs from Defender scanning
+        shell: pwsh
+        run: |
+          $paths = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP, (go env GOCACHE)) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          foreach ($p in $paths) {
+            try {
+              Add-MpPreference -ExclusionPath $p -ErrorAction Stop
+              Write-Host "Defender exclusion added: $p"
+            } catch {
+              Write-Host "::warning::Defender exclusion failed for ${p}: $($_.Exception.Message)"
+            }
+          }
+
       # go:embed of frontend/dist needs a built frontend before the package
       # compiles, same as the ubuntu desktop leg.
       - name: Build frontend
@@ -720,6 +821,44 @@ jobs:
       - name: Smoke-test Electron native startup
         timeout-minutes: 3
         run: node packaging/smoke.mjs build/electron/windows-amd64/app --service build/bin/reasonix-desktop.exe
+
+      - name: Test native window geometry on Windows
+        timeout-minutes: 2
+        run: node electron/scripts/window-geometry-smoke.mjs
+
+      - name: Test transcript content bounds in native Electron
+        timeout-minutes: 5
+        env:
+          REASONIX_LAYOUT_ARTIFACTS: ${{ runner.temp }}/transcript-layout-electron
+        run: pnpm --dir frontend test:transcript-electron
+
+      - name: Upload native transcript layout evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: transcript-layout-electron-windows
+          if-no-files-found: ignore
+          retention-days: 7
+          path: ${{ runner.temp }}/transcript-layout-electron
+
+      - name: Test bounded Electron diagnostics
+        timeout-minutes: 3
+        run: node electron/scripts/performance-smoke.mjs
+
+      - name: Measure Electron diagnostic overhead
+        timeout-minutes: 10
+        run: node electron/scripts/performance-benchmark.mjs
+
+      - name: Upload diagnostic benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostic-overhead-windows
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            desktop/electron/artifacts/performance/overhead.json
+            desktop/electron/artifacts/performance/diagnostic-report.png
 
       - name: test (Windows desktop and update helper)
         # Normal wall time is 6-7 minutes; a loaded runner has exceeded 15 with
