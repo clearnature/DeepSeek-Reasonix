@@ -326,6 +326,7 @@
   .modemenu .mi .rt { margin-left: auto; padding-left: 14px; white-space: nowrap }
 
   .mi {
+    position: relative;
     display: flex; gap: 9px; width: 100%; padding: 7px 9px; text-align: left;
     border: 0; border-radius: var(--r-sm); background: transparent;
     color: inherit; font: inherit; cursor: pointer; transition: background var(--m-line);
@@ -333,6 +334,14 @@
   .mi:hover { background: var(--float-hi) }
   .mi:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
   .mi .dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 5.5px; flex: none; background: var(--ghost) }
+  /* Every menu answers the same question — which one is it right now — so it
+     gets the rail's answer: a fill and a straight bar. A hue change on a 6px
+     dot was the whole mark in a value picker, and the eye resolves area. */
+  .mi[data-on] { background: color-mix(in srgb, var(--accent) 7%, transparent) }
+  .mi[data-on]::before {
+    content: ""; position: absolute; left: 0; top: 5px; bottom: 5px; width: 2px;
+    border-radius: 2px; background: var(--accent);
+  }
   .mi[data-on] .dot { background: var(--accent) }
   .mi .tx { min-width: 0; flex: 1 }
   .mi .lb { display: block; font: var(--w-med) var(--fs-ui) var(--ui); color: var(--text) }
@@ -382,7 +391,14 @@
      --float, so on a dark theme the selected row would read as a hole. */
   .slashmenu .mi[data-on] {
     background: color-mix(in srgb, var(--accent) 9%, var(--float-hi));
-    box-shadow: inset 2px 0 var(--accent);
+  }
+  /* The same marker the rail draws on the workspace a pane is open in: a
+     straight bar with an end of its own. An inset shadow was following the
+     row's 6px corner instead, which curved it into a crescent — one idea for
+     "this is the current row", drawn two ways. */
+  .slashmenu .mi[data-on]::before {
+    content: ""; position: absolute; left: 0; top: 5px; bottom: 5px; width: 2px;
+    border-radius: 2px; background: var(--accent);
   }
   /* 选中行本来就该更重，说明文字跟着提一档，正好也把它从 AA 线下拿回来。 */
   .slashmenu .mi[data-on] .ds { color: var(--text) }

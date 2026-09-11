@@ -53,7 +53,15 @@ const read = () =>
         return {
           on: b.hasAttribute("data-on"),
           fill: c[3] === 0 ? null : lum(c) - floor,
-          rail: s.boxShadow !== "none",
+          // 那条竖杠按结构量，不按「有没有阴影」量：它是左边缘一条 2px 宽、
+          // 着了色的标记，换一种画法仍然是它，而阴影可以是任何别的东西。
+          rail: (() => {
+            const m = getComputedStyle(b, "::before");
+            const w = parseFloat(m.width);
+            const painted = m.backgroundColor && !/rgba\(0, 0, 0, 0\)|transparent/.test(m.backgroundColor);
+            if (m.content !== "none" && painted && w > 0 && w <= 4 && parseFloat(m.left) <= 1) return true;
+            return /inset\s+\d/.test(s.boxShadow);
+          })(),
         };
       }),
     };
