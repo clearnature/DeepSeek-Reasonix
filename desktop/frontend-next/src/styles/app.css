@@ -1148,9 +1148,14 @@
   /* display:contents on the frame between them, so the card is still the
      block's child everywhere layout is concerned and only the selector has to
      say so. */
+  /* auto remembers a card once it has been laid out; the fallback is what a
+     card the reader has never reached is assumed to be, and 96px was below the
+     shortest card that exists (measured: min 119, median 199, mean 216). Every
+     unseen card was underestimated, so the error accumulated in one direction
+     and the scroller always landed short — then corrected, which is the jerk. */
   .chunk > .enterbox > .call {
     content-visibility: auto;
-    contain-intrinsic-size: auto 96px;
+    contain-intrinsic-size: auto 216px;
   }
 
   /* 贴底与否由观察它来回答，省掉每次滚动对整条记录的测量 */
