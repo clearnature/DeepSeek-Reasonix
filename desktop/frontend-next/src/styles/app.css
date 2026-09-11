@@ -5239,7 +5239,11 @@
   .sesscopies[aria-expanded="true"] { border-color: var(--warn); color: var(--warn-ink) }
   .sessrow.sesscopy { padding-left: 34px }
   .sessrow.sesscopy .sesstitle { color: var(--ghost); font-style: italic }
-  .sessrow .wsdel, .sessrow .sessedit-btn { opacity: 0 }
+  /* Quiet, not absent. These reserve their width whatever they look like, so
+     hiding them until hover bought nothing back and left a control that reads
+     as missing — the workspace row above keeps its own actions visible and
+     these are the same kind of thing. Held by perf/press.mjs. */
+  .sessrow .wsdel, .sessrow .sessedit-btn { opacity: .45 }
   .sessrow:hover .wsdel, .sessrow:hover .sessedit-btn,
   .sessrow .wsdel:focus-visible, .sessrow .sessedit-btn:focus-visible { opacity: 1 }
   .sessedit-btn {

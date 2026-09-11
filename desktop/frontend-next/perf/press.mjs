@@ -129,6 +129,37 @@ if (silentTotal) {
 }
 check("每个接受指针的控件都对按下有反馈", silentTotal === 0, silentTotal ? `${silentTotal} 个缺少` : "");
 
+// A control that reserves its width and then paints nothing reads as missing,
+// and costs the row the space anyway — the worst of both. Quiet is fine;
+// absent while present is not.
+const ghosts = await page.evaluate(() => {
+  const hiddenAbove = (el) => {
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      if (s.display === "none" || s.visibility === "hidden" || Number(s.opacity) === 0) return true;
+      if (p.hasAttribute("hidden") || p.hasAttribute("inert")) return true;
+    }
+    return false;
+  };
+  const out = new Map();
+  for (const el of document.querySelectorAll("button, a[href], summary, [role=button], [role=option], [role=menuitem]")) {
+    const s = getComputedStyle(el);
+    if (s.display === "none" || s.visibility === "hidden" || Number(s.opacity) > 0.02) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 3 || r.height < 3 || hiddenAbove(el)) continue;
+    const cls = typeof el.className === "string" ? el.className.split(/\s+/)[0] : "";
+    const key = `${el.tagName.toLowerCase()}${cls ? "." + cls : ""}`;
+    out.set(key, (out.get(key) ?? 0) + 1);
+  }
+  return [...out].sort((a, b) => b[1] - a[1]);
+});
+if (ghosts.length) {
+  console.log(`
+占着宽度却不可见的 ${ghosts.length} 种：`);
+  for (const [k, n] of ghosts) console.log(`  ${String(n).padStart(3)}  ${k}`);
+}
+check("占位的控件都看得见", ghosts.length === 0, ghosts.length ? `${ghosts.length} 种是透明的` : "");
+
 if (survey.orphans.length) {
   console.log(`\n接受指针但既非语义元素、也没有 role 的 ${survey.orphans.length} 种（键盘与读屏无法到达）：`);
   for (const [id, n] of survey.orphans) console.log(`  ${String(n).padStart(3)}  ${id}`);
