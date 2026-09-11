@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { AgentPort, HookCatalog, HookDryRun, HookEntry } from "../port/port";
 import { reason } from "../i18n/kernel";
@@ -52,6 +53,7 @@ export function Hooks({ port, onChanged }: Props) {
   const [cat, setCat] = useState<HookCatalog | null>(null);
   const [scope, setScope] = useState<"user" | "project">("user");
   const [expert, setExpert] = useState(false);
+  useEscape(expert, () => setExpert(false));
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [tried, setTried] = useState<Record<string, HookDryRun>>({});

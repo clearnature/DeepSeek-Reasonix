@@ -3,7 +3,7 @@ import type { AccountState } from "../port/port";
 
 // signedIn with an error is a token that is still here and an identity service
 // that could not be reached — the row says so rather than showing a stranger.
-export function AccountRow({ account, onOpen }: { account: AccountState | null; onOpen: () => void }) {
+export function AccountRow({ account, unread, onOpen }: { account: AccountState | null; unread?: string; onOpen: () => void }) {
   const user = account?.user;
   const name = user?.label || user?.handle || user?.email || "";
   const initial = [...(name || "?")][0]?.toUpperCase() ?? "?";
@@ -17,7 +17,15 @@ export function AccountRow({ account, onOpen }: { account: AccountState | null; 
       <span className="who">
         <span className="n">{signedIn ? name || t("已登录") : t("未登录")}</span>
         <span className="d">
-          {account?.expired ? t("登录已过期") : account?.error ? t("连不上身份服务") : signedIn ? user?.email || "" : t("只有联网功能需要它")}
+          {account?.expired
+            ? t("登录已过期")
+            : account?.error
+              ? t("连不上身份服务")
+              : signedIn
+                ? user?.email || ""
+                : unread
+                  ? t("这里读不到登录状态")
+                  : t("只有联网功能需要它")}
         </span>
       </span>
     </button>

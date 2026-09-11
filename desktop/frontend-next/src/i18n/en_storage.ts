@@ -45,6 +45,6 @@ export const EN_STORAGE: Record<string, string> = {
   "设置和 API key，始终随用户配置文件走":
     "Settings and API keys; these always stay with your user profile",
   进程锁: "Process locks",
-  "多个实例互斥用，必须留在本机固定位置":
-    "How instances exclude each other; these must stay in one place on this machine",
+  "多个实例互斥用，必须留在本机固定位置。每个是空文件，删掉会破坏互斥，所以只留不删":
+    "How instances exclude each other; these must stay in one place on this machine. Each is an empty file and removing one would break the exclusion, so they are kept rather than cleaned",
 };

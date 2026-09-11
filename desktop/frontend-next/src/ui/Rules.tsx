@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { AgentPort, PermissionLists, PermissionRules } from "../port/port";
 import { Switch } from "./Switch";
@@ -151,6 +152,7 @@ export function Rules({ port, onChanged }: { port: AgentPort; onChanged: () => v
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
+  useEscape(adding, () => setAdding(false));
   const [shut, setShut] = useState<Set<string>>(new Set());
 
   useEffect(() => {

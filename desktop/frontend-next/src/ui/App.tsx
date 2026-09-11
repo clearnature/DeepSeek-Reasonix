@@ -102,6 +102,7 @@ export function App({ hub }: { hub: HubPort }) {
   // undefined until asked; false means the opening sequence is still owed.
   const [welcomed, setWelcomed] = useState<boolean | undefined>(undefined);
   const [account, setAccount] = useState<AccountState | null>(null);
+  const [accountUnread, setAccountUnread] = useState("");
   const [pack, setPack] = useState<ThemePack | null>(null);
   const [look, setLook] = useState<Look>({});
   // The metrics column is the window's, but its contents belong to the focused
@@ -226,8 +227,20 @@ export function App({ hub }: { hub: HubPort }) {
     };
   }, [activePort]);
 
+  // A kernel that does not carry sign-in refuses this with a code and a
+  // sentence. Dropping it left the panel saying "checking…" for the rest of
+  // the session about a question that had already been answered.
   const reloadAccount = useCallback(() => {
-    activePort?.account().then(setAccount).catch(() => setAccount(null));
+    activePort
+      ?.account()
+      .then((a) => {
+        setAccount(a);
+        setAccountUnread("");
+      })
+      .catch((e) => {
+        setAccount(null);
+        setAccountUnread(reason(e));
+      });
   }, [activePort]);
   useEffect(reloadAccount, [reloadAccount]);
 
@@ -602,7 +615,7 @@ export function App({ hub }: { hub: HubPort }) {
           ) : null}
           </div>
           <div className="railfoot">
-            <AccountRow account={account} onOpen={() => showPrefs("account")} />
+            <AccountRow account={account} unread={accountUnread} onOpen={() => showPrefs("account")} />
           </div>
         </div>
 
@@ -731,6 +744,7 @@ export function App({ hub }: { hub: HubPort }) {
           reloadThemes={reloadThemes}
           at={typeof settings === "string" ? settings : undefined}
           account={account}
+          accountUnread={accountUnread}
           reloadAccount={reloadAccount}
         />
       )}

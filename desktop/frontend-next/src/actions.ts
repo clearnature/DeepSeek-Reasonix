@@ -101,10 +101,14 @@ export const ACTIONS: UIAction[] = [
   //    by the transport verb behind it — a port method reaching post/patch/del
   //    changes canonical state, one reaching get does not, and no name or
   //    return type says which.
+  // Asking again for a read that was refused. Nothing changes on either side,
+  // and the refusal that put the button on screen is what makes it worth one.
+  { id: "account.reload", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "account.sign-in", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "account.sign-out", kind: "kernel-mutation", target: "none", proof: "interaction" },
   { id: "ask.answer", kind: "interaction", target: "none", proof: "authority-effect" },
   { id: "remote-ask.answer", kind: "interaction", target: "none", proof: "interaction" },
+  { id: "memory.reload", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "memory.save", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "memory.restore", kind: "kernel-mutation", target: "entity", proof: "interaction" },
   { id: "memory.forget", kind: "destructive", target: "entity", proof: "interaction" },
@@ -120,6 +124,9 @@ export const ACTIONS: UIAction[] = [
   { id: "extensions.export", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "extensions.enabled", kind: "kernel-mutation", target: "entity", proof: "authority-effect" },
   { id: "extensions.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
+  // Taking back the innermost open thing: a popover, an inline form. One
+  // intent, reached by pressing away and by Escape.
+  { id: "layer.dismiss", kind: "navigation", target: "none", proof: "interaction" },
   { id: "settings.close", kind: "navigation", target: "none", proof: "interaction" },
   { id: "pane.activate", kind: "navigation", target: "none", proof: "interaction" },
   // How this session is being read. One id across a bar button and a menu row,
@@ -184,6 +191,7 @@ export const ACTIONS: UIAction[] = [
   { id: "remotes.add", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "remotes.save", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "remotes.remove", kind: "destructive", target: "entity", proof: "authority-effect" },
+  { id: "versions.reload", kind: "repeatable", target: "none", proof: "interaction" },
   { id: "versions.pin", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "versions.activate", kind: "kernel-mutation", target: "none", proof: "authority-effect" },
   { id: "shell.executor", kind: "kernel-mutation", target: "none", proof: "authority-effect" },

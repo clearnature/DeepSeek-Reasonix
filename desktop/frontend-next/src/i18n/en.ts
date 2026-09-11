@@ -498,6 +498,8 @@ export const EN: Record<string, string> = {
 
   // ── 版本 ─────────────────────────────────────────────────────────
   "正在读取版本…": "Loading versions…",
+  "读不到版本信息": "Version information could not be read",
+  "再试一次": "Try again",
   "连不上版本目录": "Cannot reach the version index",
   "已固定": "Pinned",
   "固定在这里": "Pin here",
@@ -513,6 +515,8 @@ export const EN: Record<string, string> = {
 
   // ── 账号 ─────────────────────────────────────────────────────────
   "正在检查登录状态…": "Checking sign-in status…",
+  "读不到登录状态": "Sign-in status could not be read",
+  "这里读不到登录状态": "Sign-in status cannot be read here",
   "上次的登录已过期。": "The previous sign-in has expired.",
   "只清除本地登录凭证，不影响会话、记忆和配置":
     "Clears the local credential only; sessions, memory and config are untouched",
@@ -559,6 +563,9 @@ export const EN: Record<string, string> = {
   "一轮结束时跑测试，红了会作为提醒显示出来": "Runs the tests at the end of a turn; a red one shows up as a warning",
   "已过期": "Expired",
   "读不到记忆。": "Could not read the memory.",
+  "读不到记忆": "Memory could not be read",
+  "要自己记一条：在输入框里用 {cmd} 写下来。": "To write one yourself, use {cmd} in the composer.",
+  "正在读取记忆…": "Loading memory…",
 
   // ── 其余 ─────────────────────────────────────────────────────────
   "没有打开的会话": "No session open",

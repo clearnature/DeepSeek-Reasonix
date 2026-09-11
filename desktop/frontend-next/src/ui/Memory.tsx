@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
+import { tx } from "../i18n/rich";
 import { reason } from "../i18n/kernel";
 import type { AgentPort, MemoryEdit, MemoryEntry } from "../port/port";
 
@@ -15,6 +16,7 @@ const SCOPE: Record<string, string> = { project: "项目", global: "我的" };
 
 export function Memory({ port }: { port: AgentPort }) {
   const [items, setItems] = useState<MemoryEntry[] | null>(null);
+  const [unread, setUnread] = useState("");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState("");
   const [busy, setBusy] = useState("");
@@ -29,13 +31,46 @@ export function Memory({ port }: { port: AgentPort }) {
       .then((c) => {
         setItems(c.memories);
         setQuery(c.recallQuery);
+        setUnread("");
       })
-      .catch(() => setItems(null));
+      .catch((e) => {
+        setItems(null);
+        setUnread(reason(e));
+      });
   };
   useEffect(reload, [port]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!items) return <div className="empty">{t("读不到记忆。")}</div>;
-  if (items.length === 0) return <div className="empty">{t("还没有记下任何东西。")}</div>;
+  // This panel reads, rewrites and removes facts; writing a new one is the
+  // composer's /remember — the same command the CLI's memory view points at.
+  // Naming it here rather than opening a second write path keeps one way in,
+  // and this page had none at all: an empty store was a dead end.
+  const authoring = (
+    <p className="note">{tx("要自己记一条：在输入框里用 {cmd} 写下来。", { cmd: <code>/remember</code> })}</p>
+  );
+
+  // Three answers, not two: a request still out is not a store that refused,
+  // and reading the first as the second told every reader their memory was
+  // broken for as long as the first fetch took.
+  if (unread)
+    return (
+      <div className="find" data-lvl="warn" role="alert">
+        <span className="t">{t("读不到记忆")}</span>
+        <span className="why">
+          {unread}
+          <button className="lnk" data-action="memory.reload" onClick={reload}>
+            {t("再试一次")}
+          </button>
+        </span>
+      </div>
+    );
+  if (!items) return <div className="empty">{t("正在读取记忆…")}</div>;
+  if (items.length === 0)
+    return (
+      <>
+        <div className="empty">{t("还没有记下任何东西。")}</div>
+        {authoring}
+      </>
+    );
 
   const save = async () => {
     if (!edit) return;
@@ -203,6 +238,7 @@ export function Memory({ port }: { port: AgentPort }) {
         );
       })}
       {error && <div className="why">{error}</div>}
+      {authoring}
     </div>
   );
 }

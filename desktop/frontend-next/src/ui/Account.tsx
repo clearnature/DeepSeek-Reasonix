@@ -9,7 +9,7 @@ import type { AccountState, AgentPort } from "../port/port";
 // state is App's, not this panel's. Fetching its own opened on null and drew
 // the signed-out branch for a round trip, which is how a click aimed at 登录
 // landed on 退出 when the answer arrived mid-reach.
-export function Account({ port, state, reload }: { port: AgentPort; state: AccountState | null; reload: () => void }) {
+export function Account({ port, state, unread, reload }: { port: AgentPort; state: AccountState | null; unread?: string; reload: () => void }) {
   const [code, setCode] = useState<{ userCode: string; uri: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -68,7 +68,22 @@ export function Account({ port, state, reload }: { port: AgentPort; state: Accou
   };
 
   // Unknown is its own state. Rendering it as signed out puts an action on
-  // screen that the next tick may replace with its opposite.
+  // screen that the next tick may replace with its opposite. Refused is a
+  // third: the kernel already said why, and waiting is not what to do about it.
+  if (unread) {
+    return (
+      <div className="find" data-lvl="warn" role="alert">
+        <span className="t">{t("读不到登录状态")}</span>
+        <span className="why">
+          {unread}
+          <button className="lnk" data-action="account.reload" onClick={reload}>
+            {t("再试一次")}
+          </button>
+        </span>
+      </div>
+    );
+  }
+
   if (state === null) {
     return <p className="acct-note">{t("正在检查登录状态…")}</p>;
   }

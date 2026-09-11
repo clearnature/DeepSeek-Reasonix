@@ -32,20 +32,10 @@ export class SseExtensions extends SseLook {
   async setPluginEnabled(name: string, enabled: boolean) {
     await this.post0<{ reloadError?: string }>("/plugins/enabled", { name, enabled });
   }
-  async removePlugin(name: string): Promise<PluginPlan> {
-    const res = await fetch(this.base + "/plugins/" + encodeURIComponent(name), {
-      method: "DELETE",
-      credentials: "same-origin",
-    });
-    const body = (await res.json().catch(() => ({}))) as PluginPlan & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/plugins/${name}: ${res.status}`);
-    return body;
+  removePlugin(name: string): Promise<PluginPlan> {
+    return this.del0<PluginPlan>("/plugins/" + encodeURIComponent(name));
   }
 
-  // A webview starts no downloads of its own, so the shell writes the file
-  // through its own save dialog when there is one. In a browser tab the archive
-  // is an ordinary download, and the header is read first because the body is
-  // bytes and has nowhere to say what was stripped out of it.
   // A webview starts no downloads of its own, so the shell writes the file
   // through its own save dialog when there is one. In a browser tab the archive
   // is an ordinary download, and the header is read first because the body is

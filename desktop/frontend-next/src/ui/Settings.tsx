@@ -31,6 +31,7 @@ import { KIND_LABEL } from "./vendors";
 import { planProtocolSwitch } from "./protocolswitch";
 import { Roles } from "./Roles";
 import { Boundary } from "./Boundary";
+import { Path } from "./Path";
 import { Versions } from "./Versions";
 import { Memory } from "./Memory";
 import { DEFAULT_DAYS, Usage } from "./Usage";
@@ -84,10 +85,11 @@ interface Props {
   onChanged: () => void;
   at?: string;
   account: AccountState | null;
+  accountUnread: string;
   reloadAccount: () => void;
 }
 
-export function Settings({ hub, onError, port, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, reloadThemes, at: opened, account: acct, reloadAccount }: Props) {
+export function Settings({ hub, onError, port, status, theme, onTheme, contrast, onContrast, weight, onWeight, look, onLook, onClose, onChanged, reloadThemes, at: opened, account: acct, accountUnread, reloadAccount }: Props) {
   const [at, setAt] = useState<Section>((opened as Section) || "session");
   // 搜索的语料是这张表，不是屏幕上的 DOM：分区是按需挂载的，读 DOM 就只搜得到
   // 当前这一页，而为了搜索把每一页都挂起来会让隐藏页面开始发请求。
@@ -180,12 +182,18 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
     port.versions().then((v) => put("versions", v.current || "dev")).catch(() => {});
   }, [port]);
 
-  // Focus lands once, when the pane opens. onClose is a fresh arrow on every
-  // parent render, so re-running this with it would pull focus back out of
-  // whatever the user is holding — a native select closes its dropdown the
-  // instant it is blurred, which reads as the menu refusing to open at all.
+  // Focus lands once, when the pane opens, and goes back where it came from on
+  // the way out. onClose is a fresh arrow on every parent render, so re-running
+  // this with it would pull focus out of whatever the user is holding — a
+  // native select closes its dropdown the instant it is blurred, which reads as
+  // the menu refusing to open. Closing used to leave focus on <body>, which
+  // left a reader on the keyboard with no position at all.
   useEffect(() => {
+    const from = document.activeElement as HTMLElement | null;
     root.current?.focus();
+    return () => {
+      if (from?.isConnected) from.focus();
+    };
   }, []);
 
   useEffect(() => {
@@ -412,9 +420,12 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
             return (
               <Fragment key={group}>
                 <div className="navsec">{t(group)}</div>
+                {/* One tab stop for the list, arrows move inside it: twelve
+                    stops made Tab the wrong way through this screen. */}
                 {rows.map(([id, name]) => (
                   <button key={id} id={`prefs-${id}`} role="tab" title={t(name)}
                     data-action="settings.section" data-value={id}
+                    tabIndex={at === id ? 0 : -1}
                     aria-selected={at === id} onClick={() => setAt(id)}>
                     <svg viewBox="0 0 16 16" aria-hidden="true">{ICON[id]}</svg>
                     <span className="nm">{t(name)}</span>
@@ -477,7 +488,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               <Group id="session-dir" title={t("这个会话在哪写")}>
                 <div className="kv">
                   <span className="k">{t("工作目录")}</span>
-                  <span className="v">{status?.cwd ?? "—"}</span>
+                  <span className="v"><Path of={status?.cwd ?? "—"} /></span>
                 </div>
                 <p className="note">
                   {t("在左栏管理文件夹：底部添加，展开后可新建会话。会话归属于创建它的文件夹，不会移动到其他位置。")}
@@ -717,7 +728,7 @@ export function Settings({ hub, onError, port, status, theme, onTheme, contrast,
               title={t("账号")}
               hint={t("Reasonix 本身不需要账号，仅在需要联网的功能中使用：社区发帖、崩溃问题跟进，以及后续的技能发布。")}
             >
-              <Account port={port} state={acct} reload={reloadAccount} />
+              <Account port={port} state={acct} unread={accountUnread} reload={reloadAccount} />
             </Group>
           )}
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { Protocol, ProviderCheck, ProviderEdit, ProviderEntry, ProviderProbe } from "../port/port";
 import { AddProvider } from "./AddProvider";
@@ -77,6 +78,7 @@ interface ProvidersProps {
 export function Providers({ port, onChanged, onFailed, protocol, onProtocol, activeKindFor }: ProvidersProps) {
   const [list, setList] = useState<ProviderEntry[] | null>(null);
   const [adding, setAdding] = useState(false);
+  useEscape(adding, () => setAdding(false));
   const [busy, setBusy] = useState("");
 
   const reload = useCallback(() => {
@@ -146,6 +148,7 @@ function Conn({
 }) {
   const [found, setFound] = useState<ProviderCheck | null>(null);
   const [editing, setEditing] = useState(false);
+  useEscape(editing, () => setEditing(false));
   const entry = a.byKind[kind] ?? a.byKind[a.kinds[0]];
   const checking = busy === `check:${entry.name}`;
   const inUse = a.kinds.some((k) => a.byKind[k].inUse);

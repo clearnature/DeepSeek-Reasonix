@@ -35,7 +35,7 @@ function draw() {
       theme="light" onTheme={() => {}} contrast="" onContrast={() => {}} weight="" onWeight={() => {}}
       look={{} as never} onLook={() => {}} reloadThemes={() => {}}
       onClose={onClose} onChanged={() => {}} onError={() => {}}
-      account={null} reloadAccount={() => {}}
+      account={null} accountUnread="" reloadAccount={() => {}}
     />,
   );
   const find = () => screen.getByRole("textbox", { name: "搜索设置" });

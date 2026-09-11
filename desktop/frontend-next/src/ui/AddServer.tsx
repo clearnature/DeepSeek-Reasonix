@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import type { AgentPort, McpDraftServer, McpInstallResult, McpInstallScope, McpRisk } from "../port/port";
 import { reason } from "../i18n/kernel";
@@ -26,6 +27,8 @@ interface Props {
 }
 
 export function AddServer({ port, canProject, onClose, onInstalled }: Props) {
+  // Mounted only while open, so this component is the layer Escape closes.
+  useEscape(true, onClose);
   const [text, setText] = useState("");
   const [draft, setDraft] = useState<{ servers: McpDraftServer[]; risks: McpRisk[] } | null>(null);
   const [scope, setScope] = useState<McpInstallScope>("user");

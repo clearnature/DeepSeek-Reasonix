@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import { useFileDrop } from "./filedrop";
 import type { AgentPort, PluginAction, PluginPackage, PluginPlan } from "../port/port";
@@ -29,6 +30,8 @@ interface Props {
 }
 
 export function AddPlugin({ port, onClose, onInstalled, updating }: Props) {
+  // Mounted only while open, so this component is the layer Escape closes.
+  useEscape(true, onClose);
   const [text, setText] = useState(updating?.source ?? "");
   const [plan, setPlan] = useState<PluginPlan | null>(null);
   const [done, setDone] = useState<PluginPlan | null>(null);

@@ -15,15 +15,7 @@ export class SseHook extends SseMcp {
   // what the user is trying to learn — so it is read out of the body.
   // The failure message is the answer here — "command not found" is exactly
   // what the user is trying to learn — so it is read out of the body.
-  async dryRunHook(h: HookEntry): Promise<HookDryRun> {
-    const res = await fetch(this.base + "/hooks/dry-run", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ event: h.event, match: h.match, command: h.command, timeout: h.timeout, cwd: h.cwd }),
-    });
-    const body = (await res.json().catch(() => ({}))) as HookDryRun & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/hooks/dry-run: ${res.status}`);
-    return body;
+  dryRunHook(h: HookEntry): Promise<HookDryRun> {
+    return this.post0<HookDryRun>("/hooks/dry-run", { event: h.event, match: h.match, command: h.command, timeout: h.timeout, cwd: h.cwd });
   }
 }

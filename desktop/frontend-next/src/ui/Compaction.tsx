@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useEscape } from "./dismiss";
 import { t } from "../i18n";
 import { reason } from "../i18n/kernel";
 import type { AgentPort, CompactionSettings } from "../port/port";
@@ -30,6 +31,7 @@ export function Compaction({ port, onChanged }: { port: AgentPort; onChanged: ()
   // been committed, so it could never be committed.
   const [choice, setChoice] = useState<Mode | null>(null);
   const [advanced, setAdvanced] = useState(false);
+  useEscape(advanced, () => setAdvanced(false));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const field = useId();

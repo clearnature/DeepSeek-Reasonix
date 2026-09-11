@@ -276,7 +276,10 @@ func (r Roots) defaultCacheDir() string {
 func (r Roots) defaultStateDir() string { return r.Dir(RootHome) }
 
 // defaultLocksDir ignores the binding on purpose — two isolated runtimes must
-// find the same lock, so it converges on the OS user's cache.
+// find the same lock, so it converges on the OS user's cache. The price is that
+// a lock file outlives its use: deleting one breaks exclusion for a holder that
+// still has it open, so every distinct home ever run leaves a few empty files
+// here — a constant for an install, one set per run for a harness making homes.
 func (Roots) defaultLocksDir() string { return osCacheBase() }
 
 // osCacheBase is the OS user's cache location for this app. It reads no

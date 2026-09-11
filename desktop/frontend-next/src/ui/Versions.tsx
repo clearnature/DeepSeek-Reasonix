@@ -54,10 +54,24 @@ export function Versions({ port }: { port: Port }) {
   const [busy, setBusy] = useState(false);
   const [going, setGoing] = useState("");
   const [failed, setFailed] = useState("");
+  const [unread, setUnread] = useState("");
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
 
+  // The kernel says why it cannot answer — a shell that never declared an
+  // install, a server that does not carry this at all. Folding that back into
+  // null spent the one sentence it gave us and left the panel reading as a
+  // request still in flight, forever.
   const reload = useCallback(() => {
-    port.versions().then(setHub).catch(() => setHub(null));
+    port
+      .versions()
+      .then((h) => {
+        setHub(h);
+        setUnread("");
+      })
+      .catch((e) => {
+        setHub(null);
+        setUnread(reason(e));
+      });
   }, [port]);
 
   useEffect(reload, [reload]);
@@ -102,6 +116,20 @@ export function Versions({ port }: { port: Port }) {
       reload();
     }
   }, [going, progress, reload]);
+
+  if (unread) {
+    return (
+      <div className="find" data-lvl="warn" role="alert">
+        <span className="t">{t("读不到版本信息")}</span>
+        <span className="why">
+          {unread}
+          <button className="lnk" data-action="versions.reload" onClick={reload}>
+            {t("再试一次")}
+          </button>
+        </span>
+      </div>
+    );
+  }
 
   if (hub === null) {
     return <p className="acct-note">{t("正在读取版本…")}</p>;

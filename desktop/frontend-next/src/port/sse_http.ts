@@ -73,9 +73,21 @@ export class SseHttp {
     if (!res.ok) await SseHttp.fail(path, res);
   }
 
+  // A DELETE whose answer is the payload. post0's counterpart, and it exists
+  // for the same reason: hand-rolling one drops the refusal's code.
+  protected async del0<T>(path: string): Promise<T> {
+    const res = await fetch(this.base + path, { method: "DELETE", credentials: "same-origin" });
+    if (!res.ok) await SseHttp.fail(path, res);
+    return (await res.json()) as T;
+  }
+
+  // Reads refuse with a code the same way writes do, so this goes through the
+  // same fail(). It used to throw a bare Error carrying a path and a number,
+  // which spent every refusal the kernel had spelled out — "this server does
+  // not open account sign-in" reached the panel as "/account: 403".
   protected async get<T>(path: string): Promise<T> {
     const res = await fetch(this.base + path, { credentials: "same-origin" });
-    if (!res.ok) throw new Error(`${path}: ${res.status}`);
+    if (!res.ok) await SseHttp.fail(path, res);
     return (await res.json()) as T;
   }
 }

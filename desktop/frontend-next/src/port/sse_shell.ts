@@ -15,15 +15,10 @@ export class SseShell extends SseExtensions {
   shell() {
     return this.get<ShellSettings>("/shell");
   }
-  async saveShell(prefer: string, path: string) {
-    const res = await fetch(this.base + "/shell", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ prefer, path }),
-    });
-    const body = (await res.json().catch(() => ({}))) as ShellSettings & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/shell: ${res.status}`);
-    return body;
+  // post0 for the same reason setContextWindow uses it: a refusal here carries
+  // a code, and hand-rolling the fetch threw it away — "this server does not
+  // let you set the shell" reached the panel in the kernel's English.
+  saveShell(prefer: string, path: string) {
+    return this.post0<ShellSettings>("/shell", { prefer, path });
   }
 }

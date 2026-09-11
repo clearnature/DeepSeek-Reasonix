@@ -54,30 +54,14 @@ export class SseMcp extends SseProvider {
     if (!res.ok) throw new Error(body.error || `/mcp/parse: ${res.status}`);
     return { servers: body.servers ?? [], risks: body.risks ?? [] };
   }
-  async installMcp(server: McpDraftServer, scope: McpInstallScope): Promise<McpInstallResult> {
-    const res = await fetch(this.base + "/mcp/install", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ server, scope }),
-    });
-    const body = (await res.json().catch(() => ({}))) as McpInstallResult & { error?: string };
-    if (!res.ok) throw new Error(body.error || `/mcp/install: ${res.status}`);
-    return body;
+  // Both go through post0 so a refusal keeps its code. Installing and removing
+  // are governed moves — a server that does not allow either says so with one,
+  // and rethrowing only body.error handed the reader the kernel's English.
+  installMcp(server: McpDraftServer, scope: McpInstallScope): Promise<McpInstallResult> {
+    return this.post0<McpInstallResult>("/mcp/install", { server, scope });
   }
   async removeMcp(name: string) {
-    const res = await fetch(this.base + "/mcp/remove", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ name }),
-    });
-    const body = (await res.json().catch(() => ({}))) as {
-      disconnected?: boolean;
-      stillConfigured?: boolean;
-      error?: string;
-    };
-    if (!res.ok) throw new Error(body.error || `/mcp/remove: ${res.status}`);
+    const body = await this.post0<{ disconnected?: boolean; stillConfigured?: boolean }>("/mcp/remove", { name });
     return { disconnected: !!body.disconnected, stillConfigured: !!body.stillConfigured };
   }
 }

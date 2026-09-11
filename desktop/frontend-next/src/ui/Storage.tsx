@@ -16,7 +16,7 @@ const NAMED: Record<string, [string, string]> = {
   cache: ["索引与缓存", "搜索索引与派生数据，删掉会自动重建"],
   worktrees: ["隔离工作区", "交付模式检出的独立副本"],
   home: ["配置与凭据", "设置和 API key，始终随用户配置文件走"],
-  locks: ["进程锁", "多个实例互斥用，必须留在本机固定位置"],
+  locks: ["进程锁", "多个实例互斥用，必须留在本机固定位置。每个是空文件，删掉会破坏互斥，所以只留不删"],
 };
 
 export function Storage({ port }: { port: AgentPort }) {
@@ -97,6 +97,11 @@ export function Storage({ port }: { port: AgentPort }) {
 
       <section className="grp">
         <h3 className="lbl">{t("位置")}</h3>
+        {/* Said once for the section rather than on each row: it is one fact
+            about this kernel, not a property of any one path. Without it the
+            rows lose their 「移动…」 with nothing in its place, which is the
+            reading Row's own note exists to prevent. */}
+        {!state.editable && <p className="note">{t("这台服务器没有开放搬迁存储")}</p>}
         {state.roots.map((root) => (
           <Row
             key={root.id}
@@ -136,9 +141,13 @@ function Bar({ root, largest }: { root: StorageRoot; largest: number }) {
     <div className="vol">
       <div className="row">
         <span className="nm">{t(name)}</span>
+        {/* The count breaks down the size, so it goes where there is a size to
+            break down. The locks root is empty files — 0 B beside thousands of
+            them read as an occupancy nobody could find, next to a meter bar
+            drawn at its 1% floor. */}
         <span className="sz">
           {bytes(root.bytes)}
-          {root.files > 0 && ` · ${t("{n} 个文件", { n: root.files })}`}
+          {root.bytes > 0 && root.files > 0 && ` · ${t("{n} 个文件", { n: root.files })}`}
         </span>
       </div>
       <div className="meter">
