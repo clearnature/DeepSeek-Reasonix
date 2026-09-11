@@ -163,6 +163,14 @@ describe("a duration comes from a weight", () => {
     expect(raw, "hand-written durations: a weight token says it once for every use").toEqual([]);
   });
 
+  it("never writes one into transition-duration either", () => {
+    // .01ms is the reduced-motion kill switch: off is not a weight.
+    const raw = [...css.matchAll(/transition-duration:\s*([^;}]+)/g)]
+      .map((m) => m[1].trim())
+      .filter((v) => /(?<![\w.-])\d*\.?\d+m?s(?![\w-])/.test(v.replace(/\b0s\b/g, "").replace(/\.01ms/g, "")));
+    expect(raw, "a duration written beside the shorthand is still a duration").toEqual([]);
+  });
+
   it("covers every transition in the stylesheet", () => {
     // Guards the guard: a renamed property or a moved file would leave the rule
     // above passing on an empty list.

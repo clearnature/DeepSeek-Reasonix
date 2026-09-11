@@ -128,6 +128,14 @@
     --m-exit: var(--t-line) var(--ease-in);
     --m-step: 36ms;
 
+    /* A press is not a weight either: it is the contact itself, and anything
+       slower reads as the interface thinking it over before answering. What the
+       press looks like is a token too, so reduced motion answers for every
+       control by changing one value instead of repeating their list. */
+    --t-press: .06s;
+    --press: translateY(1px) scale(.985);
+    --press-wash: color-mix(in srgb, var(--text) 7%, transparent);
+
     /* 同样三档，这次是空间。份量决定入场怎么走，也该决定它占多少地方 ——
        只有时长分了档，间距没有，于是一次只读了个文件的调用和一次带二十行
        输出的调用一样重，长回合下来分不出哪里是一段。 */
@@ -218,6 +226,10 @@
   /* 笔画粗细是和对比度并列的一个轴，不是它的一部分：颜色调得再亮，400 的汉字
      在 11px 上仍然是细的。汉字笔画密，同字号下比拉丁更早糊，所以中文界面从
      medium 起步 —— 这两件事以前只有「整体放大」一个旋钮去凑。 */
+  /* 不动的那一档：按下仍然要有回答，但回答不靠位移。--press-wash 留着，
+     颜色不是动效。 */
+  @media (prefers-reduced-motion: reduce) { :root { --press: none } }
+
   :root { --w-reg: 400; --w-med: 500; --w-semi: 600 }
   :root:lang(zh) { --w-reg: 500; --w-med: 600; --w-semi: 700 }
   :root:lang(zh) { --track-display: -.006em }

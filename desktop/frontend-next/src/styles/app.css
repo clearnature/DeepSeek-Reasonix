@@ -242,7 +242,6 @@
     transition: color var(--m-line), border-color var(--m-line), background var(--m-line), transform var(--m-line);
   }
   .btn:hover { color: var(--text); border-color: var(--faint); }
-  .btn:active { transform: translateY(1px); }
   .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .btn[data-primary] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); box-shadow: var(--lit); }
   .btn[data-primary]:hover { filter: brightness(1.08); }
@@ -414,7 +413,7 @@
   }
   .mode:hover { color: var(--text); border-color: var(--faint); background: var(--overlay); transform: translateY(-1px) }
   /* 按下要顶到底再回弹，否则这一排在触控板上摸起来是块玻璃 */
-  .mode:active { transform: translateY(0) scale(.975); transition-duration: .06s }
+  .mode { --press: translateY(0) scale(.975) }
   .mode:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   /* 菜单开着的时候按钮得留在按下态 —— 不然点开一个菜单，源头看着像没被点中 */
   .mode[aria-expanded="true"] { color: var(--text); border-color: var(--faint); background: var(--overlay) }
@@ -484,7 +483,8 @@
     cursor: pointer; transition: background var(--m-line), color var(--m-line);
   }
   .thbtn:hover { background: var(--overlay); color: var(--text) }
-  .thbtn:active { background: var(--border); transform: scale(.93) }
+  .thbtn { --press: scale(.93) }
+  .thbtn:active { background: var(--border) }
   .thbtn { transition: background var(--m-line), color var(--m-line), transform var(--m-line) }
   .thbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   .thbtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round }
@@ -732,7 +732,7 @@
   /* While dragging the handle tracks the pointer, so transform must not tween.
      Releasing drops data-on, which hands transform back to the spring above and
      the borrowed pixels return on their own. */
-  .gutter[data-on]::after { opacity: .9; transition-delay: 0s; transition-duration: .16s, 0s }
+  .gutter[data-on]::after { opacity: .9; transition-delay: 0s; transition-duration: var(--t-line), 0s }
   .gutter[data-edge]::after { animation: edgebump var(--m-card) }
   @keyframes edgebump { 0%, 100% { transform: none } 40% { transform: translateX(var(--bump, 0px)) } }
   .gutter:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; border-radius: var(--r-xs) }
@@ -2344,7 +2344,7 @@
   .polmenu {
     min-width: 296px; padding: 13px 14px 12px; left: auto; right: 0;
     display: flex; flex-direction: column; gap: 16px;
-    transform-origin: bottom right; transition-duration: .2s;
+    transform-origin: bottom right; transition-duration: var(--t-card);
   }
   .segf { display: flex; flex-direction: column; gap: 7px }
   .seglb { font: var(--w-med) 10px var(--mono); letter-spacing: var(--track-cap); text-transform: uppercase; color: var(--faint) }
@@ -2568,7 +2568,7 @@
   .navbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
   .navbtn[aria-current] { color: var(--accent-ink); background: var(--accent-wash) }
   .navbtn[aria-current]::before { content: ""; position: absolute; left: -7px; top: 9px; bottom: 9px; width: 2px; border-radius: var(--r-pill); background: var(--accent) }
-  .navhint { position: absolute; left: calc(100% + 10px); top: 50%; z-index: 40; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--float); box-shadow: var(--shadow); color: var(--text); font: var(--w-med) 11.5px var(--ui); white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-3px, -50%); transition: opacity var(--m-line), transform var(--m-line) }
+  .navhint { position: absolute; left: calc(100% + 10px); top: 50%; z-index: 40; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--float); box-shadow: var(--shadow-float); color: var(--text); font: var(--w-med) 11.5px var(--ui); white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-3px, -50%); transition: opacity var(--m-line), transform var(--m-line) }
   .navbtn:hover .navhint, .navbtn:focus-visible .navhint { opacity: 1; transform: translate(0, -50%) }
 
   /* ── 右 ───────────────────────────────────────────────────────────── */
@@ -3810,11 +3810,12 @@
 
   .mrow { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 12px;
     background: var(--raised); border: 0; border-bottom: 1px solid var(--hair);
-    text-align: left; cursor: pointer }
-  .mrow:disabled { opacity: .5; cursor: default }
+    text-align: left }
+  button.mrow { cursor: pointer }
+  button.mrow:disabled { opacity: .5; cursor: default }
   .mrow:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
   .mrow:last-child { border-bottom: 0 }
-  .mrow:hover { background: var(--overlay) }
+  button.mrow:hover { background: var(--overlay) }
   .mrow[data-on] { background: var(--accent-wash); box-shadow: inset 2px 0 var(--accent) }
   .mrow .pick {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 11px;
@@ -3873,7 +3874,7 @@
     margin-left: auto; padding: 3px 7px; border: 0; border-radius: var(--r-xs);
     background: transparent; color: var(--muted); font: var(--w-reg) 10.5px var(--ui); cursor: pointer;
   }
-  .mlhead .mrefresh:hover { background: var(--hover); color: var(--text) }
+  .mlhead .mrefresh:hover { background: var(--overlay); color: var(--text) }
   .mlhead .mrefresh:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
   .mlhead .mrefresh:disabled { opacity: .45; cursor: default }
   .mguide, .mdiff { margin: 0 0 8px; font: var(--w-reg) 10.5px/1.55 var(--ui); color: var(--faint) }
@@ -3911,7 +3912,7 @@
     min-height: 26px; padding: 2px 6px; border: 0; border-radius: var(--r-xs);
     background: transparent; color: var(--muted); font: var(--w-reg) 10px var(--ui); cursor: pointer;
   }
-  .mline .mverify:hover { background: var(--hover); color: var(--text) }
+  .mline .mverify:hover { background: var(--overlay); color: var(--text) }
   .mline .mverify:disabled { opacity: .38; cursor: default }
   .mline .vtag, .mline .dtag {
     flex: none; min-height: 26px; padding: 2px 8px; border: 1px solid var(--hair); border-radius: var(--r-pill);
@@ -4422,7 +4423,7 @@
     transition: background var(--m-line), color var(--m-line), box-shadow var(--m-line), transform var(--t-line) var(--ease-spring);
   }
   .seg button:hover:not(:disabled) { color: var(--text) }
-  .seg button:active:not(:disabled) { transform: scale(.96) }
+  .seg button { --press: scale(.96) }
   .seg button[aria-pressed="true"], .seg button[aria-checked="true"] {
     background: var(--raised); color: var(--accent-ink); font-weight: var(--w-med);
     box-shadow: var(--lit), 0 1px 2px rgb(0 0 0 / .07);
@@ -6094,14 +6095,22 @@
 .dif-act[disabled] { opacity: .5; cursor: default }
 .dif-act:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
 
-/* A press is the same physical event everywhere. Full-width choices keep their
-   geometry and answer with colour; compact controls move by one physical pixel. */
-:is(.navbtn, .tab, .copy, .sug, .act, .chip, .pickup, .pickgo, .tk-lk):active:not(:disabled) {
-  transform: translateY(1px) scale(.985);
-  transition-duration: .06s;
+/* A press is the same physical event everywhere, so what answers it is what the
+   markup says is a control — nine remembered class names answered for 42. The
+   wash composites over whatever fill the control already has, which is how one
+   rule can answer for a ghost icon and a filled row without knowing either.
+   Held by perf/press.mjs, which reads the membership off the running DOM. */
+:is(button, summary, a[href], [role="button"], [role="tab"], [role="option"],
+  [role="menuitem"], [role="menuitemcheckbox"], [role="switch"],
+  [role="treeitem"]):active:not(:disabled, [aria-disabled="true"]) {
+  transform: var(--press);
+  background-image: linear-gradient(var(--press-wash), var(--press-wash));
+  transition-duration: var(--t-press);
 }
+/* A full-width row squeezed by a percentage moves its far edge several pixels
+   while a 24px button moves a quarter of one. Rows take the push alone. */
+:is([role="treeitem"], .acctrow, .srvrow, .mrow, .memrow) { --press: translateY(1px) }
 @media (prefers-reduced-motion: reduce) {
-  :is(.navbtn, .tab, .copy, .sug, .act, .chip, .pickup, .pickgo, .tk-lk):active:not(:disabled),
   .tk-acts button:hover::after { transform: none !important }
 }
 .dif-ask {
