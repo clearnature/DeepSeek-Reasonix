@@ -106,3 +106,10 @@ websearch-smoke
 .mimosa/
 desktop/.mimosa/
 desktop/frontend/.mimosa/
+
+# Local agent/tool state (never versioned). .claude/skills/** is committed and
+# stays tracked, so only its local settings file is ignored.
+.mimocode/
+.mimocode-project-id
+.gitnexus/
+.claude/settings.local.json
