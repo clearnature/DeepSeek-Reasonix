@@ -68,6 +68,31 @@ async function run() {
     .catch((e) => ({ code: -1, type: String(e) }))`);
   check("the page reaches the kernel through the gate", status.code === 200 && status.type.includes("json"), status);
 
+  // The title bar is the window's drag handle, and -webkit-app-region inherits:
+  // interactive means what the markup says, so a wordmark with role=img and the
+  // group wrapping the window buttons stay drag surface as they should.
+  // a control that does not opt back out is drag surface, the OS swallows the
+  // click, and nothing on screen says why. Only the shell can see this — in a
+  // plain browser the property does not inherit, so a page-level guard cannot
+  // fail on it and would be worse than none.
+  const dragging = await js(`(() => {
+    const bar = document.querySelector('.chrome');
+    if (!bar) return ['no .chrome'];
+    const out = [];
+    const INTERACTIVE = 'button, a[href], input, select, textarea, summary, ' +
+      '[role=button], [role=tab], [role=option], [role=menuitem], [role=menuitemcheckbox], ' +
+      '[role=switch], [role=checkbox], [role=radio], [role=treeitem], [role=link]';
+    for (const el of bar.querySelectorAll(INTERACTIVE)) {
+      const s = getComputedStyle(el);
+      if (s.display === 'none' || s.visibility === 'hidden') continue;
+      if (s.getPropertyValue('-webkit-app-region') !== 'drag') continue;
+      const cls = typeof el.className === 'string' ? el.className.split(/\s+/)[0] : '';
+      out.push(el.tagName.toLowerCase() + (cls ? '.' + cls : ''));
+    }
+    return [...new Set(out)];
+  })()`);
+  check("every control on the title bar is out of the drag region", dragging.length === 0, dragging);
+
   const prefs = win.webContents.getLastWebPreferences() ?? {};
   check("node integration is off", prefs.nodeIntegration !== true);
   check("context isolation is on", prefs.contextIsolation !== false);

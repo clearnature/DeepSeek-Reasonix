@@ -192,8 +192,17 @@
   /* Two spellings because the shells disagree: --wails-draggable is Wails'
      own property, -webkit-app-region is Chromium's. Each ignores the other. */
   [data-titlebar="app"] .chrome { --wails-draggable: drag; -webkit-app-region: drag }
-  [data-titlebar="app"] .chrome button,
-  [data-titlebar="app"] .chrome .picker,
+  /* Membership is what the markup says is interactive, not a list of the
+     controls that happened to be on the bar: the opt-out lived on the last
+     selector of a list, a control was deleted, and the declaration left with
+     it — so every control on the title bar became drag surface and the window
+     ate its clicks. Held by perf/press.mjs. */
+  [data-titlebar="app"] .chrome
+    :is(button, a[href], input, select, textarea, summary, .picker,
+        [role="button"], [role="tab"], [role="menuitem"], [role="switch"]) {
+    --wails-draggable: no-drag;
+    -webkit-app-region: no-drag;
+  }
   /* macOS floats its lights over the corner at a y AppKit owns — measured centre
      25.5px, which is the platform's own unified-toolbar metric. The row matches
      that height rather than the spec's 39px, or the lights sit 6px below the
