@@ -90,7 +90,7 @@ export function AskCard({ item, onAnswer }: Props) {
             {qs.map((q, i) => (
               <div className="ask-pane" key={q.id} data-on={i === tab ? "" : undefined}>
                 <div className="ask-q">{q.prompt}</div>
-                <div className="ask-hint">{t(q.multi ? "可多选" : "选一个")}</div>
+                <div className="ask-hint">{t(q.multi ? "可多选" : "请选择一项")}</div>
                 <div className="opts">
                   {q.options.map((o, j) => (
                     <button
@@ -118,7 +118,7 @@ export function AskCard({ item, onAnswer }: Props) {
                   >
                     <span className="mark" />
                     <span className="txt">
-                      <span className="lb">{t("其他 —— 我自己写")}</span>
+                      <span className="lb">{t("其他 —— 自行填写")}</span>
                     </span>
                   </button>
                 </div>
@@ -126,7 +126,7 @@ export function AskCard({ item, onAnswer }: Props) {
                   <input
                     value={freeShown(i)}
                     readOnly={sealed}
-                    placeholder={t("你想要的第几种做法，写在这儿")}
+                    placeholder={t("在此填写你希望采用的方案")}
                     onChange={(e) => setOther((prev) => at(prev, i, e.target.value))}
                   />
                 </div>

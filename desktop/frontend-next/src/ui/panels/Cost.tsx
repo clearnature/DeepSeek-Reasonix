@@ -34,7 +34,7 @@ export function Cost({ metrics, wallet, account, onRefreshWallet }: Props) {
         {/* 一个按公布价计出来的数和一个拿兑底表估的数是两种断言。 */}
         {sources.length > 0 && (
           <span className="pill" data-tone={metrics.estimated ? "warn" : "ok"}>
-            {metrics.estimated ? t("按兜底价估") : t("已结算")}
+            {metrics.estimated ? t("按兜底价估算") : t("已结算")}
           </span>
         )}
         {metrics.turn > 0 && <span className="delta">{t("本回合")}+{money(metrics.turn, metrics.currency)}</span>}
@@ -46,7 +46,7 @@ export function Cost({ metrics, wallet, account, onRefreshWallet }: Props) {
           <span className="msub">{t("原币种")}</span>
         </div>
       )}
-      {metrics.alt && <p className="mnote">{t("两种结算币不相加 —— 合成一个总数就得凭空发明一个汇率。")}</p>}
+      {metrics.alt && <p className="mnote">{t("两种结算币种不予合并 —— 合成单一总额需要虚构一个汇率。")}</p>}
       {sources.map(([k, v]) => <Row key={k} k={t(SRC[k] ?? k)} v={money(v, metrics.currency)} />)}
       <WalletRows wallet={wallet} account={account} onRefresh={onRefreshWallet} />
       {metrics.rounds.length > 1 && (
@@ -72,7 +72,7 @@ export function Cost({ metrics, wallet, account, onRefreshWallet }: Props) {
 function WalletRows({ wallet, account, onRefresh }: { wallet: Wallet; account: string; onRefresh: () => void }) {
   if (wallet.kind === "absent") return null;
   const name = (
-    <button type="button" className="walletk" onClick={onRefresh} title={t("重新读一次余额")}>
+    <button type="button" className="walletk" onClick={onRefresh} title={t("重新读取余额")}>
       {account ? t("钱包 · {name}", { name: account }) : t("钱包")}
     </button>
   );
@@ -104,7 +104,7 @@ function WalletRead({ reading, name }: { reading: WalletReading; name: ReactNode
   if (lines.length > 1) {
     return (
       <>
-        <Row k={k} v={<span className="msub">{t("两种币不合计")}</span>} />
+        <Row k={k} v={<span className="msub">{t("两种币种不合计")}</span>} />
         {lines.map((l) => <Row key={l.currency} k={l.currency} v={<Amount line={l} />} />)}
       </>
     );

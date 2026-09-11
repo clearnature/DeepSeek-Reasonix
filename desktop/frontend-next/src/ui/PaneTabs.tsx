@@ -238,11 +238,11 @@ export function PaneTabs({ tabs, active, showRoot, onFocus, onClose, onRename }:
           </span>
           <span className="h">
             {liveNow.length === 0
-              ? t("都已经停下了")
+              ? t("均已停止")
               : (liveNow.length === 1
-                  ? t("{names} 还在跑", { names: nameOf(liveNow[0]) })
-                  : t("其中 {n} 个还在跑：{names}", { n: liveNow.length, names: liveNow.slice(0, 3).map(nameOf).join("、") })) +
-                t("，关掉会停下它")}
+                  ? t("{names} 仍在运行", { names: nameOf(liveNow[0]) })
+                  : t("其中 {n} 个仍在运行：{names}", { n: liveNow.length, names: liveNow.slice(0, 3).map(nameOf).join("、") })) +
+                t("，关闭将使其停止")}
           </span>
           <div className="a">
             <button onClick={cancel}>{t("取消")}</button>

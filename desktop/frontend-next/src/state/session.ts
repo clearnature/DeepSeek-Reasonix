@@ -80,8 +80,8 @@ function sealTurn(items: Item[], err?: string): Item[] {
   if (stillborn > 0) {
     const text = plural(
       stillborn,
-      "还有 1 个调用没来得及开始，它没有改动任何文件",
-      "还有 {n} 个调用没来得及开始，它们没有改动任何文件",
+      "另有 1 个调用尚未开始，未修改任何文件",
+      "另有 {n} 个调用尚未开始，均未修改任何文件",
     );
     sealed.push({ t: "notice", id: nextId(), level: "info", text });
   }
@@ -402,10 +402,10 @@ function apply(s: SessionState, ev: SessionEvent): SessionState {
     }
 
     case "approval_request":
-      return ev.approval ? prompted(s, "等你批准", { t: "approval", id: nextId(), a: ev.approval }) : s;
+      return ev.approval ? prompted(s, "等待批准", { t: "approval", id: nextId(), a: ev.approval }) : s;
 
     case "ask_request":
-      return ev.ask ? prompted(s, "等你决定", { t: "ask", id: nextId(), ask: ev.ask }) : s;
+      return ev.ask ? prompted(s, "等待确认", { t: "ask", id: nextId(), ask: ev.ask }) : s;
 
     case "compaction_started":
       return { ...s, items: [...s.items, { t: "compaction", id: nextId(), c: ev.compaction ?? {}, done: false }] };

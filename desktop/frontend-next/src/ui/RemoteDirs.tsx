@@ -41,14 +41,14 @@ export function DirRows({
         ))}
         {/* The first answer may be a cold dial, and it may stop to ask for a
             host key on the way. A dimmed empty box says none of that. */}
-        {!listing && busy ? <p className="pickempty">{t("正在连上去…")}</p> : null}
+        {!listing && busy ? <p className="pickempty">{t("正在建立连接…")}</p> : null}
         {listing && !listing.folders.length && !busy ? (
-          <p className="pickempty">{t("这个目录下面没有子目录了 —— 它自己就可以是工作区")}</p>
+          <p className="pickempty">{t("该目录下没有子目录 —— 它本身即可作为工作区")}</p>
         ) : null}
       </div>
       {/* A cap that says nothing reads as "that folder is not there". */}
       {listing?.truncated ? (
-        <p className="picknote">{t("这个目录太大，只列了前面一部分。要找的在后面的话，直接把路径打上去。")}</p>
+        <p className="picknote">{t("该目录内容过多，仅列出前一部分。如需查找靠后的项，请直接输入路径。")}</p>
       ) : null}
     </>
   );
@@ -123,7 +123,7 @@ export function RemoteDirs({ hub, host, start, onPick, onClose }: Props) {
       }}
     >
       <div className="pickcard">
-        <h2 id="pick-t">{t("在 {host} 上选一个目录", { host })}</h2>
+        <h2 id="pick-t">{t("在 {host} 上选择目录", { host })}</h2>
 
         <form
           className="pickpath"
@@ -149,8 +149,8 @@ export function RemoteDirs({ hub, host, start, onPick, onClose }: Props) {
             value={draft}
             spellCheck={false}
             dir="ltr"
-            placeholder={t("那台机器上的路径")}
-            aria-label={t("那台机器上的路径")}
+            placeholder={t("该机器上的路径")}
+            aria-label={t("该机器上的路径")}
             onChange={(ev) => setDraft(ev.target.value)}
           />
           <button type="submit" className="pickgo" disabled={busy || !draft.trim()}>
@@ -165,7 +165,7 @@ export function RemoteDirs({ hub, host, start, onPick, onClose }: Props) {
         <div className="pickact">
           <button onClick={onClose}>{t("取消")}</button>
           <button data-go="" disabled={!here || busy} data-action="remote.open" onClick={() => onPick(here)}>
-            {t("就用这里")}
+            {t("使用此目录")}
           </button>
         </div>
       </div>

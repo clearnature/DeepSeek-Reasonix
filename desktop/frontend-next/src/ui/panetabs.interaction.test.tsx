@@ -62,11 +62,11 @@ describe("closing a pane that is still working", () => {
   it("re-reads what is still running when the answer comes", async () => {
     const { onClose, again, closerOf } = draw([tab("A", false), tab("B", true)]);
     await userEvent.click(closerOf("B"));
-    expect(screen.getByRole("alertdialog").textContent).toContain("还在跑");
+    expect(screen.getByRole("alertdialog").textContent).toContain("仍在运行");
 
     again([tab("A", false), tab("B", false)]);
-    await waitFor(() => expect(screen.getByRole("alertdialog").textContent).toContain("都已经停下了"));
-    expect(screen.getByRole("alertdialog").textContent).not.toContain("还在跑");
+    await waitFor(() => expect(screen.getByRole("alertdialog").textContent).toContain("均已停止"));
+    expect(screen.getByRole("alertdialog").textContent).not.toContain("仍在运行");
 
     await userEvent.click(confirmBtn());
     expect(onClose).toHaveBeenCalledWith(["B"]);

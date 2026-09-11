@@ -79,7 +79,7 @@ describe("editing a pending entry", () => {
     });
     await edit();
     const why = document.querySelector(".qwhy[data-err]");
-    expect(why?.textContent).toContain("这一条已经不在待送达里了");
+    expect(why?.textContent).toContain("该条已不在待送达队列中");
     expect(why?.textContent).not.toContain("no such entry");
   });
 

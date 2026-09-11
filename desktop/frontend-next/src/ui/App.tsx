@@ -693,8 +693,8 @@ export function App({ hub }: { hub: HubPort }) {
                   ⌘
                 </span>
                 <p className="t">{t("没有打开的会话")}</p>
-                <p className="h">{t("从左边挑一个，或者在当前文件夹开一个新的")}</p>
-                <button data-action="session.new" onClick={() => void openPane({ root: tree[0]?.root }).catch(fail)}>{t("开一个新会话")}</button>
+                <p className="h">{t("从左栏选择，或在当前文件夹新建")}</p>
+                <button data-action="session.new" onClick={() => void openPane({ root: tree[0]?.root }).catch(fail)}>{t("新建会话")}</button>
               </div>
             )}
           </div>

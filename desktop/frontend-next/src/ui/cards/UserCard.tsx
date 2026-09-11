@@ -35,7 +35,7 @@ export function UserCard({
           <span className="nm">{t("我")}</span>
           {item.pending && (
             <span className="pend">
-              {item.queued === "followup" ? t("排队中 · 这一轮跑完就发") : t("排队中 · 下一个工具边界送达")}
+              {item.queued === "followup" ? t("排队中 · 本轮结束后发送") : t("排队中 · 下一个工具边界送达")}
             </span>
           )}
           {queued && onCancelQueued && (

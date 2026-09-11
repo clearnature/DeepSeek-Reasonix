@@ -9,8 +9,8 @@ import type { RememberedFact } from "../../state/session";
 // away, when that will apply, and offers the one-click take-back that is only
 // cheap right now, while the user still remembers the conversation.
 const ACTIVATION: Record<string, string> = {
-  pinned: "以后每一轮都带着",
-  relevant: "以后相关时会想起来",
+  pinned: "后续每轮均会携带",
+  relevant: "后续相关时会被检索",
 };
 
 const SCOPE: Record<string, string> = { project: "仅当前项目", global: "在所有项目里" };

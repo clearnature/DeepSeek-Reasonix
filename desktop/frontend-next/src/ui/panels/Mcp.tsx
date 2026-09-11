@@ -24,8 +24,8 @@ export function Mcp({ servers, onOpen }: { servers: McpEntry[]; onOpen: () => vo
   const count = pending === waiting.length
     ? t("{n} 个待批准", { n: pending })
     : pending === 0
-      ? t("{n} 个连不上", { n: waiting.length })
-      : t("{n} 个连不上 · {p} 个待批准", { n: waiting.length - pending, p: pending });
+      ? t("{n} 个无法连接", { n: waiting.length })
+      : t("{n} 个无法连接 · {p} 个待批准", { n: waiting.length - pending, p: pending });
 
   return (
     <div className="block" data-b="mcp">
@@ -35,7 +35,7 @@ export function Mcp({ servers, onOpen }: { servers: McpEntry[]; onOpen: () => vo
       <div className="srvs">
         {shown.map((s) => (
           <button className="srvrow" key={s.name} data-action="chrome.settings" onClick={onOpen}
-            title={s.state === "pending" ? t("这个服务由仓库声明，到设置里决定是否允许它运行") : t("到设置的 MCP 面板里修复")}>
+            title={s.state === "pending" ? t("该服务由仓库声明，请在设置中决定是否允许其运行") : t("在设置的 MCP 面板中修复")}>
             <span className="hd">
               <i className="pip" data-s={s.state} />
               <span className="nm">{s.name}</span>
@@ -44,7 +44,7 @@ export function Mcp({ servers, onOpen }: { servers: McpEntry[]; onOpen: () => vo
           </button>
         ))}
         {waiting.length > shown.length && (
-          <span className="more">{t("还有 {n} 个，都在设置里", { n: waiting.length - shown.length })}</span>
+          <span className="more">{t("另有 {n} 个，均在设置中", { n: waiting.length - shown.length })}</span>
         )}
       </div>
     </div>

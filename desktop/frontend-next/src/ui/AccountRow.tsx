@@ -20,7 +20,7 @@ export function AccountRow({ account, unread, onOpen }: { account: AccountState 
           {account?.expired
             ? t("登录已过期")
             : account?.error
-              ? t("连不上身份服务")
+              ? t("无法连接身份服务")
               : signedIn
                 ? user?.email || ""
                 : unread

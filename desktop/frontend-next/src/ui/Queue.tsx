@@ -184,7 +184,7 @@ export function Queue({ queue, onRead, onEdit, onMove, onCancel, onRetry, onRefr
               {it.blockReason && <span className="qwhy">{it.blockReason}</span>}
               {unread?.id === it.id && (
                 <span className="qwhy" data-err="" role="alert">
-                  {t("读不回这一条的正文，没有打开编辑：{why}", { why: unread.why })}
+                  {t("无法读取该条的正文，未打开编辑：{why}", { why: unread.why })}
                 </span>
               )}
               {live && (

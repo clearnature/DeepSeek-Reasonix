@@ -19,13 +19,13 @@ const draw = (availability?: TrajectoryAvailability) =>
 describe("what the pane says its rows cover", () => {
   it("marks a prefix as a prefix", () => {
     expect(draw("truncated")).toContain('data-coverage="truncated"');
-    expect(draw("truncated")).toContain("记录到容量上限就停了");
+    expect(draw("truncated")).toContain("记录已达容量上限而停止");
   });
 
   it("does not present an unrecorded run's live events as a record", () => {
     const html = draw("not_recorded");
     expect(html).toContain('data-coverage="not_recorded"');
-    expect(html).toContain("这次运行没有记录轨迹");
+    expect(html).toContain("本次运行未记录轨迹");
   });
 
   it("says nothing is missing only when the host said so", () => {

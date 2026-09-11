@@ -24,9 +24,9 @@ function gapPhrase(kind: string): string {
     case "missing_check": return t("预期的检查从未通过");
     case "failed_verification": return t("验证失败");
     case "stale_verification": return t("验证早于最后一次改动");
-    case "inconclusive_verification": return t("跑过，但退出码是命令里另一段的");
+    case "inconclusive_verification": return t("已运行，但退出码来自命令中的其他片段");
     case "unverified_change": return t("有改动；没有主机能读作证据的检查");
-    case "unreviewed_change": return t("改动后再没看过");
+    case "unreviewed_change": return t("改动后未再检查");
     case "declared_unverified": return t("自己申报未验证");
     default: return kind;
   }

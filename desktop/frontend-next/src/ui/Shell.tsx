@@ -15,8 +15,8 @@ const LABEL: Record<string, string> = {
 // What changes for the person reading it. Only the 5.1 line is a warning: it is
 // the one interpreter that refuses syntax the model writes by habit.
 const NOTE: Record<string, string> = {
-  pwsh: "认得 && 和 ||，但语法仍然是 PowerShell，不是 bash",
-  powershell: "不认 && 和 ||，链式命令得拆成两条",
+  pwsh: "支持 && 和 ||，但语法仍为 PowerShell，而非 bash",
+  powershell: "不支持 && 和 ||，链式命令需拆分为两条",
 };
 
 const label = (o: ShellOption) => LABEL[o.name] ?? o.name;
@@ -44,7 +44,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
 
   useEffect(load, [load]);
 
-  if (!s) return <div className="empty">{t("读不到 shell 配置。")}</div>;
+  if (!s) return <div className="empty">{t("无法读取 shell 配置。")}</div>;
 
   const options = s.options ?? [];
   // Two bashes on one machine are two different programs, so picking one has to
@@ -100,7 +100,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
       <p className="note">
         {auto ? (
           <>
-            {t("自己找，优先真 bash。这台机器上会选到")} {label(s.auto)}
+            {t("自动查找，优先选择原生 bash。本机将选用")} {label(s.auto)}
           </>
         ) : (
           <>
@@ -112,7 +112,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
 
       {noBash && (
         <p className="note">
-          {t("这台机器上没有 bash，所以命令只能按 PowerShell 写。装一个 Git for Windows就会多出 Git Bash 这一项 —— WSL 里的那个不算，它看到的是 /mnt 下的另一套路径，够不着这个工作目录。")}
+          {t("本机没有 bash，因此命令只能按 PowerShell 语法编写。安装 Git for Windows 后会增加 Git Bash 选项 —— WSL 中的 bash 不适用，它看到的是 /mnt 下的另一套路径，无法访问当前工作目录。")}
         </p>
       )}
 
@@ -121,7 +121,7 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
           <span className="fold">{t("指定一个可执行文件")}</span>
         </summary>
         <p className="note">
-          {t("自己编的 bash、MSYS2、装在别处的 pwsh 都填这里。保存前会真的拿它跑一条命令，跑不起来就不会写进配置。")}
+          {t("自行编译的 bash、MSYS2，或安装在其他位置的 pwsh 均可填写于此。保存前会实际执行一条命令进行验证，无法运行则不会写入配置。")}
         </p>
         <div className="fields">
           <label className="grow full">
@@ -141,14 +141,14 @@ export function Shell({ port, onChanged }: { port: AgentPort; onChanged?: () => 
           )}
           <button className="act" data-action="shell.custom-path" data-primary disabled={!!busy || !custom.trim()}
             onClick={() => void save("custom", kindOf(custom), custom.trim())}>
-            {t(busy === "custom" ? "验证中…" : "保存这个路径")}
+            {t(busy === "custom" ? "验证中…" : "保存该路径")}
           </button>
         </div>
       </details>
 
       {failed && (
         <div className="find" data-lvl="warn" role="alert">
-          <span className="t">{t("没换成")}</span>
+          <span className="t">{t("切换失败")}</span>
           <span className="why">{failed}</span>
         </div>
       )}

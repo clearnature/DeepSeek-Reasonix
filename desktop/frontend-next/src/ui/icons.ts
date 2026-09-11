@@ -11,7 +11,7 @@ const LABEL: Record<string, string> = {
   update_goal: "Goal", guardian_assessment: "Guardian", compress: "Compress",
   // Checked against the kernel's registered names, not guessed: these all ship
   // and were rendering as their raw id under a default icon.
-  delete_range: "Delete", delete_symbol: "Delete", move_file: "Move",
+  delete_range: "Delete", delete_symbol: "Delete", move_file: "Migrate",
   notebook_edit: "Notebook", submit_plan: "Plan", ask: "Ask",
   fleet: "Fleet", read_only_task: "Task", read_subagent_result: "Result",
   complete_subtask: "Subtask", lsp_diagnostics: "Diagnostics",

@@ -63,7 +63,7 @@ export function ModelChoice({
           type="search"
           value={q}
           spellCheck={false}
-          placeholder={t("搜模型名；列表里没有的，直接把名字写在这里")}
+          placeholder={t("搜索模型名称；列表中没有的，可直接输入名称")}
           aria-label={t("搜索或添加模型")}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -86,7 +86,7 @@ export function ModelChoice({
             {onVision ? (
               <button className="vtag" aria-pressed={vision.includes(m)}
                 disabled={!on.has(m) || visionLocked?.(m)}
-                title={visionLocked?.(m) ? t("内核不给这个模型发图片，改这里不会有效果") : undefined}
+                title={visionLocked?.(m) ? t("内核不会向该模型发送图片，此处的修改不会生效") : undefined}
                 onClick={() => onVision(m)}>
                 {t("读图")}
               </button>
@@ -103,7 +103,7 @@ export function ModelChoice({
         ))}
       </div>
 
-      {hidden > 0 && <span className="mmore">{t("还有 {n} 个没列出来，搜一下就能找到", { n: hidden })}</span>}
+      {hidden > 0 && <span className="mmore">{t("另有 {n} 个未列出，可通过搜索找到", { n: hidden })}</span>}
       {shown.length === 0 && !naming && <div className="empty">{t("没有匹配的模型。")}</div>}
 
       {/* Under the list, never over it: a "create" offer sitting above seven
@@ -112,8 +112,8 @@ export function ModelChoice({
         <button className="mnew" onClick={add}>
           <span className="k">+</span>
           <span className="tx">
-            <span className="lb">{t("就用「{name}」", { name: q.trim() })}</span>
-            <span className="ds">{t("端点没报出这个名字，能不能用只有你知道")}</span>
+            <span className="lb">{t("使用「{name}」", { name: q.trim() })}</span>
+            <span className="ds">{t("端点未报告该名称，是否可用需由你确认")}</span>
           </span>
         </button>
       )}

@@ -39,7 +39,7 @@ export function Task({ goal, ask, plan, rows, t0, running, blocked, elapsed, onT
   const done = plan.filter((s) => s.done).length;
   const now = plan.findIndex((s) => !s.done);
   const state = blocked
-    ? { text: t("等你"), tone: "accent" }
+    ? { text: t("等待确认"), tone: "accent" }
     : running
       ? { text: t("运行中"), tone: "net" }
       : total > 0 && done === total
@@ -97,7 +97,7 @@ export function Task({ goal, ask, plan, rows, t0, running, blocked, elapsed, onT
             </button>
           </div>
           {tail.length === 0 ? (
-            <p className="tk-empty">{t("还没有动静")}</p>
+            <p className="tk-empty">{t("尚无活动")}</p>
           ) : (
             <div className="tk-rows">
               {tail.map((r) => (
@@ -123,7 +123,7 @@ export function Task({ goal, ask, plan, rows, t0, running, blocked, elapsed, onT
           </button>
           <button onClick={onLatest}>
             <span className="n">{t("回到活动最新")}</span>
-            <span className="d">{t("跳回这一轮正在写的地方")}</span>
+            <span className="d">{t("跳回本轮正在写入的位置")}</span>
           </button>
           <button data-action="task.summarize-phase" onClick={onSummary}>
             <span className="n">{t("生成阶段总结")}</span>

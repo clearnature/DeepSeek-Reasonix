@@ -82,15 +82,15 @@ export function Welcome({ variant, children, replay, onDone }: Props) {
 
         <div className="oobe-lines" aria-live="polite">
           <div className="oobe-line l1">
-            <b>{t("我是小 R。")}</b>
+            <b>{t("欢迎使用 Reasonix。")}</b>
           </div>
           <div className="oobe-line l2">
-            <b>{t("你交代一件事，我把它做完。")}</b>
-            <span>{t("读代码、查证、动手、验证 —— 不是给你一段建议就完了。")}</span>
+            <b>{t("交付一项任务，由它完整执行。")}</b>
+            <span>{t("读取代码、查证、执行、验证 —— 而非仅给出一段建议。")}</span>
           </div>
           <div className="oobe-line l3">
-            <b>{t("每一步都留得下来。")}</b>
-            <span>{t("改了哪个文件、跑了哪条命令、花了多少 token，都能翻回去看。")}</span>
+            <b>{t("每一步均可追溯。")}</b>
+            <span>{t("修改了哪个文件、运行了哪条命令、消耗了多少 token，均可回溯查看。")}</span>
           </div>
         </div>
       </div>

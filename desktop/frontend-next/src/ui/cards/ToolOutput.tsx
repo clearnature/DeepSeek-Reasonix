@@ -339,7 +339,7 @@ function BoundNote({ bound }: { bound?: Bound }) {
   if (bound.kind === "spilled") {
     return (
       <div className="bound" title={bound.path}>
-        {t("完整输出已存盘（{lines} 行 · {size}），模型按需读取", {
+        {t("完整输出已保存（{lines} 行 · {size}），模型按需读取", {
           lines: bound.lines ?? 0,
           size: bytes(bound.bytes ?? 0),
         })}

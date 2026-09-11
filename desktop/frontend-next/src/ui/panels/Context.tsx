@@ -18,8 +18,8 @@ function parts(): [keyof ContextBreakdown, string, string][] {
   return [
     ["system", t("系统提示"), t("基础指令、记忆、技能清单")],
     ["tools", t("工具定义"), t("发给模型的工具清单")],
-    ["user", t("你说的话"), t("这一会话里你输入的部分")],
-    ["reply", t("模型回复"), t("模型说过的话")],
+    ["user", t("你的输入"), t("本会话中你输入的部分")],
+    ["reply", t("模型回复"), t("模型的输出")],
     ["output", t("工具输出"), t("命令、读取、检索返回的内容")],
   ];
 }
@@ -102,7 +102,7 @@ export function Context({ ctx, legend = false, port, onCtx }: {
       <>
         <Row k={t("上下文")} v={tokens(Math.round(used))} />
         <p className="ctxnote">
-          {t("没人说过这个来源的窗口有多大，所以画不出用了多少 —— 也不会自动压缩。中转站转发的是别人的模型，只有你知道它有多大。")}
+          {t("该来源未声明窗口大小，因此无法显示已用比例，也不会自动压缩。中转服务转发的是第三方模型，其容量只有你知道。")}
         </p>
         {field}
       </>
@@ -133,7 +133,7 @@ export function Context({ ctx, legend = false, port, onCtx }: {
         <button
           className="ctxden"
           aria-expanded={editing}
-          title={t("这个窗口是谁填的说不准 —— 点一下改成这个模型真正的上限")}
+          title={t("该窗口值的来源无法确定 —— 点击可改为该模型的实际上限")}
           onClick={() => setEditing((v) => !v)}
         >
           {tokens(ctx.window)}
@@ -173,7 +173,7 @@ export function Context({ ctx, legend = false, port, onCtx }: {
       {press && (
         <p className="ctxnote" data-press={press}>
           {press === "soon"
-            ? t("快到维护点了，接下来会自动整理上下文。")
+            ? t("即将到达维护点，随后会自动整理上下文。")
             : t("接近维护点，模型已经被告知要收窄接下来的工作。")}
         </p>
       )}
@@ -218,7 +218,7 @@ export function Context({ ctx, legend = false, port, onCtx }: {
               <span className="p">{percent(p.n / sum)}</span>
             </div>
           ))}
-          <p className="foot">{t("估算值，和触发压缩用的是同一把尺子")}</p>
+          <p className="foot">{t("估算值，与触发压缩使用同一口径")}</p>
         </div>
       )}
     </>
@@ -278,14 +278,14 @@ function DeclareWindow({ port, onSet, was, onDone }: {
           }}
         />
         <button data-action="context.window-tokens" disabled={busy || !draft || Number(draft) === was} onClick={() => void commit()}>
-          {t("记下")}
+          {t("记录")}
         </button>
       </div>
       {error && <p className="ctxnote" data-lvl="warn">{error}</p>}
       <p className="ctxnote">
         {t(was > 0
           ? "只改当前这个模型，同一个来源下的其它模型不动。填模型文档写的上下文上限，不是最大输出。会重建运行时，任务跑着的时候改不了。"
-          : "填模型文档写的上下文上限，不是最大输出。会重建运行时，任务跑着的时候改不了。")}
+          : "填写模型文档中的上下文上限，而非最大输出长度。将重建运行时，任务运行期间无法修改。")}
       </p>
     </div>
   );

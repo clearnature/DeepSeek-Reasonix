@@ -125,7 +125,7 @@ describe("switching one skill off", () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
 
     const said = onFailed.mock.calls.at(-1)?.[0] as string;
-    expect(said).toBe("这次请求没能送到内核（HTTP 502）");
+    expect(said).toBe("请求未能送达内核（HTTP 502）");
     expect(said).not.toContain("/skills/enabled");
     expect(sw().getAttribute("aria-checked")).toBe("true");
     expect(sw().disabled).toBe(false);

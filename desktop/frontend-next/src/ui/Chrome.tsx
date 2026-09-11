@@ -4,7 +4,7 @@ import type { AccountState, AgentPort, SessionStatus, WorkspaceInfo } from "../p
 import { WindowControls, zoomOnTitleBar } from "./WindowControls";
 import { chord } from "./keys";
 
-const RUN_LB: Record<string, string> = { running: "运行中", halt: "等你", done: "已完成", idle: "待命" };
+const RUN_LB: Record<string, string> = { running: "运行中", halt: "等待确认", done: "已完成", idle: "待命" };
 
 const base = (p: string) => p.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || p;
 // The filename is a timestamp and a model ref — true, and useless to read. The
@@ -107,7 +107,7 @@ export function Chrome({ port, status, title, steer, run, onSettings, account, h
           onClick={onFocus}
           aria-pressed={focus}
           aria-label={focus ? t("退出专注") : t("专注")}
-          title={focus ? t("退出专注") : t("专注：收起两侧的栏")}
+          title={focus ? t("退出专注") : t("专注：收起两侧栏")}
         >
           <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.3">
             {focus ? (

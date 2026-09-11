@@ -37,17 +37,17 @@ export function RemoteAsk({ ask, onAnswer }: Props) {
         <h2 id="ask-t">
           {secret
             ? ask.kind === "password"
-              ? t("{host} 要密码", { host: ask.host })
-              : t("私钥被口令锁着")
-            : t("第一次连 {host}", { host: ask.host })}
+              ? t("{host} 需要密码", { host: ask.host })
+              : t("私钥已被口令锁定")
+            : t("首次连接 {host}", { host: ask.host })}
         </h2>
 
         {secret ? (
           <>
             <p className="h">
               {ask.identityFile
-                ? t("解开 {file}。它只存在这次连接的内存里，不会写进任何文件。", { file: ask.identityFile })
-                : t("只存在这次连接的内存里，不会写进任何文件。想让它记住，在设置里填一个环境变量名。")}
+                ? t("解锁 {file}。该口令仅存在于本次连接的内存中，不会写入任何文件。", { file: ask.identityFile })
+                : t("仅存在于本次连接的内存中，不会写入任何文件。如需保存，请在设置中填写环境变量名。")}
             </p>
             <input
               ref={box}
@@ -64,7 +64,7 @@ export function RemoteAsk({ ask, onAnswer }: Props) {
         ) : (
           <>
             <p className="h">
-              {t("这台机器还没见过。下面是它出示的指纹 —— 跟你从别处拿到的那份对一下，一致才接受。")}
+              {t("该机器尚未记录。以下是它出示的指纹 —— 请与从其他渠道获取的指纹核对，一致后再接受。")}
             </p>
             <dl className="askfacts">
               <dt>{t("地址")}</dt>
@@ -91,7 +91,7 @@ export function RemoteAsk({ ask, onAnswer }: Props) {
             {t("取消")}
           </button>
           <button data-action="remote-ask.answer" data-value="accept" data-go="" onClick={() => onAnswer(ask.askId, true, text)}>
-            {secret ? t("继续") : t("对得上，记住它")}
+            {secret ? t("继续") : t("指纹一致，记住该机器")}
           </button>
         </div>
       </div>

@@ -644,7 +644,7 @@ function Await({ since, retry }: { since: number; retry?: Waiting["retry"] }) {
                 ? "连接在响应头前断了，重试 {attempt}/{max} · {secs}s"
                 : retry.scope === "stream"
                   ? "回包写到一半断了，重放 {attempt}/{max} · {secs}s"
-                  : "连接断了，重试 {attempt}/{max} · {secs}s",
+                  : "连接已断开，重试 {attempt}/{max} · {secs}s",
               { attempt: retry.attempt, max: retry.max, secs: decimals(secs, 1) },
             )
           : t("等待回包 {secs}s", { secs: decimals(secs, 1) })}
@@ -654,9 +654,9 @@ function Await({ since, retry }: { since: number; retry?: Waiting["retry"] }) {
 }
 
 const SUGGESTIONS = [
-  "把这个仓库跑一遍测试，把失败的那几个定位到具体文件",
-  "读一遍最近三次提交，告诉我哪里的改动风险最高",
-  "查一下这个项目的缓存命中率为什么会掉",
+  "运行本仓库的测试，并将失败项定位到具体文件",
+  "审阅最近三次提交，指出风险最高的改动",
+  "排查本项目缓存命中率下降的原因",
 ];
 
 interface HeroProps {
@@ -675,7 +675,7 @@ function Hero({ onPick, needsProject, onOpen, onKeep }: HeroProps) {
       <div className="t">{needsProject ? t("先打开一个项目") : t("描述任务，其余交给 Reasonix")}</div>
       <div className="s">
         {needsProject
-          ? t("读取代码、运行测试和修改文件都只发生在你选定的文件夹内。")
+          ? t("读取代码、运行测试与修改文件均只在你选定的文件夹内进行。")
           : t("可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。")}
       </div>
       {needsProject ? (
@@ -684,7 +684,7 @@ function Hero({ onPick, needsProject, onOpen, onKeep }: HeroProps) {
             {t("打开项目…")}
           </button>
           <button className="stay" onClick={onKeep}>
-            {t("就用当前位置")}
+            {t("使用当前位置")}
           </button>
         </div>
       ) : (

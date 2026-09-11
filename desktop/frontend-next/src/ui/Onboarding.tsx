@@ -68,7 +68,7 @@ export function Onboarding({ port, setup, onDone }: Props) {
   // there rather than here — where this particular failure sends the reader.
   const vendor = SHORTCUTS.find((s) => s.label === pick);
   const fixAt = err?.code && FIX_AT_VENDOR.has(err.code) ? vendor?.console : undefined;
-  const open = (at: string) => void port.openExternal(at).catch(() => setErr({ text: t("打不开浏览器，手动访问 {at}", { at }) }));
+  const open = (at: string) => void port.openExternal(at).catch(() => setErr({ text: t("无法打开浏览器，请手动访问 {at}", { at }) }));
 
   const choose = (label: string, next: string) => {
     setPick(label);
@@ -126,9 +126,9 @@ export function Onboarding({ port, setup, onDone }: Props) {
   return (
     <div className="onb">
       <div className="onb-card">
-        <h1 className="onb-t">{t("先连一个模型服务")}</h1>
+        <h1 className="onb-t">{t("首先连接模型服务")}</h1>
         <p className="onb-s">
-          {t("填地址和 key，剩下的问它自己 —— 协议、模型清单、能不能读图，都是探得到的。")}
+          {t("填写地址与 key，其余由系统探测 —— 协议、模型清单、是否支持读图均可自动获取。")}
         </p>
 
         <div className="onb-chips" role="group" aria-label={t("常用服务")}>
@@ -168,7 +168,7 @@ export function Onboarding({ port, setup, onDone }: Props) {
                 没有 key 的人就卡死在这个框上，而界面什么都没说。 */}
             {vendor?.console && (
               <button type="button" className="onb-getkey" data-action="external.open" onClick={() => open(vendor.console!)}>
-                {t("还没有？去拿一个")}
+                {t("尚无 key？前往获取")}
               </button>
             )}
           </label>
@@ -201,24 +201,24 @@ export function Onboarding({ port, setup, onDone }: Props) {
             <div className="onb-found-hd">
               <span className="tick">✓</span>
               <span>{KIND_LABEL[found.kind] || found.kind}</span>
-              <span className="k">{t("{n} 个模型 · key 存本机", { n: found.models.length })}</span>
+              <span className="k">{t("{n} 个模型 · key 保存在本机", { n: found.models.length })}</span>
             </div>
             {/* More than one wire answered, or one listing several may be
                 driven with: either way the line above is a preference. */}
             {(found.ambiguous || (found.kinds?.length ?? 0) > 1) && (
               <p className="onb-why">
-                {t("这个端点不止一种协议答应了，上面是偏好而不是事实。连上之后能在设置里换。")}
+                {t("该端点响应了多种协议，上方为偏好选择而非确定结果。连接后可在设置中更改。")}
               </p>
             )}
             <div className="onb-field">
-              <span className="lb">{t("先用哪个")}</span>
+              <span className="lb">{t("优先使用")}</span>
               {/* The app's own picker rather than a <select>: a gateway can
                   publish a hundred models, and this one grows a filter past
                   ten. A native dropdown would also paint its list in the
                   system's colours on top of this scene. */}
               <div className="onb-pick" data-busy={busy ? "" : undefined}>
                 <Picker
-                  label={model || t("选一个")}
+                  label={model || t("请选择一项")}
                   items={found.models.map((m) => ({ value: m, label: m }))}
                   current={model}
                   onPick={setModel}
@@ -236,11 +236,11 @@ export function Onboarding({ port, setup, onDone }: Props) {
           disabled={busy || !url.trim() || !key.trim() || (!!found && !model)}
           onClick={found ? start : connect}
         >
-          {t(busy ? (found ? "正在保存…" : "正在连…") : found ? "开始" : "连上看看")}
+          {t(busy ? (found ? "正在保存…" : "正在连接…") : found ? "开始" : "连接并继续")}
         </button>
 
         <div className="onb-note">
-          {t("key 存进本机配置，不上传任何第三方。模型、推理强度、执行设定都有默认值，随时能在输入框那排改。")}
+          {t("key 保存在本机配置中，不会上传至任何第三方。模型、推理强度与执行设定均有默认值，可随时在输入框上方调整。")}
         </div>
       </div>
     </div>

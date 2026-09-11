@@ -58,9 +58,9 @@ export const REMOTE_STEP_LABEL: Record<string, string> = {
   install: "安装 reasonix",
   waiting_lock: "等待其他连接",
   launch: "启动 serve",
-  health_check: "等它就绪",
+  health_check: "等待就绪",
   ready: "挂载端口转发",
-  reuse: "接上已在运行的",
+  reuse: "接入已运行的实例",
 };
 
 // One row as the settings page writes it. Secrets are named, never carried:

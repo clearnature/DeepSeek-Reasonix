@@ -97,7 +97,7 @@ export function Trajectory({
         </button>
         {saved && (
           <span className="traj-saved">
-            {saved.path ? t("存到 {path}", { path: saved.to }) : t("已下载 {name}", { name: saved.to })}
+            {saved.path ? t("已保存至 {path}", { path: saved.to }) : t("已下载 {name}", { name: saved.to })}
           </span>
         )}
       </div>
@@ -139,12 +139,12 @@ export function Trajectory({
           the last row as the end is exactly the mistake. */}
       <div className="traj-note" data-coverage={availability ?? "unread"}>
         {availability === "truncated"
-          ? t("记录到容量上限就停了 —— 最后一行之后还发生过什么，没有留下")
+          ? t("记录已达容量上限而停止 —— 最后一行之后的内容未被保留")
           : availability === "not_recorded"
-            ? t("这次运行没有记录轨迹 —— 下面只是本次连接看到的实时事件")
+            ? t("本次运行未记录轨迹 —— 以下仅为本次连接观察到的实时事件")
             : availability === "complete"
-              ? t("完整记录 · 重进会话会照原样重建")
-              : t("还没读到这份轨迹覆盖了多少")}
+              ? t("完整记录 · 重新进入会话将原样重建")
+              : t("尚未读取该轨迹的覆盖范围")}
       </div>
     </>
   );

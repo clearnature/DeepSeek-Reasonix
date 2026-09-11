@@ -16,8 +16,8 @@ function thoughtLabel(item: Extract<Item, { t: "say" }>) {
   // the reader and two to the string.
   const chars = t("{n} 字", { n: count([...(item.reasoning ?? "")].length) });
   return item.thoughtMs
-    ? t("想了 {secs} 秒 · {chars}", { secs: decimals(item.thoughtMs / 1000, 1), chars })
-    : t("想了 {chars}", { chars });
+    ? t("思考 {secs} 秒 · {chars}", { secs: decimals(item.thoughtMs / 1000, 1), chars })
+    : t("思考 {chars}", { chars });
 }
 
 export function SayCard({ item }: { item: Extract<Item, { t: "say" }> }) {

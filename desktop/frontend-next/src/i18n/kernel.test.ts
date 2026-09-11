@@ -25,7 +25,7 @@ const coded = (message: string, code: string, params?: Record<string, string | n
 // the last hop prints the English that rode along for the log.
 describe("what a reader is told a refusal was", () => {
   it("says a coded refusal in the window's own language", () => {
-    expect(reason(coded("inbox item not found", "inbox.not_found"))).toBe("这一条已经不在待送达里了");
+    expect(reason(coded("inbox item not found", "inbox.not_found"))).toBe("该条已不在待送达队列中");
   });
 
   // The gate the codes were for. The kernel rewords its own English whenever a
@@ -48,7 +48,7 @@ describe("what a reader is told a refusal was", () => {
   // reading it.
   it("does not put a path and a status in front of the reader", () => {
     const said = reason(new HttpError(502, "/skills/enabled: 502", undefined, false));
-    expect(said).toBe("这次请求没能送到内核（HTTP 502）");
+    expect(said).toBe("请求未能送达内核（HTTP 502）");
     expect(said).not.toContain("/skills/enabled");
   });
 

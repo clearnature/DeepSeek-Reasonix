@@ -94,7 +94,7 @@ function LaneView({
         <b>{lane.group.label || lane.group.id}</b>
         <span className="gl-st">{stateWord(state)}</span>
         <span className="gl-n">
-          {t("{n} 个跑了", { n: lane.ran })}
+          {t("{n} 个已运行", { n: lane.ran })}
           {lane.reused > 0 && <em>{t("· {n} 个复用", { n: lane.reused })}</em>}
         </span>
       </header>
@@ -147,8 +147,8 @@ function Detail({ node, lane, ms, onOpen, unknown }: { node: GraphNode; lane: La
     [t("模型"), unknown ? t("没有记录过，不是继承") : [node.model, node.effort].filter(Boolean).join(" · ")],
     [t("权限"), node.grant === "write" ? t("可写") : node.grant === "read" ? t("只读") : undefined],
     [t("耗时"), ms != null ? seconds(ms, 2) : undefined],
-    [t("等空位"), wait != null ? seconds(wait, 2) : undefined],
-    [t("入队时被挡"), waitWord(node.wait)],
+    [t("等待空位"), wait != null ? seconds(wait, 2) : undefined],
+    [t("入队时被阻止"), waitWord(node.wait)],
     [t("等待"), waiting && namesOf(lane, waiting)],
     [t("复用自"), lane.reuse[node.id]],
     [t("记录"), node.ref],
@@ -186,17 +186,17 @@ function Interruptions({ list, graph }: { list: ExecutionInterruption[]; graph: 
   if (list.length === 0) return null;
   return (
     <section className="ginter">
-      <header>{t("{n} 项执行已经没有人在跑了", { n: list.length })}</header>
+      <header>{t("{n} 项执行已无人运行", { n: list.length })}</header>
       <ul>
         {list.map((cut) => (
           <li key={cut.execution}>
             <b>{labelOfId(graph, cut.execution)}</b>
             <span>
               {cut.kind === "interrupted-during-execution"
-                ? t("已经开工，做到哪一步没有记录")
-                : t("还没拿到空位，什么都没做")}
+                ? t("已开始执行，但未记录进度")
+                : t("尚未获得空位，未执行任何操作")}
             </span>
-            <em>{t("不会自己接着跑")}</em>
+            <em>{t("不会自动继续运行")}</em>
           </li>
         ))}
       </ul>
@@ -228,14 +228,14 @@ export function Graph({ run, items, onOpen }: { run: ExecutionState; items: Item
   // read: a graph under a name it no longer belongs to is a lie the eye cannot
   // catch, and the read is one round trip.
   if (run.phase === "loading") {
-    return <p className="gempty">{t("正在读取这一轮的运行图…")}</p>;
+    return <p className="gempty">{t("正在读取本轮的运行图…")}</p>;
   }
 
   if (lanes.length === 0 && run.interruptions.length === 0) {
     return (
       <p className="gempty">
         {t(
-          "这一轮还没有派出子代理。派出去了就画在这里 —— 谁在跑、跑成什么样；成组派出时还有谁在等谁、谁在同时跑、哪些答案是复用的。",
+          "本轮尚未派出子代理。派出后将在此处呈现 —— 各自的运行状态与结果；成组派出时还会显示依赖关系、并行情况，以及哪些结果是复用的。",
         )}
       </p>
     );
@@ -255,9 +255,9 @@ export function Graph({ run, items, onOpen }: { run: ExecutionState; items: Item
         <div className="gsum">
           <span className="gb-n">
             {t("{n} 个子代理", { n: ran + reused })}
-            {reused > 0 && <em>{t("· {n} 个没有重跑", { n: reused })}</em>}
-            {waiting > 0 && <em className="on">{t("· {n} 个在等上游", { n: waiting })}</em>}
-            {queued > 0 && <em className="on">{t("· {n} 个在等空位", { n: queued })}</em>}
+            {reused > 0 && <em>{t("· {n} 个未重新运行", { n: reused })}</em>}
+            {waiting > 0 && <em className="on">{t("· {n} 个正在等待上游", { n: waiting })}</em>}
+            {queued > 0 && <em className="on">{t("· {n} 个正在等待空位", { n: queued })}</em>}
           </span>
           {/* 边有两种,靠线型分,不靠颜色分 —— 排了序和真把答案交过去是两件事。 */}
           <span className="gkey">

@@ -30,7 +30,7 @@ describe("the external services block on the rail", () => {
   it("keeps the row pressable and titled with where it goes", () => {
     const html = rail([entry()]);
     expect(html).toContain("<button");
-    expect(html).toContain("到设置的 MCP 面板里修复");
+    expect(html).toContain("在设置的 MCP 面板中修复");
   });
 
   it("draws nothing while every service is answering", () => {

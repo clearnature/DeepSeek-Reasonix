@@ -112,7 +112,7 @@ export function ToolCard({
           {/* 名字是给人读的，id 是给人查的。标签只在它说了名字没说的事时才占地方
               （见 tagFor），所以精确的那个字符串挂在这里，一直够得着。 */}
           <span className={running ? "nm shim" : "nm"} title={shown}>{head}</span>
-          {who && <span className="who" title={t("按 {name} 这份技能的设定跑的子代理", { name: who })}>{who}</span>}
+          {who && <span className="who" title={t("按技能 {name} 的设定运行的子代理", { name: who })}>{who}</span>}
           {from && <span className="src" title={t("外部服务 {name} 提供的工具", { name: from.server })}>{from.server}</span>}
           {tag && <span className="tag" title={tagHint(tool)}>{tag}</span>}
           {arg && <span className={streaming ? "arg shim" : "arg"}>{arg}</span>}
@@ -216,7 +216,7 @@ function NestedCall({ tool }: { tool: Tool }) {
 // it for the rest of the turn, the card records what it was when it was written.
 function Steps({ tool }: { tool: Tool }) {
   const steps = parsePlan(tool);
-  if (!steps?.length) return <span className="fold">{t("计划已进右栏")}</span>;
+  if (!steps?.length) return <span className="fold">{t("计划已移入右栏")}</span>;
   const now = steps.findIndex((s) => !s.done);
   return (
     <div className="steps">
@@ -253,7 +253,7 @@ const SHELL_HINT: Record<string, string> = {
   bash: "命令交给 bash 执行",
   "git-bash": "命令交给 Git Bash 执行",
   pwsh: "命令交给 PowerShell 7 执行 —— 语法是 PowerShell，不是 bash",
-  powershell: "这台机器上没有 bash，命令交给 Windows PowerShell 执行 —— 它不认 && 和 ||",
+  powershell: "本机没有 bash，命令交由 Windows PowerShell 执行 —— 它不支持 && 和 ||",
 };
 
 const tagHint = (tool: Tool) => {

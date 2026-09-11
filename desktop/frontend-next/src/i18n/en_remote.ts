@@ -5,11 +5,11 @@
 export const EN_REMOTE: Record<string, string> = {
   // ── 远程主机 ─────────────────────────────────────────────────
   "远程": "Remote",
-  "断了，第 {n} 次重连": "Dropped — reconnecting, attempt {n}",
-  "断了，正在重连": "Dropped — reconnecting",
-  "连上了，但有转发没挂上": "Connected, but a forward did not attach",
+  "连接已断开，第 {n} 次重连": "Dropped — reconnecting, attempt {n}",
+  "连接已断开，正在重连": "Dropped — reconnecting",
+  "已连接，但部分转发未建立": "Connected, but a forward did not attach",
   "已断开": "Disconnected",
-  "这台主机还没有设默认工作区": "This host has no default workspace set",
+  "该主机尚未设置默认工作区": "This host has no default workspace set",
   // The bootstrap's steps. Looked up by key rather than written out at a call
   // site, so the scanner cannot see them — they are listed here by hand, and a
   // missing one shows up as Chinese in an English window rather than as a test
@@ -18,23 +18,23 @@ export const EN_REMOTE: Record<string, string> = {
   "安装 reasonix": "Installing reasonix",
   "等待其他连接": "Waiting for another client",
   "启动 serve": "Starting serve",
-  "等它就绪": "Waiting for it to come up",
+  "等待就绪": "Waiting for it to become ready",
   "挂载端口转发": "Attaching the port forward",
-  "接上已在运行的": "Reusing the one already running",
+  "接入已运行的实例": "Reusing the running instance",
 
   // ── 远程：挑一个目录 ─────────────────────────────────────────
-  "在 {name} 上挑一个目录打开": "Pick a folder on {name} to open",
-  "在 {host} 上选一个目录": "Pick a folder on {host}",
+  "在 {name} 上选择要打开的目录": "Pick a folder on {name} to open",
+  "在 {host} 上选择目录": "Pick a folder on {host}",
   "浏览…": "Browse…",
-  "那台机器上的路径": "A path on that machine",
+  "该机器上的路径": "A path on that machine",
   "上一级": "Up one level",
   "转到": "Go",
   "子目录": "Subfolders",
-  "正在连上去…": "Connecting…",
-  "就用这里": "Use this folder",
-  "这个目录下面没有子目录了 —— 它自己就可以是工作区":
+  "正在建立连接…": "Connecting…",
+  "使用此目录": "Use this folder",
+  "该目录下没有子目录 —— 它本身即可作为工作区":
     "Nothing below this folder — it can be the workspace itself",
-  "这个目录太大，只列了前面一部分。要找的在后面的话，直接把路径打上去。":
+  "该目录内容过多，仅列出前一部分。如需查找靠后的项，请直接输入路径。":
     "This folder is too big to list whole, so only the first entries are here. If what you want is further down, type its path.",
 
   // ── 远程：设置页 ─────────────────────────────────────────────
@@ -69,26 +69,26 @@ export const EN_REMOTE: Record<string, string> = {
   "部分转发未建立": "A forward did not attach",
 
   // ── 连接时的两个问题 ─────────────────────────────────────────
-  "第一次连 {host}": "First connection to {host}",
-  "这台机器还没见过。下面是它出示的指纹 —— 跟你从别处拿到的那份对一下，一致才接受。":
+  "首次连接 {host}": "First connection to {host}",
+  "该机器尚未记录。以下是它出示的指纹 —— 请与从其他渠道获取的指纹核对，一致后再接受。":
     "This machine has not been seen before. Below is the fingerprint it presented \u2014 compare it with the one you were given elsewhere, and accept only if they match.",
   "算法": "Algorithm",
   "指纹": "Fingerprint",
-  "对得上，记住它": "They match, remember it",
-  "私钥被口令锁着": "The private key is passphrase-locked",
-  "{host} 要密码": "{host} wants a password",
-  "解开 {file}。它只存在这次连接的内存里，不会写进任何文件。":
+  "指纹一致，记住该机器": "They match, remember it",
+  "私钥已被口令锁定": "The private key is passphrase-locked",
+  "{host} 需要密码": "{host} wants a password",
+  "解锁 {file}。该口令仅存在于本次连接的内存中，不会写入任何文件。":
     "To unlock {file}. It lives in memory for this connection only and is never written to any file.",
-  "只存在这次连接的内存里，不会写进任何文件。想让它记住，在设置里填一个环境变量名。":
+  "仅存在于本次连接的内存中，不会写入任何文件。如需保存，请在设置中填写环境变量名。":
     "It lives in memory for this connection only and is never written to any file. To have it remembered, name an environment variable in settings.",
   "继续": "Continue",
-  "{host} 上没有 reasonix，而这台机器设了不自动装。把安装方式改回「自动」，或者自己去那边装一个": "There is no reasonix on {host}, and this machine is set never to install one. Switch installing back to automatic, or install one over there yourself",
-  "{host} 上跑不了 npm —— 多半是那台机器没有 Node.js。装一个，或者把安装方式改成「上传」": "npm will not run on {host} — most likely it has no Node.js. Install one, or switch installing to upload",
-  "npm 装好了，可它装到了登录 shell 找不到的地方。去那边调 npm prefix，或者把安装方式改成「上传」": "npm installed it somewhere the login shell does not look. Fix the npm prefix over there, or switch installing to upload",
-  "本机的 reasonix 跑不了 {host} 的平台，也没有对应的官方包可下。把安装方式改成「npm」": "This machine's reasonix cannot run on {host}'s platform, and no official build for it was available. Switch installing to npm",
-  "{host} 上装不上 reasonix —— npm、上传、下载都试过了。先自己去那台机器上装一个，再回来连": "Nothing could install reasonix on {host} — npm, upload and download were all tried. Install one there by hand, then connect again",
-  "装到 {host} 上的 reasonix 跑不起来。那个目录可能挂了 noexec，也可能传到一半断了": "The reasonix installed on {host} will not run. That directory may be mounted noexec, or the transfer was cut short",
-  "{host} 上的 reasonix 起来了，却一直没报出端口。去那边看一眼 ~/.reasonix/remote 下的日志": "reasonix started on {host} but never reported a port. Look at the logs under ~/.reasonix/remote over there",
+  "{host} 上没有 reasonix，且本机已设置为不自动安装。请将安装方式改回「自动」，或自行在该机器上安装": "There is no reasonix on {host}, and this machine is set never to install one. Switch installing back to automatic, or install one over there yourself",
+  "{host} 上无法运行 npm —— 通常是该机器未安装 Node.js。请安装 Node.js，或将安装方式改为「上传」": "npm will not run on {host} — most likely it has no Node.js. Install one, or switch installing to upload",
+  "npm 安装完成，但安装位置不在登录 shell 的搜索路径中。请在该机器上调整 npm prefix，或将安装方式改为「上传」": "npm installed it somewhere the login shell does not look. Fix the npm prefix over there, or switch installing to upload",
+  "本机的 reasonix 不支持 {host} 的平台，也没有对应的官方包可供下载。请将安装方式改为「npm」": "This machine's reasonix cannot run on {host}'s platform, and no official build for it was available. Switch installing to npm",
+  "无法在 {host} 上安装 reasonix —— npm、上传、下载均已尝试。请先自行在该机器上安装，再重新连接": "Nothing could install reasonix on {host} — npm, upload and download were all tried. Install one there by hand, then connect again",
+  "安装到 {host} 上的 reasonix 无法运行。该目录可能挂载了 noexec，也可能传输中断": "The reasonix installed on {host} will not run. That directory may be mounted noexec, or the transfer was cut short",
+  "{host} 上的 reasonix 已启动，但始终未报告端口。请查看该机器上 ~/.reasonix/remote 下的日志": "reasonix started on {host} but never reported a port. Look at the logs under ~/.reasonix/remote over there",
   "跳板机": "Jump host",
   "登录密码的环境变量名": "Env var with the password",
   "安装方式": "Installing",

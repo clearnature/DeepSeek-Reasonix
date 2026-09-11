@@ -20,7 +20,7 @@ const SCOPES: { value: RewindScope; label: string; files: boolean }[] = [
 ];
 
 const GAP_REASONS: Record<string, string> = {
-  bash_side_effect: "bash 命令改的东西没有快照",
+  bash_side_effect: "bash 命令所作的修改没有快照",
 };
 
 type Stage =
@@ -117,7 +117,7 @@ export function RewindControl({
           ref={btn}
           aria-haspopup="menu"
           aria-expanded={open}
-          title={t("把工作区和对话退回这条消息之前")}
+          title={t("将工作区与对话回退至该消息之前")}
           onClick={() => setStage(stage.at === "closed" ? { at: "menu" } : { at: "closed" })}
         >
           {t("↩ 回到这里")}
@@ -145,7 +145,7 @@ export function RewindControl({
                 <div className="mi plain">
                   <span className="dot" />
                   <span className="tx">
-                    <span className="lb">{t("这一轮没有改动文件")}</span>
+                    <span className="lb">{t("本轮未修改任何文件")}</span>
                   </span>
                 </div>
               )}
@@ -162,7 +162,7 @@ export function RewindControl({
                   <div className="mi plain">
                     <span className="dot" />
                     <span className="tx">
-                      <span className="lb">{t("这一轮有改动还原不了")}</span>
+                      <span className="lb">{t("本轮有改动无法还原")}</span>
                       <span className="ds">
                         {(stage.plan.coverageGaps ?? [])
                           .map((g) => GAP_REASONS[g.reason] ?? g.detail)
@@ -174,7 +174,7 @@ export function RewindControl({
                   <button className="mi" role="menuitem" data-action="rewind.commit" onClick={() => commit(stage.plan)}>
                     <span className="dot" />
                     <span className="tx">
-                      <span className="lb">{t("仍然还原剩下的")}</span>
+                      <span className="lb">{t("仍还原其余部分")}</span>
                     </span>
                     <span className="rt">{stage.plan.fileCount} 个文件</span>
                   </button>
@@ -207,7 +207,7 @@ export function RewindControl({
                 <div className="mi plain">
                   <span className="dot" />
                   <span className="tx">
-                    <span className="lb">{t("没能还原")}</span>
+                    <span className="lb">{t("还原失败")}</span>
                     <span className="ds">{stage.why}</span>
                   </span>
                 </div>

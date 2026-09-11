@@ -43,10 +43,10 @@ describe("what the run graph draws", () => {
         { execution: "g/2", kind: "interrupted-before-start" },
       ],
     });
-    expect(html).toContain("2 项执行已经没有人在跑了");
-    expect(html).toContain("已经开工，做到哪一步没有记录");
-    expect(html).toContain("还没拿到空位，什么都没做");
-    expect(html).toContain("不会自己接着跑");
+    expect(html).toContain("2 项执行已无人运行");
+    expect(html).toContain("已开始执行，但未记录进度");
+    expect(html).toContain("尚未获得空位，未执行任何操作");
+    expect(html).toContain("不会自动继续运行");
   });
 
   // A run whose fan-out never formed still has interruptions to report, and the
@@ -63,13 +63,13 @@ describe("what the run graph draws", () => {
         onOpen={() => {}}
       />,
     );
-    expect(html).toContain("1 项执行已经没有人在跑了");
+    expect(html).toContain("1 项执行已无人运行");
     expect(html).not.toContain("这一轮还没有派出子代理");
   });
 
   it("shows nothing of the last conversation while the next one is being read", () => {
     const html = shown({ phase: "loading" });
-    expect(html).toContain("正在读取这一轮的运行图…");
+    expect(html).toContain("正在读取本轮的运行图…");
     expect(html).not.toContain("survey");
   });
 });

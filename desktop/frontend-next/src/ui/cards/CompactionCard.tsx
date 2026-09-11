@@ -5,8 +5,8 @@ import { tokens } from "../../i18n/format";
 import { tx } from "../../i18n/rich";
 
 const TRIGGER: Record<string, string> = {
-  auto: "上下文到阈值，自动触发",
-  manual: "你手动触发",
+  auto: "上下文达到阈值，自动触发",
+  manual: "手动触发",
 };
 
 // A digest reads as complete whatever it dropped, so the count of the fold's
@@ -24,18 +24,18 @@ function Coverage({ c }: { c: Compaction }) {
         <span className="k">✓</span>
         <span>
           {missing === 0 ? (
-            <>{tx("这段做过的 {n} 处改动，简报都写到了", { n: <b>{required}</b> })}</>
+            <>{tx("本段的 {n} 处改动均已写入简报", { n: <b>{required}</b> })}</>
           ) : (
             <>{tx("{kept}/{required} 处改动写进了简报", { kept: <b>{kept}</b>, required })}</>
           )}
-          {c.coverageBackstopped && t("（缺的由主机补上）")}
+          {c.coverageBackstopped && t("（缺失部分由主机补全）")}
         </span>
       </div>
       {missing > 0 && (
         <div className="row">
           <span className="x">×</span>
           <span>
-            {tx("还有 {n} 处只剩下索引地址，要用原文得 recall 取回", { n: <b>{missing}</b> })}
+            {tx("另有 {n} 处仅保留索引地址，需通过 recall 取回原文", { n: <b>{missing}</b> })}
           </span>
         </div>
       )}
@@ -79,9 +79,9 @@ export function CompactionCard({ c, done }: { c: Compaction; done: boolean }) {
               {(c.messages || before > 0) && (
                 <div className="comp-n">
                   {c.messages ? (
-                    <>{tx("正在把 {n} 条消息折成简报", { n: <b>{c.messages}</b> })}</>
+                    <>{tx("正在将 {n} 条消息折叠为简报", { n: <b>{c.messages}</b> })}</>
                   ) : (
-                    t("正在折成简报")
+                    t("正在折叠为简报")
                   )}
                   {before > 0 && (
                     <>
@@ -110,7 +110,7 @@ export function CompactionCard({ c, done }: { c: Compaction; done: boolean }) {
                 {c.messages ? (
                   <>{tx("折叠了 {n} 条消息", { n: <b>{c.messages}</b> })}</>
                 ) : (
-                  t("这一趟没折叠掉什么")
+                  t("本次未折叠任何内容")
                 )}
                 {shrank && (
                   <>
@@ -123,7 +123,7 @@ export function CompactionCard({ c, done }: { c: Compaction; done: boolean }) {
               {c.summary && (
                 <details>
                   <summary>
-                    <span className="fold">{t("看它接着往下用的简报")}</span>
+                    <span className="fold">{t("查看其后续使用的简报")}</span>
                   </summary>
                   <div className="txt">{c.summary}</div>
                 </details>

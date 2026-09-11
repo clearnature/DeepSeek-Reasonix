@@ -333,8 +333,8 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
           {status?.vision === false && shots.some((c) => c.k === "image" && c.a.image !== false) && (
             <li className="warn">
               {status?.visionDeclared === false
-                ? t("没人说过这个模型读不读图 · 先按不读处理；在「连接」里勾上它就直接发")
-                : t("当前模型不读图 · 将交给能读图的子代理")}
+                ? t("该模型是否支持读图未声明 · 暂按不支持处理；在「连接」中勾选后即可直接发送")
+                : t("当前模型不支持读图 · 将交由支持读图的子代理处理")}
             </li>
           )}
         </ul>
@@ -448,7 +448,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
         />
         <button
           className="mode plain attach"
-          title={t("添加图片　也可以直接拖进来或粘贴")}
+          title={t("添加图片　也可直接拖入或粘贴")}
           aria-label={t("添加图片")}
           onClick={() => picker.current?.click()}
         >

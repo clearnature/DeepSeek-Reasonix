@@ -25,7 +25,7 @@ export const EN_SETTINGS: Record<string, string> = {
 
   // ── 设置：会话 ───────────────────────────────────────────────────
   "决定任务完成的判定标准。切换立即生效，不会重建运行时。": "Sets what counts as finished. Switching takes effect immediately and does not rebuild the runtime.",
-  "正常执行：已批准的写入操作直接执行": "Normal execution: approved writes just happen",
+  "正常执行：已批准的写入操作直接执行": "Normal execution: approved writes are performed directly",
   "创建": "Open one",
   "启用中…": "Opening…",
   "计划模式": "Plan mode",
@@ -112,7 +112,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "没有匹配的规则。": "No rule matches that.",
   "工具": "Tool",
   "处理方式": "Verdict",
-  "添加规则": "Add one",
+  "添加规则": "Add a rule",
   "例如 git push:*　（留空 = 整个工具）": "e.g. git push:*　(empty = the whole tool)",
   "例如 *.env*　（留空 = 整个工具）": "e.g. *.env*　(empty = the whole tool)",
   "文件工具读写 .env 一律拒绝。bash 中的 cat 属于另一条路径，本规则不覆盖":
@@ -122,9 +122,9 @@ export const EN_SETTINGS: Record<string, string> = {
   "测试命令直接放行，其余保持不变": "Test commands go straight through; everything else is unchanged",
   "未被任何规则命中的写入操作，执行前请求一次确认": "A write no rule matched asks once before it happens",
   "其余写入操作": "Everything else that writes",
-  "请求确认": "Ask me",
+  "请求确认": "Ask for confirmation",
   "没被上面三组说中的写操作，动手前问一次": "A write no list matched asks once before it happens",
-  "未被命中的写入操作直接执行": "A write no list matched just happens",
+  "未被命中的写入操作直接执行": "A write matched by no rule is performed directly",
   "未被命中的写入操作一律不执行": "A write no list matched never happens",
   "一律拒绝": "Always refuse",
   "先看这一组。命中了就没有商量的余地：全放行也拦得住，批准框不会出现。":
@@ -220,7 +220,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "上次连上时的记录 · 声明改过，可能对不上了": "From the last time it connected · the declaration changed since",
   "当前未连接，以下是上次连接时它返回的内容。":
     "Nothing is connected right now; this is what the service itself answered the last time it was.",
-  "会修改数据": "Changes things",
+  "会修改数据": "Modifies data",
   "技能": "Skills",
   "当前工作目录下没有技能。": "No skills in this working directory.",
   "未提供说明": "No description written",
@@ -270,45 +270,45 @@ export const EN_SETTINGS: Record<string, string> = {
   "最小化": "Minimize",
   "工作区与会话": "Workspaces and sessions",
   "允许这一次": "Allow once",
-  "这一类不再问": "Stop asking for this kind",
-  "核心把它记进会话授权，不落盘。": "The kernel records it for this session only; nothing is written to disk.",
-  "agent 收到否决，会另想办法或停手。": "The agent takes the refusal and either finds another way or stops.",
-  "下次同样的操作仍会问你。": "The same operation will ask again next time.",
-  "你想要的第几种做法，写在这儿": "Which one you want, or write your own here",
+  "此类操作不再询问": "Stop asking for this kind",
+  "内核已记入会话授权，不写入磁盘。": "The kernel records it for this session only; nothing is written to disk.",
+  "agent 已收到拒绝，将改用其他方式或终止。": "The agent takes the refusal and either finds another way or stops.",
+  "下次同样的操作仍会请求确认。": "The same operation will ask again next time.",
+  "在此填写你希望采用的方案": "Which one you want, or write your own here",
   "问题 {n}": "Question {n}",
   "未答": "Unanswered",
   "确认（还有 {n} 个没答）": "Confirm ({n} left)",
   "确认": "Confirm",
   "先不选择，直接回复": "Skip the choice and reply instead",
   "（补写过一次）": " (repaired once)",
-  "（缺的由主机补上）": " (gaps kept by the host)",
-  "正在折成简报": "Folding into a digest",
-  "这一趟没折叠掉什么": "This pass folded nothing",
-  "这段做过的 {n} 处改动，简报都写到了": "All {n} changes made here are in the digest",
+  "（缺失部分由主机补全）": " (gaps kept by the host)",
+  "正在折叠为简报": "Folding into a digest",
+  "本次未折叠任何内容": "This pass folded nothing",
+  "本段的 {n} 处改动均已写入简报": "All {n} changes made here are in the digest",
   "{kept}/{required} 处改动写进了简报": "{kept}/{required} changes are in the digest",
-  "还有 {n} 处只剩下索引地址，要用原文得 recall 取回": "{n} more are index entries only; recall fetches the original",
-  "正在把 {n} 条消息折成简报": "Folding {n} messages into a digest",
+  "另有 {n} 处仅保留索引地址，需通过 recall 取回原文": "{n} more are index entries only; recall fetches the original",
+  "正在将 {n} 条消息折叠为简报": "Folding {n} messages into a digest",
   "折叠了 {n} 条消息": "Folded {n} messages",
 
   // ── 首次连接 ─────────────────────────────────────────────────────
-  "先连一个模型服务": "Connect a model service first",
-  "填地址和 key，剩下的问它自己 —— 协议、模型清单、能不能读图，都是探得到的。":
+  "首先连接模型服务": "Connect a model service first",
+  "填写地址与 key，其余由系统探测 —— 协议、模型清单、是否支持读图均可自动获取。":
     "Give it an address and a key; the rest is asked of the endpoint — protocol, model list, whether it reads images.",
-  "key 存进本机配置，不上传任何第三方。模型、推理强度、执行设定都有默认值，随时能在输入框那排改。":
+  "key 保存在本机配置中，不会上传至任何第三方。模型、推理强度与执行设定均有默认值，可随时在输入框上方调整。":
     "The key goes into this machine's config and is uploaded nowhere. Model, reasoning effort and execution settings all have defaults you can change from the composer at any time.",
   "常用服务": "Common services",
   "服务地址": "Service address",
   "https://你的地址/v1": "https://your-host/v1",
-  "先用哪个": "Which one to start with",
+  "优先使用": "Which one to start with",
   "选择默认模型": "Choose the default model",
-  "这个端点不止一种协议答应了，上面是偏好而不是事实。连上之后能在设置里换。":
+  "该端点响应了多种协议，上方为偏好选择而非确定结果。连接后可在设置中更改。":
     "More than one protocol answered at this endpoint, so the choice above is a preference rather than a fact. You can change it in Settings once connected.",
 
   // ── 状态与动作 ───────────────────────────────────────────────
   " · 缺 key": " · no key",
   "安装这个版本": "Install this version",
   "保存中…": "Saving…",
-  "不发送": "Don't send",
+  "不发送": "Do not send",
   "当前版本": "Current version",
   "读取中…": "Reading…",
   "覆盖已安装的版本": "Replace the installed copy",
@@ -383,7 +383,7 @@ export const EN_SETTINGS: Record<string, string> = {
   "该来源未声明上下文窗口，因此不会自动整理上下文。请先在右侧「上下文」中填写该模型的窗口大小。":
     "This source declares no context window, so nothing is tidied automatically. Declare this model's window in the Context panel on the right first.",
   "当前": "Now",
-  "下次整理": "Next tidy-up",
+  "下次整理": "Next maintenance",
   "模型窗口": "Model window",
   "经济维护阈值会先到，因此本会话预计在 {n} tokens 左右自动整理上下文。":
     "The economic threshold comes first, so this session should tidy its context automatically at around {n} tokens.",

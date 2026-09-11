@@ -28,33 +28,33 @@ export const EN: Record<string, string> = {
   // ── 转录：卡片与流 ───────────────────────────────────────────────
   "描述任务，其余交给 Reasonix": "Describe the task; Reasonix takes it from there",
   "可读取代码、查找资料、运行工具并修改文件。完整执行过程可在「轨迹」中查看。":
-    "It can read code, look things up, run tools, and edit files. The full run stays visible in the Trajectory.",
-  "把这个仓库跑一遍测试，把失败的那几个定位到具体文件":
+    "It can read code, research, run tools, and edit files. The full run stays visible in the Trajectory.",
+  "运行本仓库的测试，并将失败项定位到具体文件":
     "Run this repository's tests and pin the failures down to specific files",
-  "读一遍最近三次提交，告诉我哪里的改动风险最高":
+  "审阅最近三次提交，指出风险最高的改动":
     "Read the last three commits and tell me which changes carry the most risk",
-  "查一下这个项目的缓存命中率为什么会掉":
+  "排查本项目缓存命中率下降的原因":
     "Find out why this project's cache hit rate is dropping",
   "等待回包 {secs}s": "Waiting for a response · {secs}s",
   "连接在响应头前断了，重试 {attempt}/{max} · {secs}s":
     "Connection dropped before the headers · retry {attempt}/{max} · {secs}s",
   "回包写到一半断了，重放 {attempt}/{max} · {secs}s":
     "The response was cut mid-stream · replay {attempt}/{max} · {secs}s",
-  "连接断了，重试 {attempt}/{max} · {secs}s": "Connection dropped · retry {attempt}/{max} · {secs}s",
+  "连接已断开，重试 {attempt}/{max} · {secs}s": "Connection dropped · retry {attempt}/{max} · {secs}s",
   "Agent": "Agent",
   "思考中…": "Thinking…",
   "复制": "Copy",
   "已复制": "Copied",
   "复制不了": "Copy blocked",
   "复制这段回答": "Copy this answer",
-  "想了 {chars}": "Thought · {chars}",
-  "想了 {secs} 秒 · {chars}": "Thought for {secs}s · {chars}",
+  "思考 {chars}": "Thought · {chars}",
+  "思考 {secs} 秒 · {chars}": "Thought for {secs}s · {chars}",
   "{n} 字": "{n} chars",
   "{n} 张图片": "{n} images",
   "这一步没有回报结果就随本轮结束了": "This step ended with the turn without reporting a result",
-  "还有 1 个调用没来得及开始，它没有改动任何文件":
+  "另有 1 个调用尚未开始，未修改任何文件":
     "1 call never got started; it changed no files",
-  "还有 {n} 个调用没来得及开始，它们没有改动任何文件":
+  "另有 {n} 个调用尚未开始，均未修改任何文件":
     "{n} calls never got started; they changed no files",
 
   // ── 运行状态 ─────────────────────────────────────────────────────
@@ -64,11 +64,11 @@ export const EN: Record<string, string> = {
   "正在回答": "Answering",
   "已完成": "Done",
   "已中断": "Interrupted",
-  "这次请求没能送到内核（HTTP {status}）": "That request never reached the kernel (HTTP {status})",
+  "请求未能送达内核（HTTP {status}）": "That request never reached the kernel (HTTP {status})",
   "移动 {id} 的界面": "Move {id}'s view",
-  "等你批准": "Waiting for approval",
+  "等待批准": "Waiting for approval",
   "等待工作区": "Waiting for the workspace",
-  "等你决定": "Waiting on you",
+  "等待确认": "Waiting on you",
   "缓存": "Cache",
   "{n} 步 · {clock}": "{n} steps · {clock}",
   "{n} 秒": "{n}s",
@@ -97,7 +97,7 @@ export const EN: Record<string, string> = {
   "子代理": "Subagents",
   "尚未派出": "None dispatched",
   "{n} 并行": "{n} in parallel",
-  "已交活": "Handed back",
+  "已交付": "Handed back",
   "待审改动": "Pending changes",
   "改动 · 已放行": "Changes · auto-approved",
   "尚无改动": "No changes yet",
@@ -107,20 +107,20 @@ export const EN: Record<string, string> = {
   "基础指令、记忆、技能清单": "Base instructions, memory, the skill list",
   "工具定义": "Tool definitions",
   "发给模型的工具清单": "The tool list sent to the model",
-  "你说的话": "What you said",
-  "这一会话里你输入的部分": "Your side of this session",
+  "你的输入": "What you said",
+  "本会话中你输入的部分": "Your side of this session",
   "模型回复": "Model replies",
-  "模型说过的话": "What the model has said",
+  "模型的输出": "What the model has said",
   "工具输出": "Tool output",
   "命令、读取、检索返回的内容": "What commands, reads and searches returned",
-  "估算值，和触发压缩用的是同一把尺子": "An estimate, measured the same way compaction is triggered",
+  "估算值，与触发压缩使用同一口径": "An estimate, measured the same way compaction is triggered",
   "策略": "Policy",
   "自动批准": "Auto approve",
   "下次维护": "Next maintenance",
   "模型容量": "Model capacity",
   "接近维护点，模型已经被告知要收窄接下来的工作。":
     "Approaching the maintenance point; the model has been told to narrow what it takes on next.",
-  "快到维护点了，接下来会自动整理上下文。":
+  "即将到达维护点，随后会自动整理上下文。":
     "The maintenance point is close; the context will be tidied automatically.",
   "前缀命中": "Prefix hits",
   "命中": "Hit",
@@ -143,15 +143,15 @@ export const EN: Record<string, string> = {
   "后台任务": "Background jobs",
   "无": "None",
   "外部服务": "External services",
-  "{n} 个连不上": "{n} unreachable",
+  "{n} 个无法连接": "{n} unreachable",
   "{n} 个待批准": "{n} awaiting approval",
-  "{n} 个连不上 · {p} 个待批准": "{n} unreachable · {p} awaiting approval",
+  "{n} 个无法连接 · {p} 个待批准": "{n} unreachable · {p} awaiting approval",
   "这个端点还有 {n} 个模型不在列表里：{names}。点「编辑」把它们加进来。":
     "This endpoint serves {n} models this connection does not list: {names}. Add them under Edit.",
-  "还有 {n} 个，都在设置里": "{n} more, all in Settings",
+  "另有 {n} 个，均在设置中": "{n} more, all in Settings",
   "到设置里重连": "Reconnect from Settings",
-  "到设置的 MCP 面板里修复": "Fix it in the MCP panel under Settings",
-  "这个服务由仓库声明，到设置里决定是否允许它运行":
+  "在设置的 MCP 面板中修复": "Fix it in the MCP panel under Settings",
+  "该服务由仓库声明，请在设置中决定是否允许其运行":
     "This server was declared by the repository; decide under Settings whether it may run",
   "去修复": "Fix",
   "去批准": "Approve",
@@ -166,40 +166,40 @@ export const EN: Record<string, string> = {
   // ── 会话树 ───────────────────────────────────────────────────────
   "新会话": "New session",
   "新会话 {n}": "New session {n}",
-  "从左边挑一个，或者在当前文件夹开一个新的": "Pick one on the left, or start a new one in this folder",
-  "开一个新会话": "Start a new session",
+  "从左栏选择，或在当前文件夹新建": "Pick one on the left, or start a new one in this folder",
+  "新建会话": "Start a new session",
   "空会话": "Empty session",
   "{n} 轮": "{n} turns",
   "还有 {n} 个 · 全部显示": "{n} more · show all",
   "打开或新建项目…": "Open or start a project…",
   "文件夹的完整路径": "Full path to the folder",
-  "还没有文件夹": "No folders yet",
+  "尚无文件夹": "No folders yet",
   "打开项目…": "Open a project…",
   "先打开一个项目": "Open a project first",
-  "读取代码、运行测试和修改文件都只发生在你选定的文件夹内。": "Reading code, running tests and editing files all happen inside the folder you choose.",
-  "就用当前位置": "Stay where I am",
+  "读取代码、运行测试与修改文件均只在你选定的文件夹内进行。": "Reading code, running tests and editing files all happen inside the folder you choose.",
+  "使用当前位置": "Stay where I am",
   "隔离": "Isolated",
   "移除": "Remove",
   "删除": "Delete",
   "从列表移除（不删除任何文件）": "Remove from the list (deletes no files)",
-  "删除这个会话": "Delete this session",
+  "删除该会话": "Delete this session",
   "删除这份恢复副本？": "Delete this recovery copy?",
-  "连同它的记录一起删掉": "Deletes it together with its record",
+  "连同其记录一并删除": "Deletes it together with its record",
   "恢复副本": "Recovery",
-  "这次对话被外部程序改写时留下的副本": "Copies left behind when something outside rewrote this conversation",
-  "重命名这个会话": "Rename this session",
+  "本次对话被外部程序改写时留下的副本": "Copies left behind when something outside rewrote this conversation",
+  "重命名该会话": "Rename this session",
   "展开": "Expand",
   "收起": "Collapse",
   "展开全部": "Show all",
-  "完整输出已存盘（{lines} 行 · {size}），模型按需读取": "Full output saved to disk ({lines} lines · {size}); the model reads it on demand",
+  "完整输出已保存（{lines} 行 · {size}），模型按需读取": "Full output saved to disk ({lines} lines · {size}); the model reads it on demand",
   "已显示开头部分，模型可继续往下读": "Showing the start; the model can read on from there",
   "模型只收到 {kept}，共 {size} — 其余未进入上下文": "The model received only {kept} of {size} — the rest never entered its context",
-  "在 {name} 下开一个新会话": "Start a new session in {name}",
-  "最多同时开 {n} 个面板，先关掉一个": "At most {n} panes at once — close one first",
+  "在 {name} 下新建会话": "Start a new session in {name}",
+  "最多同时打开 {n} 个面板，请先关闭一个": "At most {n} panes at once — close one first",
   "关闭这个会话面板": "Close this pane",
   "不会删除任何文件": "No files are deleted",
-  "会先关掉 {n} 个面板；不会删除任何文件": "Closes {n} panes first; no files are deleted",
-  "会先关掉 {n} 个面板，其中 {live} 个还在跑；不会删除任何文件":
+  "将先关闭 {n} 个面板；不会删除任何文件": "Closes {n} panes first; no files are deleted",
+  "将先关闭 {n} 个面板，其中 {live} 个仍在运行；不会删除任何文件":
     "Closes {n} panes first, {live} of them mid-turn; no files are deleted",
 
   // ── 输入区 ───────────────────────────────────────────────────────
@@ -228,17 +228,17 @@ export const EN: Record<string, string> = {
   "{n} 行 · 展开到输入框": "{n} lines · put it back in the box",
   "移除这张图":"Remove this image",
   "添加图片": "Add an image",
-  "添加图片　也可以直接拖进来或粘贴": "Add an image　or just drop or paste one in",
-  "当前模型不读图 · 将交给能读图的子代理": "This model does not read images · a subagent that does will take it",
-  "没人说过这个模型读不读图 · 先按不读处理；在「连接」里勾上它就直接发":
+  "添加图片　也可直接拖入或粘贴": "Add an image　or drop or paste one in",
+  "当前模型不支持读图 · 将交由支持读图的子代理处理": "This model does not read images · a subagent that does will take it",
+  "该模型是否支持读图未声明 · 暂按不支持处理；在「连接」中勾选后即可直接发送":
     "Nobody has said whether this model reads images · treated as no for now; tick it under Connection to send them straight through",
-  "每次动手前问你。": "Asks before every action.",
+  "每次执行操作前请求确认。": "Asks before every action.",
   "自动": "Auto",
-  "低风险自己过，写操作仍然问。": "Low-risk steps proceed; writes still ask.",
-  "不询问": "Don't interrupt",
-  "不弹审批；要批准才能做的一概不做。": "No approval prompts; anything needing approval is not done.",
+  "低风险操作自动放行，写入操作仍需确认。": "Low-risk steps proceed; writes still ask.",
+  "不询问": "Do not ask",
+  "不显示审批请求；需要批准的操作一律不执行。": "No approval prompts; anything needing approval is not done.",
   "全部放行": "Allow all",
-  "不问了。只在你完全信任这个工作区时用。": "No more questions. Only for a workspace you fully trust.",
+  "不再请求确认，仅在完全信任当前工作区时使用。": "No more questions. Only for a workspace you fully trust.",
   "均衡": "Balanced",
   "交付": "Delivery",
   "执行设定": "Execution",
@@ -266,7 +266,7 @@ export const EN: Record<string, string> = {
   "受阻": "blocked",
   "状态不明": "uncertain",
   "冻结 {n} 文件": "{n} frozen",
-  "读不回这一条的正文，没有打开编辑：{why}":
+  "无法读取该条的正文，未打开编辑：{why}":
     "Could not read this entry back, so it was not opened for editing: {why}",
   "上移": "Move up",
   "下移": "Move down",
@@ -356,19 +356,19 @@ export const EN: Record<string, string> = {
   "端点自己执行的搜索，不占本地工具。": "The endpoint runs the search itself; it costs no local tool.",
   "思考参数": "Thinking parameter",
   "模型 · 已启用 {on}/{all}": "Models · {on} of {all} enabled",
-  "搜模型名；列表里没有的，直接把名字写在这里":
+  "搜索模型名称；列表中没有的，可直接输入名称":
     "Search the list — or type a name that is not on it",
   "搜索或添加模型": "Search or add a model",
   "选用 {name}": "Enable {name}",
-  "就用「{name}」": "Use “{name}”",
-  "端点没报出这个名字，能不能用只有你知道":
+  "使用「{name}」": "Use “{name}”",
+  "端点未报告该名称，是否可用需由你确认":
     "The endpoint never reported this name; whether it answers is something only you know",
-  "还有 {n} 个没列出来，搜一下就能找到": "{n} more not listed — search to reach them",
-  "内核不给这个模型发图片，改这里不会有效果":
+  "另有 {n} 个未列出，可通过搜索找到": "{n} more not listed — search to reach them",
+  "内核不会向该模型发送图片，此处的修改不会生效":
     "The kernel sends no images to this model; changing this has no effect",
   "读图": "Reads images",
   "推理": "Reasoning",
-  "手动添加": "Write one myself",
+  "手动添加": "Write one manually",
   "无法连接": "Unreachable",
   "连上了": "Connected",
   "{n} 条规则": "{n} rules",
@@ -386,9 +386,9 @@ export const EN: Record<string, string> = {
   "预期的检查从未通过": "an expected check never passed",
   "验证失败": "verification failed",
   "验证早于最后一次改动": "the verification predates the last change",
-  "跑过，但退出码是命令里另一段的": "it ran, but the exit code came from another stage of the command",
+  "已运行，但退出码来自命令中的其他片段": "it ran, but the exit code came from another stage of the command",
   "有改动；没有主机能读作证据的检查": "changed; no check the host could read as proof",
-  "改动后再没看过": "changed, never looked at again",
+  "改动后未再检查": "changed, never looked at again",
   "自己申报未验证": "declared unverified by the turn itself",
   "同一账号的两种接入方式。当前这一种不支持联网搜索；这是协议差异，不是可配置项。": "Two ways in to the same account. This one has no web search — that is a difference between the protocols, not a setting.",
   "同一账号的两种接入方式。切换后下方的模型列表随之改变。": "Two ways in to the same account. Switching changes the model list below.",
@@ -451,47 +451,47 @@ export const EN: Record<string, string> = {
   "指定一个可执行文件": "Point at an executable",
   "取消指定": "Clear it",
   "可执行文件路径": "Path to the executable",
-  "自己编的 bash、MSYS2、装在别处的 pwsh 都填这里。保存前会真的拿它跑一条命令，跑不起来就不会写进配置。":
+  "自行编译的 bash、MSYS2，或安装在其他位置的 pwsh 均可填写于此。保存前会实际执行一条命令进行验证，无法运行则不会写入配置。":
     "A bash you built yourself, MSYS2, a pwsh installed elsewhere — all go here. Before saving, one command is really run through it; if that fails, nothing is written to the config.",
-  "没换成": "Not changed",
+  "切换失败": "Not changed",
   "够不着这个工作目录。": "cannot reach this working directory.",
-  "这台机器上没有 bash，所以命令只能按 PowerShell 写。装一个 Git for Windows就会多出 Git Bash 这一项 —— WSL 里的那个不算，它看到的是 /mnt 下的另一套路径，够不着这个工作目录。":
+  "本机没有 bash，因此命令只能按 PowerShell 语法编写。安装 Git for Windows 后会增加 Git Bash 选项 —— WSL 中的 bash 不适用，它看到的是 /mnt 下的另一套路径，无法访问当前工作目录。":
     "There is no bash on this machine, so commands can only be written for PowerShell. Installing Git for Windows adds Git Bash here — the one inside WSL does not count: it sees a different set of paths under /mnt and cannot reach this working directory.",
-  "读不到 shell 配置。": "Could not read the shell config.",
+  "无法读取 shell 配置。": "Could not read the shell config.",
 
   // ── 卡片：批准、还原、收工 ───────────────────────────────────────
-  "要动手了": "About to act",
+  "即将执行": "About to act",
   "允许这一次。": "Allowed once.",
-  "本会话不再问这一类。": "Will not ask again this session for this kind.",
+  "本会话不再询问此类操作。": "Will not ask again this session for this kind.",
   "已拒绝。": "Denied.",
-  "已记成规则。": "Recorded as a rule.",
-  "写进了配置，以后的会话也不再问这一类。": "Written to the config; later sessions will not ask for this kind either.",
+  "已保存为规则。": "Recorded as a rule.",
+  "已写入配置，后续会话也不再询问此类操作。": "Written to the config; later sessions will not ask for this kind either.",
   "推荐": "Recommended",
-  "其他 —— 我自己写": "Something else — I will write it",
+  "其他 —— 自行填写": "Something else — I will write it",
   "你": "You",
   "我": "Me",
   "排队中 · 下一个工具边界送达": "Queued · delivered at the next tool boundary",
-  "排队中 · 这一轮跑完就发": "Queued · goes as soon as this turn lands",
+  "排队中 · 本轮结束后发送": "Queued · goes as soon as this turn lands",
   "撤回": "Take it back",
   "改动": "Changes",
   "独立上下文 · 不进主轨迹": "Its own context · stays out of the main trajectory",
-  "计划已进右栏": "The plan is in the right rail",
+  "计划已移入右栏": "The plan is in the right rail",
   "收工检查": "Wrap-up check",
-  "看它接着往下用的简报": "See the digest it carries forward",
+  "查看其后续使用的简报": "See the digest it carries forward",
   "正在还原…": "Restoring…",
   "撤销这次还原": "Undo this restore",
-  "仍然还原剩下的": "Restore the rest anyway",
-  "没能还原": "Could not restore",
-  "这一轮没有改动文件": "This turn changed no files",
-  "这一轮有改动还原不了": "Some of this turn's changes cannot be restored",
+  "仍还原其余部分": "Restore the rest anyway",
+  "还原失败": "Could not restore",
+  "本轮未修改任何文件": "This turn changed no files",
+  "本轮有改动无法还原": "Some of this turn's changes cannot be restored",
 
   // ── 开场 ─────────────────────────────────────────────────────────
-  "我是小 R。": "I am R.",
-  "你交代一件事，我把它做完。": "You give it one thing, and I see it through.",
-  "读代码、查证、动手、验证 —— 不是给你一段建议就完了。":
+  "欢迎使用 Reasonix。": "Welcome to Reasonix.",
+  "交付一项任务，由它完整执行。": "You hand it a task, and it sees the task through.",
+  "读取代码、查证、执行、验证 —— 而非仅给出一段建议。":
     "Reading code, checking facts, doing the work, verifying it — not handing you advice and stopping there.",
-  "每一步都留得下来。": "Every step stays on the record.",
-  "改了哪个文件、跑了哪条命令、花了多少 token，都能翻回去看。":
+  "每一步均可追溯。": "Every step stays on the record.",
+  "修改了哪个文件、运行了哪条命令、消耗了多少 token，均可回溯查看。":
     "Which file changed, which command ran, how many tokens it cost — all of it can be read back.",
   "按任意键跳过": "Press any key to skip",
 
@@ -518,7 +518,7 @@ export const EN: Record<string, string> = {
   "上次的登录已过期。": "The previous sign-in has expired.",
   "只清除本地登录凭证，不影响会话、记忆和配置":
     "Clears the local credential only; sessions, memory and config are untouched",
-  "用于社区发帖和崩溃问题跟进。与你的模型 API key 无关 —— 登录不会上传你的对话、代码或密钥。":
+  "用于社区发帖与崩溃问题跟进。与模型 API key 无关 —— 登录不会上传你的对话、代码或密钥。":
     "Used for posting to the community and following up crashes. Unrelated to your model API keys — signing in uploads none of your conversations, code or secrets.",
 
   // ── 分工与模型 ───────────────────────────────────────────────────
@@ -531,7 +531,7 @@ export const EN: Record<string, string> = {
   "无法读取模型列表。": "Could not read the model list.",
 
   // ── 记忆 ─────────────────────────────────────────────────────────
-  "暂无记录。": "Nothing has been written down yet.",
+  "暂无记录。": "No entries yet.",
   "始终生效": "Always on",
   "相关时才会检索": "Recalled when relevant",
   "仅在当前轮次相关时才会被检索": "Only surfaced when this turn looks like it needs them",
@@ -616,13 +616,13 @@ export const EN: Record<string, string> = {
   "处理主模型无法识别的图片": "Reads images the main model cannot",
   "复核": "Review",
   "独立复核本轮": "Audits this turn independently",
-  "认得 && 和 ||，但语法仍然是 PowerShell，不是 bash":
+  "支持 && 和 ||，但语法仍为 PowerShell，而非 bash":
     "Understands && and ||, but the syntax is still PowerShell, not bash",
-  "不认 && 和 ||，链式命令得拆成两条": "Does not accept && or ||; chained commands must be split in two",
-  "保存这个路径": "Save this path",
+  "不支持 && 和 ||，链式命令需拆分为两条": "Does not accept && or ||; chained commands must be split in two",
+  "保存该路径": "Save this path",
   "验证中…": "Verifying…",
   "{n} 个角色跟随主模型": "{n} roles follow it",
-  "自己找，优先真 bash。这台机器上会选到": "Finds one itself, preferring a real bash. On this machine that picks",
+  "自动查找，优先选择原生 bash。本机将选用": "Finds one itself, preferring a real bash. On this machine that picks",
   "使用系统或环境变量中已配置的代理": "Uses whatever proxy the system or the environment already sets",
   "{n} 个": "{n}",
   "{n} 个技能": "{n} skills",
@@ -642,11 +642,11 @@ export const EN: Record<string, string> = {
   // ── 面板标签与关闭确认 ───────────────────────────────────────────
   "会话面板": "Session panes",
   "关闭这个面板？": "Close this pane?",
-  "都已经停下了": "They have all stopped",
+  "均已停止": "They have all stopped",
   "关闭 {n} 个面板？": "Close {n} panes?",
-  "{names} 还在跑": "{names} is still running",
-  "其中 {n} 个还在跑：{names}": "{n} of them are still running: {names}",
-  "，关掉会停下它": " — closing stops it",
+  "{names} 仍在运行": "{names} is still running",
+  "其中 {n} 个仍在运行：{names}": "{n} of them are still running: {names}",
+  "，关闭将使其停止": " — closing stops it",
 
   // ── 版本 ─────────────────────────────────────────────────────────
   "今天": "today",
@@ -682,9 +682,9 @@ export const EN: Record<string, string> = {
   "超时了，这一步会被当成失败": "Timed out — this step counts as a failure",
 
   // ── 卡片 ─────────────────────────────────────────────────────────
-  "把工作区和对话退回这条消息之前": "Take the workspace and the conversation back to before this message",
+  "将工作区与对话回退至该消息之前": "Take the workspace and the conversation back to before this message",
   "↩ 回到这里": "↩ Back to here",
-  "按 {name} 这份技能的设定跑的子代理": "A subagent running under the {name} skill's settings",
+  "按技能 {name} 的设定运行的子代理": "A subagent running under the {name} skill's settings",
   "外部服务 {name} 提供的工具": "A tool provided by the external service {name}",
   "由 {name} 渲染": "Drawn by {name}",
   "{name} 做了 {n} 步": "{name} took {n} steps",
@@ -698,7 +698,7 @@ export const EN: Record<string, string> = {
   "设置": "Settings",
   "专注": "Focus",
   "退出专注": "Leave focus",
-  "专注：收起两侧的栏": "Focus: put the side columns away",
+  "专注：收起两侧栏": "Focus: put the side columns away",
   "主题": "Theme",
   "主题：{name}": "Theme: {name}",
   "描述一个任务": "Describe a task",
@@ -731,12 +731,12 @@ export const EN: Record<string, string> = {
   "月之暗面": "Moonshot",
   "智谱": "Zhipu",
   "中转站 / 自建": "Relay / self-hosted",
-  "{n} 个模型 · key 存本机": "{n} models · key stays on this machine",
-  "选一个": "Pick one",
+  "{n} 个模型 · key 保存在本机": "{n} models · key stays on this machine",
+  "请选择一项": "Pick one",
   "正在保存…": "Saving…",
-  "正在连…": "Connecting…",
+  "正在连接…": "Connecting…",
   "开始": "Start",
-  "连上看看": "Connect",
+  "连接并继续": "Connect",
 
   // ── 回合中的通知（notices.ts 按 code 查表，扫描器看不到）──────
   "这一轮模型没有给出回答，正在让它重说一次": "The model gave no answer this round; asking it again",
@@ -749,16 +749,16 @@ export const EN: Record<string, string> = {
   // ── 连不上时卡在哪一步（kernel.ts 的 refusal 措辞）─────────────
 
   // ── 内核其余的拒绝措辞 ─────────────────────────────────────────
-  "这个供应商拒绝了当前密钥，余额读不到": "The provider refused this key, so the balance cannot be read",
-  "这个供应商的余额接口没有应答": "The provider's balance endpoint did not answer",
-  "这个供应商的余额接口回的内容读不懂": "The provider's balance endpoint answered in a shape this build cannot read",
+  "该供应商拒绝了当前密钥，无法读取余额": "The provider refused this key, so the balance cannot be read",
+  "该供应商的余额接口无响应": "The provider's balance endpoint did not answer",
+  "无法解析该供应商余额接口返回的内容": "The provider's balance endpoint answered in a shape this build cannot read",
 
   // ── 钱包 ───────────────────────────────────────────────────────
   "钱包": "Wallet",
   "钱包 · {name}": "Wallet · {name}",
-  "重新读一次余额": "Read the balance again",
+  "重新读取余额": "Read the balance again",
   "已停用": "Suspended",
-  "两种币不合计": "Two currencies, not summed",
+  "两种币种不合计": "Two currencies, not summed",
   "含赠金 {amount}": "incl. {amount} credit",
   "刚刚": "just now",
   "{n} 分钟前": "{n} min ago",

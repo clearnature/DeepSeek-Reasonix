@@ -263,8 +263,8 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                         className="wsadd"
                         data-busy={busy === "new:" + ws.root ? "" : undefined}
                         disabled={full || ws.missing}
-                        title={full ? t("最多同时开 {n} 个面板，先关掉一个", { n: maxPanes }) : t("在 {name} 下开一个新会话", { name: ws.name })}
-                        aria-label={t("在 {name} 下开一个新会话", { name: ws.name })}
+                        title={full ? t("最多同时打开 {n} 个面板，请先关闭一个", { n: maxPanes }) : t("在 {name} 下新建会话", { name: ws.name })}
+                        aria-label={t("在 {name} 下新建会话", { name: ws.name })}
                         onClick={(ev) => {
                           ev.stopPropagation();
                           void startSession(ws);
@@ -300,7 +300,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                         <Confirm
                           key={session.path}
                           what={`删除「${session.title || session.name}」？`}
-                          hint={t(session.runtimeId ? "它的面板会先关掉" : "连同它的记录一起删掉")}
+                          hint={t(session.runtimeId ? "它的面板会先关掉" : "连同其记录一并删除")}
                           go="删除"
                           danger
                           onGo={() => void dropSession(session)}
@@ -326,7 +326,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                         {editing === session.path ? (
                           <input
                             className="sessedit"
-                            aria-label={t("重命名这个会话")}
+                            aria-label={t("重命名该会话")}
                             autoFocus
                             defaultValue={session.title || session.name}
                             onClick={(ev) => ev.stopPropagation()}
@@ -359,7 +359,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                           <button
                             className="sesscopies"
                             aria-expanded={open}
-                            title={t("这次对话被外部程序改写时留下的副本")}
+                            title={t("本次对话被外部程序改写时留下的副本")}
                             onClick={(ev) => {
                               ev.stopPropagation();
                               setSpread((prev) => {
@@ -376,7 +376,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                         <button
                           className="sessedit-btn"
                           title={t("重命名")}
-                          aria-label={t("重命名这个会话")}
+                          aria-label={t("重命名该会话")}
                           onClick={(ev) => {
                             ev.stopPropagation();
                             setEditing(session.path);
@@ -386,8 +386,8 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                         </button>
                         <button
                           className="wsdel"
-                          title={t("删除这个会话")}
-                          aria-label={t("删除这个会话")}
+                          title={t("删除该会话")}
+                          aria-label={t("删除该会话")}
                           onClick={(ev) => {
                             ev.stopPropagation();
                             setConfirm(session.path);
@@ -402,7 +402,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                             <Confirm
                               key={copy.path}
                               what={t("删除这份恢复副本？")}
-                              hint={t("连同它的记录一起删掉")}
+                              hint={t("连同其记录一并删除")}
                               go={t("删除")}
                               danger
                               onGo={() => void dropSession(copy)}
@@ -422,8 +422,8 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
                               <span className="sessmeta">{copy.turns ? t("{n} 轮", { n: copy.turns }) : t("空会话")}</span>
                               <button
                                 className="wsdel"
-                                title={t("删除这个会话")}
-                                aria-label={t("删除这个会话")}
+                                title={t("删除该会话")}
+                                aria-label={t("删除该会话")}
                                 onClick={(ev) => {
                                   ev.stopPropagation();
                                   setConfirm(copy.path);
@@ -452,7 +452,7 @@ function WorkspacesView({ hub, tree, runtimes, active, folded, reload, onFold, o
             );
           })}
           {tree.length > 0 && shownTree.length === 0 && <div className="ws-empty">{t("没有匹配的会话")}</div>}
-          {tree.length === 0 && <div className="ws-empty">{t("还没有文件夹")}</div>}
+          {tree.length === 0 && <div className="ws-empty">{t("尚无文件夹")}</div>}
         </div>
       </div>
 
@@ -469,8 +469,8 @@ export const Workspaces = memo(WorkspacesView);
 // the removal either way, and a refusal names no pane the reader can go find.
 export function removeHint(panes: number, live: number): string {
   if (panes === 0) return t("不会删除任何文件");
-  if (live === 0) return t("会先关掉 {n} 个面板；不会删除任何文件", { n: panes });
-  return t("会先关掉 {n} 个面板，其中 {live} 个还在跑；不会删除任何文件", { n: panes, live });
+  if (live === 0) return t("将先关闭 {n} 个面板；不会删除任何文件", { n: panes });
+  return t("将先关闭 {n} 个面板，其中 {live} 个仍在运行；不会删除任何文件", { n: panes, live });
 }
 
 // 确认不跟原来那行抢位置：把「×」换成「移除」两个字，宽度一变就把文件夹名挤扁

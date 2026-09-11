@@ -55,7 +55,7 @@ describe("the wallet in the cost card", () => {
     );
     expect(html).toContain("¥70.16");
     expect(html).toContain("$12.00");
-    expect(html).toContain("两种币不合计");
+    expect(html).toContain("两种币种不合计");
   });
 
   // Promotional credit expires, so it is worth naming; a zero is not, and the
@@ -67,8 +67,8 @@ describe("the wallet in the cost card", () => {
 
   // A wallet that could not be read says why, and never as a zero.
   it("gives the reason instead of a number", () => {
-    const html = card({ kind: "unread", why: "这个供应商拒绝了当前密钥，余额读不到" });
-    expect(html).toContain("这个供应商拒绝了当前密钥");
+    const html = card({ kind: "unread", why: "该供应商拒绝了当前密钥，无法读取余额" });
+    expect(html).toContain("该供应商拒绝了当前密钥");
     // The value column carries the mark for a number that is missing, never a
     // zero — "cannot be read" and "is empty" are opposite things.
     expect(html).toContain('<span class="v">—</span>');

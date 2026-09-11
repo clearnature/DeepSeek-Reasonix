@@ -79,7 +79,7 @@ describe("sealing a turn", () => {
 
   it("reads as one call, not as a count of one", () => {
     const s = run([partial("c1"), done("context canceled")]);
-    expect(notices(s)[0]).toBe("还有 1 个调用没来得及开始，它没有改动任何文件");
+    expect(notices(s)[0]).toBe("另有 1 个调用尚未开始，未修改任何文件");
   });
 
   // The wire omits `partial: false`, so a fold that merely spread the full
@@ -365,7 +365,7 @@ describe("a question the run is still blocked on", () => {
 
   it("survives the rebuild that follows a reconnect", () => {
     const s = run([asking("ask-1"), rebuild([said("有一个技术决策需要确认：")])]);
-    expect(s.doing, "the header says the run is waiting on you").toBe("等你决定");
+    expect(s.doing, "the header says the run is waiting on you").toBe("等待确认");
     expect(asks(s), "so the question has to still be answerable").toHaveLength(1);
     expect(asks(s)[0].ask.id).toBe("ask-1");
   });

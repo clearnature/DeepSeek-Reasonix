@@ -7,10 +7,10 @@ describe("removeHint", () => {
   });
 
   it("counts the panes the removal will close", () => {
-    expect(removeHint(3, 0)).toBe("会先关掉 3 个面板；不会删除任何文件");
+    expect(removeHint(3, 0)).toBe("将先关闭 3 个面板；不会删除任何文件");
   });
 
   it("names the cost when closing would stop a turn", () => {
-    expect(removeHint(3, 2)).toBe("会先关掉 3 个面板，其中 2 个还在跑；不会删除任何文件");
+    expect(removeHint(3, 2)).toBe("将先关闭 3 个面板，其中 2 个仍在运行；不会删除任何文件");
   });
 });

@@ -89,9 +89,9 @@ export function remoteWorkspaces(host: RemoteHost, tree: TreeWorkspace[] | null 
 function note(host: RemoteHost): string {
   switch (host.status) {
     case "reconnecting":
-      return host.attempt ? t("断了，第 {n} 次重连", { n: host.attempt }) : t("断了，正在重连");
+      return host.attempt ? t("连接已断开，第 {n} 次重连", { n: host.attempt }) : t("连接已断开，正在重连");
     case "degraded":
-      return host.error || t("连上了，但有转发没挂上");
+      return host.error || t("已连接，但部分转发未建立");
     case "stopped":
       return host.error || t("已断开");
     default:
@@ -223,8 +223,8 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
               <button
                 className="rmtpick"
                 disabled={!!busy}
-                title={t("在 {name} 上挑一个目录打开", { name: host.name })}
-                aria-label={t("在 {name} 上挑一个目录打开", { name: host.name })}
+                title={t("在 {name} 上选择要打开的目录", { name: host.name })}
+                aria-label={t("在 {name} 上选择要打开的目录", { name: host.name })}
                 onClick={(ev) => {
                   ev.stopPropagation();
                   setPicking(host);
@@ -273,8 +273,8 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                             data-action="session.new"
                             data-busy={busy === host.name + ws.root ? "" : undefined}
                             disabled={!!busy}
-                            title={t("在 {name} 下开一个新会话", { name: ws.name })}
-                            aria-label={t("在 {name} 下开一个新会话", { name: ws.name })}
+                            title={t("在 {name} 下新建会话", { name: ws.name })}
+                            aria-label={t("在 {name} 下新建会话", { name: ws.name })}
                             onClick={(ev) => {
                               ev.stopPropagation();
                               void open(host, ws.root);
@@ -372,7 +372,7 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
                 className="rmtopen"
                 data-busy={busy.startsWith(host.name) ? "" : undefined}
                 disabled={!!busy}
-                title={t("这台主机还没有设默认工作区")}
+                title={t("该主机尚未设置默认工作区")}
                 onClick={() => void open(host)}
               >
                 <span className="plus" aria-hidden="true">

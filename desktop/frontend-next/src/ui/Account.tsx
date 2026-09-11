@@ -95,7 +95,7 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
           <span className="nm">{state.user.label}</span>
           <span className="em">{state.user.email}</span>
         </div>
-        {state.error && <p className="acct-note">连不上身份服务：{state.error}</p>}
+        {state.error && <p className="acct-note">{t("无法连接身份服务")}：{state.error}</p>}
         <div className="acct-act">
           <button className="btn" data-action="account.sign-out" onClick={signOut} disabled={busy} onMouseLeave={() => setConfirm(false)}>
             {t(confirm ? "确认退出" : "退出登录")}
@@ -109,7 +109,7 @@ export function Account({ port, state, unread, reload }: { port: AgentPort; stat
   return (
     <div className="acct">
       <p className="acct-note">
-        {t("用于社区发帖和崩溃问题跟进。与你的模型 API key 无关 —— 登录不会上传你的对话、代码或密钥。")}
+        {t("用于社区发帖与崩溃问题跟进。与模型 API key 无关 —— 登录不会上传你的对话、代码或密钥。")}
       </p>
       {state.expired && <p className="acct-note">{t("上次的登录已过期。")}</p>}
       {code ? (

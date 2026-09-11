@@ -33,7 +33,7 @@ export function DiffView({ diff, path, onPrepare, onCommit }: Props) {
       // anyway posts an empty planId and answers "missing planId".
       if (!got.canFiles || !got.planId) {
         setOutcome("refused");
-        setFailed(got.disabledReason || t("这个文件不能从检查点还原"));
+        setFailed(got.disabledReason || t("该文件无法从检查点还原"));
         return;
       }
       setPlan(got);
@@ -72,7 +72,7 @@ export function DiffView({ diff, path, onPrepare, onCommit }: Props) {
           <span className="ro">{t("保留了当前版本")}</span>
         ) : revertable && !plan ? (
           <button className="dif-act" data-action="file-revert.prepare" disabled={busy} onClick={() => void prepare()}>
-            {t(busy ? "…" : "还原这个文件")}
+            {t(busy ? "…" : "还原该文件")}
           </button>
         ) : (
           <span className="ro">{t("只读")}</span>
@@ -83,13 +83,13 @@ export function DiffView({ diff, path, onPrepare, onCommit }: Props) {
         <div className="dif-ask" data-clash={clash ? "" : undefined}>
           {clash ? (
             <>
-              <div className="q">{t("这个文件在检查点之后又被改过了。")}</div>
+              <div className="q">{t("该文件在检查点之后再次被修改。")}</div>
               <div className="row">
                 <button className="dif-act" data-action="file-revert.commit" data-value="overwrite_checkpoint" disabled={busy} onClick={() => void commit("overwrite_checkpoint")}>
-                  {t("用检查点的版本覆盖")}
+                  {t("以检查点版本覆盖")}
                 </button>
                 <button className="dif-act ghost" data-action="file-revert.commit" data-value="keep_current" disabled={busy} onClick={() => void commit("keep_current")}>
-                  {t("保留现在的")}
+                  {t("保留当前版本")}
                 </button>
                 <button className="dif-act ghost" onClick={() => setPlan(null)}>{t("取消")}</button>
               </div>
@@ -99,7 +99,7 @@ export function DiffView({ diff, path, onPrepare, onCommit }: Props) {
               {/* earliestRevisions(0): the preimage is the session's first, not
                   this turn's. Saying "before this change" would promise a
                   surgical undo and deliver a session-wide one. */}
-              <div className="q">{t("把这个文件还原到本次会话开始时的样子 —— 会话里对它的其他改动也会一并撤销。")}</div>
+              <div className="q">{t("将该文件还原至本次会话开始时的状态 —— 会话中对它的其他改动也会一并撤销。")}</div>
               <div className="row">
                 <button className="dif-act" data-action="file-revert.commit" disabled={busy} onClick={() => void commit()}>
                   {t(busy ? "正在还原…" : "还原")}

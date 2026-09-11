@@ -29,7 +29,7 @@ export function ApprovalCard({ item, onApprove, onPlan }: Props) {
       </div>
       <div className="c">
         <div className="hl">
-          <span className="nm">{t("要动手了")}</span>
+          <span className="nm">{t("即将执行")}</span>
         </div>
         <div className="out">
           <div className="apv" data-sealed={sealed ? item.verdict : undefined}>
@@ -46,7 +46,7 @@ export function ApprovalCard({ item, onApprove, onPlan }: Props) {
                 </button>
                 <button className="btn" data-action="decision.tool" data-target={item.a.id} data-value="always"
                   onClick={() => onApprove(item.id, item.a.id, "always")}>
-                  {t("这一类不再问")}
+                  {t("此类操作不再询问")}
                 </button>
                 <button className="btn" data-action="decision.tool" data-target={item.a.id} data-value="deny"
                   onClick={() => onApprove(item.id, item.a.id, "deny")}>
@@ -57,13 +57,13 @@ export function ApprovalCard({ item, onApprove, onPlan }: Props) {
             {sealed && (
               <div className="apv-done">
                 {item.verdict === "always" ? (
-                  <><b>{t("本会话不再问这一类。")}</b>{t("核心把它记进会话授权，不落盘。")}</>
+                  <><b>{t("本会话不再询问此类操作。")}</b>{t("内核已记入会话授权，不写入磁盘。")}</>
                 ) : item.verdict === "deny" ? (
-                  <><b>{t("已拒绝。")}</b>{t("agent 收到否决，会另想办法或停手。")}</>
+                  <><b>{t("已拒绝。")}</b>{t("agent 已收到拒绝，将改用其他方式或终止。")}</>
                 ) : item.verdict === "persist" ? (
-                  <><b>{t("已记成规则。")}</b>{t("写进了配置，以后的会话也不再问这一类。")}</>
+                  <><b>{t("已保存为规则。")}</b>{t("已写入配置，后续会话也不再询问此类操作。")}</>
                 ) : (
-                  <><b>{t("允许这一次。")}</b>{t("下次同样的操作仍会问你。")}</>
+                  <><b>{t("允许这一次。")}</b>{t("下次同样的操作仍会请求确认。")}</>
                 )}
               </div>
             )}
@@ -85,10 +85,10 @@ function PlanGate({ item, onPlan }: { item: Props["item"]; onPlan: Props["onPlan
   const sealed = item.verdict !== undefined;
   const said =
     item.verdict === "start"
-      ? [t("已开始执行。"), t("计划模式已经关掉，接下来是执行。")]
+      ? [t("已开始执行。"), t("计划模式已关闭，进入执行阶段。")]
       : item.verdict === "exit"
-        ? [t("暂不执行。"), t("已退出计划模式，计划保留在上方，可随时重新交代。")]
-        : [t("继续规划。"), t("在下面说要改什么，规划者会据此重写这份计划。")];
+        ? [t("暂不执行。"), t("已退出计划模式，计划保留在上方，可随时重新下达。")]
+        : [t("继续规划。"), t("在下方说明需要修改的内容，规划者将据此重写该计划。")];
   return (
     <div className="call" data-k="ask">
       <div className="g">
@@ -97,12 +97,12 @@ function PlanGate({ item, onPlan }: { item: Props["item"]; onPlan: Props["onPlan
       </div>
       <div className="c">
         <div className="hl">
-          <span className="nm">{t("计划等你定")}</span>
+          <span className="nm">{t("计划待确认")}</span>
           <span className="tag">{item.a.tool}</span>
         </div>
         <div className="out">
           <div className="apv" data-sealed={sealed ? item.verdict : undefined}>
-            <div className="apv-dt">{item.a.reason || t("计划已经写好，怎么走由你定。")}</div>
+            <div className="apv-dt">{item.a.reason || t("计划已生成，如何执行由你决定。")}</div>
             {!sealed && (
               <>
                 <div className="apv-ft">
@@ -121,7 +121,7 @@ function PlanGate({ item, onPlan }: { item: Props["item"]; onPlan: Props["onPlan
                 </div>
                 {/* 这一句就是这张卡存在的理由：过去只有「拒绝」，而它其实是
                     「继续规划」—— 想改计划的人以为自己把计划扔了。 */}
-                <div className="apv-note">{t("「修改计划」会留在计划模式里，直接在下面说要改哪里。")}</div>
+                <div className="apv-note">{t("「修改计划」将保持在计划模式中，请在下方说明需要修改之处。")}</div>
               </>
             )}
             {sealed && (
