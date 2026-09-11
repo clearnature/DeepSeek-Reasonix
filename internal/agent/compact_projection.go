@@ -200,9 +200,8 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
-	res, err := a.foldToSummaryMode(ctx, prepared.fold, prepared.instructions, prepared.inputMode)
+	res, tele, err := a.foldSummaryWithChunkedFallback(ctx, trigger, nil, prepared.fold, prepared.instructions, result.SourceTokens, prepared.inputMode)
 	summary := res.Text
-	tele := compactionTelemetryFromSummary(trigger, a.CacheState(), result.SourceTokens, res)
 	if err != nil {
 		tele.Error = err.Error()
 		a.emitCompactionTelemetry(tele)
@@ -429,46 +428,12 @@ func compactionTelemetryFromSummary(trigger, cacheState string, sourceTokens int
 	return tele
 }
 
-// foldSummaryWithChunkedFallback retries summary size failures through the
-// resilient fragment/tree-reduce path used for over-length sessions.
-func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger string, fold []provider.Message, instructions string, sourceTokens int, inputMode string) (foldSummary, CompactionTelemetry, error) {
-	res, tele, err := a.foldSummaryWithTelemetry(ctx, trigger, fold, instructions, sourceTokens, inputMode)
-	if err == nil || !chunkedFallbackApplies(err, inputMode) {
-		return res, tele, err
-	}
-	chunked, chunkedErr := a.chunkedFoldSummary(ctx, fold, instructions, nil)
-	chunked.Usage = mergeSamplingUsage(res.Usage, chunked.Usage)
-	chunked.Spans += res.Spans
-	if chunked.FoldTokens <= 0 {
-		chunked.FoldTokens = res.FoldTokens
-	}
-	if chunked.RequestID == "" {
-		chunked.RequestID = res.RequestID
-	}
-	if chunkedErr != nil {
-		tele = compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked)
-		tele.Error = fmt.Sprintf("%v (chunked fallback: %v)", err, chunkedErr)
-		return chunked, tele, chunkedErr
-	}
-	return chunked, compactionTelemetryFromSummary(trigger, a.CacheState(), sourceTokens, chunked), nil
-}
-
-// chunkedFallbackApplies reports a size failure the fragment path can fix. A
-// provider overflow qualifies only once the transcript form has failed too;
-// before that a re-planned replay is one request instead of many.
-func chunkedFallbackApplies(err error, inputMode string) bool {
-	if provider.AsContextLimitError(err) != nil {
-		return inputMode == SummaryInputSlim
-	}
-	return summarySizeFailure(err)
-}
-
 // compact writes a context projection; trigger stays "auto"/"manual" for UI cards.
-func (a *Agent) summarizeFold(ctx context.Context, trigger string, fold []provider.Message, instructions string, sourceTokens int, inputMode string, req foldRequest) (foldSummary, CompactionTelemetry, error) {
-	if req.allowChunked {
-		return a.foldSummaryWithChunkedFallback(ctx, trigger, fold, instructions, sourceTokens, inputMode)
+func (a *Agent) summarizeFold(ctx context.Context, trigger string, prefix, fold []provider.Message, instructions string, sourceTokens int, inputMode string, allowChunked bool) (foldSummary, CompactionTelemetry, error) {
+	if allowChunked {
+		return a.foldSummaryWithChunkedFallback(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
 	}
-	return a.foldSummaryWithTelemetry(ctx, trigger, fold, instructions, sourceTokens, inputMode)
+	return a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)
 }
 
 func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instructions string, req foldRequest) (CompactionOutcome, error) {
@@ -543,7 +508,19 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	sourceTokens := a.estimatedVisibleRequestTokens(msgs)
 	inputMode := summaryInputModeFor(req, regionHadPinnedRevision,
 		providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash)
-	res, tele, err := a.summarizeFold(ctx, trigger, fold, instructions, sourceTokens, inputMode, req)
+	summaryPrefix, foldExtra, foldAnchors := a.summaryFoldPlan(msgs, head, start)
+	if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
+		// An extension rewrote the fold: the rewritten bytes must be sent and
+		// read literally — anchor locating inside the frozen prefix would
+		// summarize the pre-rewrite text. Quality wins over cache here.
+		summaryPrefix = msgs[:head]
+		foldExtra = fold
+		foldAnchors = ""
+	}
+	if foldAnchors != "" {
+		instructions += foldAnchors
+	}
+	res, tele, err := a.summarizeFold(ctx, trigger, summaryPrefix, foldExtra, instructions, sourceTokens, inputMode, req.allowChunked)
 	if err != nil {
 		a.emitCompactionTelemetry(tele)
 		a.emitCompactionAborted(trigger)
@@ -577,6 +554,12 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		generation: startGeneration, activeTurn: activeTurn, trigger: trigger,
 		summary: summary, inputHash: viewInputHash, outputHash: viewOutputHash,
 		sourceTokens: sourceTokens, projectionTokens: projTokens, covered: covered,
+		// Persist the wire form (normalized): a resumed process re-normalizes
+		// the restored bytes inside summaryRequest, so they must already match
+		// what this request actually sent. The tools ride along as the same
+		// cached unit (system+tools+messages).
+		wirePrefix: a.normalizeModelRequestMessages(summaryPrefix),
+		wireTools:  a.summaryRequestToolsForCommit(summaryPrefix),
 	})
 	if err != nil {
 		a.emitCompactionAborted(trigger)
@@ -680,6 +663,123 @@ func (a *Agent) planFoldRegion(msgs []provider.Message, force, splitActive bool)
 	return head, start, start > head
 }
 
+// summaryFoldPlan selects the cache-aligned summary request shape for the
+// fold msgs[head:start]: the frozen main-request bytes when they cover the
+// head, otherwise the live view (when it fits the admissible ceiling),
+// otherwise the verbatim head + fold. The anchors name the fold region inside
+// the replayed bytes so the summarizer summarizes only that segment.
+func (a *Agent) summaryFoldPlan(msgs []provider.Message, head, start int) (prefix, extra []provider.Message, anchors string) {
+	fold := msgs[head:start]
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
+		region := fold
+		if start > len(saved.messages) {
+			extra = msgs[max(head, len(saved.messages)):start]
+			region = append(append([]provider.Message(nil), fold...), extra...)
+		}
+		return saved.messages, extra, foldAnchorInstruction(region)
+	}
+	if a.summaryViewReplayFits(msgs) {
+		return msgs, nil, foldAnchorInstruction(fold)
+	}
+	return msgs[:head], msgs[head:start], ""
+}
+
+func (a *Agent) summaryFoldEstimate(msgs []provider.Message, head, candidate int, instructions string) provider.Request {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
+		var extra []provider.Message
+		if start := max(head, len(saved.messages)); start < candidate && candidate <= len(msgs) {
+			extra = msgs[start:candidate]
+		}
+		anchors := ""
+		if region := msgs[head:candidate]; len(region) > 0 && candidate <= len(msgs) {
+			anchors = foldAnchorInstruction(append(append([]provider.Message(nil), region...), extra...))
+		}
+		return a.summaryRequest(saved.messages, extra, instructions+anchors)
+	}
+	if a.summaryViewReplayFits(msgs) {
+		anchors := ""
+		if region := msgs[head:candidate]; len(region) > 0 {
+			anchors = foldAnchorInstruction(region)
+		}
+		// For estimation, use only the fold region as prefix (matching v1.36.0).
+		// The actual summaryFoldPlan may use all visible messages for cache
+		// alignment, but the estimate should reflect the minimal request shape.
+		return a.summaryRequest(msgs[head:candidate], nil, instructions+anchors)
+	}
+	return a.summaryRequest(msgs[:head], msgs[head:candidate], instructions)
+}
+
+// summaryMaxPromptTokens is the admissible summarizer input ceiling, shared by
+// planning (maximumSafeSummaryPrefixEnd), the replay-fits check, and send-time
+// admission so a planned request is never rejected after it is selected.
+func (a *Agent) summaryMaxPromptTokens() int {
+	window := a.effectiveContextWindow()
+	if window <= 0 {
+		return 0
+	}
+	policy := contextBudgetPolicyOf(a.svc.prov)
+	if policy.WindowMode == provider.ContextWindowUnknown {
+		// A learned overflow makes an unknown gateway shared-window. Otherwise
+		// preserve the request because the configured window may be an estimate.
+		if a.lastAdmission().ObservedWindow <= 0 {
+			return a.hardInputCeiling()
+		}
+		policy.WindowMode = provider.ContextWindowShared
+	}
+	if policy.WindowMode == provider.ContextWindowShared {
+		return window - outputBudgetReserve - protocolReserveTokens
+	}
+	return a.hardInputCeiling()
+}
+
+// summaryViewReplayFits reports whether the whole live view can be replayed
+// as the summarizer prefix (view + instruction within the admissible input
+// ceiling). Over-ceiling views must crop instead, at the cost of the prefix
+// cache match.
+func (a *Agent) summaryViewReplayFits(msgs []provider.Message) bool {
+	// The safe ceiling already subtracts the (window-scaled) summary output
+	// budget: a view that leaves no room for the digest must crop to the
+	// frozen-prefix branch instead of replaying past the window.
+	maxPromptTokens, enforce := a.safeSummaryPromptTokenLimit()
+	if !enforce {
+		return true
+	}
+	if maxPromptTokens <= 0 {
+		return false
+	}
+	return a.estimatedRequestTokens(a.summaryRequest(msgs, nil, "")) <= maxPromptTokens
+}
+
+// foldAnchorInstruction names the fold region by verbatim excerpts so the
+// summarizer can locate it inside the already-sent main-request bytes. The end
+// excerpt is taken from the whole region (fold + extras) so new turns beyond
+// the frozen prefix stay inside the summarized range.
+func foldAnchorInstruction(region []provider.Message) string {
+	startAnchor, endAnchor := "", ""
+	for _, m := range region {
+		if text := strings.TrimSpace(m.Content); text != "" {
+			if startAnchor == "" {
+				startAnchor = foldAnchor(text)
+			}
+			endAnchor = foldAnchor(text)
+		}
+	}
+	if startAnchor == "" {
+		return ""
+	}
+	return fmt.Sprintf("\n\nThe conversation above contains a segment to summarize. It starts with the excerpt %q and ends with the excerpt %q (both appear verbatim in the conversation above). Summarize ONLY that segment; leave everything else untouched.", startAnchor, endAnchor)
+}
+
+// foldAnchor truncates a message's content to a stable locating excerpt.
+func foldAnchor(text string) string {
+	const maxAnchor = 160
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) <= maxAnchor {
+		return text
+	}
+	return text[:maxAnchor]
+}
+
 type userTurnRetention struct {
 	Kept    int
 	Dropped int
@@ -718,8 +818,8 @@ func latestSessionContextIndex(messages []provider.Message) int {
 }
 
 // runCompactionSummary uses the single local summarizer path for every provider.
-func (a *Agent) runCompactionSummary(ctx context.Context, fold []provider.Message, instructions string) (summary, mode string, usage *provider.Usage, providerReqID string, err error) {
-	summary, usage, err = a.summarizeOnce(ctx, fold, instructions)
+func (a *Agent) runCompactionSummary(ctx context.Context, prefix, fold []provider.Message, instructions string) (summary, mode string, usage *provider.Usage, providerReqID string, err error) {
+	summary, usage, err = a.summarizeOnce(ctx, prefix, fold, instructions)
 	if err != nil {
 		return "", CompactionModeSummarized, usage, "", err
 	}

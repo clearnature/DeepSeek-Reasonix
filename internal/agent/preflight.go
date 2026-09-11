@@ -181,6 +181,17 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	}
 	a.sess.compactionState = st
 	if valid {
+		// Lossless projection inverse: the sidecar preserved the parent
+		// process's last wire bytes; replay them as the frozen main-request
+		// prefix so the first post-resume compaction hits the provider-cached
+		// unit.
+		if len(st.LastWireMessages) > 0 {
+			a.sess.lastMainReq.Store(&mainRequestBytes{messages: st.LastWireMessages, tools: st.LastWireTools})
+			// The frozen bytes are also the last wire unit; without this the
+			// compaction telemetry reports an empty wire_fp and the summary
+			// prefix can no longer be compared against what was sent.
+			a.sess.setWireFP(providerVisibleFingerprint(st.LastWireMessages))
+		}
 		a.sess.checkpointState = "restored"
 		if needsNormalization {
 			if err := a.persistCompactionStateLocked(); err != nil {
@@ -257,6 +268,34 @@ func (a *Agent) SetSessionPath(path string) {
 	a.sess.compactionMu.Lock()
 	a.sess.path = path
 	a.sess.compactionMu.Unlock()
+}
+
+// ModelVisibleFingerprint fingerprints the agent's current model-visible view.
+// Resume telemetry compares it across reopens to separate view divergence from
+// server-side cache expiry.
+func (a *Agent) ModelVisibleFingerprint() string {
+	if a == nil {
+		return ""
+	}
+	return providerVisibleFingerprint(modelInputMessages(a.modelVisibleMessages()))
+}
+
+// ProjectionCoveredMatch reports whether the sidecar projection's covered
+// prefix byte-matches the transcript. True means the first send after resume
+// transmits projection + tail instead of the full history.
+func (a *Agent) ProjectionCoveredMatch() (match bool, covered int) {
+	if a == nil || a.sess.conversation == nil {
+		return false, 0
+	}
+	msgs, _ := a.sess.conversation.snapshotMessagesVersion()
+	a.sess.compactionMu.Lock()
+	st := a.sess.compactionState
+	a.sess.compactionMu.Unlock()
+	covered = st.Projection.CoveredCount
+	if covered <= 0 || covered > len(msgs) || st.Projection.CoveredPrefixHash == "" {
+		return false, covered
+	}
+	return coveredPrefixHash(msgs, covered) == st.Projection.CoveredPrefixHash, covered
 }
 
 // SessionPath returns the bound transcript path.
