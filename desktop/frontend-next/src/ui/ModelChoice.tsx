@@ -160,7 +160,7 @@ function ModelEvidence({ fact }: { fact: ModelFact }) {
   const origin = {
     configured: "已配置",
     endpoint: "现场探测",
-    manual: "手动添加",
+    manual: "用户添加",
     missing: "本次未返回",
   }[fact.origin];
   const state = fact.checking

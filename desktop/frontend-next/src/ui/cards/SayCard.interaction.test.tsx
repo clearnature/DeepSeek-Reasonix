@@ -11,7 +11,7 @@ describe("completed reasoning", () => {
     const { container } = render(<SayCard item={{ t: "say", id: "s", text: "answer", reasoning: "reason", done: true }} />);
     const details = container.querySelector("details") as HTMLDetailsElement;
     expect(details.open).toBe(false);
-    await userEvent.click(screen.getByText(/想了/));
+    await userEvent.click(screen.getByText(/思考/));
     expect(details.open).toBe(true);
   });
 });

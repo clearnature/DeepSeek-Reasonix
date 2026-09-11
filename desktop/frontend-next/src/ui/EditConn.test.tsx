@@ -70,7 +70,7 @@ it("keeps an exact unlisted model id and verifies it independently of the catalo
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索或添加模型" }), `${hidden}{enter}`);
 
   const row = screen.getByText(hidden).closest(".mline") as HTMLElement;
-  expect(within(row).getByText("手动添加")).toBeTruthy();
+  expect(within(row).getByText("用户添加")).toBeTruthy();
   expect(within(row).getByText("待验证")).toBeTruthy();
   await userEvent.click(within(row).getByRole("button", { name: `验证模型 ${hidden}` }));
 

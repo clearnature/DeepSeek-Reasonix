@@ -343,7 +343,7 @@ export const EN: Record<string, string> = {
   "重新验证": "Verify again",
   "已配置": "Configured",
   "现场探测": "Endpoint catalog",
-  "手动添加": "Added manually",
+  "用户添加": "Added manually",
   "本次未返回": "Not returned this time",
   "已验证可用": "Verified available",
   "当前不可用": "Currently unavailable",
