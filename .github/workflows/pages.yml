@@ -48,30 +48,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set +e
-          gh api "repos/${GITHUB_REPOSITORY}/pages" > /tmp/pages-response.json 2> /tmp/pages-error.txt
-          gh_status="$?"
-          set -e
+          status_code="$(curl -sS -o /tmp/pages-response.json -w '%{http_code}' \
+            -u "x-access-token:${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")"
 
-          if [ "${gh_status}" = "0" ]; then
+          if [ "${status_code}" = "200" ]; then
             echo "enabled=true" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
-          response_error="$(cat /tmp/pages-error.txt)"
+          response_body="$(cat /tmp/pages-response.json)"
 
-          if grep -q 'HTTP 404' /tmp/pages-error.txt; then
+          if [ "${status_code}" = "404" ]; then
             echo "enabled=false" >> "${GITHUB_OUTPUT}"
             echo "::notice::Skipping deploy: GitHub Pages is not enabled for ${GITHUB_REPOSITORY}."
             exit 0
           fi
 
-          if grep -q 'HTTP 403' /tmp/pages-error.txt; then
-            echo "::error::Failed to check GitHub Pages status (HTTP 403): token lacks access or API rate limit exceeded. Response: ${response_error}"
+          if [ "${status_code}" = "403" ]; then
+            echo "::error::Failed to check GitHub Pages status (HTTP 403): token lacks access or API rate limit exceeded. Response: ${response_body}"
             exit 1
           fi
 
-          echo "::error::Failed to check GitHub Pages status. Response: ${response_error}"
+          echo "::error::Failed to check GitHub Pages status (HTTP ${status_code}). Response: ${response_body}"
           exit 1
       - id: deploy
         if: steps.pages_status.outputs.enabled == 'true'
