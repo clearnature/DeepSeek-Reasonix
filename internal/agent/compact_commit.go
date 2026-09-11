@@ -18,14 +18,10 @@ type summaryProjectionCommit struct {
 	// covered is the canonical length the frozen projection body represents;
 	// messages past it splice live from the transcript.
 	covered int
-	// wirePrefix is the exact prefix the summary request sent this checkpoint
-	// (the provider-cached unit it replayed). Persisted as the lossless
-	// projection inverse so a resumed process replays the same bytes.
+	// wirePrefix/wireTools persist the exact provider-cached unit this
+	// checkpoint replayed, so a resumed process sends the same bytes.
 	wirePrefix []provider.Message
-	// wireTools is the tool-schema half of the same cached unit; without it a
-	// resumed process replays the frozen messages against the live tool set
-	// and misses past the system prefix (2026-08-31 desktop).
-	wireTools []provider.ToolSchema
+	wireTools  []provider.ToolSchema
 }
 
 // commitSummaryProjection CAS-installs a checkpoint under compactionMu:

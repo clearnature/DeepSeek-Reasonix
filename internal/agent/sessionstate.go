@@ -29,12 +29,8 @@ type sessionRuntime struct {
 	// wire fp it separates payload divergence from server-side expiry.
 	lastWireFP atomic.Pointer[string]
 
-	// lastMainReq freezes the last main (sampling) request's provider-visible
-	// unit — messages AND tool schemas. The server caches system+tools+messages
-	// as one prefix, so the summarizer must replay all three; freezing only
-	// messages left the tools seam unaligned when the live tool set changed
-	// (MCP registration, interceptors) and every summary missed past the
-	// system prefix (2026-08-31: hit=16896 of 256122 on desktop).
+	// lastMainReq freezes the last sampling request's provider-visible unit
+	// (messages AND tool schemas): the server caches all three as one prefix.
 	lastMainReq atomic.Pointer[mainRequestBytes]
 
 	// lastMainReqPersist is the last time the frozen main-request bytes were

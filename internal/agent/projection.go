@@ -159,10 +159,7 @@ type CompactionState struct {
 	NativeContextEditingAccepted bool `json:"native_context_editing_accepted,omitempty"`
 	ContextEditingFallbackLocal  bool `json:"context_editing_fallback_local,omitempty"`
 	// LastWireMessages/LastWireTools freeze the most recent main request's
-	// provider-visible unit (local extension, 2026-08-31 lesson: a resumed
-	// session whose sidecar lacks the last wire unit replays a stale prefix
-	// and pays a full-price summary). omitempty keeps old sidecars loadable;
-	// LoadProjectionSidecar restores them with the rest of the struct.
+	// provider-visible unit so a resumed process replays the cached prefix.
 	LastWireMessages []provider.Message    `json:"last_wire_messages,omitempty"`
 	LastWireTools    []provider.ToolSchema `json:"last_wire_tools,omitempty"`
 	UpdatedAt        time.Time             `json:"updated_at"`

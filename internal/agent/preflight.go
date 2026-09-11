@@ -181,17 +181,7 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 	}
 	a.sess.compactionState = st
 	if valid {
-		// Lossless projection inverse: the sidecar preserved the parent
-		// process's last wire bytes; replay them as the frozen main-request
-		// prefix so the first post-resume compaction hits the provider-cached
-		// unit.
-		if len(st.LastWireMessages) > 0 {
-			a.sess.lastMainReq.Store(&mainRequestBytes{messages: st.LastWireMessages, tools: st.LastWireTools})
-			// The frozen bytes are also the last wire unit; without this the
-			// compaction telemetry reports an empty wire_fp and the summary
-			// prefix can no longer be compared against what was sent.
-			a.sess.setWireFP(providerVisibleFingerprint(st.LastWireMessages))
-		}
+		a.restoreFrozenWire(st)
 		a.sess.checkpointState = "restored"
 		if needsNormalization {
 			if err := a.persistCompactionStateLocked(); err != nil {
@@ -202,6 +192,17 @@ func (a *Agent) LoadProjectionSidecar(sessionPath string) {
 		a.sess.checkpointState = "none"
 	}
 	a.sess.compactionMu.Unlock()
+}
+
+// restoreFrozenWire re-adopts the sidecar's frozen main-request unit as this
+// process's prefix, so the first post-resume compaction replays the
+// provider-cached bytes instead of a cropped view.
+func (a *Agent) restoreFrozenWire(st CompactionState) {
+	if len(st.LastWireMessages) == 0 {
+		return
+	}
+	a.sess.lastMainReq.Store(&mainRequestBytes{messages: st.LastWireMessages, tools: st.LastWireTools})
+	a.sess.setWireFP(providerVisibleFingerprint(st.LastWireMessages))
 }
 
 // lineageKeyCompatible reports whether a stored PromptCacheKey still belongs to
