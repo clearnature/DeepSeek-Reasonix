@@ -22,7 +22,7 @@ const wantEn = wantZh ? (catalogue.match(new RegExp(`"${quote(wantZh)}":\\s*"([^
 // An empty side means the code was renamed or the file moved, not that the
 // two agree.
 if (!wantZh || !wantEn) {
-  console.log(`未能从源码读到 ${CODE} 的两种说法：中文=${wantZh || "(空)"} 英文=${wantEn || "(空)"}`);
+  console.log(`未能从源码读取 ${CODE} 的两种语言文本：中文=${wantZh || "(空)"} 英文=${wantEn || "(空)"}`);
   process.exit(1);
 }
 
@@ -65,10 +65,10 @@ async function refuse(lang) {
 const zh = await refuse("zh");
 const en = await refuse("en");
 console.log(`\n  中文界面：${zh}\n  英文界面：${en}\n`);
-check("中文界面显示的是该码在源码中对应的中文", zh === wantZh, `实际「${zh || "(空)"}」，源码「${wantZh}」`);
-check("英文界面显示的是目录为该中文给出的英文", en === wantEn, `实际「${en || "(空)"}」，目录「${wantEn}」`);
+check("中文界面显示该码在源码中对应的中文", zh === wantZh, `实际「${zh || "(空)"}」，源码「${wantZh}」`);
+check("英文界面显示目录为该中文给出的英文", en === wantEn, `实际「${en || "(空)"}」，目录「${wantEn}」`);
 check("同一个码在两种语言下不同", zh !== en);
-check("码本身没有泄漏给读者", !zh.includes(CODE) && !en.includes(CODE));
+check("码本身未泄漏给读者", !zh.includes(CODE) && !en.includes(CODE));
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} 项未通过` : "\n全部通过");

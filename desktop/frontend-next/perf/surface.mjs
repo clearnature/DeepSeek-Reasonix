@@ -74,11 +74,11 @@ for (const scheme of ["dark", "light"]) {
   }, MIN_L);
 
   if (found.length) {
-    console.log(`\n${scheme}：以底色分层、但这一层不可见的 ${found.length} 种：`);
+    console.log(`\n${scheme}：以底色分层但该层不可见的 ${found.length} 种：`);
     for (const f of found) console.log("  " + f);
   }
   check(
-    `${scheme}：以底色分层的容器，这一层可见`,
+    `${scheme}：以底色分层的容器，该层可见`,
     found.length === 0,
     found.length ? `${found.length} 种低于 ΔL ${MIN_L}` : `阈值 ΔL ${MIN_L}`,
   );

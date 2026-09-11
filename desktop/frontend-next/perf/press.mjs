@@ -118,16 +118,16 @@ const survey = await page.evaluate(() => {
 
 console.log(`接受指针的控件 ${survey.controls} 个   带 :active 的规则 ${survey.pressedRules} 条`);
 if (!survey.controls || !survey.pressedRules) {
-  console.log("\n没有扫到控件或规则：这份守卫会一直通过，请先确认页面已经就绪。");
+  console.log("\n未扫描到控件或规则：该检查将始终通过，请先确认页面已就绪。");
   process.exit(1);
 }
 
 const silentTotal = survey.silent.reduce((a, [, n]) => a + n, 0);
 if (silentTotal) {
-  console.log(`\n按下后没有任何反馈的 ${silentTotal} 个（${survey.silent.length} 种）：`);
+  console.log(`\n按下后无任何反馈的控件 ${silentTotal} 个（${survey.silent.length} 种）：`);
   for (const [id, n] of survey.silent) console.log(`  ${String(n).padStart(3)}  ${id}`);
 }
-check("每个接受指针的控件都对按下有反馈", silentTotal === 0, silentTotal ? `${silentTotal} 个缺少` : "");
+check("每个接受指针的控件均对按下有反馈", silentTotal === 0, silentTotal ? `${silentTotal} 个未满足` : "");
 
 // A control that reserves its width and then paints nothing reads as missing,
 // and costs the row the space anyway — the worst of both. Quiet is fine;
@@ -155,16 +155,16 @@ const ghosts = await page.evaluate(() => {
 });
 if (ghosts.length) {
   console.log(`
-占着宽度却不可见的 ${ghosts.length} 种：`);
+占据宽度但不可见的控件 ${ghosts.length} 种：`);
   for (const [k, n] of ghosts) console.log(`  ${String(n).padStart(3)}  ${k}`);
 }
-check("占位的控件都看得见", ghosts.length === 0, ghosts.length ? `${ghosts.length} 种是透明的` : "");
+check("占据布局空间的控件均可见", ghosts.length === 0, ghosts.length ? `${ghosts.length} 种不可见` : "");
 
 if (survey.orphans.length) {
-  console.log(`\n接受指针但既非语义元素、也没有 role 的 ${survey.orphans.length} 种（键盘与读屏无法到达）：`);
+  console.log(`\n接受指针但既非语义元素也无 role 的元素 ${survey.orphans.length} 种（键盘与读屏无法到达）：`);
   for (const [id, n] of survey.orphans) console.log(`  ${String(n).padStart(3)}  ${id}`);
 }
-check("接受指针的元素都是控件", survey.orphans.length === 0, survey.orphans.length ? `${survey.orphans.length} 种不是控件` : "");
+check("接受指针的元素均为控件", survey.orphans.length === 0, survey.orphans.length ? `${survey.orphans.length} 种不是控件` : "");
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} 项未通过` : "\n全部通过");
