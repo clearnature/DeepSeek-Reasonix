@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -85,7 +86,7 @@ func statsDir() string {
 
 func parseRecord(line string) (usageRecord, bool) {
 	var raw struct {
-		Ts         string `json:"ts"`
+		TS         string `json:"ts"`
 		Model      string `json:"model"`
 		Source     string `json:"usage_source"`
 		Prompt     int    `json:"prompt"`
@@ -100,7 +101,7 @@ func parseRecord(line string) (usageRecord, bool) {
 	if strings.TrimSpace(raw.Model) == "" {
 		return usageRecord{}, false
 	}
-	ts, err := time.Parse(time.RFC3339Nano, raw.Ts)
+	ts, err := time.Parse(time.RFC3339Nano, raw.TS)
 	if err != nil {
 		return usageRecord{}, false
 	}
@@ -141,7 +142,7 @@ func collect(dir string, cutoff time.Time, filter string) (*audit, error) {
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -197,9 +198,7 @@ func collect(dir string, cutoff time.Time, filter string) (*audit, error) {
 func listPrices(cfg *config.Config) map[string]*provider.Pricing {
 	out := map[string]*provider.Pricing{}
 	for _, entry := range cfg.Providers {
-		for id, p := range entry.Prices {
-			out[id] = p
-		}
+		maps.Copy(out, entry.Prices)
 		if entry.Price != nil {
 			out["*"] = entry.Price
 		}

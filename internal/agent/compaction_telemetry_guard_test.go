@@ -43,7 +43,7 @@ func TestCompactionDetailKeysAreParsed(t *testing.T) {
 
 func compactionDetailKeys(detail string) map[string]bool {
 	out := map[string]bool{}
-	for _, tok := range strings.Fields(detail) {
+	for tok := range strings.FieldsSeq(detail) {
 		if k, _, ok := strings.Cut(tok, "="); ok {
 			out[k] = true
 		}

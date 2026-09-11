@@ -3,6 +3,7 @@ package serve
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"reasonix/internal/control"
@@ -55,9 +56,9 @@ func (s *Server) SpawnSubSession(ctx context.Context, prompt, completion string)
 
 // lastAssistantText returns the most recent assistant message body.
 func lastAssistantText(history []provider.Message) string {
-	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role == "assistant" && strings.TrimSpace(history[i].Content) != "" {
-			return history[i].Content
+	for _, v := range slices.Backward(history) {
+		if v.Role == "assistant" && strings.TrimSpace(v.Content) != "" {
+			return v.Content
 		}
 	}
 	return ""

@@ -22,7 +22,7 @@ func preserveSubagentFailure(run *agent.SubagentRun, store *agent.SubagentStore,
 func runReadOnlySkillSession(ctx context.Context, prov provider.Provider, reg *tool.Registry, prompt string, opts agent.Options, sink event.Sink, systemPrompt string,
 	runner func(context.Context, provider.Provider, *tool.Registry, *agent.Session, string, agent.Options, event.Sink) (string, error),
 ) (string, error) {
-	run := agent.EphemeralSubagentRun(systemPrompt)
+	run := ephemeralSkillRun(ctx, systemPrompt)
 	answer, err := runner(ctx, prov, reg, run.Session, prompt, opts, sink)
 	if err != nil {
 		return preserveSubagentFailure(run, nil, err)

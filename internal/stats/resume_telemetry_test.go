@@ -30,7 +30,7 @@ func TestRecorderWritesResumeTelemetry(t *testing.T) {
 	var got struct {
 		Resume *ResumeRecord `json:"resume"`
 	}
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		if strings.Contains(line, "resume") {
 			if err := json.Unmarshal([]byte(line), &got); err != nil {
 				t.Fatalf("unmarshal: %v", err)
@@ -59,7 +59,7 @@ func TestRecorderWritesResumeTelemetry(t *testing.T) {
 	var all []struct {
 		Resume *ResumeRecord `json:"resume"`
 	}
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		var row struct {
 			Resume *ResumeRecord `json:"resume"`
 		}

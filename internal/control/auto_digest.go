@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -94,7 +95,7 @@ func (c *Controller) runDigestRound(name string) {
 	}()
 	err := c.RunTurn(ctx, c.digestPrompt(name))
 	if err != nil {
-		if err == ErrTurnRunning {
+		if errors.Is(err, ErrTurnRunning) {
 			return // the user turn that owns the controller carries the context
 		}
 		if ctx.Err() == context.Canceled {

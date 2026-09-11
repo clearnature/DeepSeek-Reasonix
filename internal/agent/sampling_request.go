@@ -137,6 +137,10 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 	if err != nil {
 		return samplingRequest{}, err
 	}
+	// Predict overflow before the request goes on the wire: when the estimated
+	// prompt alone leaves almost no room for output, surface a record-only
+	// notice. No compaction is triggered — this is a diagnostic, not a gate.
+	a.maybePredictOverflow(a.estimatedPromptTokens(requestMessages), req.MaxTokens)
 	return samplingRequest{req: req}, nil
 }
 

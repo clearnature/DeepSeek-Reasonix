@@ -108,10 +108,8 @@ func TestUserTurnPreemptsDigestRound(t *testing.T) {
 	}
 	// The preempting user turn must then run to completion (provider call 2).
 	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if pv.callCount() >= 2 {
-			break
-		}
+	for pv.callCount() < 2 {
+
 		if time.Now().After(deadline) {
 			t.Fatal("user turn after preemption never ran")
 		}

@@ -18,8 +18,8 @@ func TestReplaySessionEventLogTailRecoversOversizedLog(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "oversized.events.jsonl")
 	var b strings.Builder
-	for i := 0; i < 300; i++ {
-		b.WriteString(fmt.Sprintf(`{"schema_version":1,"type":"append","message_index":%d,"messages":[{"role":"user","content":"bulk filler that pushes the log past the byte budget"}]}`+"\n", i))
+	for i := range 300 {
+		fmt.Fprintf(&b, `{"schema_version":1,"type":"append","message_index":%d,"messages":[{"role":"user","content":"bulk filler that pushes the log past the byte budget"}]}`+"\n", i)
 	}
 	b.WriteString(`{"schema_version":1,"type":"replace","messages":[{"role":"system","content":"sys"},{"role":"user","content":"tail"}]}` + "\n")
 	contents := b.String()
@@ -64,7 +64,7 @@ func TestReplaySessionEventLogTailRefusesAppendOnlyLog(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "appendonly.events.jsonl")
 	var b strings.Builder
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		b.WriteString(`{"schema_version":1,"type":"append","message_index":0,"messages":[{"role":"user","content":"bulk filler that pushes the log past the byte budget"}]}` + "\n")
 	}
 	if err := os.WriteFile(logPath, []byte(b.String()), 0o600); err != nil {

@@ -235,18 +235,18 @@ func cacheStats(start, end time.Time) {
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		var r struct {
-			Ts         string `json:"ts"`
+			TS         string `json:"ts"`
 			CacheHit   int    `json:"cache_hit"`
 			CacheMiss  int    `json:"cache_miss"`
 			Completion int    `json:"completion"`
 			PrefixHash string `json:"prefix_hash"`
 		}
-		if err := json.Unmarshal(sc.Bytes(), &r); err != nil || len(r.Ts) < 16 {
+		if err := json.Unmarshal(sc.Bytes(), &r); err != nil || len(r.TS) < 16 {
 			continue
 		}
 		// ISO timestamps sort lexicographically; the minute window is enough
 		// to isolate the experiment (sessionDir start → evaluation end).
-		if r.Ts[:16] < lo || r.Ts[:16] > hi {
+		if r.TS[:16] < lo || r.TS[:16] > hi {
 			continue
 		}
 		reqs++

@@ -165,7 +165,7 @@ func (r *Recorder) recordResume(e event.Event) {
 		return
 	}
 	rec := ResumeRecord{State: "unknown", Decision: "replay"}
-	for _, tok := range strings.Fields(e.Detail) {
+	for tok := range strings.FieldsSeq(e.Detail) {
 		k, v, ok := strings.Cut(tok, "=")
 		if !ok {
 			continue
@@ -224,7 +224,7 @@ func (r *Recorder) recordCompaction(e event.Event) {
 		return
 	}
 	rec := CompactionRecord{Trigger: "unknown", Mode: "unknown"}
-	for _, tok := range strings.Fields(e.Detail) {
+	for tok := range strings.FieldsSeq(e.Detail) {
 		k, v, ok := strings.Cut(tok, "=")
 		if !ok {
 			continue
@@ -354,7 +354,7 @@ func (r *Recorder) recordEstimateAnomaly(e event.Event) {
 		return
 	}
 	rec := EstimateAnomalyRecord{}
-	for _, tok := range strings.Fields(e.Detail) {
+	for tok := range strings.FieldsSeq(e.Detail) {
 		k, v, ok := strings.Cut(tok, "=")
 		if !ok {
 			continue

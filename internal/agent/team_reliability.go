@@ -156,9 +156,7 @@ func (ts *TeammateStore) loadSnapshot() {
 			ts.approvals[k] = v
 		}
 	}
-	for k, v := range snap.Board {
-		ts.board[k] = v
-	}
+	maps.Copy(ts.board, snap.Board)
 	ts.mu.Unlock()
 }
 

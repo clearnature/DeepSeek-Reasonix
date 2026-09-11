@@ -12,6 +12,8 @@ import (
 // skill body appended to the system tail, or a cold start when inheritance is
 // unavailable. runAs=subagent skills used to cold-start every invocation,
 // paying full price for each child turn (team 三职能 each round).
+//
+//nolint:unused // kept for *Session-owning runners; boot now goes through ephemeralSkillRun/prepareSkillRun.
 func skillForkSession(sctx context.Context, sysPrompt string) *agent.Session {
 	if sess := agent.PrepareSkillForkSession(agent.ContextParentAgent(sctx), sysPrompt); sess != nil {
 		return sess

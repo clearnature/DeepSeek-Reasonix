@@ -26,7 +26,7 @@ func TestRecorderWritesEstimateAnomaly(t *testing.T) {
 	var got struct {
 		Estimate *EstimateAnomalyRecord `json:"estimate"`
 	}
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		if strings.Contains(line, "estimate") {
 			if err := json.Unmarshal([]byte(line), &got); err != nil {
 				t.Fatalf("unmarshal: %v", err)

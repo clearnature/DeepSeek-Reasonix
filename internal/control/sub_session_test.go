@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"reasonix/internal/tool"
 )
 
 // TestCreateSubSessionWithoutSpawnerReportsDaemonOnly locks the qwen
@@ -47,5 +45,5 @@ func TestCreateSubSessionDelegatesToSpawner(t *testing.T) {
 	if _, err := tt.Execute(context.Background(), json.RawMessage(`{"prompt":"x","completion":"bogus"}`)); err == nil {
 		t.Fatal("bogus completion should be rejected")
 	}
-	var _ tool.Tool = tt
+	var _ = tt
 }

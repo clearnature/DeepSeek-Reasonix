@@ -446,6 +446,9 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	a.sess.compactionMu.Unlock()
 	msgs, onProjection := a.visibleInputForFold(stateSnapshot, canonical, transcriptVersion)
 	viewInputHash := providerVisibleFingerprint(modelInputMessages(msgs))
+	if a.sameTurnCompactionBlocked(activeTurn, trigger, req.mustFree, stateSnapshot, viewInputHash) {
+		return CompactionNoop, nil
+	}
 	head, start, ok := a.planFoldRegion(msgs, req.force, req.mustFree)
 	if !ok {
 		return CompactionNoop, nil

@@ -18,17 +18,6 @@ import (
 	"reasonix/internal/tool"
 )
 
-// releaseOnCleanup closes ch exactly once when the test unwinds, so a failed
-// assertion cannot leave the job closure blocked on <-release and hang
-// Manager.Close.
-func releaseOnCleanup(ch chan struct{}) {
-	select {
-	case <-ch:
-	default:
-		close(ch)
-	}
-}
-
 // p3NoopTool is a read-only no-op tool so the mock provider can script a
 // first tool-call round and a second final round, giving the run loop two
 // per-iteration boundaries to drain job messages on.

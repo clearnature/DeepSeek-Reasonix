@@ -59,7 +59,7 @@ func TestLoopWakeupDeliversToLeaderInbox(t *testing.T) {
 		t.Fatalf("cron_list missing entry: %q", listOut)
 	}
 	var id string
-	for _, line := range strings.Split(listOut, "\n") {
+	for line := range strings.SplitSeq(listOut, "\n") {
 		if strings.Contains(line, "cron") && strings.Contains(line, "status sweep") {
 			id = strings.Fields(line)[1]
 		}

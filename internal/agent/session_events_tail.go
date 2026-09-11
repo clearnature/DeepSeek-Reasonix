@@ -71,7 +71,7 @@ func tailReplaceOffset(f *os.File, size int64) (int64, error) {
 				continue
 			}
 			pos := off
-			for k := 0; k < i; k++ {
+			for k := range i {
 				pos += int64(len(lines[k])) + 1
 			}
 			return pos, nil
