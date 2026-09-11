@@ -475,6 +475,7 @@ export function Composer({ port, status, running, focus, onSubmit, onChanged, on
           // the caret is what decides which token the menu is completing.
           onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
           onClick={(e) => setCaret(e.currentTarget.selectionStart)}
+          data-action-paste="session.attach"
           // Dropping is the pane's job — a one-row box is 40px to aim at, and the
           // handler that used to live here prevented the default and then did
           // nothing with text, which is worse than not handling it at all.
