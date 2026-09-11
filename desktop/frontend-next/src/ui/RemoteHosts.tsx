@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useState } from "react";
 import { useRailQuery } from "./railsearch";
 import { t } from "../i18n";
 import type { HubPort, RuntimeView, TreeWorkspace } from "../port/hub";
@@ -21,6 +21,11 @@ interface Props {
   // Re-reads the host book. Dropping a folder edits it, and the list this
   // column draws from is held one level up.
   reload: () => Promise<void>;
+  // Each connected machine's own session book, and a way to ask for them again.
+  // Held one level up with this machine's, because what makes either of them
+  // stale is the same event — a turn ending — and one owner answers for both.
+  trees: Record<string, TreeWorkspace[] | null>;
+  reloadTrees: () => Promise<void>;
   onError: (e: unknown) => void;
 }
 
@@ -111,14 +116,13 @@ function note(host: RemoteHost): string {
   }
 }
 
-function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload, onError }: Props) {
+function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload, trees, reloadTrees, onError }: Props) {
   const [busy, setBusy] = useState("");
   // The machine whose folder picker is open, empty for none. One at a time:
   // it is a dialog over the window, not a panel inside a row.
   const [picking, setPicking] = useState<RemoteHost | null>(null);
   // What each connected machine holds. Absent until asked; null while nothing
   // is open on it, which is the state the connect button belongs to.
-  const [trees, setTrees] = useState<Record<string, TreeWorkspace[] | null>>({});
   // Folded rows. A host's key is its name; a workspace's carries the host, so
   // one machine collapsing never takes a folder on another with it.
   const [shut, setShut] = useState<Set<string>>(new Set());
@@ -127,32 +131,11 @@ function RemoteHostsView({ hub, hosts, runtimes, active, onOpen, onFocus, reload
   // Workspaces the reader asked to see in full.
   const [whole, setWhole] = useState<Set<string>>(new Set());
 
-  // Only a machine with a pane on it has a kernel to ask. Keyed by host so a
-  // second one connecting does not re-read the first.
-  const live = hosts
-    .filter((h) => h.status === "connected" || h.status === "degraded")
-    .map((h) => h.name)
-    .join("\u0000");
-  const readTrees = useCallback(async () => {
-    for (const host of live ? live.split("\u0000") : []) {
-      try {
-        const tree = await hub.remoteTree(host);
-        setTrees((held) => ({ ...held, [host]: tree }));
-      } catch {
-        setTrees((held) => ({ ...held, [host]: null }));
-      }
-    }
-  }, [hub, live]);
-
-  useEffect(() => {
-    void readTrees();
-  }, [readTrees]);
-
   const open = async (host: RemoteHost, workspace?: string, sessionPath?: string) => {
     setBusy(host.name + (sessionPath ?? workspace ?? ""));
     try {
       await onOpen(host.name, workspace ?? host.workspace, sessionPath);
-      await readTrees();
+      await reloadTrees();
     } catch (e) {
       onError(e);
     } finally {

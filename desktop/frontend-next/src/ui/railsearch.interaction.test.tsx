@@ -31,6 +31,8 @@ const draw = (hosts: RemoteHost[]) =>
         onOpen={async () => {}}
         onFocus={() => {}}
         reload={async () => {}}
+        trees={{}}
+        reloadTrees={async () => {}}
         onError={() => {}}
       />
     </RailSearch>,

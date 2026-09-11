@@ -18,6 +18,7 @@ import { RemoteAsk } from "./RemoteAsk";
 import { RemoteHosts } from "./RemoteHosts";
 import type { RemoteAsk as RemoteAskT, RemoteHost } from "../port/remote";
 import { RailSearch } from "./railsearch";
+import { useMachineBooks } from "./machinebooks";
 import { Workspaces } from "./Workspaces";
 import { Sky } from "./Sky";
 import { useAddWorkspace } from "./addws";
@@ -146,6 +147,10 @@ export function App({ hub }: { hub: HubPort }) {
     [hub],
   );
 
+  // Held beside this machine's tree, and re-read on the same beat: see
+  // useMachineBooks for why that beat is one rather than two.
+  const { trees: remoteTrees, reload: reloadRemoteTrees } = useMachineBooks(hub, remotes);
+
   // Panes and tree move together: opening a session marks its row live, closing
   // one hands the row back.
   const reloadPanes = useCallback(async () => {
@@ -153,7 +158,8 @@ export function App({ hub }: { hub: HubPort }) {
     setRuntimes(list);
     setActive((cur) => (list.some((rt) => rt.id === cur) ? cur : (list[0]?.id ?? "")));
     await reloadTree();
-  }, [hub, reloadTree]);
+    void reloadRemoteTrees();
+  }, [hub, reloadTree, reloadRemoteTrees]);
 
   useEffect(() => {
     void reloadPanes();
@@ -613,6 +619,8 @@ export function App({ hub }: { hub: HubPort }) {
                 onOpen={openRemotePane}
                 onFocus={focusPane}
                 reload={reloadRemotes}
+                trees={remoteTrees}
+                reloadTrees={reloadRemoteTrees}
                 onError={fail}
               />
             ) : null}
