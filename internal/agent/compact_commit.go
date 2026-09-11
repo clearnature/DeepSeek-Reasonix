@@ -86,10 +86,8 @@ func (a *Agent) summaryProjectionState(commit summaryProjectionCommit) Compactio
 			ViewInputHash: commit.inputHash, ViewOutputHash: commit.outputHash, CreatedAt: now,
 		},
 		LastReceipt: receipt, UpdatedAt: now,
-		// Lossless projection inverse: preserve the exact prefix the summary
-		// request replayed (the provider-cached unit), so a resumed process can
-		// replay the same bytes instead of paying a full-price first compaction
-		// (project + reconstruct = identity).
+		// Preserve the exact prefix the summary request replayed (the
+		// provider-cached unit): a resumed process replays the same bytes.
 		LastWireMessages: commit.wirePrefix,
 		LastWireTools:    commit.wireTools,
 	}

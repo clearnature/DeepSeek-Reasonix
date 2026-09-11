@@ -534,17 +534,8 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		return CompactionNoop, err
 	}
 
-	// The projection body freezes only prefix + digest + kept messages; the
-	// verbatim tail splices live from canonical[start:] so tail-side rewrites
-	// (rewind truncation, snips) stay visible without rebuilding the fold.
-	projMsgs := checkpointProjectionMessages(msgs, head, kept, summary)
-	if len(bodySuffix) > 0 {
-		projMsgs = append(projMsgs, projectionMessagesPreservingPinnedContext(bodySuffix)...)
-	}
-	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
-	projMsgs, spliced, projTokens, err := a.preparePinnedCheckpointCandidate(trigger, projMsgs, canonical, covered, sourceTokens, &tele)
+	projMsgs, spliced, projTokens, err := a.prepareCheckpointBody(trigger, msgs, kept, canonical, bodySuffix, head, covered, sourceTokens, summary, retention, &tele)
 	if err != nil {
-		a.emitCompactionAborted(trigger)
 		return CompactionNoop, err
 	}
 	viewOutputHash := providerVisibleFingerprint(modelInputMessages(spliced))
@@ -562,16 +553,28 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 	}, summary, len(fold))
 }
 
+// prepareCheckpointBody assembles the checkpoint body and verifies its
+// savings. The verbatim tail splices live from canonical[covered:], so
+// tail-side rewrites stay visible without rebuilding the fold.
+func (a *Agent) prepareCheckpointBody(trigger string, msgs, kept, canonical, bodySuffix []provider.Message, head, covered, sourceTokens int, summary string, retention userTurnRetention, tele *CompactionTelemetry) ([]provider.Message, []provider.Message, int, error) {
+	projMsgs := checkpointProjectionMessages(msgs, head, kept, summary)
+	if len(bodySuffix) > 0 {
+		projMsgs = append(projMsgs, projectionMessagesPreservingPinnedContext(bodySuffix)...)
+	}
+	tele.UserTurnsKept, tele.UserTurnsDropped = retention.Kept, retention.Dropped
+	return a.preparePinnedCheckpointCandidate(trigger, projMsgs, canonical, covered, sourceTokens, tele)
+}
+
 // installSummaryCheckpoint CAS-installs the checkpoint and emits the done event.
-func (a *Agent) installSummaryCheckpoint(trigger string, commit summaryProjectionCommit, summary string, foldCount int) error {
+func (a *Agent) installSummaryCheckpoint(trigger string, commit summaryProjectionCommit, summary string, foldCount int) (CompactionOutcome, error) {
 	if _, err := a.commitSummaryProjection(commit); err != nil {
 		a.emitCompactionAborted(trigger)
-		return err
+		return CompactionNoop, err
 	}
 	a.svc.sink.Emit(event.Event{Kind: event.CompactionDone, Compaction: event.Compaction{
 		Trigger: trigger, Messages: foldCount, Summary: summary,
 	}})
-	return nil
+	return CompactionInstalled, nil
 }
 
 func (a *Agent) preparePinnedCheckpointCandidate(
