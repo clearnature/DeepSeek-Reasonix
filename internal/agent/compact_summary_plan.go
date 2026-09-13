@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"reasonix/internal/provider"
 )
@@ -91,12 +92,18 @@ func foldAnchorInstruction(region []provider.Message) string {
 	return fmt.Sprintf("\n\nThe conversation above contains a segment to summarize. It starts with the excerpt %q and ends with the excerpt %q (both appear verbatim in the conversation above). Summarize ONLY that segment; leave everything else untouched.", startAnchor, endAnchor)
 }
 
-// foldAnchor truncates a message's content to a stable locating excerpt.
+// foldAnchor truncates a message's content to a stable locating excerpt. The
+// excerpt has to occur verbatim in the bytes already sent, so whitespace is
+// preserved: collapsing runs makes the quote unfindable in code or tool output.
+// The cut also lands on a rune boundary rather than splitting a multi-byte rune.
 func foldAnchor(text string) string {
 	const maxAnchor = 160
-	text = strings.Join(strings.Fields(text), " ")
 	if len(text) <= maxAnchor {
 		return text
 	}
-	return text[:maxAnchor]
+	cut := maxAnchor
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
 }

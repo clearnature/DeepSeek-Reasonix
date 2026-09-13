@@ -386,7 +386,10 @@ func compactionInstructionWithFocus(instructions string) string {
 // summary request will send: frozen when a full frozen unit exists, else the
 // live registry. Telemetry uses it to attribute tool-seam divergence.
 func (a *Agent) summaryRequestToolsForCommit(prefix []provider.Message) []provider.ToolSchema {
-	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
+	// A frozen request that carried zero tools is a real snapshot, not a
+	// missing one: re-deriving the live registry there would move the tool
+	// seam the provider cached. Only a nil snapshot falls back.
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
 		return saved.tools
 	}
 	if a.svc.tools != nil {
@@ -400,7 +403,7 @@ func (a *Agent) summaryRequestToolsForCommit(prefix []provider.Message) []provid
 // or none. Mirrors summaryRequest's choice so telemetry can attribute a
 // system-only cache hit to a tool-seam fork.
 func (a *Agent) summaryToolsSource() ([]provider.ToolSchema, string) {
-	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
 		return saved.tools, "frozen"
 	}
 	if a.svc.tools != nil {
@@ -429,7 +432,7 @@ func (a *Agent) summaryRequest(prefix, region []provider.Message, instructions s
 	messages := a.normalizeModelRequestMessages(msgs)
 	messages = append(messages, HostGeneratedUserMessage(compactionInstructionWithFocus(instructions)))
 	var schemas []provider.ToolSchema
-	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 && len(saved.tools) > 0 {
+	if saved := a.savedMainRequest(); saved != nil && len(saved.messages) > 0 {
 		schemas = saved.tools
 	} else if a.svc.tools != nil {
 		schemas = a.providerToolSchemas()

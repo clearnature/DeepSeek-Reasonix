@@ -21,7 +21,7 @@ func (a *Agent) foldSummaryWithChunkedFallback(ctx context.Context, trigger stri
 	var res foldSummary
 	var tele CompactionTelemetry
 	var chunkedReason error
-	preflight := a.validateSafeSummaryRequest(fold, instructions, false)
+	preflight := a.validateSafeSummaryRequest(prefix, fold, instructions, false)
 	if preflight == nil {
 		var err error
 		res, tele, err = a.foldSummaryWithTelemetry(ctx, trigger, prefix, fold, instructions, sourceTokens, inputMode)

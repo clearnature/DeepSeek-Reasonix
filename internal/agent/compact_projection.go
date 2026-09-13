@@ -200,7 +200,20 @@ func (a *Agent) compressVisibleRange(
 		return result, nil
 	}
 
-	res, tele, err := a.foldSummaryWithChunkedFallback(ctx, trigger, nil, prepared.fold, prepared.instructions, result.SourceTokens, prepared.inputMode)
+	// SummaryInputCachePrefix means the fold is the head of what was already
+	// sent, so the frozen main-request bytes are the prefix to replay. Verify
+	// the fold really is that prefix before trusting it; otherwise send no
+	// prefix rather than a mismatched one.
+	var frozenPrefix []provider.Message
+	if inputMode == SummaryInputCachePrefix {
+		if saved := a.savedMainRequest(); saved != nil && len(saved.messages) >= len(prepared.fold) &&
+			providerVisibleFingerprint(modelInputMessages(saved.messages[:len(prepared.fold)])) ==
+				providerVisibleFingerprint(modelInputMessages(prepared.fold)) {
+			frozenPrefix = saved.messages
+		}
+	}
+
+	res, tele, err := a.foldSummaryWithChunkedFallback(ctx, trigger, frozenPrefix, prepared.fold, prepared.instructions, result.SourceTokens, prepared.inputMode)
 	summary := res.Text
 	if err != nil {
 		tele.Error = err.Error()
@@ -499,17 +512,17 @@ func (a *Agent) compactToProjectionLocked(ctx context.Context, trigger, instruct
 		return CompactionNoop, nil
 	}
 	if req.mustFree || trigger != CompactionTriggerManual {
-		if err := a.validateSafeSummaryRequest(fold, instructions, req.slim); err != nil {
+		if err := a.validateSafeSummaryRequest(nil, fold, instructions, req.slim); err != nil {
 			a.emitCompactionAborted(trigger)
 			return CompactionNoop, err
 		}
 	}
 
 	sourceTokens := a.estimatedVisibleRequestTokens(msgs)
-	inputMode := summaryInputModeFor(req, regionHadPinnedRevision,
-		providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash)
+	extendedFold := providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash
+	inputMode := summaryInputModeFor(req, regionHadPinnedRevision, extendedFold)
 	summaryPrefix, foldExtra, foldAnchors := a.summaryFoldPlan(msgs, head, start)
-	if providerVisibleFingerprint(modelInputMessages(fold)) != originalFoldHash {
+	if extendedFold {
 		// An extension rewrote the fold: the rewritten bytes must be sent and
 		// read literally — anchor locating inside the frozen prefix would
 		// summarize the pre-rewrite text. Quality wins over cache here.
