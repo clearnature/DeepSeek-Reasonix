@@ -169,12 +169,13 @@ func (m ContextManager) prepareOnce(ctx context.Context, policy ContextPreparePo
 	return m.foldContext(ctx, prepared, policy, inputHash, est, fold, hard, forceFold)
 }
 
-func shouldPruneBeforeFold(trigger string, overHardCeiling bool) bool {
+// shouldPruneBeforeFold reports whether prune must run before the fold. Pruning
+// keeps a fold small enough for the 8192-token digest to describe: a manual
+// compact that skips it truncates and falls into the full-price fragment path.
+func shouldPruneBeforeFold(trigger string, _ bool) bool {
 	switch trigger {
-	case CompactionTriggerPressure, CompactionTriggerOverflow:
+	case CompactionTriggerPressure, CompactionTriggerOverflow, CompactionTriggerManual:
 		return true
-	case CompactionTriggerManual:
-		return overHardCeiling
 	default:
 		return false
 	}

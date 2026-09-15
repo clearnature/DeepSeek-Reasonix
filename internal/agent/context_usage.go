@@ -16,10 +16,12 @@ type contextUsage struct {
 }
 
 // ContextUsedTokens is the number ContextManager compares against its
-// thresholds: the estimated prompt size of the view the next request sends. A
-// gauge fed from the last turn's usage instead lags a turn, counts completion
-// tokens the trigger ignores, and reads zero on a rebound session — which is
-// how a session displays 8% while it is compacting.
+// thresholds: the estimated prompt size of the view the next request sends. The
+// gauge must NOT be fed from last turn's usage — after a fold that reading is
+// stale (and zero on a rebound session), which is how a session displays 8%
+// while it is compacting. Gauge and trigger share this estimate deliberately;
+// when they disagree the fix belongs in the estimate's accuracy, not in
+// swapping one side for a measurement taken at a different time.
 func (a *Agent) ContextUsedTokens() int {
 	if a == nil {
 		return 0
